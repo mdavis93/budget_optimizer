@@ -11,6 +11,7 @@ const api = {
 
   budget: {
     getAll: () => ipcRenderer.invoke('budget:get-all'),
+    getAllWithStats: () => ipcRenderer.invoke('budget:get-all-with-stats'),
     getCurrent: () => ipcRenderer.invoke('budget:get-current'),
     getStats: (budgetId: string) => ipcRenderer.invoke('budget:get-stats', budgetId),
     create: (input: BudgetInput) => ipcRenderer.invoke('budget:create', input),

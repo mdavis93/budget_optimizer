@@ -32,6 +32,7 @@ export default function ExportPage() {
     if ((incomes.length > 0 || bills.length > 0) && !schedule) {
       generateSchedule(startDate, months, startingBalance);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: generateSchedule/schedule excluded to prevent infinite loops
   }, [incomes, bills, startDate, months, startingBalance]);
 
   const checkGoogleAuth = async () => {
@@ -76,7 +77,7 @@ export default function ExportPage() {
       } else {
         setExportStatus({ type: 'error', message: exportResult.error || 'Export failed' });
       }
-    } catch (error) {
+    } catch {
       setExportStatus({ type: 'error', message: 'Failed to export report' });
     } finally {
       setIsExporting(false);
@@ -131,7 +132,7 @@ export default function ExportPage() {
       } else {
         setExportStatus({ type: 'error', message: result.error || 'Export failed' });
       }
-    } catch (error) {
+    } catch {
       setExportStatus({ type: 'error', message: 'Failed to export to Google Sheets' });
     } finally {
       setIsExporting(false);

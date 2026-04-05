@@ -37,7 +37,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
     show: true,
   });
@@ -48,7 +48,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('Failed to load:', errorCode, errorDescription);
+    logger.error('Failed to load:', errorCode, errorDescription);
   });
 
   mainWindow.webContents.on('did-finish-load', () => {
@@ -137,7 +137,7 @@ ipcMain.handle('app:check-biometric-available', async () => {
       }
       return canPrompt;
     } catch (err) {
-      console.error('Touch ID check failed:', err);
+      logger.warn('Touch ID check failed:', err);
       return false;
     }
   }

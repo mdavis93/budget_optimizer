@@ -39,6 +39,8 @@ interface BudgetStats {
   billCount: number;
 }
 
+interface BudgetDataWithStats extends BudgetData, BudgetStats {}
+
 interface CurrentBudgetState {
   budget: BudgetData | null;
   isQuickBudget: boolean;
@@ -210,6 +212,7 @@ interface ElectronAPI {
 
   budget: {
     getAll: () => Promise<ApiResult<BudgetData[]>>;
+    getAllWithStats: () => Promise<ApiResult<BudgetDataWithStats[]>>;
     getCurrent: () => Promise<ApiResult<CurrentBudgetState>>;
     getStats: (budgetId: string) => Promise<ApiResult<BudgetStats>>;
     create: (input: BudgetInput) => Promise<ApiResult<BudgetData>>;

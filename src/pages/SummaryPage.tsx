@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import { format, parseISO, startOfMonth, differenceInDays } from 'date-fns';
 import {
@@ -71,10 +71,12 @@ export default function SummaryPage() {
   const [savingsAPY, setSavingsAPY] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadSettings = async () => {
       try {
         const result = await window.electronAPI.settings.get();
-        if (result.success && result.data) {
+        if (isMounted && result.success && result.data) {
           setSavingsAPY(result.data.savingsAPY || 0);
         }
       } catch {
@@ -82,29 +84,37 @@ export default function SummaryPage() {
       }
     };
     loadSettings();
+    
+    return () => { isMounted = false; };
   }, []);
 
-  const loadScheduleData = useCallback(async () => {
-    if (incomes.length === 0 && bills.length === 0) return;
-    
-    setIsLoading(true);
-    try {
-      const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      const result = await generateSchedule(startDate, timePeriod, 0);
-      if (result) {
-        setScheduleData({
-          paychecks: result.paychecks,
-          summary: result.summary,
-        });
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [incomes, bills, timePeriod, generateSchedule]);
-
   useEffect(() => {
+    let isMounted = true;
+    
+    const loadScheduleData = async () => {
+      if (incomes.length === 0 && bills.length === 0) return;
+      
+      setIsLoading(true);
+      try {
+        const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+        const result = await generateSchedule(startDate, timePeriod, 0);
+        if (isMounted && result) {
+          setScheduleData({
+            paychecks: result.paychecks,
+            summary: result.summary,
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+    
     loadScheduleData();
-  }, [loadScheduleData]);
+    
+    return () => { isMounted = false; };
+  }, [incomes, bills, timePeriod, generateSchedule]);
 
   const handleAPYChange = async (newAPY: number) => {
     setSavingsAPY(newAPY);

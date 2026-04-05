@@ -56,14 +56,20 @@ export default function DashboardPage() {
   const [startingBalance, setStartingBalance] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadSchedule = async () => {
       const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      await generateSchedule(startDate, 3, startingBalance);
+      if (isMounted) {
+        await generateSchedule(startDate, 3, startingBalance);
+      }
     };
     
     if (incomes.length > 0 || bills.length > 0) {
       loadSchedule();
     }
+    
+    return () => { isMounted = false; };
   }, [incomes, bills, generateSchedule, startingBalance]);
 
   const totalMonthlyIncome = useMemo(() => {

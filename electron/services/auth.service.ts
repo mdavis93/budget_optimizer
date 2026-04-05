@@ -3,6 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { CryptoService } from './crypto.service';
+import { logger } from './logger.service';
 
 interface AuthConfig {
   salt: string;
@@ -35,7 +36,7 @@ export class AuthService {
         this.config = JSON.parse(data);
       }
     } catch (error) {
-      console.error('Failed to load auth config:', error);
+      logger.warn('Failed to load auth config:', error);
       this.config = null;
     }
   }
@@ -219,7 +220,7 @@ export class AuthService {
       
       return { success: true, newRecoveryKey };
     } catch (error) {
-      console.error('Recovery failed:', error);
+      logger.error('Recovery failed:', error);
       return { success: false, error: 'Failed to reset password. Please check your recovery key.' };
     }
   }
@@ -299,7 +300,7 @@ export class AuthService {
 
   private saveBiometricKey(encryptedKey: string): void {
     const keyPath = path.join(app.getPath('userData'), 'biometric.key');
-    fs.writeFileSync(keyPath, encryptedKey);
+    fs.writeFileSync(keyPath, encryptedKey, { mode: 0o600 });
   }
 
   lock(): void {

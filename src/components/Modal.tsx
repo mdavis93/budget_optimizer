@@ -14,7 +14,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
+
+  onCloseRef.current = onClose;
 
   const getFocusableElements = useCallback(() => {
     if (!dialogRef.current) return [];
@@ -25,10 +28,33 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
   }, []);
 
+  // Effect 1: Initial focus (only when modal opens)
   useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      requestAnimationFrame(() => {
+        const focusable = getFocusableElements();
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        } else {
+          dialogRef.current?.focus();
+        }
+      });
+    }
+    return () => {
+      if (previousFocusRef.current && typeof previousFocusRef.current.focus === 'function') {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, [isOpen, getFocusableElements]);
+
+  // Effect 2: Keyboard handlers and body overflow
+  useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -49,29 +75,14 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       }
     };
 
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
-
-      requestAnimationFrame(() => {
-        const focusable = getFocusableElements();
-        if (focusable.length > 0) {
-          focusable[0].focus();
-        } else {
-          dialogRef.current?.focus();
-        }
-      });
-    }
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
-      if (previousFocusRef.current && typeof previousFocusRef.current.focus === 'function') {
-        previousFocusRef.current.focus();
-      }
     };
-  }, [isOpen, onClose, getFocusableElements]);
+  }, [isOpen, getFocusableElements]);
 
   if (!isOpen) return null;
 

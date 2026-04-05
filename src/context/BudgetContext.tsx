@@ -29,19 +29,9 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   const loadBudgets = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await window.electronAPI.budget.getAll();
+      const result = await window.electronAPI.budget.getAllWithStats();
       if (result.success && result.data) {
-        const budgetsWithStats: BudgetWithStats[] = await Promise.all(
-          result.data.map(async (budget) => {
-            const statsResult = await window.electronAPI.budget.getStats(budget.id);
-            return {
-              ...budget,
-              incomeCount: statsResult.data?.incomeCount ?? 0,
-              billCount: statsResult.data?.billCount ?? 0,
-            };
-          })
-        );
-        setBudgets(budgetsWithStats);
+        setBudgets(result.data);
       }
     } finally {
       setIsLoading(false);
@@ -136,6 +126,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useBudget() {
   const context = useContext(BudgetContext);
   if (!context) {

@@ -42,7 +42,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       } else {
         setError(result.error || 'Failed to load incomes');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to load incomes');
     }
   }, [isUnlocked]);
@@ -56,7 +56,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       } else {
         setError(result.error || 'Failed to load bills');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to load bills');
     }
   }, [isUnlocked]);
@@ -73,16 +73,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Reload data when budget changes
   useEffect(() => {
+    let isMounted = true;
+    
     if (isUnlocked && hasBudgetSelected) {
       setIsLoading(true);
       Promise.all([refreshIncomes(), refreshBills()]).finally(() => {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       });
     } else {
       setIncomes([]);
       setBills([]);
       setSchedule(null);
     }
+    
+    return () => { isMounted = false; };
   }, [isUnlocked, hasBudgetSelected, currentBudget?.id, isQuickBudget, refreshIncomes, refreshBills]);
 
   const createIncome = useCallback(async (income: IncomeInput): Promise<boolean> => {
@@ -227,6 +233,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useData() {
   const context = useContext(DataContext);
   if (!context) {

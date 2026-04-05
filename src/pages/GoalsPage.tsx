@@ -43,8 +43,25 @@ export default function GoalsPage() {
   }, []);
 
   useEffect(() => {
-    loadGoals();
-  }, [loadGoals]);
+    let isMounted = true;
+    
+    const doLoad = async () => {
+      setIsLoading(true);
+      try {
+        const result = await window.electronAPI.goals.getAll();
+        if (isMounted && result.success && result.data) {
+          setGoals(result.data);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+    
+    doLoad();
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     if (schedule?.goalProjections) {

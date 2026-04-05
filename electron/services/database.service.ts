@@ -518,6 +518,31 @@ export class DatabaseService {
     return { incomeCount, billCount };
   }
 
+  getAllBudgetsWithStats(): Array<Budget & { incomeCount: number; billCount: number }> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const rows = this.db.prepare(`
+      SELECT 
+        b.*,
+        (SELECT COUNT(*) FROM incomes WHERE budget_id = b.id) as income_count,
+        (SELECT COUNT(*) FROM bills WHERE budget_id = b.id) as bill_count
+      FROM budgets b
+      ORDER BY b.created_at ASC
+    `).all() as Array<BudgetRow & { income_count: number; bill_count: number }>;
+    
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      startingBalance: row.starting_balance,
+      targetCashOnHand: row.target_cash_on_hand ?? 250,
+      minCashOnHand: row.min_cash_on_hand ?? 100,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      incomeCount: row.income_count,
+      billCount: row.bill_count,
+    }));
+  }
+
   // Income Management (budget-scoped)
   getAllIncomes(budgetId: string): Income[] {
     if (!this.db) throw new Error('Database not initialized');

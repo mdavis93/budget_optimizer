@@ -119,6 +119,18 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
+  ipcMain.handle('budget:get-all-with-stats', () => {
+    if (!services.budgetManager) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const data = services.budgetManager.getAllBudgetsWithStats();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: 'Failed to get budgets with stats' };
+    }
+  });
+
   ipcMain.handle('budget:get-current', () => {
     if (!services.budgetManager) {
       return { success: false, error: 'Not initialized' };

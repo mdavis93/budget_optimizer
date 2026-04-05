@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(result.error || 'Failed to create password');
         return false;
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
       return false;
     }
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(result.error || 'Invalid password');
         return false;
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
       return false;
     }
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(result.error || 'Biometric authentication failed');
         return false;
       }
-    } catch (err) {
+    } catch {
       setError('Biometric authentication failed');
       return false;
     }
@@ -147,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

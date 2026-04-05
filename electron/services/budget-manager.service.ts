@@ -86,6 +86,10 @@ export class BudgetManager {
     return this.database.getBudgetStats(budgetId);
   }
 
+  getAllBudgetsWithStats(): Array<Budget & { incomeCount: number; billCount: number }> {
+    return this.database.getAllBudgetsWithStats();
+  }
+
   // Starting Balance (routes to quick budget or current budget)
   getStartingBalance(): number {
     if (this.isQuickBudgetMode) {

@@ -7,6 +7,7 @@ import http from 'http';
 import { URL } from 'url';
 import { ScheduleData } from './scheduler.service';
 import { format, parseISO } from 'date-fns';
+import { logger } from './logger.service';
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 const REDIRECT_PORT = 8089;
@@ -45,7 +46,7 @@ export class GoogleService {
         }
       }
     } catch (error) {
-      console.error('Failed to load Google tokens:', error);
+      logger.warn('Failed to load Google tokens:', error);
       this.tokens = null;
     }
   }
@@ -56,7 +57,7 @@ export class GoogleService {
         const encrypted = safeStorage.encryptString(JSON.stringify(this.tokens));
         fs.writeFileSync(this.tokenPath, encrypted);
       } else {
-        console.warn('safeStorage not available - Google tokens will not be persisted');
+        logger.warn('safeStorage not available - Google tokens will not be persisted');
       }
     }
   }

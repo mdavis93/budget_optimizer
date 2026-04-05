@@ -34,21 +34,27 @@ export default function SettingsPage() {
 
   // Load settings on mount
   useEffect(() => {
+    let isMounted = true;
+    
     const loadSettings = async () => {
       try {
         const result = await window.electronAPI.settings.get();
-        if (result.success && result.data) {
+        if (isMounted && result.success && result.data) {
           setCurrency(result.data.currency || 'USD');
           setAutoLockMinutes(result.data.autoLockMinutes ?? 5);
           setSavingsAPY(result.data.savingsAPY ?? 0);
         }
-      } catch (error) {
-        console.error('Failed to load settings:', error);
+      } catch {
+        // Settings load failed, using defaults
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
     loadSettings();
+    
+    return () => { isMounted = false; };
   }, []);
 
   // Save settings when they change
@@ -63,7 +69,7 @@ export default function SettingsPage() {
         setStatus({ type: 'success', message: 'Settings saved' });
         setTimeout(() => setStatus({ type: null, message: '' }), 2000);
       }
-    } catch (error) {
+    } catch {
       setStatus({ type: 'error', message: 'Failed to save settings' });
       setTimeout(() => setStatus({ type: null, message: '' }), 3000);
     }
@@ -292,7 +298,7 @@ export default function SettingsPage() {
       <div className="card bg-[var(--color-bg-tertiary)]">
         <h3 className="font-semibold mb-2">About Budget Optimizer</h3>
         <p className="text-sm text-[var(--color-text-secondary)]">
-          Version 2.3.0
+          Version 2.4.0
         </p>
         <p className="text-sm text-[var(--color-text-secondary)] mt-2">
           A secure desktop app for managing your income and optimizing bill payments.
