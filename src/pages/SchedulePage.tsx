@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
-import { Calendar, List, AlertTriangle, RefreshCw, PiggyBank } from 'lucide-react';
+import { Calendar, List, AlertTriangle, RefreshCw, PiggyBank, Target, ChevronDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { format, parseISO, startOfMonth } from 'date-fns';
 import { PaycheckBill, BillAssignment, ProposedFix } from '../types';
@@ -24,6 +24,29 @@ export default function SchedulePage() {
   const [showReconciliation, setShowReconciliation] = useState(false);
   const [dismissedReconciliation, setDismissedReconciliation] = useState(false);
   const [isApplyingFixes, setIsApplyingFixes] = useState(false);
+  const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
+
+  // Calculate total goal deposits from all paychecks
+  const totalGoalDeposits = useMemo(() => {
+    if (!schedule?.paychecks) return 0;
+    return schedule.paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0);
+  }, [schedule?.paychecks]);
+
+  // Determine if there are actionable recommendations (not just informational)
+  const hasActionableRecommendations = useMemo(() => {
+    if (!schedule?.recommendations) return false;
+    return schedule.recommendations.some(rec => 
+      rec.toLowerCase().includes('shortfall') || 
+      rec.toLowerCase().includes('deficit') ||
+      rec.includes("couldn't be resolved") ||
+      rec.includes('consuming over 90%')
+    );
+  }, [schedule?.recommendations]);
+
+  // Auto-expand recommendations if there are actionable items
+  useEffect(() => {
+    setRecommendationsExpanded(hasActionableRecommendations);
+  }, [hasActionableRecommendations]);
 
   // Check if reconciliation is needed when schedule changes
   useEffect(() => {
@@ -174,7 +197,7 @@ export default function SchedulePage() {
     }
   }, [draggedBill, generateSchedule, startDate, months, startingBalance]);
 
-  const togglePaycheck = (date: string) => {
+  const togglePaycheck = useCallback((date: string) => {
     setExpandedPaychecks(prev => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -184,7 +207,7 @@ export default function SchedulePage() {
       }
       return next;
     });
-  };
+  }, []);
 
   const expandAll = () => {
     if (schedule?.paychecks) {
@@ -302,7 +325,7 @@ export default function SchedulePage() {
       />
 
       {schedule?.summary && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="card">
             <p className="text-sm text-[var(--color-text-secondary)] mb-1">Total Income</p>
             <p className="text-xl font-semibold text-success-500">{formatCurrency(schedule.summary.totalIncome)}</p>
@@ -327,6 +350,15 @@ export default function SchedulePage() {
             </div>
             <p className="text-xl font-semibold text-primary-600 dark:text-primary-400">
               {formatCurrency(schedule.summary.finalSavingsBalance)}
+            </p>
+          </div>
+          <div className="card bg-success-50 dark:bg-success-500/10 border-success-200 dark:border-success-800">
+            <div className="flex items-center gap-2 mb-1">
+              <Target className="w-4 h-4 text-success-500" />
+              <p className="text-sm text-success-700 dark:text-success-400">Goals Total</p>
+            </div>
+            <p className="text-xl font-semibold text-success-600 dark:text-success-400">
+              {formatCurrency(totalGoalDeposits)}
             </p>
           </div>
           <div className="card">
@@ -370,16 +402,50 @@ export default function SchedulePage() {
       )}
 
       {schedule?.recommendations && schedule.recommendations.length > 0 && (
-        <div className="card border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-500/10">
-          <h3 className="font-semibold mb-3 text-primary-700 dark:text-primary-400">Optimization Recommendations</h3>
-          <ul className="space-y-2">
-            {schedule.recommendations.map((rec, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm text-primary-700 dark:text-primary-300">
-                <span className="text-primary-500 mt-0.5">→</span>
-                {rec}
-              </li>
-            ))}
-          </ul>
+        <div className={clsx(
+          'card',
+          hasActionableRecommendations 
+            ? 'border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/30'
+            : 'border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-500/10'
+        )}>
+          <button
+            onClick={() => setRecommendationsExpanded(!recommendationsExpanded)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <h3 className={clsx(
+              'font-semibold',
+              hasActionableRecommendations
+                ? 'text-warning-700 dark:text-warning-400'
+                : 'text-primary-700 dark:text-primary-400'
+            )}>
+              {hasActionableRecommendations ? 'Action Recommended' : 'Budget Insights'}
+            </h3>
+            <ChevronDown className={clsx(
+              'w-5 h-5 transition-transform',
+              hasActionableRecommendations
+                ? 'text-warning-600 dark:text-warning-400'
+                : 'text-primary-600 dark:text-primary-400',
+              recommendationsExpanded && 'rotate-180'
+            )} />
+          </button>
+          {recommendationsExpanded && (
+            <ul className="space-y-2 mt-3">
+              {schedule.recommendations.map((rec, index) => (
+                <li key={index} className={clsx(
+                  'flex items-start gap-2 text-sm',
+                  hasActionableRecommendations
+                    ? 'text-warning-700 dark:text-warning-300'
+                    : 'text-primary-700 dark:text-primary-300'
+                )}>
+                  <span className={clsx(
+                    'mt-0.5',
+                    hasActionableRecommendations ? 'text-warning-500' : 'text-primary-500'
+                  )}>→</span>
+                  {rec}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

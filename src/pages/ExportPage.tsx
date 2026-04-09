@@ -25,7 +25,24 @@ export default function ExportPage() {
   const [startingBalance, setStartingBalance] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
+    
+    const checkGoogleAuth = async () => {
+      try {
+        const authed = await window.electronAPI.export.isGoogleAuthed();
+        if (isMounted) {
+          setIsGoogleAuthed(authed);
+        }
+      } catch {
+        if (isMounted) {
+          setIsGoogleAuthed(false);
+        }
+      }
+    };
+    
     checkGoogleAuth();
+    
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
@@ -34,15 +51,6 @@ export default function ExportPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: generateSchedule/schedule excluded to prevent infinite loops
   }, [incomes, bills, startDate, months, startingBalance]);
-
-  const checkGoogleAuth = async () => {
-    try {
-      const authed = await window.electronAPI.export.isGoogleAuthed();
-      setIsGoogleAuthed(authed);
-    } catch {
-      setIsGoogleAuthed(false);
-    }
-  };
 
   const handleExportPdf = async () => {
     if (!schedule) {

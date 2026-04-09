@@ -3,6 +3,7 @@ interface BudgetInput {
   startingBalance?: number;
   targetCashOnHand?: number;
   minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
 }
 
 interface BudgetData {
@@ -11,6 +12,7 @@ interface BudgetData {
   startingBalance: number;
   targetCashOnHand: number;
   minCashOnHand: number;
+  minSavingsPerPaycheck: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -144,17 +146,23 @@ interface GoalProjectionData {
   targetDate: string;
   paycheckCount: number;
   requiredPerPaycheck: number;
+  adjustedRequiredPerPaycheck: number;
   availablePerPaycheck: number;
+  actualAllocation: number;
   achievableAmount: number;
   achievabilityPercent: number;
   status: 'achievable' | 'partial' | 'impossible';
   suggestions: GoalSuggestionData[];
+  isProjected: boolean;
+  projectionNote?: string;
 }
 
 interface ScheduleData {
   startDate: string;
   endDate: string;
   paychecks: PaycheckEntryData[];
+  fullPaychecks: PaycheckEntryData[];
+  viewportMonths: number;
   entries: Array<{
     date: string;
     type: 'income' | 'expense' | 'savings';
@@ -188,6 +196,48 @@ interface AppSettings {
   defaultScheduleMonths: number;
   savingsAPY: number;
   lastBudgetId?: string;
+}
+
+interface DebtInput {
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+}
+
+interface DebtData {
+  id: string;
+  budgetId: string;
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AmortizationPaymentData {
+  paymentNumber: number;
+  date: string;
+  payment: number;
+  principal: number;
+  interest: number;
+  remainingBalance: number;
+}
+
+interface AmortizationScheduleData {
+  payments: AmortizationPaymentData[];
+  totalPayments: number;
+  totalInterest: number;
+  totalPrincipal: number;
+  payoffDate: string;
+  monthsToPayoff: number;
+}
+
+interface DebtWithAmortizationData {
+  debt: DebtData;
+  bill: import('./index').Bill | null;
+  amortization: AmortizationScheduleData | null;
 }
 
 interface ApiResult<T = void> {
@@ -272,6 +322,17 @@ interface ElectronAPI {
     create: (input: SavingsGoalInput) => Promise<ApiResult<SavingsGoalData>>;
     update: (id: string, input: Partial<SavingsGoalInput>) => Promise<ApiResult<SavingsGoalData>>;
     delete: (id: string) => Promise<ApiResult>;
+    getProjections: () => Promise<ApiResult<GoalProjectionData[]>>;
+  };
+
+  debts: {
+    getAll: () => Promise<ApiResult<DebtData[]>>;
+    getByBill: (billId: string) => Promise<ApiResult<DebtData | null>>;
+    create: (input: DebtInput) => Promise<ApiResult<DebtData>>;
+    update: (id: string, input: Partial<DebtInput>) => Promise<ApiResult<DebtData>>;
+    delete: (id: string) => Promise<ApiResult>;
+    getAmortization: (debtId: string) => Promise<ApiResult<AmortizationScheduleData>>;
+    getAllWithAmortization: () => Promise<ApiResult<DebtWithAmortizationData[]>>;
   };
 
   schedule: {

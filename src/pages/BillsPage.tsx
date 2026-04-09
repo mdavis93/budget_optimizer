@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Receipt, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { Bill, BillInput, Income, PRIORITY_LABELS, CATEGORY_OPTIONS } from '../types';
@@ -270,19 +270,34 @@ export default function BillsPage() {
     }).format(amount);
   };
 
-  const filteredBills = filterCategory === 'all' 
-    ? bills 
-    : bills.filter(b => b.category === filterCategory);
+  const filteredBills = useMemo(() => 
+    filterCategory === 'all' 
+      ? bills 
+      : bills.filter(b => b.category === filterCategory),
+    [bills, filterCategory]
+  );
 
-  const totalMonthlyBills = bills.reduce((sum, b) => sum + b.budgetedAmount, 0);
-  const criticalBills = bills.filter(b => b.priority === 'critical');
+  const totalMonthlyBills = useMemo(() => 
+    bills.reduce((sum, b) => sum + b.budgetedAmount, 0),
+    [bills]
+  );
+  
+  const criticalBills = useMemo(() => 
+    bills.filter(b => b.priority === 'critical'),
+    [bills]
+  );
 
-  const categories = [...new Set(bills.map(b => b.category).filter(Boolean))];
+  const categories = useMemo(() => 
+    [...new Set(bills.map(b => b.category).filter(Boolean))],
+    [bills]
+  );
 
-  const sortedBills = [...filteredBills].sort((a, b) => {
+  const sortedBills = useMemo(() => {
     const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
-    return priorityOrder[a.priority] - priorityOrder[b.priority] || a.dueDay - b.dueDay;
-  });
+    return [...filteredBills].sort((a, b) => {
+      return priorityOrder[a.priority] - priorityOrder[b.priority] || a.dueDay - b.dueDay;
+    });
+  }, [filteredBills]);
 
   return (
     <div className="space-y-6">

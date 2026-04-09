@@ -14,6 +14,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
   const onCloseRef = useRef(onClose);
   const titleId = useId();
 
@@ -86,15 +87,24 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
 
   if (!isOpen) return null;
 
+  // Track where mousedown started to prevent closing on drag-release outside modal
+  const handleOverlayMouseDown = (e: React.MouseEvent) => {
+    mouseDownTargetRef.current = e.target;
+  };
+
   const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) {
+    // Only close if BOTH mousedown and mouseup/click happened on the overlay
+    // This prevents closing when user drags to select text and releases outside
+    if (e.target === overlayRef.current && mouseDownTargetRef.current === overlayRef.current) {
       onClose();
     }
+    mouseDownTargetRef.current = null;
   };
 
   return (
     <div
       ref={overlayRef}
+      onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
     >

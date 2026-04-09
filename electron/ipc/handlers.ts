@@ -1,11 +1,25 @@
 import { IpcMain } from 'electron';
+import { addMonths, parseISO, isBefore } from 'date-fns';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
-import { DatabaseService } from '../services/database.service';
-import { SchedulerService } from '../services/scheduler.service';
+import { DatabaseService, DebtInput } from '../services/database.service';
+import { SchedulerService, DebtPayoffInfo } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
 import { GoogleService } from '../services/google.service';
 import { BudgetManager } from '../services/budget-manager.service';
+import { DebtService } from '../services/debt.service';
+import { ipcLogger } from '../services/logger.service';
+
+// Schedule is always calculated for 12 months - viewport filtering only affects display
+const SCHEDULE_CALCULATION_MONTHS = 12;
+
+// Helper to extract error message from unknown error type
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
 
 interface Services {
   auth: AuthService;
@@ -15,6 +29,7 @@ interface Services {
   scheduler: SchedulerService;
   pdf: PdfService;
   google: GoogleService;
+  debt: DebtService;
 }
 
 export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void {
@@ -53,13 +68,19 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   });
 
   ipcMain.handle('auth:lock', () => {
-    services.auth.lock();
-    if (services.budgetManager) {
-      services.budgetManager = null;
-    }
-    if (services.database) {
-      services.database.close();
-      services.database = null;
+    try {
+      services.auth.lock();
+      if (services.budgetManager) {
+        services.budgetManager = null;
+      }
+      if (services.database) {
+        services.database.close();
+        services.database = null;
+      }
+      return { success: true };
+    } catch (error) {
+      ipcLogger.error('auth:lock failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -84,7 +105,13 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   });
 
   ipcMain.handle('auth:clear-pending-recovery-key', () => {
-    services.auth.clearPendingRecoveryKey();
+    try {
+      services.auth.clearPendingRecoveryKey();
+      return { success: true };
+    } catch (error) {
+      ipcLogger.error('auth:clear-pending-recovery-key failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
   });
 
   ipcMain.handle('auth:verify-recovery-key', async (_, recoveryKey: string) => {
@@ -115,7 +142,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getAllBudgets();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get budgets' };
+      ipcLogger.error('budget:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -127,7 +155,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getAllBudgetsWithStats();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get budgets with stats' };
+      ipcLogger.error('budget:get-all-with-stats failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -146,7 +175,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         } 
       };
     } catch (error) {
-      return { success: false, error: 'Failed to get current budget' };
+      ipcLogger.error('budget:get-current failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -158,7 +188,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getBudgetStats(budgetId);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get budget stats' };
+      ipcLogger.error('budget:get-stats failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -170,7 +201,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.createBudget(input);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to create budget' };
+      ipcLogger.error('budget:create failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -185,7 +217,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to update budget' };
+      ipcLogger.error('budget:update failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -200,7 +233,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to delete budget' };
+      ipcLogger.error('budget:delete failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -215,7 +249,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to switch budget' };
+      ipcLogger.error('budget:switch failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -227,7 +262,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       services.budgetManager.startQuickBudget();
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to start quick budget' };
+      ipcLogger.error('budget:start-quick failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -239,7 +275,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       services.budgetManager.endQuickBudget();
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to end quick budget' };
+      ipcLogger.error('budget:end-quick failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -252,7 +289,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getAllIncomes();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get incomes' };
+      ipcLogger.error('income:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -264,7 +302,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.createIncome(income);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to create income' };
+      ipcLogger.error('income:create failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -279,7 +318,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to update income' };
+      ipcLogger.error('income:update failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -294,7 +334,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to delete income' };
+      ipcLogger.error('income:delete failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -307,7 +348,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getAllBills();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get bills' };
+      ipcLogger.error('bills:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -319,7 +361,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.createBill(bill);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to create bill' };
+      ipcLogger.error('bills:create failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -334,7 +377,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to update bill' };
+      ipcLogger.error('bills:update failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -349,7 +393,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to delete bill' };
+      ipcLogger.error('bills:delete failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -362,7 +407,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getSkippedBills();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get skipped bills' };
+      ipcLogger.error('skipped-bills:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -374,7 +420,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.skipBill(billId, skipDate);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to skip bill' };
+      ipcLogger.error('skipped-bills:skip failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -386,7 +433,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const success = services.budgetManager.unskipBill(billId, skipDate);
       return { success };
     } catch (error) {
-      return { success: false, error: 'Failed to unskip bill' };
+      ipcLogger.error('skipped-bills:unskip failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -398,7 +446,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const isSkipped = services.budgetManager.isSkipped(billId, skipDate);
       return { success: true, data: isSkipped };
     } catch (error) {
-      return { success: false, error: 'Failed to check skip status' };
+      ipcLogger.error('skipped-bills:is-skipped failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -411,7 +460,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getBillAssignments();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get bill assignments' };
+      ipcLogger.error('bill-assignments:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -423,7 +473,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.assignBillToPaycheck(billId, billDueDate, paycheckDate);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to assign bill' };
+      ipcLogger.error('bill-assignments:assign failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -435,7 +486,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const success = services.budgetManager.removeBillAssignment(billId, billDueDate);
       return { success };
     } catch (error) {
-      return { success: false, error: 'Failed to remove bill assignment' };
+      ipcLogger.error('bill-assignments:remove failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -448,7 +500,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.getAllGoals();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get goals' };
+      ipcLogger.error('goals:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -466,7 +519,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.budgetManager.createGoal(input);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to create goal' };
+      ipcLogger.error('goals:create failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -487,7 +541,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to update goal' };
+      ipcLogger.error('goals:update failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -502,13 +557,104 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to delete goal' };
+      ipcLogger.error('goals:delete failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  // Goal projections - uses ACTUAL 12-month scheduler allocation
+  // Goals beyond 12 months are marked as isProjected with extrapolated estimates
+  ipcMain.handle('goals:get-projections', () => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const goals = services.budgetManager.getAllGoals();
+      if (goals.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      const incomes = services.budgetManager.getAllIncomes();
+      const bills = services.budgetManager.getAllBills();
+      const startingBalance = services.budgetManager.getStartingBalance();
+      const targetCashOnHand = services.budgetManager.getTargetCashOnHand();
+      const minCashOnHand = services.budgetManager.getMinCashOnHand();
+      const minSavingsPerPaycheck = services.budgetManager.getMinSavingsPerPaycheck();
+      const skippedBills = services.budgetManager.getSkippedBills();
+      const billAssignments = services.budgetManager.getBillAssignments();
+
+      // Create a Set of skipped bill keys for fast lookup
+      const skippedSet = new Set(
+        skippedBills.map(sb => `${sb.billId}-${sb.skipDate}`)
+      );
+
+      // Create a Map of manual assignments (billId + billDueDate -> paycheckDate)
+      const manualAssignments = new Map(
+        billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
+      );
+
+      // Calculate debt payoff info for bills with linked debts
+      const debtPayoffs = new Map<string, DebtPayoffInfo>();
+      const state = services.budgetManager.getCurrentState();
+      if (state.budgetId) {
+        const debts = services.database.getDebts(state.budgetId);
+        for (const debt of debts) {
+          const linkedBill = bills.find(b => b.id === debt.billId);
+          if (linkedBill) {
+            const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
+            const amortization = services.debt.calculateAmortization(
+              debt.principalBalance,
+              debt.apr,
+              debt.monthlyPayment,
+              extra,
+              extra > 0 ? 'monthly' : 'none'
+            );
+
+            if (amortization.monthsToPayoff > 0) {
+              const lastPayment = amortization.payments[amortization.payments.length - 1];
+              debtPayoffs.set(debt.billId, {
+                billId: debt.billId,
+                payoffDate: new Date(amortization.payoffDate),
+                finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
+              });
+            }
+          }
+        }
+      }
+
+      // Always use 12 months - consistent with schedule single source of truth
+      // Goals beyond 12 months will be marked as isProjected with extrapolated estimates
+      const today = new Date();
+      const startDate = today.toISOString().split('T')[0];
+
+      // Generate 12-month schedule for accurate goal projections
+      const scheduleData = services.scheduler.generateSchedule(
+        incomes,
+        bills,
+        startDate,
+        SCHEDULE_CALCULATION_MONTHS,  // Always 12 months
+        startingBalance,
+        skippedSet,
+        manualAssignments,
+        targetCashOnHand,
+        goals,
+        minCashOnHand,
+        minSavingsPerPaycheck,
+        debtPayoffs
+      );
+
+      // Return the goal projections from the actual schedule
+      return { success: true, data: scheduleData.goalProjections || [] };
+    } catch (error) {
+      ipcLogger.error('goals:get-projections failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
   // Schedule Generation (via BudgetManager)
-  ipcMain.handle('schedule:generate', (_, startDate: string, months: number) => {
-    if (!services.budgetManager) {
+  // Always calculates 12 months internally - viewportMonths only affects what's displayed
+  ipcMain.handle('schedule:generate', (_, startDate: string, viewportMonths: number) => {
+    if (!services.budgetManager || !services.database) {
       return { success: false, error: 'Not initialized' };
     }
     try {
@@ -518,6 +664,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const startingBalance = services.budgetManager.getStartingBalance();
       const targetCashOnHand = services.budgetManager.getTargetCashOnHand();
       const minCashOnHand = services.budgetManager.getMinCashOnHand();
+      const minSavingsPerPaycheck = services.budgetManager.getMinSavingsPerPaycheck();
       const skippedBills = services.budgetManager.getSkippedBills();
       const billAssignments = services.budgetManager.getBillAssignments();
       
@@ -531,17 +678,50 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
       
+      // Calculate debt payoff info for bills with linked debts
+      const debtPayoffs = new Map<string, DebtPayoffInfo>();
+      const state = services.budgetManager.getCurrentState();
+      if (state.budgetId) {
+        const debts = services.database.getDebts(state.budgetId);
+        for (const debt of debts) {
+          const linkedBill = bills.find(b => b.id === debt.billId);
+          if (linkedBill) {
+            // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
+            const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
+            const amortization = services.debt.calculateAmortization(
+              debt.principalBalance,
+              debt.apr,
+              debt.monthlyPayment,
+              extra,
+              extra > 0 ? 'monthly' : 'none'
+            );
+            
+            if (amortization.monthsToPayoff > 0) {
+              const lastPayment = amortization.payments[amortization.payments.length - 1];
+              debtPayoffs.set(debt.billId, {
+                billId: debt.billId,
+                payoffDate: new Date(amortization.payoffDate),
+                finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
+              });
+            }
+          }
+        }
+      }
+      
+      // ALWAYS calculate 12 months for consistent data - viewport only affects display
       const data = services.scheduler.generateSchedule(
         incomes, 
         bills, 
         startDate, 
-        months, 
+        SCHEDULE_CALCULATION_MONTHS, // Always 12 months
         startingBalance,
         skippedSet,
         manualAssignments,
         targetCashOnHand,
         goals,
-        minCashOnHand
+        minCashOnHand,
+        minSavingsPerPaycheck,
+        debtPayoffs
       );
       
       // FINAL DEDUPLICATION - nuclear option
@@ -570,18 +750,44 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         }
       }
       
+      // Store full 12-month paychecks before filtering
+      const fullPaychecks = [...data.paychecks];
+      
+      // Filter paychecks for the requested viewport
+      const viewportEndDate = addMonths(parseISO(startDate), viewportMonths);
+      const viewportPaychecks = data.paychecks.filter(p => 
+        isBefore(parseISO(p.date), viewportEndDate)
+      );
+      
+      // Update data with viewport-filtered paychecks and full schedule
+      data.paychecks = viewportPaychecks;
+      data.fullPaychecks = fullPaychecks;
+      data.viewportMonths = viewportMonths;
+      
+      // Recalculate summary for viewport (for display purposes)
+      const viewportSummary = {
+        ...data.summary,
+        totalIncome: viewportPaychecks.reduce((sum, p) => sum + p.totalIncome, 0),
+        totalExpenses: viewportPaychecks.reduce((sum, p) => sum + p.totalBills, 0),
+        totalSavingsDeposits: viewportPaychecks.reduce((sum, p) => sum + p.savingsDeposit, 0),
+        shortfallCount: viewportPaychecks.filter(p => p.isShortfall).length,
+      };
+      viewportSummary.netBalance = viewportSummary.totalIncome - viewportSummary.totalExpenses;
+      data.summary = viewportSummary;
+      
       // Analyze for shortfalls and generate fix proposals
       const reconciliation = services.scheduler.analyzeAndProposeFixes(data);
       data.reconciliation = reconciliation;
       
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to generate schedule' };
+      ipcLogger.error('schedule:generate failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
   ipcMain.handle('schedule:optimize', (_, startDate: string, months: number, startingBalance: number) => {
-    if (!services.budgetManager) {
+    if (!services.budgetManager || !services.database) {
       return { success: false, error: 'Not initialized' };
     }
     try {
@@ -590,6 +796,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const goals = services.budgetManager.getAllGoals();
       const targetCashOnHand = services.budgetManager.getTargetCashOnHand();
       const minCashOnHand = services.budgetManager.getMinCashOnHand();
+      const minSavingsPerPaycheck = services.budgetManager.getMinSavingsPerPaycheck();
       const skippedBills = services.budgetManager.getSkippedBills();
       const billAssignments = services.budgetManager.getBillAssignments();
       
@@ -603,6 +810,36 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
       
+      // Calculate debt payoff info for bills with linked debts
+      const debtPayoffs = new Map<string, DebtPayoffInfo>();
+      const state = services.budgetManager.getCurrentState();
+      if (state.budgetId) {
+        const debts = services.database.getDebts(state.budgetId);
+        for (const debt of debts) {
+          const linkedBill = bills.find(b => b.id === debt.billId);
+          if (linkedBill) {
+            // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
+            const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
+            const amortization = services.debt.calculateAmortization(
+              debt.principalBalance,
+              debt.apr,
+              debt.monthlyPayment,
+              extra,
+              extra > 0 ? 'monthly' : 'none'
+            );
+            
+            if (amortization.monthsToPayoff > 0) {
+              const lastPayment = amortization.payments[amortization.payments.length - 1];
+              debtPayoffs.set(debt.billId, {
+                billId: debt.billId,
+                payoffDate: new Date(amortization.payoffDate),
+                finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
+              });
+            }
+          }
+        }
+      }
+      
       const data = services.scheduler.generateSchedule(
         incomes, 
         bills, 
@@ -613,11 +850,14 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         manualAssignments,
         targetCashOnHand,
         goals,
-        minCashOnHand
+        minCashOnHand,
+        minSavingsPerPaycheck,
+        debtPayoffs
       );
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to optimize schedule' };
+      ipcLogger.error('schedule:optimize failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -625,7 +865,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     try {
       return await services.pdf.generatePdf(schedule, filePath);
     } catch (error) {
-      return { success: false, error: 'Failed to export PDF' };
+      ipcLogger.error('export:to-pdf failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -673,7 +914,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
       return { success: true };
     } catch (error) {
-      return { success: false, error: 'Failed to apply fixes' };
+      ipcLogger.error('reconciliation:apply-fixes failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -685,7 +927,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.database.getSettings();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to get settings' };
+      ipcLogger.error('settings:get failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 
@@ -697,7 +940,178 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const data = services.database.updateSettings(settings);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: 'Failed to update settings' };
+      ipcLogger.error('settings:update failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  // Debt Management
+  ipcMain.handle('debts:get-all', () => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      const data = services.database.getDebts(state.budgetId);
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('debts:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('debts:get-by-bill', (_, billId: string) => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      const data = services.database.getDebtByBillId(billId, state.budgetId);
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('debts:get-by-bill failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('debts:create', (_, input: DebtInput) => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      const data = services.database.createDebt(state.budgetId, input);
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('debts:create failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('debts:update', (_, id: string, input: Partial<DebtInput>) => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      const data = services.database.updateDebt(id, state.budgetId, input);
+      if (!data) {
+        return { success: false, error: 'Debt not found' };
+      }
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('debts:update failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('debts:delete', (_, id: string) => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      const deleted = services.database.deleteDebt(id, state.budgetId);
+      if (!deleted) {
+        return { success: false, error: 'Debt not found' };
+      }
+      return { success: true };
+    } catch (error) {
+      ipcLogger.error('debts:delete failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('debts:get-amortization', (_, debtId: string) => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      
+      const debt = services.database.getDebtById(debtId, state.budgetId);
+      if (!debt) {
+        return { success: false, error: 'Debt not found' };
+      }
+      
+      // Get linked bill to calculate extra payment from budget overage
+      const bills = services.budgetManager.getAllBills();
+      const linkedBill = bills.find(b => b.id === debt.billId);
+      
+      // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
+      const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
+      
+      const amortization = services.debt.calculateAmortization(
+        debt.principalBalance,
+        debt.apr,
+        debt.monthlyPayment,
+        extra,
+        extra > 0 ? 'monthly' : 'none'
+      );
+      
+      return { success: true, data: amortization };
+    } catch (error) {
+      ipcLogger.error('debts:get-amortization failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('debts:get-all-with-amortization', () => {
+    if (!services.budgetManager || !services.database) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const state = services.budgetManager.getCurrentState();
+      if (!state.budgetId) {
+        return { success: false, error: 'No budget selected' };
+      }
+      
+      const debts = services.database.getDebts(state.budgetId);
+      const bills = services.budgetManager.getAllBills();
+      
+      const data = debts.map(debt => {
+        const linkedBill = bills.find(b => b.id === debt.billId);
+        
+        // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
+        const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
+        
+        const amortization = services.debt.calculateAmortization(
+          debt.principalBalance,
+          debt.apr,
+          debt.monthlyPayment,
+          extra,
+          extra > 0 ? 'monthly' : 'none'
+        );
+        
+        return { 
+          debt, 
+          bill: linkedBill || null, 
+          amortization 
+        };
+      });
+      
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('debts:get-all-with-amortization failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   });
 }

@@ -1,0 +1,669 @@
+import { useState, useEffect, useCallback } from 'react';
+import { format, parseISO } from 'date-fns';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import { CreditCard, Plus, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent } from 'lucide-react';
+import { useData } from '../context/DataContext';
+import { Bill, DebtInput, DebtWithAmortization } from '../types';
+import Modal from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
+import clsx from 'clsx';
+
+type TimePeriod = 3 | 6 | 12 | 'max';
+
+const CHART_COLORS = {
+  principal: '#3b82f6',
+  interest: '#ef4444',
+};
+
+interface DebtFormProps {
+  debt?: DebtWithAmortization;
+  bills: Bill[];
+  existingDebtBillIds: Set<string>;
+  preselectedBill?: Bill;
+  onSubmit: (data: DebtInput) => void;
+  onCancel: () => void;
+}
+
+function DebtForm({ debt, bills, existingDebtBillIds, preselectedBill, onSubmit, onCancel }: DebtFormProps) {
+  const [billId, setBillId] = useState(debt?.debt.billId ?? preselectedBill?.id ?? '');
+  const [principalBalance, setPrincipalBalance] = useState(debt?.debt.principalBalance?.toString() ?? '');
+  const [apr, setApr] = useState(debt?.debt.apr ? (debt.debt.apr * 100).toString() : '');
+  const [monthlyPayment, setMonthlyPayment] = useState(() => {
+    if (debt?.debt.monthlyPayment) return debt.debt.monthlyPayment.toString();
+    if (preselectedBill) return preselectedBill.budgetedAmount.toString();
+    return '';
+  });
+
+  const isPreselected = !!preselectedBill;
+  const debtBills = bills.filter(b => 
+    b.category === 'Debt' && 
+    (b.id === debt?.debt.billId || b.id === preselectedBill?.id || !existingDebtBillIds.has(b.id))
+  );
+
+  // Get the selected bill to calculate extra payment
+  const selectedBill = bills.find(b => b.id === billId);
+  const extraPayment = selectedBill && monthlyPayment 
+    ? Math.max(0, selectedBill.budgetedAmount - parseFloat(monthlyPayment || '0'))
+    : 0;
+
+  const handleBillChange = (newBillId: string) => {
+    setBillId(newBillId);
+    const newSelectedBill = bills.find(b => b.id === newBillId);
+    if (newSelectedBill && !monthlyPayment) {
+      setMonthlyPayment(newSelectedBill.budgetedAmount.toString());
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      billId,
+      principalBalance: parseFloat(principalBalance),
+      apr: parseFloat(apr) / 100,
+      monthlyPayment: parseFloat(monthlyPayment),
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label htmlFor="debt-bill" className="label">Linked Bill</label>
+        <select
+          id="debt-bill"
+          value={billId}
+          onChange={(e) => handleBillChange(e.target.value)}
+          className="input"
+          required
+          disabled={!!debt || isPreselected}
+        >
+          <option value="">Select a debt bill...</option>
+          {debtBills.map((bill) => (
+            <option key={bill.id} value={bill.id}>
+              {bill.creditorName} (${bill.budgetedAmount.toFixed(2)}/mo)
+            </option>
+          ))}
+        </select>
+        {debtBills.length === 0 && !isPreselected && (
+          <p className="text-sm text-warning-500 mt-1">
+            No debt bills available. Create a bill with category "Debt" first.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="debt-principal" className="label">Remaining Balance (Principal)</label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+          <input
+            id="debt-principal"
+            type="number"
+            step="0.01"
+            min="0"
+            value={principalBalance}
+            onChange={(e) => setPrincipalBalance(e.target.value)}
+            className="input pl-7"
+            placeholder="0.00"
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="debt-apr" className="label">Annual Percentage Rate (APR)</label>
+        <div className="relative">
+          <input
+            id="debt-apr"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            value={apr}
+            onChange={(e) => setApr(e.target.value)}
+            className="input pr-7"
+            placeholder="0.00"
+            required
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">%</span>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="debt-monthly-payment" className="label">Monthly Payment</label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+          <input
+            id="debt-monthly-payment"
+            type="number"
+            step="0.01"
+            min="0"
+            value={monthlyPayment}
+            onChange={(e) => setMonthlyPayment(e.target.value)}
+            className="input pl-7"
+            placeholder="0.00"
+            required
+          />
+        </div>
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          The amount you pay each month toward this debt
+        </p>
+      </div>
+
+      {selectedBill && monthlyPayment && (
+        <div className="p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+          <p className="text-sm font-medium text-[var(--color-text-secondary)]">Extra Payment (auto-calculated)</p>
+          <p className={clsx(
+            'text-lg font-semibold',
+            extraPayment > 0 ? 'text-success-400' : 'text-[var(--color-text-muted)]'
+          )}>
+            {extraPayment > 0 ? `+$${extraPayment.toFixed(2)}/mo` : 'None'}
+          </p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            Based on bill budget (${selectedBill.budgetedAmount.toFixed(2)}) minus minimum payment.
+            To pay extra, increase the budgeted amount on the linked bill.
+          </p>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button type="button" onClick={onCancel} className="btn-secondary">
+          Cancel
+        </button>
+        <button type="submit" className="btn-primary" disabled={!billId || debtBills.length === 0}>
+          {debt ? 'Update' : 'Add'} Debt
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface DebtCardProps {
+  debtData: DebtWithAmortization;
+  timePeriod: TimePeriod;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
+  const { debt, bill, amortization } = debtData;
+  
+  if (!bill || !amortization) {
+    return null;
+  }
+
+  // Calculate extra payment from bill budget vs minimum payment
+  const extraPayment = Math.max(0, bill.budgetedAmount - debt.monthlyPayment);
+
+  const monthsToShow = timePeriod === 'max' ? amortization.monthsToPayoff : Math.min(timePeriod, amortization.monthsToPayoff);
+  const paymentsToShow = amortization.payments.slice(0, monthsToShow);
+  
+  const chartData = paymentsToShow.map((payment) => ({
+    name: format(parseISO(payment.date), 'MMM yy'),
+    principal: payment.principal,
+    interest: payment.interest,
+    payment: payment.payment,
+  }));
+
+  const displayedInterest = paymentsToShow.reduce((sum, p) => sum + p.interest, 0);
+  const displayedPrincipal = paymentsToShow.reduce((sum, p) => sum + p.principal, 0);
+
+  return (
+    <div className="card p-6 space-y-4">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-danger-500/10 flex items-center justify-center">
+            <CreditCard className="w-5 h-5 text-danger-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg">{bill.creditorName}</h3>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              ${debt.monthlyPayment.toFixed(2)}/mo min payment
+              {extraPayment > 0 && (
+                <span className="text-success-400">
+                  {' '}+ ${extraPayment.toFixed(2)} extra
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onEdit}
+            className="p-2 rounded-lg hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            aria-label="Edit debt"
+          >
+            <Pencil className="w-4 h-4 text-[var(--color-text-muted)]" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-2 rounded-lg hover:bg-danger-500/10 transition-colors"
+            aria-label="Delete debt"
+          >
+            <Trash2 className="w-4 h-4 text-danger-400" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+            <DollarSign className="w-4 h-4" />
+            <span className="text-xs">Balance</span>
+          </div>
+          <p className="text-lg font-semibold">${debt.principalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+            <Percent className="w-4 h-4" />
+            <span className="text-xs">APR</span>
+          </div>
+          <p className="text-lg font-semibold">{(debt.apr * 100).toFixed(2)}%</p>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+            <Calendar className="w-4 h-4" />
+            <span className="text-xs">Payoff Date</span>
+          </div>
+          <p className="text-lg font-semibold">
+            {amortization.monthsToPayoff > 0 
+              ? format(parseISO(amortization.payoffDate), 'MMM yyyy')
+              : 'Never'}
+          </p>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+            <TrendingDown className="w-4 h-4" />
+            <span className="text-xs">Total Interest</span>
+          </div>
+          <p className="text-lg font-semibold text-danger-400">
+            ${amortization.totalInterest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-[var(--color-border)]">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-medium">Payment Breakdown</h4>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS.principal }} />
+              <span>Principal: ${displayedPrincipal.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS.interest }} />
+              <span>Interest: ${displayedInterest.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+              <XAxis 
+                dataKey="name" 
+                tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: 'var(--color-border)' }}
+              />
+              <YAxis 
+                tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => `$${value}`}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'var(--color-bg-secondary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                }}
+                labelStyle={{ color: 'var(--color-text-primary)' }}
+                formatter={(value: number, name: string) => [
+                  `$${value.toFixed(2)}`,
+                  name.charAt(0).toUpperCase() + name.slice(1)
+                ]}
+              />
+              <Legend 
+                wrapperStyle={{ paddingTop: '10px' }}
+                formatter={(value) => <span className="text-[var(--color-text-secondary)]">{value}</span>}
+              />
+              <Bar 
+                dataKey="principal" 
+                stackId="a" 
+                fill={CHART_COLORS.principal} 
+                name="Principal"
+                radius={[0, 0, 0, 0]}
+              />
+              <Bar 
+                dataKey="interest" 
+                stackId="a" 
+                fill={CHART_COLORS.interest} 
+                name="Interest"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="mt-4 p-3 rounded-lg bg-[var(--color-bg-tertiary)] text-sm">
+          <div className="flex justify-between">
+            <span className="text-[var(--color-text-muted)]">Total Payments ({amortization.monthsToPayoff} months)</span>
+            <span className="font-medium">${amortization.totalPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-[var(--color-text-muted)]">Amount Over Principal</span>
+            <span className="font-medium text-danger-400">
+              +${(amortization.totalPayments - amortization.totalPrincipal).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface UnsetupDebtCardProps {
+  bill: Bill;
+  onClick: () => void;
+}
+
+function UnsetupDebtCard({ bill, onClick }: UnsetupDebtCardProps) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left p-4 rounded-lg border-2 border-dashed border-[var(--color-border)] hover:border-primary-500/50 hover:bg-[var(--color-bg-tertiary)] transition-all group"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-[var(--color-bg-tertiary)] flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity">
+          <CreditCard className="w-5 h-5 text-[var(--color-text-muted)]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="font-medium text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)] truncate transition-colors">
+              {bill.creditorName}
+            </h3>
+            <span className="text-sm text-[var(--color-text-muted)] whitespace-nowrap">
+              ${bill.budgetedAmount.toFixed(2)}/mo
+            </span>
+          </div>
+          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
+            Click to add remaining balance and APR
+          </p>
+        </div>
+        <div className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Plus className="w-5 h-5 text-primary-500" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+export default function DebtsPage() {
+  const { bills } = useData();
+  const [debtsWithAmortization, setDebtsWithAmortization] = useState<DebtWithAmortization[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>(12);
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<DebtWithAmortization | null>(null);
+  const [deleteDebt, setDeleteDebt] = useState<DebtWithAmortization | null>(null);
+  const [preselectedBill, setPreselectedBill] = useState<Bill | null>(null);
+
+  const loadDebts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await window.electronAPI.debts.getAllWithAmortization();
+      if (result.success && result.data) {
+        setDebtsWithAmortization(result.data as DebtWithAmortization[]);
+      }
+    } catch {
+      // Error loading debts
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDebts();
+  }, [loadDebts]);
+
+  const existingDebtBillIds = new Set(debtsWithAmortization.map(d => d.debt.billId));
+  
+  const debtBills = bills.filter(b => b.category === 'Debt');
+  const untrackedDebtBills = debtBills.filter(b => !existingDebtBillIds.has(b.id));
+  const hasDebtBills = debtBills.length > 0;
+  const hasAnyContent = debtsWithAmortization.length > 0 || untrackedDebtBills.length > 0;
+
+  const handleCreateDebt = async (data: DebtInput) => {
+    try {
+      const result = await window.electronAPI.debts.create(data);
+      if (result.success) {
+        await loadDebts();
+        setIsModalOpen(false);
+        setPreselectedBill(null);
+      }
+    } catch {
+      // Error creating debt
+    }
+  };
+
+  const handleSetupDebt = (bill: Bill) => {
+    setPreselectedBill(bill);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setPreselectedBill(null);
+  };
+
+  const handleUpdateDebt = async (data: DebtInput) => {
+    if (!editingDebt) return;
+    
+    try {
+      const result = await window.electronAPI.debts.update(editingDebt.debt.id, data);
+      if (result.success) {
+        await loadDebts();
+        setEditingDebt(null);
+      }
+    } catch {
+      // Error updating debt
+    }
+  };
+
+  const handleDeleteDebt = async () => {
+    if (!deleteDebt) return;
+    
+    try {
+      const result = await window.electronAPI.debts.delete(deleteDebt.debt.id);
+      if (result.success) {
+        await loadDebts();
+        setDeleteDebt(null);
+      }
+    } catch {
+      // Error deleting debt
+    }
+  };
+
+  const totalBalance = debtsWithAmortization.reduce((sum, d) => sum + d.debt.principalBalance, 0);
+  const totalInterest = debtsWithAmortization.reduce((sum, d) => sum + (d.amortization?.totalInterest || 0), 0);
+  const maxPayoffMonths = Math.max(...debtsWithAmortization.map(d => d.amortization?.monthsToPayoff || 0), 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Debt Tracking</h1>
+          <p className="text-[var(--color-text-muted)] mt-1">
+            Track your debt payoff progress and see amortization projections
+          </p>
+        </div>
+        <button 
+          onClick={() => setIsModalOpen(true)} 
+          className="btn-primary"
+          disabled={untrackedDebtBills.length === 0}
+          title={
+            !hasDebtBills 
+              ? 'Create a bill with category "Debt" first' 
+              : untrackedDebtBills.length === 0 
+                ? 'All debt bills are being tracked'
+                : ''
+          }
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Debt
+        </button>
+      </div>
+
+      {debtsWithAmortization.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card p-4">
+              <p className="text-sm text-[var(--color-text-muted)]">Total Debt Balance</p>
+              <p className="text-2xl font-bold text-danger-400">
+                ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="card p-4">
+              <p className="text-sm text-[var(--color-text-muted)]">Total Interest (All Debts)</p>
+              <p className="text-2xl font-bold text-warning-400">
+                ${totalInterest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="card p-4">
+              <p className="text-sm text-[var(--color-text-muted)]">Longest Payoff</p>
+              <p className="text-2xl font-bold">
+                {maxPayoffMonths > 0 ? `${maxPayoffMonths} months` : '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-[var(--color-text-muted)]">View:</span>
+            {([3, 6, 12, 'max'] as const).map((period) => (
+              <button
+                key={period}
+                onClick={() => setTimePeriod(period)}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                  timePeriod === period
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'
+                )}
+              >
+                {period === 'max' ? 'MAX' : `${period} mo`}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!hasAnyContent ? (
+        <EmptyState
+          icon={CreditCard}
+          title="No debts to track"
+          description="Create a bill with category 'Debt' first, then you can track its payoff here."
+        />
+      ) : (
+        <div className="space-y-6">
+          {untrackedDebtBills.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-medium text-[var(--color-text-muted)] uppercase tracking-wide">
+                  Finish Setting Up Your Debts
+                </h2>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-warning-500/10 text-warning-400 font-medium">
+                  {untrackedDebtBills.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {untrackedDebtBills.map((bill) => (
+                  <UnsetupDebtCard
+                    key={bill.id}
+                    bill={bill}
+                    onClick={() => handleSetupDebt(bill)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {debtsWithAmortization.length > 0 && (
+            <div className="space-y-4">
+              {untrackedDebtBills.length > 0 && (
+                <h2 className="text-sm font-medium text-[var(--color-text-muted)] uppercase tracking-wide">
+                  Tracking ({debtsWithAmortization.length})
+                </h2>
+              )}
+              {debtsWithAmortization.map((debtData) => (
+                <DebtCard
+                  key={debtData.debt.id}
+                  debtData={debtData}
+                  timePeriod={timePeriod}
+                  onEdit={() => setEditingDebt(debtData)}
+                  onDelete={() => setDeleteDebt(debtData)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        title={preselectedBill ? `Set Up: ${preselectedBill.creditorName}` : 'Add Debt'}
+      >
+        <DebtForm
+          bills={bills}
+          existingDebtBillIds={existingDebtBillIds}
+          preselectedBill={preselectedBill ?? undefined}
+          onSubmit={handleCreateDebt}
+          onCancel={handleCloseModal}
+        />
+      </Modal>
+
+      <Modal
+        isOpen={!!editingDebt}
+        onClose={() => setEditingDebt(null)}
+        title="Edit Debt"
+      >
+        {editingDebt && (
+          <DebtForm
+            debt={editingDebt}
+            bills={bills}
+            existingDebtBillIds={existingDebtBillIds}
+            onSubmit={handleUpdateDebt}
+            onCancel={() => setEditingDebt(null)}
+          />
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteDebt}
+        onClose={() => setDeleteDebt(null)}
+        onConfirm={handleDeleteDebt}
+        title="Delete Debt"
+        message={`Are you sure you want to delete the debt tracking for "${deleteDebt?.bill?.creditorName}"? The linked bill will remain.`}
+        confirmText="Delete"
+        variant="danger"
+      />
+    </div>
+  );
+}

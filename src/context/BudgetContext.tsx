@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { Budget, BudgetWithStats } from '../types';
 
 interface BudgetContextValue {
@@ -10,7 +10,7 @@ interface BudgetContextValue {
   
   loadBudgets: () => Promise<void>;
   createBudget: (name: string, startingBalance?: number, targetCashOnHand?: number, minCashOnHand?: number) => Promise<Budget>;
-  updateBudget: (id: string, updates: { name?: string; startingBalance?: number; targetCashOnHand?: number; minCashOnHand?: number }) => Promise<void>;
+  updateBudget: (id: string, updates: { name?: string; startingBalance?: number; targetCashOnHand?: number; minCashOnHand?: number; minSavingsPerPaycheck?: number }) => Promise<void>;
   deleteBudget: (id: string) => Promise<boolean>;
   switchBudget: (id: string) => Promise<void>;
   startQuickBudget: () => Promise<void>;
@@ -55,7 +55,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     return result.data;
   }, [loadBudgets]);
 
-  const updateBudget = useCallback(async (id: string, updates: { name?: string; startingBalance?: number; targetCashOnHand?: number; minCashOnHand?: number }) => {
+  const updateBudget = useCallback(async (id: string, updates: { name?: string; startingBalance?: number; targetCashOnHand?: number; minCashOnHand?: number; minSavingsPerPaycheck?: number }) => {
     const result = await window.electronAPI.budget.update(id, updates);
     if (!result.success) {
       throw new Error(result.error || 'Failed to update budget');
@@ -103,24 +103,38 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
   const hasBudgetSelected = currentBudget !== null || isQuickBudget;
 
+  const value = useMemo(() => ({
+    budgets,
+    currentBudget,
+    isQuickBudget,
+    isLoading,
+    hasBudgetSelected,
+    loadBudgets,
+    createBudget,
+    updateBudget,
+    deleteBudget,
+    switchBudget,
+    startQuickBudget,
+    endQuickBudget,
+    refreshCurrentBudget,
+  }), [
+    budgets,
+    currentBudget,
+    isQuickBudget,
+    isLoading,
+    hasBudgetSelected,
+    loadBudgets,
+    createBudget,
+    updateBudget,
+    deleteBudget,
+    switchBudget,
+    startQuickBudget,
+    endQuickBudget,
+    refreshCurrentBudget,
+  ]);
+
   return (
-    <BudgetContext.Provider
-      value={{
-        budgets,
-        currentBudget,
-        isQuickBudget,
-        isLoading,
-        hasBudgetSelected,
-        loadBudgets,
-        createBudget,
-        updateBudget,
-        deleteBudget,
-        switchBudget,
-        startQuickBudget,
-        endQuickBudget,
-        refreshCurrentBudget,
-      }}
-    >
+    <BudgetContext.Provider value={value}>
       {children}
     </BudgetContext.Provider>
   );

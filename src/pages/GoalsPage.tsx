@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback, useId } from 'react';
-import { useData } from '../context/DataContext';
 import { SavingsGoal, SavingsGoalInput, GoalProjection } from '../types';
-import { Target, Plus, Pencil, Trash2, Check, TrendingUp, AlertTriangle, Calendar, DollarSign, Lightbulb } from 'lucide-react';
+import { Target, Plus, Pencil, Trash2, Check, AlertTriangle, Lightbulb } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import Modal from '../components/Modal';
 
 export default function GoalsPage() {
-  const { schedule, generateSchedule } = useData();
-  
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [projections, setProjections] = useState<GoalProjection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,6 +27,19 @@ export default function GoalsPage() {
   const savedInputId = useId();
   const priorityInputId = useId();
 
+  // Load projections using the INDEPENDENT endpoint (glide-path algorithm)
+  // This produces consistent results regardless of which page generated the last schedule
+  const loadProjections = useCallback(async () => {
+    try {
+      const result = await window.electronAPI.goals.getProjections();
+      if (result.success && result.data) {
+        setProjections(result.data);
+      }
+    } catch {
+      // Projections will remain empty on error
+    }
+  }, []);
+
   const loadGoals = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -42,15 +52,25 @@ export default function GoalsPage() {
     }
   }, []);
 
+  // Load goals and projections on mount
   useEffect(() => {
     let isMounted = true;
     
     const doLoad = async () => {
       setIsLoading(true);
       try {
-        const result = await window.electronAPI.goals.getAll();
-        if (isMounted && result.success && result.data) {
-          setGoals(result.data);
+        const [goalsResult, projectionsResult] = await Promise.all([
+          window.electronAPI.goals.getAll(),
+          window.electronAPI.goals.getProjections()
+        ]);
+        
+        if (isMounted) {
+          if (goalsResult.success && goalsResult.data) {
+            setGoals(goalsResult.data);
+          }
+          if (projectionsResult.success && projectionsResult.data) {
+            setProjections(projectionsResult.data);
+          }
         }
       } finally {
         if (isMounted) {
@@ -63,18 +83,11 @@ export default function GoalsPage() {
     return () => { isMounted = false; };
   }, []);
 
-  useEffect(() => {
-    if (schedule?.goalProjections) {
-      setProjections(schedule.goalProjections);
-    }
-  }, [schedule?.goalProjections]);
-
+  // Refresh both goals and projections
   const refreshData = useCallback(async () => {
     await loadGoals();
-    const today = new Date();
-    const startDate = format(today, 'yyyy-MM-dd');
-    await generateSchedule(startDate, 12, 0);
-  }, [loadGoals, generateSchedule]);
+    await loadProjections();
+  }, [loadGoals, loadProjections]);
 
   const resetForm = () => {
     setFormName('');
@@ -302,40 +315,53 @@ export default function GoalsPage() {
                   <>
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium">Achievability</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">Achievability</span>
+                          {projection.isProjected && (
+                            <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded">
+                              Projected
+                            </span>
+                          )}
+                        </div>
                         <span className={clsx('text-sm font-semibold', getStatusColor(projection.status))}>
                           {projection.achievabilityPercent}%
                         </span>
                       </div>
-                      <div className="w-full bg-[var(--color-surface-hover)] rounded-full h-3">
+                      {/* Progress bar with text overlay showing amount saved */}
+                      <div className="relative w-full bg-[var(--color-surface-hover)] rounded-full h-5">
                         <div
-                          className={clsx('h-3 rounded-full transition-all', getProgressBarColor(projection.achievabilityPercent))}
+                          className={clsx('h-5 rounded-full transition-all', getProgressBarColor(projection.achievabilityPercent))}
                           style={{ width: `${Math.min(100, projection.achievabilityPercent)}%` }}
                         />
+                        {/* Text overlay - hidden at 90%+ to avoid clutter when nearly complete */}
+                        {projection.achievabilityPercent < 90 && (
+                          <span 
+                            className="absolute inset-0 flex items-center justify-center text-xs font-medium"
+                            style={{ 
+                              color: projection.achievabilityPercent > 30 ? 'white' : 'var(--color-text-secondary)',
+                              textShadow: projection.achievabilityPercent > 30 ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'
+                            }}
+                          >
+                            {formatCurrency(goal.alreadySaved + (projection.actualAllocation || 0))} allocated
+                          </span>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-sm text-[var(--color-text-secondary)] mb-3">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        <span>{projection.paycheckCount} paychecks</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="w-4 h-4" />
-                        <span>{formatCurrency(projection.requiredPerPaycheck)}/paycheck needed</span>
-                      </div>
-                      {projection.availablePerPaycheck > 0 && (
-                        <div className="flex items-center gap-1">
-                          <TrendingUp className="w-4 h-4" />
-                          <span>{formatCurrency(projection.availablePerPaycheck)}/paycheck available</span>
-                        </div>
+                      {projection.isProjected && projection.projectionNote && (
+                        <p className="text-xs text-[var(--color-text-muted)] mt-1 italic">
+                          {projection.projectionNote}
+                        </p>
                       )}
                     </div>
 
                     {projection.status === 'achievable' && (
                       <div className="flex items-center gap-2 text-sm text-success-700 dark:text-success-400">
                         <Check className="w-4 h-4" />
-                        <span>Fully achievable with your current budget</span>
+                        <span>
+                          {projection.isProjected 
+                            ? 'Projected to be achievable based on current allocation rate'
+                            : 'Fully achievable with your current budget'
+                          }
+                        </span>
                       </div>
                     )}
 

@@ -11,6 +11,7 @@ export class QuickBudgetService {
   private startingBalance: number = 0;
   private targetCashOnHand: number = 250;
   private minCashOnHand: number = 100;
+  private minSavingsPerPaycheck: number = 0;
 
   private generateId(): string {
     return uuidv4();
@@ -25,6 +26,7 @@ export class QuickBudgetService {
     this.startingBalance = 0;
     this.targetCashOnHand = 250;
     this.minCashOnHand = 100;
+    this.minSavingsPerPaycheck = 0;
   }
 
   getStartingBalance(): number {
@@ -49,6 +51,14 @@ export class QuickBudgetService {
 
   setMinCashOnHand(amount: number): void {
     this.minCashOnHand = amount;
+  }
+
+  getMinSavingsPerPaycheck(): number {
+    return this.minSavingsPerPaycheck;
+  }
+
+  setMinSavingsPerPaycheck(amount: number): void {
+    this.minSavingsPerPaycheck = amount;
   }
 
   // Income Management

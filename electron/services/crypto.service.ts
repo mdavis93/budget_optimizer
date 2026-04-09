@@ -317,6 +317,7 @@ export class CryptoService {
       this.encryptionKey.fill(0);
       this.encryptionKey = null;
     }
+    this.masterPasswordHash = null;
   }
 
   isKeySet(): boolean {
@@ -377,9 +378,15 @@ export class CryptoService {
   }
 
   secureCompare(a: string, b: string): boolean {
-    if (a.length !== b.length) {
-      return false;
-    }
-    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+    // Pad both strings to the same length to avoid timing leaks
+    const maxLength = Math.max(a.length, b.length);
+    const paddedA = a.padEnd(maxLength, '\0');
+    const paddedB = b.padEnd(maxLength, '\0');
+    
+    // Perform timing-safe comparison
+    const result = crypto.timingSafeEqual(Buffer.from(paddedA), Buffer.from(paddedB));
+    
+    // Also check length equality (constant time, after the main comparison)
+    return result && a.length === b.length;
   }
 }

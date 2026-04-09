@@ -15,14 +15,25 @@ import {
   differenceInDays
 } from 'date-fns';
 import { Income, Bill, SavingsGoal } from './database.service';
+import {
+  getPaycheckDatesUntilGoal,
+  calculateGlidePath,
+  calculateAllocationMultiplier,
+  estimateAchievableAmount,
+  getNextIncomeDate,
+} from '../utils/paycheck-calculator';
+import { PRIORITY_ORDER, formatCurrency, roundCurrency } from '../utils/constants';
 
 const DEFAULT_TARGET_CASH_ON_HAND = 250;
 const DEFAULT_MIN_CASH_ON_HAND = 100;
 const MIN_BREATHING_ROOM = 50; // Minimum balance to maintain after bills
 const MAX_PREPAY_DAYS = 14; // Bills cannot be paid more than 14 days early
 
-const formatCurrency = (amount: number) =>
-  amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export interface DebtPayoffInfo {
+  billId: string;
+  payoffDate: Date;
+  finalPaymentAmount: number;
+}
 
 export interface PaycheckBill {
   billId: string;
@@ -125,17 +136,23 @@ export interface GoalProjection {
   targetDate: string;
   paycheckCount: number;
   requiredPerPaycheck: number;
+  adjustedRequiredPerPaycheck: number;
   availablePerPaycheck: number;
+  actualAllocation: number;  // Real amount allocated in schedule
   achievableAmount: number;
   achievabilityPercent: number;
   status: 'achievable' | 'partial' | 'impossible';
   suggestions: GoalSuggestion[];
+  isProjected: boolean;  // True if goal is beyond 12-month schedule window
+  projectionNote?: string;  // Explanation when isProjected is true
 }
 
 export interface ScheduleData {
   startDate: string;
   endDate: string;
   paychecks: PaycheckEntry[];
+  fullPaychecks: PaycheckEntry[];  // Always contains full 12-month schedule
+  viewportMonths: number;  // The currently displayed viewport (1, 3, 6, or 12)
   entries: ScheduleEntry[];
   summary: ScheduleSummary;
   recommendations: string[];
@@ -172,7 +189,7 @@ export class SchedulerService {
     currentDate = startOfDay(currentDate);
 
     while (isBefore(currentDate, startDate)) {
-      currentDate = this.getNextIncomeDate(currentDate, income.cadence);
+      currentDate = getNextIncomeDate(currentDate, income.cadence);
     }
 
     while (isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) {
@@ -182,37 +199,18 @@ export class SchedulerService {
         sourceName: income.sourceName,
         amount: income.amount,
       });
-      currentDate = this.getNextIncomeDate(currentDate, income.cadence);
+      currentDate = getNextIncomeDate(currentDate, income.cadence);
     }
 
     return events;
   }
 
-  private getNextIncomeDate(current: Date, cadence: Income['cadence']): Date {
-    switch (cadence) {
-      case 'weekly':
-        return addWeeks(current, 1);
-      case 'biweekly':
-        return addWeeks(current, 2);
-      case 'semimonthly':
-        const day = getDate(current);
-        if (day === 1) {
-          return setDate(current, 15);
-        } else if (day === 15) {
-          return setDate(addMonths(current, 1), 1);
-        } else if (day < 15) {
-          return setDate(current, 15);
-        } else {
-          return setDate(addMonths(current, 1), 1);
-        }
-      case 'monthly':
-        return addMonths(current, 1);
-      default:
-        return addMonths(current, 1);
-    }
-  }
-
-  projectBills(bill: Bill, startDate: Date, endDate: Date): ProjectedBill[] {
+  projectBills(
+    bill: Bill, 
+    startDate: Date, 
+    endDate: Date,
+    debtPayoffInfo?: DebtPayoffInfo
+  ): ProjectedBill[] {
     const events: ProjectedBill[] = [];
     
     let currentMonth = startOfMonth(startDate);
@@ -223,15 +221,24 @@ export class SchedulerService {
       const dueDay = Math.min(bill.dueDay, daysInMonth);
       const dueDate = setDate(currentMonth, dueDay);
 
+      // If this bill has debt payoff info, stop projecting after payoff date
+      if (debtPayoffInfo && isAfter(dueDate, debtPayoffInfo.payoffDate)) {
+        break;
+      }
+
       if (
         (isAfter(dueDate, startDate) || isEqual(dueDate, startDate)) &&
         (isBefore(dueDate, endDate) || isEqual(dueDate, endDate))
       ) {
+        // Check if this is the final payment month for a debt
+        const isFinalPayment = debtPayoffInfo && 
+          startOfMonth(dueDate).getTime() === startOfMonth(debtPayoffInfo.payoffDate).getTime();
+        
         events.push({
           date: dueDate,
           billId: bill.id,
           creditorName: bill.creditorName,
-          amount: bill.budgetedAmount,
+          amount: isFinalPayment ? debtPayoffInfo.finalPaymentAmount : bill.budgetedAmount,
           dueDay: bill.dueDay,
           priority: bill.priority,
           category: bill.category,
@@ -258,7 +265,9 @@ export class SchedulerService {
     manualAssignments: Map<string, string> = new Map(),
     maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
     goals: SavingsGoal[] = [],
-    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0,
+    debtPayoffs: Map<string, DebtPayoffInfo> = new Map()
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
     const endDate = addMonths(startDate, months);
@@ -275,7 +284,8 @@ export class SchedulerService {
 
     const allBills: ProjectedBill[] = [];
     for (const bill of regularBills) {
-      allBills.push(...this.projectBills(bill, startDate, endDate));
+      const debtInfo = debtPayoffs.get(bill.id);
+      allBills.push(...this.projectBills(bill, startDate, endDate, debtInfo));
     }
 
     allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -314,7 +324,8 @@ export class SchedulerService {
       incomeAttachedBillsRaw,
       maxBudgetRemaining,
       goals,
-      minCashOnHand
+      minCashOnHand,
+      minSavingsPerPaycheck
     );
 
     // Calculate goal projections
@@ -322,7 +333,8 @@ export class SchedulerService {
       goals,
       paychecks,
       format(endDate, 'yyyy-MM-dd'),
-      minCashOnHand
+      minCashOnHand,
+      minSavingsPerPaycheck
     );
 
     const entries = this.convertToLegacyEntries(paychecks, startingBalance);
@@ -334,6 +346,8 @@ export class SchedulerService {
       startDate: format(startDate, 'yyyy-MM-dd'),
       endDate: format(endDate, 'yyyy-MM-dd'),
       paychecks,
+      fullPaychecks: paychecks,  // Will be same as paychecks when called directly
+      viewportMonths: months,    // Will be updated by IPC handler for viewport filtering
       entries,
       summary,
       recommendations,
@@ -410,7 +424,8 @@ export class SchedulerService {
     incomeAttachedBillsRaw: Bill[] = [],
     maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
     goals: SavingsGoal[] = [],
-    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0
   ): PaycheckEntry[] {
     // Step 1: Initial assignment of bills to paychecks based on due dates
     const paycheckAssignments: {
@@ -547,8 +562,7 @@ export class SchedulerService {
     // Sort all paycheck bills by priority
     for (const assignment of paycheckAssignments) {
       assignment.bills.sort((a, b) => {
-        const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
+        return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       });
     }
 
@@ -569,15 +583,13 @@ export class SchedulerService {
     }
 
     // Step 3: Build final paycheck entries with balances, savings, and goal deposits
-    return this.buildPaycheckEntries(paycheckAssignments, startingBalance, maxBudgetRemaining, goals, minCashOnHand);
+    return this.buildPaycheckEntries(paycheckAssignments, startingBalance, maxBudgetRemaining, goals, minCashOnHand, minSavingsPerPaycheck);
   }
 
-  private rebalanceBills(
-    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
-    startingBalance: number
-  ): void {
-    // Each paycheck is SELF-SUFFICIENT: income must cover bills
-    
+  // Type for rebalance helper functions (passed to phase methods)
+  private createRebalanceHelpers(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[]
+  ) {
     const getBalance = (index: number): number => {
       const income = assignments[index].incomes.reduce((sum, inc) => sum + inc.amount, 0);
       const bills = assignments[index].bills.reduce((sum, bill) => sum + bill.amount, 0);
@@ -592,26 +604,19 @@ export class SchedulerService {
       return Math.max(0, MIN_BREATHING_ROOM - getBalance(index));
     };
 
-    const getTotalSurplus = (): number => {
-      return assignments.reduce((sum, _, i) => sum + getSurplus(i), 0);
-    };
-
     const getTotalDeficit = (): number => {
       return assignments.reduce((sum, _, i) => sum + getDeficit(i), 0);
     };
 
-    // Helper to move a bill between paychecks (with duplicate prevention and prepay limit)
     const moveBill = (fromIdx: number, toIdx: number, bill: ProjectedBill): boolean => {
-      // Check prepay limit: bill cannot be paid more than MAX_PREPAY_DAYS before due date
       const targetPaycheckDate = assignments[toIdx].date;
       const billDueDate = bill.date;
       const daysEarly = differenceInDays(billDueDate, targetPaycheckDate);
       
       if (daysEarly > MAX_PREPAY_DAYS) {
-        return false; // Would be paying too early
+        return false;
       }
       
-      // Find the bill in the source paycheck
       const billIndex = assignments[fromIdx].bills.findIndex(b => 
         b.billId === bill.billId && 
         b.date.getTime() === bill.date.getTime() &&
@@ -619,10 +624,9 @@ export class SchedulerService {
       );
       
       if (billIndex === -1) {
-        return false; // Bill not found in source
+        return false;
       }
       
-      // Check if bill already exists in target (prevent duplicates)
       const alreadyInTarget = assignments[toIdx].bills.some(b =>
         b.billId === bill.billId && 
         b.date.getTime() === bill.date.getTime() &&
@@ -630,30 +634,33 @@ export class SchedulerService {
       );
       
       if (alreadyInTarget) {
-        // Bill already in target - just remove from source
         assignments[fromIdx].bills.splice(billIndex, 1);
         return true;
       }
       
-      // Move the bill
       const [movedBill] = assignments[fromIdx].bills.splice(billIndex, 1);
       assignments[toIdx].bills.push(movedBill);
       return true;
     };
 
-    // Get movable bills from a paycheck (non-critical, sorted by priority then amount)
     const getMovableBills = (index: number): ProjectedBill[] => {
       return [...assignments[index].bills]
         .filter(b => b.priority !== 'critical')
         .sort((a, b) => {
-          const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
-          const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+          const priorityDiff = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
           if (priorityDiff !== 0) return priorityDiff;
           return b.amount - a.amount;
         });
     };
 
-    // PHASE 1: Direct moves - move bills from deficit to surplus paychecks
+    return { getBalance, getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills };
+  }
+
+  private rebalancePhase1_DirectMoves(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    helpers: ReturnType<typeof this.createRebalanceHelpers>
+  ): void {
+    const { getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills } = helpers;
     let maxPasses = 200;
     let madeProgress = true;
 
@@ -661,13 +668,11 @@ export class SchedulerService {
       madeProgress = false;
       maxPasses--;
 
-      // Work backwards from last paycheck to first
       for (let i = assignments.length - 1; i >= 0; i--) {
         if (getDeficit(i) > 0) {
           const movableBills = getMovableBills(i);
 
           for (const bill of movableBills) {
-            // Find ANY earlier paycheck with surplus capacity
             for (let j = i - 1; j >= 0; j--) {
               if (getSurplus(j) >= bill.amount) {
                 if (moveBill(i, j, bill)) {
@@ -683,35 +688,32 @@ export class SchedulerService {
         if (madeProgress) break;
       }
     }
+  }
 
-    // PHASE 2: Cascade moves - create capacity by moving bills between non-deficit paychecks
-    // This enables multi-hop rebalancing
-    maxPasses = 200;
-    madeProgress = true;
+  private rebalancePhase2_CascadeMoves(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    helpers: ReturnType<typeof this.createRebalanceHelpers>
+  ): void {
+    const { getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills } = helpers;
+    let maxPasses = 200;
+    let madeProgress = true;
 
     while (madeProgress && maxPasses > 0 && getTotalDeficit() > 0) {
       madeProgress = false;
       maxPasses--;
 
-      // Find paychecks that still have deficits
       for (let deficitIdx = assignments.length - 1; deficitIdx >= 0; deficitIdx--) {
         if (getDeficit(deficitIdx) === 0) continue;
 
-        // For each paycheck between the deficit and the beginning
-        // Try to create capacity by moving its bills further back
         for (let midIdx = deficitIdx - 1; midIdx >= 1; midIdx--) {
-          // Can we move something from midIdx to an earlier paycheck?
           const midMovable = getMovableBills(midIdx);
           
           for (const midBill of midMovable) {
-            // Look for surplus earlier
             for (let earlyIdx = midIdx - 1; earlyIdx >= 0; earlyIdx--) {
               if (getSurplus(earlyIdx) >= midBill.amount) {
-                // This move creates capacity at midIdx
                 if (moveBill(midIdx, earlyIdx, midBill)) {
                   madeProgress = true;
                   
-                  // Now try to use the new capacity
                   const newCapacity = getSurplus(midIdx);
                   const deficitBills = getMovableBills(deficitIdx);
                   
@@ -732,10 +734,15 @@ export class SchedulerService {
         if (madeProgress) break;
       }
     }
+  }
 
-    // PHASE 3: Deep cascade - try moving smaller bills to create room for larger ones
-    maxPasses = 100;
-    madeProgress = true;
+  private rebalancePhase3_DeepCascade(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    helpers: ReturnType<typeof this.createRebalanceHelpers>
+  ): void {
+    const { getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills } = helpers;
+    let maxPasses = 100;
+    let madeProgress = true;
 
     while (madeProgress && maxPasses > 0 && getTotalDeficit() > 0) {
       madeProgress = false;
@@ -745,31 +752,26 @@ export class SchedulerService {
         const deficit = getDeficit(deficitIdx);
         if (deficit === 0) continue;
 
-        // Get the smallest bill that would resolve or reduce the deficit
         const deficitBills = getMovableBills(deficitIdx);
         
         for (const targetBill of deficitBills) {
-          // For each intermediate paycheck, try to make room for this specific bill
           for (let midIdx = deficitIdx - 1; midIdx >= 0; midIdx--) {
             const currentCapacity = getSurplus(midIdx);
             const needed = targetBill.amount - currentCapacity;
             
             if (needed <= 0) {
-              // Already has capacity
               if (moveBill(deficitIdx, midIdx, targetBill)) {
                 madeProgress = true;
                 break;
               }
             } else if (midIdx > 0) {
-              // Need to free up 'needed' amount from midIdx
               const midBills = getMovableBills(midIdx)
-                .filter(b => b.amount <= needed + 50); // Small buffer
+                .filter(b => b.amount <= needed + 50);
               
               let freedAmount = 0;
               const billsToMove: { bill: ProjectedBill; to: number }[] = [];
               
               for (const midBill of midBills) {
-                // Can we move this bill further back?
                 for (let earlyIdx = midIdx - 1; earlyIdx >= 0; earlyIdx--) {
                   if (getSurplus(earlyIdx) >= midBill.amount) {
                     billsToMove.push({ bill: midBill, to: earlyIdx });
@@ -781,7 +783,6 @@ export class SchedulerService {
               }
 
               if (freedAmount >= needed) {
-                // Execute the cascade
                 for (const move of billsToMove) {
                   moveBill(midIdx, move.to, move.bill);
                 }
@@ -798,10 +799,15 @@ export class SchedulerService {
         if (madeProgress) break;
       }
     }
+  }
 
-    // PHASE 4: Even out paychecks for better breathing room
-    maxPasses = 50;
-    madeProgress = true;
+  private rebalancePhase4_EvenOut(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    helpers: ReturnType<typeof this.createRebalanceHelpers>
+  ): void {
+    const { getBalance, getSurplus, moveBill, getMovableBills } = helpers;
+    let maxPasses = 50;
+    let madeProgress = true;
 
     while (madeProgress && maxPasses > 0) {
       madeProgress = false;
@@ -828,14 +834,18 @@ export class SchedulerService {
         if (madeProgress) break;
       }
     }
+  }
 
-    // Deduplicate bills across all paychecks (safety check)
+  private rebalanceFinalCleanup(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[]
+  ): void {
+    // Deduplicate bills across all paychecks
     const seenBills = new Set<string>();
     for (const assignment of assignments) {
       assignment.bills = assignment.bills.filter(bill => {
         const key = `${bill.billId}-${bill.date.getTime()}-${bill.amount}`;
         if (seenBills.has(key)) {
-          return false; // Duplicate, remove it
+          return false;
         }
         seenBills.add(key);
         return true;
@@ -844,11 +854,30 @@ export class SchedulerService {
 
     // Re-sort bills by priority
     for (const assignment of assignments) {
-      assignment.bills.sort((a, b) => {
-        const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      });
+      assignment.bills.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
     }
+  }
+
+  private rebalanceBills(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    _startingBalance: number
+  ): void {
+    const helpers = this.createRebalanceHelpers(assignments);
+    
+    // Phase 1: Direct moves - move bills from deficit to surplus paychecks
+    this.rebalancePhase1_DirectMoves(assignments, helpers);
+    
+    // Phase 2: Cascade moves - create capacity by moving bills between non-deficit paychecks
+    this.rebalancePhase2_CascadeMoves(assignments, helpers);
+    
+    // Phase 3: Deep cascade - try moving smaller bills to create room for larger ones
+    this.rebalancePhase3_DeepCascade(assignments, helpers);
+    
+    // Phase 4: Even out paychecks for better breathing room
+    this.rebalancePhase4_EvenOut(assignments, helpers);
+    
+    // Final cleanup: deduplicate and sort
+    this.rebalanceFinalCleanup(assignments);
   }
 
   private buildPaycheckEntries(
@@ -856,13 +885,45 @@ export class SchedulerService {
     startingBalance: number,
     maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
     goals: SavingsGoal[] = [],
-    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0
   ): PaycheckEntry[] {
     const paychecks: PaycheckEntry[] = [];
     let totalSavings = 0;
 
     // Calculate how much each goal needs per paycheck (for goals that end within the schedule)
     const goalRequirements = this.calculateGoalRequirementsPerPaycheck(goals, assignments);
+
+    // Track cumulative progress for each goal (for glide-path allocation)
+    const goalProgress = new Map<string, number>();
+    for (const goal of goals) {
+      goalProgress.set(goal.id, goal.alreadySaved);
+    }
+
+    // Calculate glide-path expected progress for each goal at each paycheck
+    const goalGlidePaths = new Map<string, Map<string, number>>();
+    for (const goal of goals) {
+      const remainingAmount = goal.targetAmount - goal.alreadySaved;
+      if (remainingAmount <= 0) continue;
+
+      const goalDate = parseISO(goal.targetDate);
+      const relevantAssignments = assignments.filter(a => 
+        isBefore(a.date, goalDate) || isEqual(a.date, goalDate)
+      );
+
+      if (relevantAssignments.length === 0) continue;
+
+      const idealPerPaycheck = remainingAmount / relevantAssignments.length;
+      const glidePath = new Map<string, number>();
+      
+      for (let i = 0; i < relevantAssignments.length; i++) {
+        const dateStr = format(relevantAssignments[i].date, 'yyyy-MM-dd');
+        // Expected total saved by this paycheck (including alreadySaved)
+        glidePath.set(dateStr, goal.alreadySaved + (idealPerPaycheck * (i + 1)));
+      }
+      
+      goalGlidePaths.set(goal.id, glidePath);
+    }
 
     for (const assignment of assignments) {
       // Deduplicate bills by creditorName+dueDay (keep first occurrence)
@@ -881,53 +942,84 @@ export class SchedulerService {
 
       // Each paycheck is standalone: budget remaining = income - bills
       let budgetRemaining = totalIncome - totalBillsAmount;
-
-      // First allocate to savings (above target cash on hand)
-      let savingsDeposit = 0;
-      if (budgetRemaining > maxBudgetRemaining) {
-        savingsDeposit = budgetRemaining - maxBudgetRemaining;
-        budgetRemaining = maxBudgetRemaining;
-        totalSavings += savingsDeposit;
-      }
-
-      // Then allocate to goals from the surplus (between minCashOnHand and maxBudgetRemaining)
-      // Goals can only consume surplus down to minCashOnHand
-      const goalDeposits: GoalDeposit[] = [];
-      let totalGoalDeposits = 0;
       const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
 
-      // Get available surplus for goals
-      const availableForGoals = Math.max(0, budgetRemaining - minCashOnHand);
-      let remainingForGoals = availableForGoals;
+      // GLIDE-PATH ALLOCATION ALGORITHM:
+      // 1. Calculate available surplus above minimum cash on hand
+      // 2. Minimum savings gets first priority
+      // 3. Goals get allocated using glide-path multipliers
+      // 4. Any remainder goes to additional savings
 
-      // Allocate to goals by priority (sorted ascending - priority 1 is highest)
-      const sortedGoals = [...goals].sort((a, b) => a.priority - b.priority);
+      const goalDeposits: GoalDeposit[] = [];
+      let totalGoalDeposits = 0;
+      let savingsDeposit = 0;
 
-      for (const goal of sortedGoals) {
-        if (remainingForGoals <= 0) break;
+      // Calculate available surplus above minimum cash on hand
+      const availableSurplus = Math.max(0, budgetRemaining - minCashOnHand);
 
-        // Check if this paycheck is before the goal's target date
-        const paycheckDate = parseISO(paycheckDateStr);
-        const goalDate = parseISO(goal.targetDate);
+      if (availableSurplus <= 0) {
+        // No surplus - nothing to allocate to savings or goals
+        savingsDeposit = 0;
+      } else if (availableSurplus <= minSavingsPerPaycheck) {
+        // Not enough for minimum savings - all surplus goes to savings, no goals
+        savingsDeposit = availableSurplus;
+        budgetRemaining = minCashOnHand;
+        totalSavings += savingsDeposit;
+      } else {
+        // Enough for both minimum savings and potentially goals
+        // Step 1: Minimum savings deposit first
+        savingsDeposit = minSavingsPerPaycheck;
         
-        if (!isBefore(paycheckDate, goalDate) && !isEqual(paycheckDate, goalDate)) {
-          continue; // Skip goals whose deadline has passed
+        // Step 2: Calculate pool available for goals
+        let poolForGoals = availableSurplus - minSavingsPerPaycheck;
+        
+        // Step 3: Allocate to goals - fund aggressively by priority
+        // Higher priority goals get fully funded before lower priority goals start
+        const sortedGoals = [...goals].sort((a, b) => a.priority - b.priority);
+
+        for (const goal of sortedGoals) {
+          if (poolForGoals <= 0) break;
+
+          // Check if this paycheck is before the goal's target date
+          const paycheckDate = parseISO(paycheckDateStr);
+          const goalDate = parseISO(goal.targetDate);
+          
+          if (!isBefore(paycheckDate, goalDate) && !isEqual(paycheckDate, goalDate)) {
+            continue; // Skip goals whose deadline has passed
+          }
+
+          // Get current progress toward this goal
+          const currentProgress = goalProgress.get(goal.id) || goal.alreadySaved;
+          
+          // How much is still needed to complete this goal?
+          const remaining = goal.targetAmount - currentProgress;
+          if (remaining <= 0) continue; // Goal already funded
+
+          // Allocate as much as possible from the pool (up to what's needed)
+          // This funds goals as fast as possible rather than spreading over time
+          const allocation = Math.min(remaining, poolForGoals);
+          if (allocation > 0) {
+            goalDeposits.push({
+              goalId: goal.id,
+              goalName: goal.name,
+              amount: Math.round(allocation * 100) / 100,
+            });
+            totalGoalDeposits += allocation;
+            poolForGoals -= allocation;
+            
+            // Update goal progress for next iteration
+            goalProgress.set(goal.id, currentProgress + allocation);
+          }
         }
 
-        const required = goalRequirements.get(goal.id) || 0;
-        if (required <= 0) continue;
-
-        const allocation = Math.min(required, remainingForGoals);
-        if (allocation > 0) {
-          goalDeposits.push({
-            goalId: goal.id,
-            goalName: goal.name,
-            amount: Math.round(allocation * 100) / 100,
-          });
-          totalGoalDeposits += allocation;
-          remainingForGoals -= allocation;
-          budgetRemaining -= allocation;
+        // Step 4: Any remainder after goals goes to additional savings
+        if (poolForGoals > 0) {
+          savingsDeposit += poolForGoals;
         }
+
+        // Update budget remaining (keep minCashOnHand)
+        budgetRemaining = minCashOnHand;
+        totalSavings += savingsDeposit;
       }
 
       const isShortfall = budgetRemaining < 0;
@@ -1001,68 +1093,118 @@ export class SchedulerService {
     goals: SavingsGoal[],
     paychecks: PaycheckEntry[],
     scheduleEndDate: string,
-    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND
+    _minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    _minSavingsPerPaycheck: number = 0
   ): GoalProjection[] {
     const projections: GoalProjection[] = [];
+    const scheduleEnd = parseISO(scheduleEndDate);
+    const SCHEDULE_MONTHS = 12;
 
     // Sort goals by priority (ascending - 1 is highest priority)
     const sortedGoals = [...goals].sort((a, b) => a.priority - b.priority);
 
-    // Track remaining surplus after higher-priority goals consume it
-    const paycheckSurplus = new Map<string, number>();
+    // Sum ACTUAL allocations from paychecks
+    const actualAllocations = new Map<string, number>();
     for (const paycheck of paychecks) {
-      if (!paycheck.isShortfall) {
-        // Surplus available = budgetRemaining above minCashOnHand + savings deposit
-        // But we need to recalculate from scratch for projection purposes
-        const surplus = Math.max(0, paycheck.budgetRemaining - minCashOnHand) + paycheck.savingsDeposit;
-        paycheckSurplus.set(paycheck.date, surplus);
+      if (paycheck.isShortfall) continue;
+      for (const deposit of paycheck.goalDeposits) {
+        const current = actualAllocations.get(deposit.goalId) || 0;
+        actualAllocations.set(deposit.goalId, current + deposit.amount);
       }
     }
 
+    // Calculate the pool available for goals - this is ONLY goal deposits
+    // Savings is savings, not available for goals
+    const totalGoalDeposits = paychecks
+      .filter(p => !p.isShortfall)
+      .reduce((sum, p) => sum + p.totalGoalDeposits, 0);
+    
+    const monthlyGoalRate = totalGoalDeposits / SCHEDULE_MONTHS;
+
+    // Build projections based on schedule data
     for (const goal of sortedGoals) {
       const remainingAmount = goal.targetAmount - goal.alreadySaved;
       const goalDate = parseISO(goal.targetDate);
+      const isWithinSchedule = isBefore(goalDate, scheduleEnd) || isEqual(goalDate, scheduleEnd);
 
-      // Count paychecks before the goal deadline
-      const relevantPaycheckDates = paychecks
-        .filter(p => {
-          const pDate = parseISO(p.date);
-          return (isBefore(pDate, goalDate) || isEqual(pDate, goalDate)) && !p.isShortfall;
-        })
-        .map(p => p.date);
+      // Get ACTUAL allocation from 12-month schedule
+      const actualAllocation = actualAllocations.get(goal.id) || 0;
 
-      const paycheckCount = relevantPaycheckDates.length;
+      // Count paychecks before goal deadline (within schedule window)
+      const relevantPaychecks = paychecks.filter(p => {
+        const pDate = parseISO(p.date);
+        return (isBefore(pDate, goalDate) || isEqual(pDate, goalDate)) && !p.isShortfall;
+      });
+      const paycheckCount = relevantPaychecks.length;
 
-      if (paycheckCount === 0 || remainingAmount <= 0) {
+      // Handle already achieved goals
+      if (remainingAmount <= 0) {
         projections.push({
           goalId: goal.id,
           goalName: goal.name,
           targetAmount: goal.targetAmount,
           alreadySaved: goal.alreadySaved,
-          remainingAmount: Math.max(0, remainingAmount),
+          remainingAmount: 0,
           targetDate: goal.targetDate,
           paycheckCount: 0,
           requiredPerPaycheck: 0,
+          adjustedRequiredPerPaycheck: 0,
           availablePerPaycheck: 0,
-          achievableAmount: goal.alreadySaved,
-          achievabilityPercent: remainingAmount <= 0 ? 100 : 0,
-          status: remainingAmount <= 0 ? 'achievable' : 'impossible',
-          suggestions: remainingAmount <= 0 ? [] : this.generateGoalSuggestions(goal, 0, paychecks, scheduleEndDate),
+          actualAllocation: 0,
+          achievableAmount: goal.targetAmount,
+          achievabilityPercent: 100,
+          status: 'achievable',
+          suggestions: [],
+          isProjected: false,
+          projectionNote: undefined,
         });
         continue;
       }
 
-      const requiredPerPaycheck = remainingAmount / paycheckCount;
+      let achievableAmount: number;
+      let achievabilityPercent: number;
+      let isProjected: boolean;
+      let projectionNote: string | undefined;
 
-      // Calculate total available surplus across relevant paychecks
-      let totalAvailableSurplus = 0;
-      for (const dateStr of relevantPaycheckDates) {
-        totalAvailableSurplus += paycheckSurplus.get(dateStr) || 0;
+      // First check: is the goal already fully funded by actual allocations?
+      // If so, it's 100% achievable - no projection needed
+      if (actualAllocation >= remainingAmount) {
+        achievableAmount = goal.targetAmount;
+        achievabilityPercent = 100;
+        isProjected = false;
+        projectionNote = undefined;
+      } else if (isWithinSchedule) {
+        // Goal is within 12-month schedule but not fully funded
+        // Use actual allocation to show partial achievability
+        achievableAmount = goal.alreadySaved + actualAllocation;
+        achievabilityPercent = Math.min(100, Math.round((achievableAmount / goal.targetAmount) * 100));
+        isProjected = false;
+        projectionNote = undefined;
+      } else {
+        // Goal is beyond 12-month schedule AND not fully funded
+        // Project based on monthly goal allocation rate
+        const monthsToGoal = Math.ceil(differenceInDays(goalDate, new Date()) / 30);
+        const projectedGoalPool = monthlyGoalRate * monthsToGoal;
+        
+        // For projection, estimate this goal's share based on priority
+        const goalIndex = sortedGoals.indexOf(goal);
+        let poolConsumedByHigherPriority = 0;
+        for (let i = 0; i < goalIndex; i++) {
+          const higherGoal = sortedGoals[i];
+          const higherRemaining = higherGoal.targetAmount - higherGoal.alreadySaved;
+          poolConsumedByHigherPriority += Math.max(0, higherRemaining);
+        }
+        
+        // Pool available for this goal (projected)
+        const poolAvailableForThisGoal = Math.max(0, projectedGoalPool - poolConsumedByHigherPriority);
+        
+        // Achievable is the minimum of what's needed and what's projected available
+        const canAchieve = Math.min(remainingAmount, poolAvailableForThisGoal);
+        achievableAmount = goal.alreadySaved + canAchieve;
+        achievabilityPercent = Math.min(100, Math.round((achievableAmount / goal.targetAmount) * 100));
+        isProjected = true;
+        projectionNote = `Projected based on ${SCHEDULE_MONTHS}-month allocation rate`;
       }
-
-      const availablePerPaycheck = totalAvailableSurplus / paycheckCount;
-      const achievableAmount = Math.min(remainingAmount, totalAvailableSurplus) + goal.alreadySaved;
-      const achievabilityPercent = Math.min(100, Math.round((achievableAmount / goal.targetAmount) * 100));
 
       let status: 'achievable' | 'partial' | 'impossible';
       if (achievabilityPercent >= 100) {
@@ -1073,12 +1215,12 @@ export class SchedulerService {
         status = 'impossible';
       }
 
-      // Update surplus tracking - deduct what this goal will consume
-      const consumptionPerPaycheck = Math.min(requiredPerPaycheck, availablePerPaycheck);
-      for (const dateStr of relevantPaycheckDates) {
-        const current = paycheckSurplus.get(dateStr) || 0;
-        paycheckSurplus.set(dateStr, Math.max(0, current - consumptionPerPaycheck));
-      }
+      const requiredPerPaycheck = paycheckCount > 0 ? remainingAmount / paycheckCount : 0;
+      // Calculate available per paycheck based on total goal deposits
+      const totalPaychecksInSchedule = paychecks.filter(p => !p.isShortfall).length;
+      const availablePerPaycheck = totalPaychecksInSchedule > 0 
+        ? totalGoalDeposits / totalPaychecksInSchedule 
+        : 0;
 
       projections.push({
         goalId: goal.id,
@@ -1088,14 +1230,18 @@ export class SchedulerService {
         remainingAmount,
         targetDate: goal.targetDate,
         paycheckCount,
-        requiredPerPaycheck: Math.round(requiredPerPaycheck * 100) / 100,
-        availablePerPaycheck: Math.round(availablePerPaycheck * 100) / 100,
-        achievableAmount: Math.round(achievableAmount * 100) / 100,
+        requiredPerPaycheck: roundCurrency(requiredPerPaycheck),
+        adjustedRequiredPerPaycheck: roundCurrency(requiredPerPaycheck),
+        availablePerPaycheck: roundCurrency(availablePerPaycheck),
+        actualAllocation: roundCurrency(actualAllocation),
+        achievableAmount: roundCurrency(achievableAmount),
         achievabilityPercent,
         status,
         suggestions: status !== 'achievable' 
           ? this.generateGoalSuggestions(goal, availablePerPaycheck, paychecks, scheduleEndDate)
           : [],
+        isProjected,
+        projectionNote,
       });
     }
 
@@ -1493,8 +1639,9 @@ export class SchedulerService {
     startingBalance: number,
     maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
     goals: SavingsGoal[] = [],
-    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0
   ): ScheduleData {
-    return this.generateSchedule(incomes, bills, startDateStr, months, startingBalance, new Set(), new Map(), maxBudgetRemaining, goals, minCashOnHand);
+    return this.generateSchedule(incomes, bills, startDateStr, months, startingBalance, new Set(), new Map(), maxBudgetRemaining, goals, minCashOnHand, minSavingsPerPaycheck);
   }
 }

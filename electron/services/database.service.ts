@@ -12,6 +12,7 @@ interface BudgetRow {
   starting_balance: number;
   target_cash_on_hand: number;
   min_cash_on_hand: number;
+  min_savings_per_paycheck: number;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +23,7 @@ export interface Budget {
   startingBalance: number;
   targetCashOnHand: number;
   minCashOnHand: number;
+  minSavingsPerPaycheck: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +33,7 @@ export interface BudgetInput {
   startingBalance?: number;
   targetCashOnHand?: number;
   minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
 }
 
 interface GoalRow {
@@ -116,6 +119,35 @@ export interface BillAssignment {
   createdAt: string;
 }
 
+interface DebtRow {
+  id: string;
+  budget_id: string;
+  bill_id: string;
+  principal_balance: number;
+  apr: number;
+  monthly_payment: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Debt {
+  id: string;
+  budgetId: string;
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DebtInput {
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+}
+
 export interface Income {
   id: string;
   sourceName: string;
@@ -177,6 +209,7 @@ export class DatabaseService {
 
     this.db = new Database(this.dbPath);
     this.db.pragma('journal_mode = WAL');
+    this.db.pragma('foreign_keys = ON');
     this.runMigrations();
   }
 
@@ -261,8 +294,77 @@ export class DatabaseService {
       this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (4)').run();
       logger.info('Migration to schema version 4 complete (savings goals)');
     }
+
+    // Schema version 5: Minimum savings per paycheck
+    if (currentVersion < 5) {
+      this.migrateToVersion5();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (5)').run();
+      logger.info('Migration to schema version 5 complete (min savings per paycheck)');
+    }
+
+    // Schema version 6: Debt tracking
+    if (currentVersion < 6) {
+      this.migrateToVersion6();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (6)').run();
+      logger.info('Migration to schema version 6 complete (debt tracking)');
+    }
+
+    // Schema version 7: Monthly payment field for debts
+    if (currentVersion < 7) {
+      this.migrateToVersion7();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (7)').run();
+      logger.info('Migration to schema version 7 complete (debt monthly payment)');
+    }
     
-    logger.info('Database initialized', { version: Math.max(currentVersion, 4) });
+    logger.info('Database initialized', { version: Math.max(currentVersion, 7) });
+  }
+
+  private migrateToVersion5(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Add min_savings_per_paycheck column to budgets table with default of 0
+    const hasColumn = this.columnExists('budgets', 'min_savings_per_paycheck');
+    if (!hasColumn) {
+      this.db.exec(`ALTER TABLE budgets ADD COLUMN min_savings_per_paycheck REAL DEFAULT 0`);
+      this.db.prepare(`UPDATE budgets SET min_savings_per_paycheck = 0 WHERE min_savings_per_paycheck IS NULL`).run();
+      logger.info('Added min_savings_per_paycheck column to budgets table');
+    }
+  }
+
+  private migrateToVersion6(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Create debts table for tracking debt payoff with amortization
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS debts (
+        id TEXT PRIMARY KEY,
+        budget_id TEXT NOT NULL,
+        bill_id TEXT NOT NULL,
+        principal_balance REAL NOT NULL,
+        apr REAL NOT NULL,
+        extra_payment_amount REAL DEFAULT 0,
+        extra_payment_type TEXT DEFAULT 'none',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE,
+        FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_debts_budget_id ON debts(budget_id);
+      CREATE INDEX IF NOT EXISTS idx_debts_bill_id ON debts(bill_id);
+    `);
+    logger.info('Created debts table');
+  }
+
+  private migrateToVersion7(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Add monthly_payment column to debts table
+    const hasColumn = this.columnExists('debts', 'monthly_payment');
+    if (!hasColumn) {
+      this.db.exec(`ALTER TABLE debts ADD COLUMN monthly_payment REAL DEFAULT 0`);
+      logger.info('Added monthly_payment column to debts table');
+    }
   }
 
   private migrateToVersion4(): void {
@@ -410,6 +512,7 @@ export class DatabaseService {
       startingBalance: row.starting_balance,
       targetCashOnHand: row.target_cash_on_hand ?? 250,
       minCashOnHand: row.min_cash_on_hand ?? 100,
+      minSavingsPerPaycheck: row.min_savings_per_paycheck ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -428,6 +531,7 @@ export class DatabaseService {
       startingBalance: row.starting_balance,
       targetCashOnHand: row.target_cash_on_hand ?? 250,
       minCashOnHand: row.min_cash_on_hand ?? 100,
+      minSavingsPerPaycheck: row.min_savings_per_paycheck ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -441,11 +545,12 @@ export class DatabaseService {
     const startingBalance = input.startingBalance ?? 0;
     const targetCashOnHand = input.targetCashOnHand ?? 250;
     const minCashOnHand = input.minCashOnHand ?? 100;
+    const minSavingsPerPaycheck = input.minSavingsPerPaycheck ?? 0;
     
     this.db.prepare(`
-      INSERT INTO budgets (id, name, starting_balance, target_cash_on_hand, min_cash_on_hand, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, startingBalance, targetCashOnHand, minCashOnHand, now, now);
+      INSERT INTO budgets (id, name, starting_balance, target_cash_on_hand, min_cash_on_hand, min_savings_per_paycheck, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.name, startingBalance, targetCashOnHand, minCashOnHand, minSavingsPerPaycheck, now, now);
     
     logger.info('Budget created', { id, name: input.name });
     
@@ -455,6 +560,7 @@ export class DatabaseService {
       startingBalance,
       targetCashOnHand,
       minCashOnHand,
+      minSavingsPerPaycheck,
       createdAt: now,
       updatedAt: now,
     };
@@ -471,10 +577,11 @@ export class DatabaseService {
     const startingBalance = input.startingBalance ?? existing.startingBalance;
     const targetCashOnHand = input.targetCashOnHand ?? existing.targetCashOnHand;
     const minCashOnHand = input.minCashOnHand ?? existing.minCashOnHand;
+    const minSavingsPerPaycheck = input.minSavingsPerPaycheck ?? existing.minSavingsPerPaycheck;
     
     this.db.prepare(`
-      UPDATE budgets SET name = ?, starting_balance = ?, target_cash_on_hand = ?, min_cash_on_hand = ?, updated_at = ? WHERE id = ?
-    `).run(name, startingBalance, targetCashOnHand, minCashOnHand, now, id);
+      UPDATE budgets SET name = ?, starting_balance = ?, target_cash_on_hand = ?, min_cash_on_hand = ?, min_savings_per_paycheck = ?, updated_at = ? WHERE id = ?
+    `).run(name, startingBalance, targetCashOnHand, minCashOnHand, minSavingsPerPaycheck, now, id);
     
     logger.info('Budget updated', { id, name });
     
@@ -484,6 +591,7 @@ export class DatabaseService {
       startingBalance,
       targetCashOnHand,
       minCashOnHand,
+      minSavingsPerPaycheck,
       createdAt: existing.createdAt,
       updatedAt: now,
     };
@@ -492,15 +600,21 @@ export class DatabaseService {
   deleteBudget(id: string): boolean {
     if (!this.db) throw new Error('Database not initialized');
     
-    // Delete all associated data first (cascade)
-    this.db.prepare('DELETE FROM goals WHERE budget_id = ?').run(id);
-    this.db.prepare('DELETE FROM bill_assignments WHERE budget_id = ?').run(id);
-    this.db.prepare('DELETE FROM skipped_bills WHERE budget_id = ?').run(id);
-    this.db.prepare('DELETE FROM bills WHERE budget_id = ?').run(id);
-    this.db.prepare('DELETE FROM incomes WHERE budget_id = ?').run(id);
+    // Use transaction for atomic deletion of budget and all associated data
+    const deleteBudgetTransaction = this.db.transaction(() => {
+      // Delete all associated data first (cascade)
+      this.db!.prepare('DELETE FROM debts WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM goals WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM bill_assignments WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM skipped_bills WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM bills WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM incomes WHERE budget_id = ?').run(id);
+      
+      // Delete the budget
+      return this.db!.prepare('DELETE FROM budgets WHERE id = ?').run(id);
+    });
     
-    // Delete the budget
-    const result = this.db.prepare('DELETE FROM budgets WHERE id = ?').run(id);
+    const result = deleteBudgetTransaction();
     
     if (result.changes > 0) {
       logger.info('Budget deleted', { id });
@@ -536,6 +650,7 @@ export class DatabaseService {
       startingBalance: row.starting_balance,
       targetCashOnHand: row.target_cash_on_hand ?? 250,
       minCashOnHand: row.min_cash_on_hand ?? 100,
+      minSavingsPerPaycheck: row.min_savings_per_paycheck ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       incomeCount: row.income_count,
@@ -785,15 +900,19 @@ export class DatabaseService {
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
     
-    // Delete existing and insert new (to handle unique constraint)
-    this.db.prepare(
-      'DELETE FROM skipped_bills WHERE budget_id = ? AND bill_id = ? AND skip_date = ?'
-    ).run(budgetId, billId, skipDate);
+    // Use transaction for atomic delete-then-insert
+    const skipBillTransaction = this.db.transaction(() => {
+      this.db!.prepare(
+        'DELETE FROM skipped_bills WHERE budget_id = ? AND bill_id = ? AND skip_date = ?'
+      ).run(budgetId, billId, skipDate);
+      
+      this.db!.prepare(`
+        INSERT INTO skipped_bills (id, budget_id, bill_id, skip_date, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, budgetId, billId, skipDate, now);
+    });
     
-    this.db.prepare(`
-      INSERT INTO skipped_bills (id, budget_id, bill_id, skip_date, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, budgetId, billId, skipDate, now);
+    skipBillTransaction();
     
     return {
       id,
@@ -854,16 +973,19 @@ export class DatabaseService {
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
     
-    // Delete any existing assignment for this bill occurrence
-    this.db.prepare(
-      'DELETE FROM bill_assignments WHERE budget_id = ? AND bill_id = ? AND bill_due_date = ?'
-    ).run(budgetId, billId, billDueDate);
+    // Use transaction for atomic delete-then-insert
+    const assignTransaction = this.db.transaction(() => {
+      this.db!.prepare(
+        'DELETE FROM bill_assignments WHERE budget_id = ? AND bill_id = ? AND bill_due_date = ?'
+      ).run(budgetId, billId, billDueDate);
+      
+      this.db!.prepare(`
+        INSERT INTO bill_assignments (id, budget_id, bill_id, bill_due_date, paycheck_date, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, budgetId, billId, billDueDate, paycheckDate, now);
+    });
     
-    // Insert new assignment
-    this.db.prepare(`
-      INSERT INTO bill_assignments (id, budget_id, bill_id, bill_due_date, paycheck_date, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, budgetId, billId, billDueDate, paycheckDate, now);
+    assignTransaction();
     
     return {
       id,
@@ -1020,6 +1142,137 @@ export class DatabaseService {
     
     if (result.changes > 0) {
       logger.info('Goal deleted', { id, budgetId });
+    }
+    
+    return result.changes > 0;
+  }
+
+  // Debt methods
+  getDebts(budgetId: string): Debt[] {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const rows = this.db.prepare(
+      'SELECT * FROM debts WHERE budget_id = ?'
+    ).all(budgetId) as DebtRow[];
+    
+    return rows.map(row => ({
+      id: row.id,
+      budgetId: row.budget_id,
+      billId: row.bill_id,
+      principalBalance: row.principal_balance,
+      apr: row.apr,
+      monthlyPayment: row.monthly_payment,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  getDebtById(id: string, budgetId: string): Debt | null {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const row = this.db.prepare(
+      'SELECT * FROM debts WHERE id = ? AND budget_id = ?'
+    ).get(id, budgetId) as DebtRow | undefined;
+    
+    if (!row) return null;
+    
+    return {
+      id: row.id,
+      budgetId: row.budget_id,
+      billId: row.bill_id,
+      principalBalance: row.principal_balance,
+      apr: row.apr,
+      monthlyPayment: row.monthly_payment,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  getDebtByBillId(billId: string, budgetId: string): Debt | null {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const row = this.db.prepare(
+      'SELECT * FROM debts WHERE bill_id = ? AND budget_id = ?'
+    ).get(billId, budgetId) as DebtRow | undefined;
+    
+    if (!row) return null;
+    
+    return {
+      id: row.id,
+      budgetId: row.budget_id,
+      billId: row.bill_id,
+      principalBalance: row.principal_balance,
+      apr: row.apr,
+      monthlyPayment: row.monthly_payment,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  createDebt(budgetId: string, input: DebtInput): Debt {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const id = this.crypto.generateId();
+    const now = new Date().toISOString();
+    
+    this.db.prepare(`
+      INSERT INTO debts (id, budget_id, bill_id, principal_balance, apr, monthly_payment, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, budgetId, input.billId, input.principalBalance, input.apr, input.monthlyPayment, now, now);
+    
+    logger.info('Debt created', { id, budgetId, billId: input.billId });
+    
+    return {
+      id,
+      budgetId,
+      billId: input.billId,
+      principalBalance: input.principalBalance,
+      apr: input.apr,
+      monthlyPayment: input.monthlyPayment,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  updateDebt(id: string, budgetId: string, input: Partial<DebtInput>): Debt | null {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const existing = this.getDebtById(id, budgetId);
+    if (!existing) return null;
+    
+    const principalBalance = input.principalBalance ?? existing.principalBalance;
+    const apr = input.apr ?? existing.apr;
+    const monthlyPayment = input.monthlyPayment ?? existing.monthlyPayment;
+    const now = new Date().toISOString();
+    
+    this.db.prepare(`
+      UPDATE debts SET principal_balance = ?, apr = ?, monthly_payment = ?, updated_at = ?
+      WHERE id = ? AND budget_id = ?
+    `).run(principalBalance, apr, monthlyPayment, now, id, budgetId);
+    
+    logger.info('Debt updated', { id, budgetId });
+    
+    return {
+      id,
+      budgetId,
+      billId: existing.billId,
+      principalBalance,
+      apr,
+      monthlyPayment,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    };
+  }
+
+  deleteDebt(id: string, budgetId: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const result = this.db.prepare(
+      'DELETE FROM debts WHERE id = ? AND budget_id = ?'
+    ).run(id, budgetId);
+    
+    if (result.changes > 0) {
+      logger.info('Debt deleted', { id, budgetId });
     }
     
     return result.changes > 0;

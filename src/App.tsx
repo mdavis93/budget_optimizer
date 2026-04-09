@@ -4,11 +4,14 @@ import { useAuth } from './context/AuthContext';
 import { BudgetProvider, useBudget } from './context/BudgetContext';
 import Layout from './components/Layout';
 import BudgetPicker from './components/BudgetPicker';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastProvider } from './components/Toast';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import DashboardPage from './pages/DashboardPage';
 import IncomePage from './pages/IncomePage';
 import BillsPage from './pages/BillsPage';
+import DebtsPage from './pages/DebtsPage';
 import SchedulePage from './pages/SchedulePage';
 import GoalsPage from './pages/GoalsPage';
 import SummaryPage from './pages/SummaryPage';
@@ -65,42 +68,47 @@ function App() {
   }
 
   return (
-    <HashRouter>
-      <BudgetProvider>
-        <Routes>
-          <Route 
-            path="/login" 
-            element={isFirstTime ? <Navigate to="/setup" replace /> : <LoginPage />} 
-          />
-          <Route 
-            path="/setup" 
-            element={isFirstTime ? <SetupPage /> : <Navigate to="/login" replace />} 
-          />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <BudgetRequiredRoute>
-                  <Layout />
-                </BudgetRequiredRoute>
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="income" element={<IncomePage />} />
-            <Route path="bills" element={<BillsPage />} />
-            <Route path="schedule" element={<SchedulePage />} />
-            <Route path="goals" element={<GoalsPage />} />
-            <Route path="summary" element={<SummaryPage />} />
-            <Route path="budgets" element={<BudgetsPage />} />
-            <Route path="export" element={<ExportPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BudgetProvider>
-    </HashRouter>
+    <ErrorBoundary>
+      <ToastProvider>
+        <HashRouter>
+          <BudgetProvider>
+          <Routes>
+            <Route 
+              path="/login" 
+              element={isFirstTime ? <Navigate to="/setup" replace /> : <LoginPage />} 
+            />
+            <Route 
+              path="/setup" 
+              element={isFirstTime ? <SetupPage /> : <Navigate to="/login" replace />} 
+            />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <BudgetRequiredRoute>
+                    <Layout />
+                  </BudgetRequiredRoute>
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="income" element={<IncomePage />} />
+              <Route path="bills" element={<BillsPage />} />
+              <Route path="debts" element={<DebtsPage />} />
+              <Route path="schedule" element={<SchedulePage />} />
+              <Route path="goals" element={<GoalsPage />} />
+              <Route path="summary" element={<SummaryPage />} />
+              <Route path="budgets" element={<BudgetsPage />} />
+              <Route path="export" element={<ExportPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BudgetProvider>
+        </HashRouter>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

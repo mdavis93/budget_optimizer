@@ -85,6 +85,18 @@ const api = {
     update: (id: string, input: Partial<SavingsGoalInput>) => 
       ipcRenderer.invoke('goals:update', id, input),
     delete: (id: string) => ipcRenderer.invoke('goals:delete', id),
+    getProjections: () => ipcRenderer.invoke('goals:get-projections'),
+  },
+
+  debts: {
+    getAll: () => ipcRenderer.invoke('debts:get-all'),
+    getByBill: (billId: string) => ipcRenderer.invoke('debts:get-by-bill', billId),
+    create: (input: DebtInput) => ipcRenderer.invoke('debts:create', input),
+    update: (id: string, input: Partial<DebtInput>) => 
+      ipcRenderer.invoke('debts:update', id, input),
+    delete: (id: string) => ipcRenderer.invoke('debts:delete', id),
+    getAmortization: (debtId: string) => ipcRenderer.invoke('debts:get-amortization', debtId),
+    getAllWithAmortization: () => ipcRenderer.invoke('debts:get-all-with-amortization'),
   },
 
   schedule: {
@@ -154,6 +166,13 @@ interface BillInput {
   priority: 'critical' | 'high' | 'normal' | 'low';
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
+}
+
+interface DebtInput {
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
 }
 
 interface ScheduleData {

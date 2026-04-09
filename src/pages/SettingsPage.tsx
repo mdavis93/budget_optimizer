@@ -10,10 +10,13 @@ import {
   DollarSign,
   CheckCircle,
   AlertCircle,
-  PiggyBank
+  PiggyBank,
+  Wallet,
+  Target
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import PasswordStrength from '../components/PasswordStrength';
 import RecoveryKeyDisplay from '../components/RecoveryKeyDisplay';
@@ -22,6 +25,7 @@ import clsx from 'clsx';
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { biometricAvailable, biometricEnabled, enableBiometric } = useAuth();
+  const { currentBudget, updateBudget, hasBudgetSelected } = useBudget();
   const [currency, setCurrency] = useState('USD');
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
   const [savingsAPY, setSavingsAPY] = useState(0);
@@ -31,6 +35,11 @@ export default function SettingsPage() {
     type: null,
     message: ''
   });
+  
+  // Budget-specific settings
+  const [targetCashOnHand, setTargetCashOnHand] = useState(250);
+  const [minCashOnHand, setMinCashOnHand] = useState(100);
+  const [minSavingsPerPaycheck, setMinSavingsPerPaycheck] = useState(0);
 
   // Load settings on mount
   useEffect(() => {
@@ -56,6 +65,15 @@ export default function SettingsPage() {
     
     return () => { isMounted = false; };
   }, []);
+
+  // Load budget settings when current budget changes
+  useEffect(() => {
+    if (currentBudget) {
+      setTargetCashOnHand(currentBudget.targetCashOnHand);
+      setMinCashOnHand(currentBudget.minCashOnHand);
+      setMinSavingsPerPaycheck(currentBudget.minSavingsPerPaycheck);
+    }
+  }, [currentBudget]);
 
   // Save settings when they change
   const saveSettings = useCallback(async (updates: { currency?: string; autoLockMinutes?: number; savingsAPY?: number }) => {
@@ -89,6 +107,49 @@ export default function SettingsPage() {
     const clampedValue = Math.min(100, Math.max(0, value));
     setSavingsAPY(clampedValue);
     saveSettings({ savingsAPY: clampedValue });
+  };
+
+  // Budget setting handlers
+  const handleTargetCashOnHandChange = async (value: number) => {
+    if (!currentBudget) return;
+    const clampedValue = Math.max(0, value);
+    setTargetCashOnHand(clampedValue);
+    try {
+      await updateBudget(currentBudget.id, { targetCashOnHand: clampedValue });
+      setStatus({ type: 'success', message: 'Budget settings saved' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
+    } catch {
+      setStatus({ type: 'error', message: 'Failed to save budget settings' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+    }
+  };
+
+  const handleMinCashOnHandChange = async (value: number) => {
+    if (!currentBudget) return;
+    const clampedValue = Math.max(0, value);
+    setMinCashOnHand(clampedValue);
+    try {
+      await updateBudget(currentBudget.id, { minCashOnHand: clampedValue });
+      setStatus({ type: 'success', message: 'Budget settings saved' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
+    } catch {
+      setStatus({ type: 'error', message: 'Failed to save budget settings' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+    }
+  };
+
+  const handleMinSavingsPerPaycheckChange = async (value: number) => {
+    if (!currentBudget) return;
+    const clampedValue = Math.max(0, value);
+    setMinSavingsPerPaycheck(clampedValue);
+    try {
+      await updateBudget(currentBudget.id, { minSavingsPerPaycheck: clampedValue });
+      setStatus({ type: 'success', message: 'Budget settings saved' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
+    } catch {
+      setStatus({ type: 'error', message: 'Failed to save budget settings' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+    }
   };
 
   const handleEnableBiometric = async () => {
@@ -295,10 +356,85 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {hasBudgetSelected && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-4">
+            <Target className="w-5 h-5 text-primary-500" />
+            <h3 className="font-semibold">Budget Allocation</h3>
+          </div>
+          <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+            Configure how surplus funds are allocated between cash reserves, savings, and goals for {currentBudget?.name}.
+          </p>
+          
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="settings-target-cash" className="label">Target Cash on Hand</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--color-text-secondary)]">$</span>
+                <input
+                  id="settings-target-cash"
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={targetCashOnHand}
+                  onChange={(e) => handleTargetCashOnHandChange(parseFloat(e.target.value) || 0)}
+                  className="input w-32"
+                />
+              </div>
+              <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                Any surplus above this amount is sent to savings
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="settings-min-cash" className="label">Minimum Cash on Hand</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--color-text-secondary)]">$</span>
+                <input
+                  id="settings-min-cash"
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={minCashOnHand}
+                  onChange={(e) => handleMinCashOnHandChange(parseFloat(e.target.value) || 0)}
+                  className="input w-32"
+                />
+              </div>
+              <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                Floor balance - goals cannot reduce cash below this
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-[var(--color-border)]">
+              <label htmlFor="settings-min-savings" className="label flex items-center gap-2">
+                <Wallet className="w-4 h-4" />
+                Minimum Savings per Paycheck
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--color-text-secondary)]">$</span>
+                <input
+                  id="settings-min-savings"
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={minSavingsPerPaycheck}
+                  onChange={(e) => handleMinSavingsPerPaycheckChange(parseFloat(e.target.value) || 0)}
+                  className="input w-32"
+                />
+              </div>
+              <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                This amount goes to savings first, before allocating to goals. 
+                Set to 0 to let goals take priority over savings.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card bg-[var(--color-bg-tertiary)]">
         <h3 className="font-semibold mb-2">About Budget Optimizer</h3>
         <p className="text-sm text-[var(--color-text-secondary)]">
-          Version 2.4.0
+          Version 2.7.0
         </p>
         <p className="text-sm text-[var(--color-text-secondary)] mt-2">
           A secure desktop app for managing your income and optimizing bill payments.

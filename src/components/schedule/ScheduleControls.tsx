@@ -34,9 +34,9 @@ export default function ScheduleControls({
         </div>
         
         <div>
-          <label htmlFor="schedule-duration" className="label">Duration</label>
+          <label htmlFor="schedule-view" className="label">View</label>
           <select
-            id="schedule-duration"
+            id="schedule-view"
             value={months}
             onChange={(e) => onMonthsChange(parseInt(e.target.value))}
             className="input"

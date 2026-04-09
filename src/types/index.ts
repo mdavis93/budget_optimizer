@@ -4,6 +4,7 @@ export interface Budget {
   startingBalance: number;
   targetCashOnHand: number;
   minCashOnHand: number;
+  minSavingsPerPaycheck: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -13,6 +14,7 @@ export interface BudgetInput {
   startingBalance?: number;
   targetCashOnHand?: number;
   minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
 }
 
 export interface SavingsGoal {
@@ -98,6 +100,48 @@ export interface BillAssignment {
   createdAt: string;
 }
 
+export interface Debt {
+  id: string;
+  budgetId: string;
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DebtInput {
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+}
+
+export interface AmortizationPayment {
+  paymentNumber: number;
+  date: string;
+  payment: number;
+  principal: number;
+  interest: number;
+  remainingBalance: number;
+}
+
+export interface AmortizationSchedule {
+  payments: AmortizationPayment[];
+  totalPayments: number;
+  totalInterest: number;
+  totalPrincipal: number;
+  payoffDate: string;
+  monthsToPayoff: number;
+}
+
+export interface DebtWithAmortization {
+  debt: Debt;
+  bill: Bill | null;
+  amortization: AmortizationSchedule | null;
+}
+
 export interface ScheduleEntry {
   date: string;
   type: 'income' | 'expense' | 'savings';
@@ -159,17 +203,23 @@ export interface GoalProjection {
   targetDate: string;
   paycheckCount: number;
   requiredPerPaycheck: number;
+  adjustedRequiredPerPaycheck: number;
   availablePerPaycheck: number;
+  actualAllocation: number;  // Real amount allocated in schedule
   achievableAmount: number;
   achievabilityPercent: number;
   status: 'achievable' | 'partial' | 'impossible';
   suggestions: GoalSuggestion[];
+  isProjected: boolean;  // True if goal is beyond 12-month schedule window
+  projectionNote?: string;  // Explanation when isProjected is true
 }
 
 export interface ScheduleData {
   startDate: string;
   endDate: string;
   paychecks: PaycheckEntry[];
+  fullPaychecks: PaycheckEntry[];  // Always contains full 12-month schedule
+  viewportMonths: number;  // The currently displayed viewport (1, 3, 6, or 12)
   entries: ScheduleEntry[];
   summary: ScheduleSummary;
   recommendations: string[];

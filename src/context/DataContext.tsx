@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
 import { Income, IncomeInput, Bill, BillInput, ScheduleData } from '../types';
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
@@ -207,27 +207,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, []);
 
+  const value = useMemo(() => ({
+    incomes,
+    bills,
+    schedule,
+    isLoading,
+    error,
+    refreshIncomes,
+    refreshBills,
+    refreshAllData,
+    createIncome,
+    updateIncome,
+    deleteIncome,
+    createBill,
+    updateBill,
+    deleteBill,
+    generateSchedule,
+    clearError,
+  }), [
+    incomes,
+    bills,
+    schedule,
+    isLoading,
+    error,
+    refreshIncomes,
+    refreshBills,
+    refreshAllData,
+    createIncome,
+    updateIncome,
+    deleteIncome,
+    createBill,
+    updateBill,
+    deleteBill,
+    generateSchedule,
+    clearError,
+  ]);
+
   return (
-    <DataContext.Provider
-      value={{
-        incomes,
-        bills,
-        schedule,
-        isLoading,
-        error,
-        refreshIncomes,
-        refreshBills,
-        refreshAllData,
-        createIncome,
-        updateIncome,
-        deleteIncome,
-        createBill,
-        updateBill,
-        deleteBill,
-        generateSchedule,
-        clearError,
-      }}
-    >
+    <DataContext.Provider value={value}>
       {children}
     </DataContext.Provider>
   );

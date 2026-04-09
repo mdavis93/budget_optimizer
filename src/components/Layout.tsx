@@ -12,7 +12,8 @@ import {
   Power,
   Briefcase,
   Zap,
-  Target
+  Target,
+  CreditCard
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/income', icon: Wallet, label: 'Income' },
   { to: '/bills', icon: Receipt, label: 'Bills' },
+  { to: '/debts', icon: CreditCard, label: 'Debts' },
   { to: '/schedule', icon: Calendar, label: 'Schedule' },
   { to: '/goals', icon: Target, label: 'Goals' },
   { to: '/summary', icon: TrendingUp, label: 'Summary' },

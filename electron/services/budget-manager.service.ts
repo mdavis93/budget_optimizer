@@ -144,6 +144,24 @@ export class BudgetManager {
     }
   }
 
+  // Minimum Savings Per Paycheck (routes to quick budget or current budget)
+  getMinSavingsPerPaycheck(): number {
+    if (this.isQuickBudgetMode) {
+      return this.quickBudgetService.getMinSavingsPerPaycheck();
+    }
+    if (!this.currentBudgetId) return 0;
+    const budget = this.database.getBudgetById(this.currentBudgetId);
+    return budget?.minSavingsPerPaycheck ?? 0;
+  }
+
+  setMinSavingsPerPaycheck(amount: number): void {
+    if (this.isQuickBudgetMode) {
+      this.quickBudgetService.setMinSavingsPerPaycheck(amount);
+    } else if (this.currentBudgetId) {
+      this.database.updateBudget(this.currentBudgetId, { minSavingsPerPaycheck: amount });
+    }
+  }
+
   // Income Operations (routed based on mode)
   getAllIncomes(): Income[] {
     if (this.isQuickBudgetMode) {

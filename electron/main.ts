@@ -7,6 +7,7 @@ import { SchedulerService } from './services/scheduler.service';
 import { PdfService } from './services/pdf.service';
 import { GoogleService } from './services/google.service';
 import { BudgetManager } from './services/budget-manager.service';
+import { DebtService } from './services/debt.service';
 import { registerIpcHandlers } from './ipc/handlers';
 import { logger } from './services/logger.service';
 
@@ -80,6 +81,7 @@ let services: {
   scheduler: SchedulerService;
   pdf: PdfService;
   google: GoogleService;
+  debt: DebtService;
 };
 
 app.whenReady().then(async () => {
@@ -92,6 +94,7 @@ app.whenReady().then(async () => {
     scheduler: new SchedulerService(),
     pdf: new PdfService(),
     google: new GoogleService(),
+    debt: new DebtService(),
   };
 
   createWindow();
