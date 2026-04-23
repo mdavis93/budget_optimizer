@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
+import { format, startOfMonth } from 'date-fns';
 import { Income, IncomeInput, Bill, BillInput, ScheduleData } from '../types';
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
@@ -9,6 +10,12 @@ interface DataContextType {
   schedule: ScheduleData | null;
   isLoading: boolean;
   error: string | null;
+  scheduleStartDate: string;
+  scheduleMonths: number;
+  scheduleStartingBalance: number;
+  setScheduleStartDate: (date: string) => void;
+  setScheduleMonths: (months: number) => void;
+  setScheduleStartingBalance: (balance: number) => void;
   refreshIncomes: () => Promise<void>;
   refreshBills: () => Promise<void>;
   refreshAllData: () => Promise<void>;
@@ -32,6 +39,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleStartDate, setScheduleStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [scheduleMonths, setScheduleMonths] = useState(3);
+  const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
 
   const refreshIncomes = useCallback(async () => {
     if (!isUnlocked) return;
@@ -213,6 +223,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     schedule,
     isLoading,
     error,
+    scheduleStartDate,
+    scheduleMonths,
+    scheduleStartingBalance,
+    setScheduleStartDate,
+    setScheduleMonths,
+    setScheduleStartingBalance,
     refreshIncomes,
     refreshBills,
     refreshAllData,
@@ -230,6 +246,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     schedule,
     isLoading,
     error,
+    scheduleStartDate,
+    scheduleMonths,
+    scheduleStartingBalance,
     refreshIncomes,
     refreshBills,
     refreshAllData,

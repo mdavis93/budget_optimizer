@@ -9,20 +9,28 @@ import {
   Loader2
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { format, parseISO, startOfMonth } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 
 export default function ExportPage() {
-  const { schedule, generateSchedule, incomes, bills } = useData();
+  const { 
+    schedule, 
+    generateSchedule, 
+    incomes, 
+    bills,
+    scheduleStartDate: startDate,
+    scheduleMonths: months,
+    scheduleStartingBalance: startingBalance,
+    setScheduleStartDate: setStartDate,
+    setScheduleMonths: setMonths,
+    setScheduleStartingBalance: setStartingBalance,
+  } = useData();
   const [isGoogleAuthed, setIsGoogleAuthed] = useState(false);
   const [exportStatus, setExportStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
   const [isExporting, setIsExporting] = useState(false);
-  const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [months, setMonths] = useState(3);
-  const [startingBalance, setStartingBalance] = useState(0);
 
   useEffect(() => {
     let isMounted = true;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
 import { Calendar, List, AlertTriangle, RefreshCw, PiggyBank, Target, ChevronDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { format, parseISO, startOfMonth } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { PaycheckBill, BillAssignment, ProposedFix } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
@@ -10,11 +10,20 @@ import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '
 type ViewMode = 'paycheck' | 'calendar';
 
 export default function SchedulePage() {
-  const { incomes, bills, schedule, generateSchedule, isLoading } = useData();
+  const { 
+    incomes, 
+    bills, 
+    schedule, 
+    generateSchedule, 
+    isLoading,
+    scheduleStartDate: startDate,
+    scheduleMonths: months,
+    scheduleStartingBalance: startingBalance,
+    setScheduleStartDate: setStartDate,
+    setScheduleMonths: setMonths,
+    setScheduleStartingBalance: setStartingBalance,
+  } = useData();
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
-  const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [months, setMonths] = useState(3);
-  const [startingBalance, setStartingBalance] = useState(0);
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
   const [skippingBill, setSkippingBill] = useState<string | null>(null);
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);

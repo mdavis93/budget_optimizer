@@ -25,7 +25,7 @@ import clsx from 'clsx';
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { biometricAvailable, biometricEnabled, enableBiometric } = useAuth();
-  const { currentBudget, updateBudget, hasBudgetSelected } = useBudget();
+  const { currentBudget, updateBudget } = useBudget();
   const [currency, setCurrency] = useState('USD');
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
   const [savingsAPY, setSavingsAPY] = useState(0);
@@ -356,7 +356,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {hasBudgetSelected && (
+      {currentBudget && (
         <div className="card">
           <div className="flex items-center gap-3 mb-4">
             <Target className="w-5 h-5 text-primary-500" />
