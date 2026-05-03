@@ -1,4 +1,4 @@
-import { Income, Bill, SkippedBill, BillAssignment, SavingsGoal, SavingsGoalInput } from './database.service';
+import { Income, Bill, SkippedBill, BillAssignment, IncomeOverride, SavingsGoal, SavingsGoalInput } from './database.service';
 import { validateBill, validateIncome, assertValid } from './validation.service';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -7,6 +7,7 @@ export class QuickBudgetService {
   private bills: Bill[] = [];
   private skippedBills: SkippedBill[] = [];
   private billAssignments: BillAssignment[] = [];
+  private incomeOverrides: IncomeOverride[] = [];
   private goals: SavingsGoal[] = [];
   private startingBalance: number = 0;
   private targetCashOnHand: number = 250;
@@ -22,6 +23,7 @@ export class QuickBudgetService {
     this.bills = [];
     this.skippedBills = [];
     this.billAssignments = [];
+    this.incomeOverrides = [];
     this.goals = [];
     this.startingBalance = 0;
     this.targetCashOnHand = 250;
@@ -107,6 +109,7 @@ export class QuickBudgetService {
     const index = this.incomes.findIndex(i => i.id === id);
     if (index === -1) return false;
     this.incomes.splice(index, 1);
+    this.incomeOverrides = this.incomeOverrides.filter(o => o.incomeId !== id);
     return true;
   }
 
@@ -233,6 +236,36 @@ export class QuickBudgetService {
     return this.billAssignments.find(
       ba => ba.billId === billId && ba.billDueDate === billDueDate
     ) || null;
+  }
+
+  getIncomeOverrides(): IncomeOverride[] {
+    return [...this.incomeOverrides];
+  }
+
+  setIncomeOverride(incomeId: string, paycheckDate: string, amount: number): IncomeOverride {
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error('Income override amount must be a non-negative number');
+    }
+    this.incomeOverrides = this.incomeOverrides.filter(
+      o => !(o.incomeId === incomeId && o.paycheckDate === paycheckDate)
+    );
+    const row: IncomeOverride = {
+      id: this.generateId(),
+      incomeId,
+      paycheckDate,
+      amount,
+      createdAt: new Date().toISOString(),
+    };
+    this.incomeOverrides.push(row);
+    return row;
+  }
+
+  removeIncomeOverride(incomeId: string, paycheckDate: string): boolean {
+    const before = this.incomeOverrides.length;
+    this.incomeOverrides = this.incomeOverrides.filter(
+      o => !(o.incomeId === incomeId && o.paycheckDate === paycheckDate)
+    );
+    return this.incomeOverrides.length < before;
   }
 
   // Savings Goals Management

@@ -1,4 +1,4 @@
-import { DatabaseService, Budget, BudgetInput, Income, Bill, SkippedBill, BillAssignment, SavingsGoal, SavingsGoalInput } from './database.service';
+import { DatabaseService, Budget, BudgetInput, Income, Bill, SkippedBill, BillAssignment, IncomeOverride, SavingsGoal, SavingsGoalInput } from './database.service';
 import { QuickBudgetService } from './quick-budget.service';
 import { budgetLogger as logger } from './logger.service';
 
@@ -316,6 +316,32 @@ export class BudgetManager {
     }
     if (!this.currentBudgetId) return null;
     return this.database.getBillAssignment(this.currentBudgetId, billId, billDueDate);
+  }
+
+  getIncomeOverrides(): IncomeOverride[] {
+    if (this.isQuickBudgetMode) {
+      return this.quickBudgetService.getIncomeOverrides();
+    }
+    if (!this.currentBudgetId) return [];
+    return this.database.getIncomeOverrides(this.currentBudgetId);
+  }
+
+  setIncomeOverride(incomeId: string, paycheckDate: string, amount: number): IncomeOverride {
+    if (this.isQuickBudgetMode) {
+      return this.quickBudgetService.setIncomeOverride(incomeId, paycheckDate, amount);
+    }
+    if (!this.currentBudgetId) {
+      throw new Error('No budget selected');
+    }
+    return this.database.setIncomeOverride(this.currentBudgetId, incomeId, paycheckDate, amount);
+  }
+
+  removeIncomeOverride(incomeId: string, paycheckDate: string): boolean {
+    if (this.isQuickBudgetMode) {
+      return this.quickBudgetService.removeIncomeOverride(incomeId, paycheckDate);
+    }
+    if (!this.currentBudgetId) return false;
+    return this.database.removeIncomeOverride(this.currentBudgetId, incomeId, paycheckDate);
   }
 
   // Savings Goals Operations (routed based on mode)

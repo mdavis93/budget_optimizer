@@ -491,6 +491,45 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
+  ipcMain.handle('income-overrides:get-all', () => {
+    if (!services.budgetManager) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const data = services.budgetManager.getIncomeOverrides();
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('income-overrides:get-all failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('income-overrides:set', (_, incomeId: string, paycheckDate: string, amount: number) => {
+    if (!services.budgetManager) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const data = services.budgetManager.setIncomeOverride(incomeId, paycheckDate, amount);
+      return { success: true, data };
+    } catch (error) {
+      ipcLogger.error('income-overrides:set failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle('income-overrides:remove', (_, incomeId: string, paycheckDate: string) => {
+    if (!services.budgetManager) {
+      return { success: false, error: 'Not initialized' };
+    }
+    try {
+      const removed = services.budgetManager.removeIncomeOverride(incomeId, paycheckDate);
+      return { success: true, data: removed };
+    } catch (error) {
+      ipcLogger.error('income-overrides:remove failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
   // Savings Goals Management (via BudgetManager)
   ipcMain.handle('goals:get-all', () => {
     if (!services.budgetManager) {
@@ -593,6 +632,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
 
+      const incomeOverridesList = services.budgetManager.getIncomeOverrides();
+      const incomeOverridesMap = new Map(
+        incomeOverridesList.map(o => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+      );
+
       // Calculate debt payoff info for bills with linked debts
       const debtPayoffs = new Map<string, DebtPayoffInfo>();
       const state = services.budgetManager.getCurrentState();
@@ -640,7 +684,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         goals,
         minCashOnHand,
         minSavingsPerPaycheck,
-        debtPayoffs
+        debtPayoffs,
+        incomeOverridesMap
       );
 
       // Return the goal projections from the actual schedule
@@ -676,6 +721,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       // Create a Map of manual assignments (billId + billDueDate -> paycheckDate)
       const manualAssignments = new Map(
         billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
+      );
+
+      const incomeOverridesListGen = services.budgetManager.getIncomeOverrides();
+      const incomeOverridesMapGen = new Map(
+        incomeOverridesListGen.map(o => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
       );
       
       // Calculate debt payoff info for bills with linked debts
@@ -721,7 +771,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         goals,
         minCashOnHand,
         minSavingsPerPaycheck,
-        debtPayoffs
+        debtPayoffs,
+        incomeOverridesMapGen
       );
       
       // FINAL DEDUPLICATION - nuclear option
@@ -809,6 +860,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const manualAssignments = new Map(
         billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
+
+      const incomeOverridesListOpt = services.budgetManager.getIncomeOverrides();
+      const incomeOverridesMapOpt = new Map(
+        incomeOverridesListOpt.map(o => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+      );
       
       // Calculate debt payoff info for bills with linked debts
       const debtPayoffs = new Map<string, DebtPayoffInfo>();
@@ -852,7 +908,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         goals,
         minCashOnHand,
         minSavingsPerPaycheck,
-        debtPayoffs
+        debtPayoffs,
+        incomeOverridesMapOpt
       );
       return { success: true, data };
     } catch (error) {

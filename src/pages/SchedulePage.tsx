@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
 import { Calendar, List, AlertTriangle, RefreshCw, PiggyBank, Target, ChevronDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { format, parseISO } from 'date-fns';
-import { PaycheckBill, BillAssignment, ProposedFix } from '../types';
+import { PaycheckBill, BillAssignment, ProposedFix, IncomeOverride } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '../components/schedule';
@@ -29,6 +29,8 @@ export default function SchedulePage() {
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
   const [billAssignments, setBillAssignments] = useState<BillAssignment[]>([]);
+  const [incomeOverrides, setIncomeOverrides] = useState<IncomeOverride[]>([]);
+  const [savingIncomeKey, setSavingIncomeKey] = useState<string | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [showReconciliation, setShowReconciliation] = useState(false);
   const [dismissedReconciliation, setDismissedReconciliation] = useState(false);
@@ -117,6 +119,20 @@ export default function SchedulePage() {
     return () => { isMounted = false; };
   }, [schedule]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadIncomeOverrides = async () => {
+      const result = await window.electronAPI.incomeOverrides.getAll();
+      if (isMounted && result.success && result.data) {
+        setIncomeOverrides(result.data);
+      }
+    };
+    loadIncomeOverrides();
+
+    return () => { isMounted = false; };
+  }, [schedule]);
+
   // Create a stable hash of incomes and bills to detect actual data changes
   const dataHash = useMemo(() => {
     const incomeData = incomes.map(i => `${i.id}-${i.amount}-${i.sourceName}-${i.cadence}-${i.startDate}-${i.isActive}`).sort().join('|');
@@ -175,6 +191,41 @@ export default function SchedulePage() {
   const handleDragLeave = useCallback(() => {
     setDropTargetDate(null);
   }, []);
+
+  const handleSaveIncomeOverride = useCallback(async (incomeId: string, paycheckDate: string, amount: number) => {
+    const key = `${incomeId}-${paycheckDate}`;
+    setSavingIncomeKey(key);
+    try {
+      const result = await window.electronAPI.incomeOverrides.set(incomeId, paycheckDate, amount);
+      if (result.success && result.data) {
+        setIncomeOverrides((prev) => {
+          const rest = prev.filter(
+            (o) => !(o.incomeId === incomeId && o.paycheckDate === paycheckDate)
+          );
+          return [...rest, result.data!];
+        });
+        await generateSchedule(startDate, months, startingBalance);
+      }
+    } finally {
+      setSavingIncomeKey(null);
+    }
+  }, [generateSchedule, startDate, months, startingBalance]);
+
+  const handleClearIncomeOverride = useCallback(async (incomeId: string, paycheckDate: string) => {
+    const key = `${incomeId}-${paycheckDate}`;
+    setSavingIncomeKey(key);
+    try {
+      const result = await window.electronAPI.incomeOverrides.remove(incomeId, paycheckDate);
+      if (result.success) {
+        setIncomeOverrides((prev) =>
+          prev.filter((o) => !(o.incomeId === incomeId && o.paycheckDate === paycheckDate))
+        );
+        await generateSchedule(startDate, months, startingBalance);
+      }
+    } finally {
+      setSavingIncomeKey(null);
+    }
+  }, [generateSchedule, startDate, months, startingBalance]);
 
   const handleDrop = useCallback(async (e: DragEvent, targetPaycheckDate: string) => {
     e.preventDefault();
@@ -478,6 +529,10 @@ export default function SchedulePage() {
           dropTargetDate={dropTargetDate}
           billAssignments={billAssignments}
           isAssigning={isAssigning}
+          incomeOverrides={incomeOverrides}
+          onSaveIncomeOverride={handleSaveIncomeOverride}
+          onClearIncomeOverride={handleClearIncomeOverride}
+          savingIncomeKey={savingIncomeKey}
         />
       ) : (
         <CalendarView paychecks={schedule?.paychecks || []} />

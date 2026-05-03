@@ -177,6 +177,21 @@ export const createMockElectronAPI = () => {
       remove: vi.fn().mockResolvedValue({ success: true }),
     },
 
+    incomeOverrides: {
+      getAll: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      set: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          id: 'ov-1',
+          incomeId: 'income-1',
+          paycheckDate: '2026-01-01',
+          amount: 1000,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+      remove: vi.fn().mockResolvedValue({ success: true, data: true }),
+    },
+
     goals: {
       getAll: vi.fn().mockResolvedValue({ success: true, data: [createMockGoal()] }),
       create: vi.fn().mockResolvedValue({ success: true, data: createMockGoal() }),

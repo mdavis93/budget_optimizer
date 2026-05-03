@@ -267,7 +267,8 @@ export class SchedulerService {
     goals: SavingsGoal[] = [],
     minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
     minSavingsPerPaycheck: number = 0,
-    debtPayoffs: Map<string, DebtPayoffInfo> = new Map()
+    debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
+    incomeOverrides: Map<string, number> = new Map()
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
     const endDate = addMonths(startDate, months);
@@ -275,6 +276,13 @@ export class SchedulerService {
     const allIncomes: ProjectedIncome[] = [];
     for (const income of incomes) {
       allIncomes.push(...this.projectIncome(income, startDate, endDate));
+    }
+
+    for (const projected of allIncomes) {
+      const key = `${projected.sourceId}-${format(projected.date, 'yyyy-MM-dd')}`;
+      if (incomeOverrides.has(key)) {
+        projected.amount = incomeOverrides.get(key)!;
+      }
     }
 
     // Separate income-attached bills from regular bills BEFORE projection
@@ -925,7 +933,8 @@ export class SchedulerService {
       goalGlidePaths.set(goal.id, glidePath);
     }
 
-    for (const assignment of assignments) {
+    for (let assignmentIndex = 0; assignmentIndex < assignments.length; assignmentIndex++) {
+      const assignment = assignments[assignmentIndex];
       // Deduplicate bills by creditorName+dueDay (keep first occurrence)
       const seenBills = new Set<string>();
       const uniqueBills = assignment.bills.filter(bill => {
@@ -940,8 +949,10 @@ export class SchedulerService {
       const totalIncome = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
       const totalBillsAmount = uniqueBills.reduce((sum, bill) => sum + bill.amount, 0);
 
-      // Each paycheck is standalone: budget remaining = income - bills
-      let budgetRemaining = totalIncome - totalBillsAmount;
+      // Each paycheck is standalone: income - bills. Starting checking balance applies only
+      // to the first paycheck (cash on hand at schedule start; no cross-paycheck carry).
+      const ledgerBoost = assignmentIndex === 0 ? startingBalance : 0;
+      let budgetRemaining = totalIncome - totalBillsAmount + ledgerBoost;
       const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
 
       // GLIDE-PATH ALLOCATION ALGORITHM:
@@ -1640,8 +1651,23 @@ export class SchedulerService {
     maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
     goals: SavingsGoal[] = [],
     minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-    minSavingsPerPaycheck: number = 0
+    minSavingsPerPaycheck: number = 0,
+    incomeOverrides: Map<string, number> = new Map()
   ): ScheduleData {
-    return this.generateSchedule(incomes, bills, startDateStr, months, startingBalance, new Set(), new Map(), maxBudgetRemaining, goals, minCashOnHand, minSavingsPerPaycheck);
+    return this.generateSchedule(
+      incomes,
+      bills,
+      startDateStr,
+      months,
+      startingBalance,
+      new Set(),
+      new Map(),
+      maxBudgetRemaining,
+      goals,
+      minCashOnHand,
+      minSavingsPerPaycheck,
+      new Map(),
+      incomeOverrides
+    );
   }
 }

@@ -202,7 +202,7 @@ describe('SchedulerService', () => {
       expect(schedule.summary.totalExpenses).toBeGreaterThan(0);
     });
 
-    it('respects starting balance', () => {
+    it('respects starting balance on first paycheck only', () => {
       const scheduleWithBalance = scheduler.generateSchedule(
         [income],
         [],
@@ -212,6 +212,33 @@ describe('SchedulerService', () => {
       );
       
       expect(scheduleWithBalance.paychecks[0].budgetRemaining).toBeGreaterThanOrEqual(0);
+    });
+
+    it('does not apply starting balance to the second paycheck', () => {
+      const withZero = scheduler.generateSchedule([income], [], '2026-01-01', 2, 0);
+      const withLargeStart = scheduler.generateSchedule([income], [], '2026-01-01', 2, 99_999);
+      expect(withZero.paychecks.length).toBeGreaterThanOrEqual(2);
+      expect(withLargeStart.paychecks.length).toBe(withZero.paychecks.length);
+      const i = 1;
+      expect(withLargeStart.paychecks[i].date).toBe(withZero.paychecks[i].date);
+      expect(withLargeStart.paychecks[i].totalIncome).toBe(withZero.paychecks[i].totalIncome);
+      expect(withLargeStart.paychecks[i].savingsDeposit).toBe(withZero.paychecks[i].savingsDeposit);
+      expect(withLargeStart.paychecks[i].budgetRemaining).toBe(withZero.paychecks[i].budgetRemaining);
+      expect(withLargeStart.paychecks[i].isShortfall).toBe(withZero.paychecks[i].isShortfall);
+    });
+
+    it('starting balance on first paycheck can clear a shortfall that would occur without it', () => {
+      const tightBill: Bill = {
+        ...bill,
+        id: 'bill-tight',
+        budgetedAmount: 2300,
+        dueDay: 10,
+        priority: 'critical' as const,
+      };
+      const noStart = scheduler.generateSchedule([income], [tightBill], '2026-01-01', 1, 0);
+      const withStart = scheduler.generateSchedule([income], [tightBill], '2026-01-01', 1, 500);
+      expect(noStart.paychecks[0].isShortfall).toBe(true);
+      expect(withStart.paychecks[0].isShortfall).toBe(false);
     });
 
     it('handles empty income list', () => {
@@ -224,6 +251,39 @@ describe('SchedulerService', () => {
       );
       
       expect(schedule.paychecks).toHaveLength(0);
+    });
+
+    it('applies incomeOverrides to projected paycheck amounts', () => {
+      const overrides = new Map<string, number>();
+      const projected = scheduler.projectIncome(
+        income,
+        parseISO('2026-01-01'),
+        parseISO('2026-01-31')
+      );
+      expect(projected.length).toBeGreaterThan(0);
+      const firstDateStr = format(projected[0].date, 'yyyy-MM-dd');
+      overrides.set(`${income.id}-${firstDateStr}`, 777);
+
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [],
+        '2026-01-01',
+        1,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0,
+        new Map(),
+        overrides
+      );
+
+      const firstPaycheck = schedule.paychecks.find((p) => p.date === firstDateStr);
+      expect(firstPaycheck).toBeDefined();
+      expect(firstPaycheck!.totalIncome).toBe(777);
+      expect(firstPaycheck!.incomeSources[0]?.amount).toBe(777);
     });
   });
 
@@ -951,12 +1011,13 @@ describe('SchedulerService', () => {
         const allBills = [rentBill, utilitiesBill];
         const allGoals = [vacationGoal];
 
+        const startingBalance = 500;
         const schedule = scheduler.generateSchedule(
           allIncomes,
           allBills,
           '2026-01-01',
           6,
-          500,
+          startingBalance,
           new Set(),
           new Map(),
           250,
@@ -965,12 +1026,14 @@ describe('SchedulerService', () => {
           100
         );
 
-        // For each paycheck, verify: income = bills + savings + goals + remaining
+        // For each paycheck: income - bills + (starting cash on first only) = savings + goals + remaining
         schedule.paychecks.forEach((paycheck, index) => {
-          const calculatedRemaining = 
-            paycheck.totalIncome - 
-            paycheck.totalBills - 
-            paycheck.savingsDeposit - 
+          const ledgerBoost = index === 0 ? startingBalance : 0;
+          const calculatedRemaining =
+            paycheck.totalIncome -
+            paycheck.totalBills +
+            ledgerBoost -
+            paycheck.savingsDeposit -
             paycheck.totalGoalDeposits;
 
           // Budget remaining should match (with small floating point tolerance)

@@ -1,4 +1,4 @@
-import { DragEvent } from 'react';
+import { DragEvent, useState } from 'react';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { 
   Wallet, 
@@ -11,9 +11,10 @@ import {
   GripVertical, 
   Target,
   AlertTriangle,
-  RefreshCw 
+  RefreshCw,
+  Pencil,
 } from 'lucide-react';
-import { PaycheckEntry, PaycheckBill, PRIORITY_LABELS, BillAssignment } from '../../types';
+import { PaycheckEntry, PaycheckBill, PRIORITY_LABELS, BillAssignment, IncomeOverride } from '../../types';
 import clsx from 'clsx';
 
 interface DraggedBill {
@@ -44,6 +45,10 @@ interface PaycheckViewProps {
   dropTargetDate: string | null;
   billAssignments: BillAssignment[];
   isAssigning: boolean;
+  incomeOverrides: IncomeOverride[];
+  onSaveIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => Promise<void>;
+  onClearIncomeOverride: (incomeId: string, paycheckDate: string) => Promise<void>;
+  savingIncomeKey: string | null;
 }
 
 export default function PaycheckView({ 
@@ -64,7 +69,11 @@ export default function PaycheckView({
   draggedBill,
   dropTargetDate,
   billAssignments,
-  isAssigning
+  isAssigning,
+  incomeOverrides,
+  onSaveIncomeOverride,
+  onClearIncomeOverride,
+  savingIncomeKey,
 }: PaycheckViewProps) {
   if (paychecks.length === 0) {
     return (
@@ -194,6 +203,10 @@ export default function PaycheckView({
                   draggedBill={draggedBill}
                   billAssignments={billAssignments}
                   isAssigning={isAssigning}
+                  incomeOverrides={incomeOverrides}
+                  onSaveIncomeOverride={onSaveIncomeOverride}
+                  onClearIncomeOverride={onClearIncomeOverride}
+                  savingIncomeKey={savingIncomeKey}
                 />
               )}
             </div>
@@ -214,6 +227,22 @@ interface PaycheckDetailsProps {
   draggedBill: DraggedBill | null;
   billAssignments: BillAssignment[];
   isAssigning: boolean;
+  incomeOverrides: IncomeOverride[];
+  onSaveIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => Promise<void>;
+  onClearIncomeOverride: (incomeId: string, paycheckDate: string) => Promise<void>;
+  savingIncomeKey: string | null;
+}
+
+function incomeOverrideRowKey(incomeId: string, paycheckDate: string): string {
+  return `${incomeId}-${paycheckDate}`;
+}
+
+function hasIncomeOverride(
+  overrides: IncomeOverride[],
+  incomeId: string,
+  paycheckDate: string
+): boolean {
+  return overrides.some(o => o.incomeId === incomeId && o.paycheckDate === paycheckDate);
 }
 
 function PaycheckDetails({
@@ -226,7 +255,14 @@ function PaycheckDetails({
   draggedBill,
   billAssignments,
   isAssigning,
+  incomeOverrides,
+  onSaveIncomeOverride,
+  onClearIncomeOverride,
+  savingIncomeKey,
 }: PaycheckDetailsProps) {
+  const [editingIncomeKey, setEditingIncomeKey] = useState<string | null>(null);
+  const [draftIncomeAmount, setDraftIncomeAmount] = useState('');
+
   return (
     <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
       <div className="space-y-4">
@@ -236,14 +272,97 @@ function PaycheckDetails({
             Income
           </h4>
           <div className="space-y-2">
-            {paycheck.incomeSources.map((source, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2 px-3 bg-success-50 dark:bg-success-500/10 rounded-lg">
-                <span className="font-medium">{source.name}</span>
-                <span className="font-mono font-semibold text-success-600 dark:text-success-500">
-                  +{formatCurrency(source.amount)}
-                </span>
-              </div>
-            ))}
+            {paycheck.incomeSources.map((source) => {
+              const rowKey = incomeOverrideRowKey(source.id, paycheck.date);
+              const overridden = hasIncomeOverride(incomeOverrides, source.id, paycheck.date);
+              const isEditing = editingIncomeKey === rowKey;
+              const isSaving = savingIncomeKey === rowKey;
+
+              return (
+                <div
+                  key={rowKey}
+                  className="py-2 px-3 bg-success-50 dark:bg-success-500/10 rounded-lg space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{source.name}</span>
+                    <div className="flex items-center gap-2">
+                      {!isEditing && (
+                        <>
+                          <span className="font-mono font-semibold text-success-600 dark:text-success-500">
+                            +{formatCurrency(source.amount)}
+                          </span>
+                          {overridden && (
+                            <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                              Adjusted
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            title="Edit gross income for this paycheck"
+                            onClick={() => {
+                              setEditingIncomeKey(rowKey);
+                              setDraftIncomeAmount(String(source.amount));
+                            }}
+                            className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          {overridden && (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"
+                              onClick={() => onClearIncomeOverride(source.id, paycheck.date)}
+                              disabled={isSaving}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing && (
+                    <div className="flex flex-wrap items-end gap-2 pt-1 border-t border-success-200/60 dark:border-success-500/20">
+                      <div className="flex-1 min-w-[140px]">
+                        <label className="text-xs text-[var(--color-text-muted)] block mb-0.5">
+                          Gross for this paycheck
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="input w-full"
+                          value={draftIncomeAmount}
+                          onChange={(e) => setDraftIncomeAmount(e.target.value)}
+                          disabled={isSaving}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-primary text-sm"
+                        disabled={isSaving}
+                        onClick={async () => {
+                          const v = parseFloat(draftIncomeAmount);
+                          if (!Number.isFinite(v) || v < 0) return;
+                          await onSaveIncomeOverride(source.id, paycheck.date, v);
+                          setEditingIncomeKey(null);
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary text-sm"
+                        disabled={isSaving}
+                        onClick={() => setEditingIncomeKey(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <div className="flex items-center justify-between py-2 px-3 bg-[var(--color-bg-tertiary)] rounded-lg font-semibold">
               <span>Total Income</span>
               <span className="font-mono text-success-600 dark:text-success-500">

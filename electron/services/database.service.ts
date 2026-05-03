@@ -119,6 +119,23 @@ export interface BillAssignment {
   createdAt: string;
 }
 
+interface IncomeOverrideRow {
+  id: string;
+  budget_id: string;
+  income_id: string;
+  paycheck_date: string;
+  amount: number;
+  created_at: string;
+}
+
+export interface IncomeOverride {
+  id: string;
+  incomeId: string;
+  paycheckDate: string;
+  amount: number;
+  createdAt: string;
+}
+
 interface DebtRow {
   id: string;
   budget_id: string;
@@ -315,8 +332,15 @@ export class DatabaseService {
       this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (7)').run();
       logger.info('Migration to schema version 7 complete (debt monthly payment)');
     }
+
+    // Schema version 8: Per-paycheck income amount overrides
+    if (currentVersion < 8) {
+      this.migrateToVersion8();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (8)').run();
+      logger.info('Migration to schema version 8 complete (income overrides)');
+    }
     
-    logger.info('Database initialized', { version: Math.max(currentVersion, 7) });
+    logger.info('Database initialized', { version: Math.max(currentVersion, 8) });
   }
 
   private migrateToVersion5(): void {
@@ -365,6 +389,27 @@ export class DatabaseService {
       this.db.exec(`ALTER TABLE debts ADD COLUMN monthly_payment REAL DEFAULT 0`);
       logger.info('Added monthly_payment column to debts table');
     }
+  }
+
+  private migrateToVersion8(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS income_overrides (
+        id TEXT PRIMARY KEY,
+        budget_id TEXT NOT NULL,
+        income_id TEXT NOT NULL,
+        paycheck_date TEXT NOT NULL,
+        amount REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE,
+        FOREIGN KEY (income_id) REFERENCES incomes(id) ON DELETE CASCADE,
+        UNIQUE(budget_id, income_id, paycheck_date)
+      );
+      CREATE INDEX IF NOT EXISTS idx_income_overrides_budget ON income_overrides(budget_id);
+      CREATE INDEX IF NOT EXISTS idx_income_overrides_income ON income_overrides(income_id);
+    `);
+    logger.info('Created income_overrides table');
   }
 
   private migrateToVersion4(): void {
@@ -606,6 +651,7 @@ export class DatabaseService {
       this.db!.prepare('DELETE FROM debts WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM goals WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM bill_assignments WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM income_overrides WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM skipped_bills WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM bills WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM incomes WHERE budget_id = ?').run(id);
@@ -746,7 +792,8 @@ export class DatabaseService {
 
   deleteIncome(id: string, budgetId: string): boolean {
     if (!this.db) throw new Error('Database not initialized');
-    
+
+    this.db.prepare('DELETE FROM income_overrides WHERE income_id = ? AND budget_id = ?').run(id, budgetId);
     const result = this.db.prepare('DELETE FROM incomes WHERE id = ? AND budget_id = ?').run(id, budgetId);
     return result.changes > 0;
   }
@@ -1032,6 +1079,63 @@ export class DatabaseService {
     ).run(budgetId, beforeDate);
     
     return result.changes;
+  }
+
+  // Income overrides (per projected paycheck date for an income source)
+  getIncomeOverrides(budgetId: string): IncomeOverride[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = this.db.prepare(
+      'SELECT * FROM income_overrides WHERE budget_id = ? ORDER BY paycheck_date ASC'
+    ).all(budgetId) as IncomeOverrideRow[];
+
+    return rows.map(row => ({
+      id: row.id,
+      incomeId: row.income_id,
+      paycheckDate: row.paycheck_date,
+      amount: row.amount,
+      createdAt: row.created_at,
+    }));
+  }
+
+  setIncomeOverride(budgetId: string, incomeId: string, paycheckDate: string, amount: number): IncomeOverride {
+    if (!this.db) throw new Error('Database not initialized');
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error('Income override amount must be a non-negative number');
+    }
+
+    const id = this.crypto.generateId();
+    const now = new Date().toISOString();
+
+    const tx = this.db.transaction(() => {
+      this.db!.prepare(
+        'DELETE FROM income_overrides WHERE budget_id = ? AND income_id = ? AND paycheck_date = ?'
+      ).run(budgetId, incomeId, paycheckDate);
+
+      this.db!.prepare(`
+        INSERT INTO income_overrides (id, budget_id, income_id, paycheck_date, amount, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, budgetId, incomeId, paycheckDate, amount, now);
+    });
+    tx();
+
+    return {
+      id,
+      incomeId,
+      paycheckDate,
+      amount,
+      createdAt: now,
+    };
+  }
+
+  removeIncomeOverride(budgetId: string, incomeId: string, paycheckDate: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.prepare(
+      'DELETE FROM income_overrides WHERE budget_id = ? AND income_id = ? AND paycheck_date = ?'
+    ).run(budgetId, incomeId, paycheckDate);
+
+    return result.changes > 0;
   }
 
   // Savings Goals Management (budget-scoped)

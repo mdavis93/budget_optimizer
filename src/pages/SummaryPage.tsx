@@ -48,7 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function SummaryPage() {
-  const { incomes, bills, generateSchedule } = useData();
+  const { incomes, bills, generateSchedule, scheduleStartingBalance } = useData();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(3);
   const [scheduleData, setScheduleData] = useState<{
     paychecks: Array<{
@@ -97,7 +97,7 @@ export default function SummaryPage() {
       setIsLoading(true);
       try {
         const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-        const result = await generateSchedule(startDate, timePeriod, 0);
+        const result = await generateSchedule(startDate, timePeriod, scheduleStartingBalance);
         if (isMounted && result) {
           setScheduleData({
             paychecks: result.paychecks,
@@ -114,7 +114,7 @@ export default function SummaryPage() {
     loadScheduleData();
     
     return () => { isMounted = false; };
-  }, [incomes, bills, timePeriod, generateSchedule]);
+  }, [incomes, bills, timePeriod, generateSchedule, scheduleStartingBalance]);
 
   const handleAPYChange = async (newAPY: number) => {
     setSavingsAPY(newAPY);
@@ -350,6 +350,8 @@ export default function SummaryPage() {
                             border: '1px solid var(--color-border)',
                             borderRadius: '8px',
                           }}
+                          labelStyle={{ color: 'var(--color-text-primary)' }}
+                          itemStyle={{ color: 'var(--color-text-primary)' }}
                         />
                       </PieChart>
                     </ResponsiveContainer>

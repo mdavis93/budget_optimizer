@@ -317,6 +317,12 @@ interface ElectronAPI {
     remove: (billId: string, billDueDate: string) => Promise<ApiResult>;
   };
 
+  incomeOverrides: {
+    getAll: () => Promise<ApiResult<import('./index').IncomeOverride[]>>;
+    set: (incomeId: string, paycheckDate: string, amount: number) => Promise<ApiResult<import('./index').IncomeOverride>>;
+    remove: (incomeId: string, paycheckDate: string) => Promise<ApiResult<boolean>>;
+  };
+
   goals: {
     getAll: () => Promise<ApiResult<SavingsGoalData[]>>;
     create: (input: SavingsGoalInput) => Promise<ApiResult<SavingsGoalData>>;

@@ -79,6 +79,14 @@ const api = {
       ipcRenderer.invoke('bill-assignments:remove', billId, billDueDate),
   },
 
+  incomeOverrides: {
+    getAll: () => ipcRenderer.invoke('income-overrides:get-all'),
+    set: (incomeId: string, paycheckDate: string, amount: number) =>
+      ipcRenderer.invoke('income-overrides:set', incomeId, paycheckDate, amount),
+    remove: (incomeId: string, paycheckDate: string) =>
+      ipcRenderer.invoke('income-overrides:remove', incomeId, paycheckDate),
+  },
+
   goals: {
     getAll: () => ipcRenderer.invoke('goals:get-all'),
     create: (input: SavingsGoalInput) => ipcRenderer.invoke('goals:create', input),

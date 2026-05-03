@@ -49,7 +49,7 @@ export default function ScheduleControls({
         </div>
         
         <div>
-          <label htmlFor="schedule-starting-balance" className="label">Starting Balance</label>
+          <label htmlFor="schedule-starting-balance" className="label">Starting checking balance</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
             <input

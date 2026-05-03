@@ -100,6 +100,15 @@ export interface BillAssignment {
   createdAt: string;
 }
 
+/** Scheduled gross for one income source on a specific paycheck date (yyyy-MM-dd). */
+export interface IncomeOverride {
+  id: string;
+  incomeId: string;
+  paycheckDate: string;
+  amount: number;
+  createdAt: string;
+}
+
 export interface Debt {
   id: string;
   budgetId: string;
