@@ -353,10 +353,8 @@ interface ElectronAPI {
 
   export: {
     toPdf: (schedule: ScheduleData, filePath: string) => Promise<ApiResult>;
-    toGoogleSheets: (schedule: ScheduleData) => Promise<ApiResult<void> & { url?: string }>;
-    googleAuthUrl: () => Promise<string | null>;
-    googleAuthCallback: (code: string) => Promise<ApiResult>;
-    isGoogleAuthed: () => Promise<boolean>;
+    toHtml: (schedule: ScheduleData, filePath: string) => Promise<ApiResult>;
+    toSpreadsheet: (schedule: ScheduleData, filePath: string) => Promise<ApiResult>;
   };
 
   settings: {

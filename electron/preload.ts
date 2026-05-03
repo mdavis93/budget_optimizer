@@ -118,14 +118,12 @@ const api = {
   },
 
   export: {
-    toPdf: (schedule: ScheduleData, filePath: string) => 
+    toPdf: (schedule: ScheduleData, filePath: string) =>
       ipcRenderer.invoke('export:to-pdf', schedule, filePath),
-    toGoogleSheets: (schedule: ScheduleData) => 
-      ipcRenderer.invoke('export:to-google-sheets', schedule),
-    googleAuthUrl: () => ipcRenderer.invoke('export:google-auth-url'),
-    googleAuthCallback: (code: string) => 
-      ipcRenderer.invoke('export:google-auth-callback', code),
-    isGoogleAuthed: () => ipcRenderer.invoke('export:is-google-authed'),
+    toHtml: (schedule: ScheduleData, filePath: string) =>
+      ipcRenderer.invoke('export:to-html', schedule, filePath),
+    toSpreadsheet: (schedule: ScheduleData, filePath: string) =>
+      ipcRenderer.invoke('export:to-spreadsheet', schedule, filePath),
   },
 
   settings: {

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { 
   FileText, 
   Table, 
+  FileCode,
   Download, 
-  ExternalLink, 
   CheckCircle, 
   AlertCircle,
   Loader2
@@ -11,6 +11,8 @@ import {
 import { useData } from '../context/DataContext';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
+
+type ExportKind = 'pdf' | 'html' | 'spreadsheet';
 
 export default function ExportPage() {
   const { 
@@ -25,33 +27,11 @@ export default function ExportPage() {
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
   } = useData();
-  const [isGoogleAuthed, setIsGoogleAuthed] = useState(false);
   const [exportStatus, setExportStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
-  const [isExporting, setIsExporting] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const checkGoogleAuth = async () => {
-      try {
-        const authed = await window.electronAPI.export.isGoogleAuthed();
-        if (isMounted) {
-          setIsGoogleAuthed(authed);
-        }
-      } catch {
-        if (isMounted) {
-          setIsGoogleAuthed(false);
-        }
-      }
-    };
-    
-    checkGoogleAuth();
-    
-    return () => { isMounted = false; };
-  }, []);
+  const [exportingKind, setExportingKind] = useState<ExportKind | null>(null);
 
   useEffect(() => {
     if ((incomes.length > 0 || bills.length > 0) && !schedule) {
@@ -60,98 +40,71 @@ export default function ExportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: generateSchedule/schedule excluded to prevent infinite loops
   }, [incomes, bills, startDate, months, startingBalance]);
 
-  const handleExportPdf = async () => {
+  const runExport = async (kind: ExportKind) => {
     if (!schedule) {
       setExportStatus({ type: 'error', message: 'No schedule to export. Generate one first.' });
       return;
     }
 
-    setIsExporting(true);
+    const configByKind: Record<ExportKind, {
+      label: string;
+      ext: string;
+      filterName: string;
+      invoke: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+    }> = {
+      pdf: {
+        label: 'PDF',
+        ext: 'pdf',
+        filterName: 'PDF Files',
+        invoke: (fp) => window.electronAPI.export.toPdf(schedule, fp),
+      },
+      html: {
+        label: 'HTML',
+        ext: 'html',
+        filterName: 'HTML Files',
+        invoke: (fp) => window.electronAPI.export.toHtml(schedule, fp),
+      },
+      spreadsheet: {
+        label: 'Spreadsheet',
+        ext: 'xlsx',
+        filterName: 'Excel Spreadsheet',
+        invoke: (fp) => window.electronAPI.export.toSpreadsheet(schedule, fp),
+      },
+    };
+
+    const config = configByKind[kind];
+
+    setExportingKind(kind);
     setExportStatus({ type: null, message: '' });
 
     try {
       const result = await window.electronAPI.showSaveDialog({
-        title: 'Save Budget Report',
-        defaultPath: `budget-report-${format(new Date(), 'yyyy-MM-dd')}.html`,
+        title: `Save Budget Report (${config.label})`,
+        defaultPath: `budget-report-${format(new Date(), 'yyyy-MM-dd')}.${config.ext}`,
         filters: [
-          { name: 'HTML Files', extensions: ['html'] },
+          { name: config.filterName, extensions: [config.ext] },
         ],
       });
 
       if (result.canceled || !result.filePath) {
-        setIsExporting(false);
+        setExportingKind(null);
         return;
       }
 
-      const exportResult = await window.electronAPI.export.toPdf(schedule, result.filePath);
-      
+      const exportResult = await config.invoke(result.filePath);
+
       if (exportResult.success) {
-        setExportStatus({ 
-          type: 'success', 
-          message: `Report saved to ${result.filePath}. Open in a browser to print as PDF.` 
+        setExportStatus({
+          type: 'success',
+          message: `${config.label} saved to ${result.filePath}`,
         });
       } else {
         setExportStatus({ type: 'error', message: exportResult.error || 'Export failed' });
       }
     } catch {
-      setExportStatus({ type: 'error', message: 'Failed to export report' });
+      setExportStatus({ type: 'error', message: `Failed to export ${config.label}` });
     } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    setExportStatus({ type: null, message: '' });
-    
-    try {
-      const authUrl = await window.electronAPI.export.googleAuthUrl();
-      if (authUrl) {
-        window.open(authUrl, '_blank');
-        setExportStatus({ 
-          type: 'success', 
-          message: 'Complete authentication in your browser, then try exporting again.' 
-        });
-      } else {
-        setExportStatus({ 
-          type: 'error', 
-          message: 'Google API not configured. Please set up API credentials.' 
-        });
-      }
-    } catch {
-      setExportStatus({ type: 'error', message: 'Failed to start Google authentication' });
-    }
-  };
-
-  const handleExportGoogleSheets = async () => {
-    if (!schedule) {
-      setExportStatus({ type: 'error', message: 'No schedule to export. Generate one first.' });
-      return;
-    }
-
-    if (!isGoogleAuthed) {
-      await handleGoogleAuth();
-      return;
-    }
-
-    setIsExporting(true);
-    setExportStatus({ type: null, message: '' });
-
-    try {
-      const result = await window.electronAPI.export.toGoogleSheets(schedule);
-      
-      if (result.success && result.url) {
-        setExportStatus({ 
-          type: 'success', 
-          message: 'Spreadsheet created successfully!' 
-        });
-        window.open(result.url, '_blank');
-      } else {
-        setExportStatus({ type: 'error', message: result.error || 'Export failed' });
-      }
-    } catch {
-      setExportStatus({ type: 'error', message: 'Failed to export to Google Sheets' });
-    } finally {
-      setIsExporting(false);
+      setExportingKind(null);
     }
   };
 
@@ -160,12 +113,14 @@ export default function ExportPage() {
     setExportStatus({ type: 'success', message: 'Schedule refreshed' });
   };
 
+  const totalGoalDeposits = schedule?.paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0) ?? 0;
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold">Export</h2>
         <p className="text-[var(--color-text-secondary)]">
-          Export your budget report as PDF or Google Sheets
+          Export your budget report as PDF, HTML, or a spreadsheet
         </p>
       </div>
 
@@ -243,7 +198,7 @@ export default function ExportPage() {
       {schedule && (
         <div className="card bg-[var(--color-bg-tertiary)]">
           <h3 className="font-semibold mb-2">Preview</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
             <div>
               <p className="text-[var(--color-text-muted)]">Period</p>
               <p className="font-medium">
@@ -263,141 +218,161 @@ export default function ExportPage() {
               </p>
             </div>
             <div>
-              <p className="text-[var(--color-text-muted)]">Entries</p>
-              <p className="font-medium">{schedule.entries.length}</p>
+              <p className="text-[var(--color-text-muted)]">Total Saved</p>
+              <p className="font-medium text-primary-500">
+                ${schedule.summary.finalSavingsBalance.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-[var(--color-text-muted)]">Paychecks</p>
+              <p className="font-medium">{schedule.paychecks.length}</p>
             </div>
           </div>
+          {totalGoalDeposits > 0 && (
+            <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-sm">
+              <span className="text-[var(--color-text-muted)]">Goals Total: </span>
+              <span className="font-medium text-success-500">
+                ${totalGoalDeposits.toLocaleString()}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 rounded-lg bg-danger-100 dark:bg-danger-500/20">
-              <FileText className="w-8 h-8 text-danger-600 dark:text-danger-500" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg">Export as PDF</h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Generate a printable budget report
-              </p>
-            </div>
-          </div>
-          
-          <ul className="space-y-2 mb-6 text-sm text-[var(--color-text-secondary)]">
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Summary statistics and metrics
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Complete payment schedule
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Running balance visualization
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Optimization recommendations
-            </li>
-          </ul>
-          
-          <button
-            onClick={handleExportPdf}
-            disabled={isExporting || !schedule}
-            className="btn-primary w-full"
-          >
-            {isExporting ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Exporting...
-              </>
-            ) : (
-              <>
-                <Download className="w-5 h-5 mr-2" />
-                Export PDF
-              </>
-            )}
-          </button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <ExportCard
+          icon={<FileText className="w-8 h-8 text-danger-600 dark:text-danger-500" />}
+          iconBg="bg-danger-100 dark:bg-danger-500/20"
+          title="Export to PDF"
+          description="A polished, printable report"
+          bullets={[
+            'Opens directly as a PDF',
+            'Paycheck-by-paycheck layout',
+            'Summary metrics & recommendations',
+            'Optimized page breaks',
+          ]}
+          buttonLabel="Export PDF"
+          loadingLabel="Generating PDF..."
+          isLoading={exportingKind === 'pdf'}
+          disabled={!schedule || exportingKind !== null}
+          onClick={() => runExport('pdf')}
+        />
 
-        <div className="card">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 rounded-lg bg-success-100 dark:bg-success-500/20">
-              <Table className="w-8 h-8 text-success-600 dark:text-success-500" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg">Export to Google Sheets</h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Create a live, editable spreadsheet
-              </p>
-            </div>
-          </div>
-          
-          <ul className="space-y-2 mb-6 text-sm text-[var(--color-text-secondary)]">
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Summary sheet with key metrics
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Full schedule with formulas
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Conditional formatting for shortfalls
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success-500" />
-              Edit and customize in Google Sheets
-            </li>
-          </ul>
-          
-          {isGoogleAuthed ? (
-            <div className="space-y-3">
-              <button
-                onClick={handleExportGoogleSheets}
-                disabled={isExporting || !schedule}
-                className="btn-primary w-full"
-              >
-                {isExporting ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Creating spreadsheet...
-                  </>
-                ) : (
-                  <>
-                    <ExternalLink className="w-5 h-5 mr-2" />
-                    Export to Google Sheets
-                  </>
-                )}
-              </button>
-              <p className="text-xs text-center text-[var(--color-text-muted)]">
-                Connected to Google
-              </p>
-            </div>
-          ) : (
-            <button
-              onClick={handleGoogleAuth}
-              className="btn-secondary w-full"
-            >
-              <ExternalLink className="w-5 h-5 mr-2" />
-              Connect Google Account
-            </button>
-          )}
-        </div>
+        <ExportCard
+          icon={<FileCode className="w-8 h-8 text-primary-600 dark:text-primary-500" />}
+          iconBg="bg-primary-100 dark:bg-primary-500/20"
+          title="Export to HTML"
+          description="Editable web-page version"
+          bullets={[
+            'Open in any browser',
+            'Easy to share or email',
+            'Print or save-as-PDF manually',
+            'Same layout as the PDF',
+          ]}
+          buttonLabel="Export HTML"
+          loadingLabel="Generating HTML..."
+          isLoading={exportingKind === 'html'}
+          disabled={!schedule || exportingKind !== null}
+          onClick={() => runExport('html')}
+        />
+
+        <ExportCard
+          icon={<Table className="w-8 h-8 text-success-600 dark:text-success-500" />}
+          iconBg="bg-success-100 dark:bg-success-500/20"
+          title="Export Spreadsheet"
+          description="Excel / Google Sheets compatible"
+          bullets={[
+            'Summary sheet with key metrics',
+            'Paycheck-level overview sheet',
+            'Full itemized schedule sheet',
+            'Imports natively into Google Sheets',
+          ]}
+          buttonLabel="Export Spreadsheet"
+          loadingLabel="Building spreadsheet..."
+          isLoading={exportingKind === 'spreadsheet'}
+          disabled={!schedule || exportingKind !== null}
+          onClick={() => runExport('spreadsheet')}
+        />
       </div>
 
       <div className="card bg-[var(--color-bg-tertiary)]">
         <h3 className="font-semibold mb-2">Export Tips</h3>
         <ul className="space-y-1 text-sm text-[var(--color-text-secondary)]">
-          <li>• PDF exports are saved as HTML files. Open in a browser and use Print → Save as PDF for best results.</li>
-          <li>• Google Sheets exports create a new spreadsheet in your Google Drive.</li>
-          <li>• Exported data is decrypted during export - keep your exports secure.</li>
-          <li>• For Google Sheets, you'll need to authorize access the first time.</li>
+          <li>• PDF exports use the system print engine; page breaks keep paycheck cycles intact.</li>
+          <li>• HTML exports can be opened in any browser and saved as PDF via the browser print dialog.</li>
+          <li>• Spreadsheets open in Excel or Numbers, and can be uploaded to Google Drive to open in Google Sheets.</li>
+          <li>• Exported data is decrypted during export &mdash; keep your exports secure.</li>
         </ul>
       </div>
+    </div>
+  );
+}
+
+interface ExportCardProps {
+  icon: React.ReactNode;
+  iconBg: string;
+  title: string;
+  description: string;
+  bullets: string[];
+  buttonLabel: string;
+  loadingLabel: string;
+  isLoading: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}
+
+function ExportCard({
+  icon,
+  iconBg,
+  title,
+  description,
+  bullets,
+  buttonLabel,
+  loadingLabel,
+  isLoading,
+  disabled,
+  onClick,
+}: ExportCardProps) {
+  return (
+    <div className="card flex flex-col">
+      <div className="flex items-center gap-4 mb-4">
+        <div className={clsx('p-3 rounded-lg', iconBg)}>
+          {icon}
+        </div>
+        <div>
+          <h3 className="font-semibold text-lg">{title}</h3>
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      <ul className="space-y-2 mb-6 text-sm text-[var(--color-text-secondary)] flex-1">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-success-500 flex-shrink-0" />
+            {b}
+          </li>
+        ))}
+      </ul>
+
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="btn-primary w-full"
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            {loadingLabel}
+          </>
+        ) : (
+          <>
+            <Download className="w-5 h-5 mr-2" />
+            {buttonLabel}
+          </>
+        )}
+      </button>
     </div>
   );
 }

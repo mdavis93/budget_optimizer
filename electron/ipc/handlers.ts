@@ -5,7 +5,7 @@ import { CryptoService } from '../services/crypto.service';
 import { DatabaseService, DebtInput } from '../services/database.service';
 import { SchedulerService, DebtPayoffInfo } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
-import { GoogleService } from '../services/google.service';
+import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DebtService } from '../services/debt.service';
 import { ipcLogger } from '../services/logger.service';
@@ -28,7 +28,7 @@ interface Services {
   budgetManager: BudgetManager | null;
   scheduler: SchedulerService;
   pdf: PdfService;
-  google: GoogleService;
+  spreadsheet: SpreadsheetService;
   debt: DebtService;
 }
 
@@ -870,20 +870,22 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
-  ipcMain.handle('export:google-auth-url', () => {
-    return services.google.getAuthUrl();
+  ipcMain.handle('export:to-html', async (_, schedule, filePath: string) => {
+    try {
+      return await services.pdf.generateHtmlFile(schedule, filePath);
+    } catch (error) {
+      ipcLogger.error('export:to-html failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
   });
 
-  ipcMain.handle('export:google-auth-callback', async (_, code: string) => {
-    return services.google.handleAuthCallback(code);
-  });
-
-  ipcMain.handle('export:is-google-authed', () => {
-    return services.google.isAuthenticated();
-  });
-
-  ipcMain.handle('export:to-google-sheets', async (_, schedule) => {
-    return services.google.exportToSheets(schedule);
+  ipcMain.handle('export:to-spreadsheet', async (_, schedule, filePath: string) => {
+    try {
+      return await services.spreadsheet.generateXlsx(schedule, filePath);
+    } catch (error) {
+      ipcLogger.error('export:to-spreadsheet failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
   });
 
   // Reconciliation handlers

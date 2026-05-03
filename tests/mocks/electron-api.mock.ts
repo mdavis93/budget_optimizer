@@ -196,10 +196,8 @@ export const createMockElectronAPI = () => {
 
     export: {
       toPdf: vi.fn().mockResolvedValue({ success: true }),
-      toGoogleSheets: vi.fn().mockResolvedValue({ success: true, url: 'https://sheets.google.com' }),
-      googleAuthUrl: vi.fn().mockResolvedValue('https://auth.google.com'),
-      googleAuthCallback: vi.fn().mockResolvedValue({ success: true }),
-      isGoogleAuthed: vi.fn().mockResolvedValue(false),
+      toHtml: vi.fn().mockResolvedValue({ success: true }),
+      toSpreadsheet: vi.fn().mockResolvedValue({ success: true }),
     },
 
     settings: {

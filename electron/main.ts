@@ -5,7 +5,7 @@ import { CryptoService } from './services/crypto.service';
 import { DatabaseService } from './services/database.service';
 import { SchedulerService } from './services/scheduler.service';
 import { PdfService } from './services/pdf.service';
-import { GoogleService } from './services/google.service';
+import { SpreadsheetService } from './services/spreadsheet.service';
 import { BudgetManager } from './services/budget-manager.service';
 import { DebtService } from './services/debt.service';
 import { registerIpcHandlers } from './ipc/handlers';
@@ -80,7 +80,7 @@ let services: {
   budgetManager: BudgetManager | null;
   scheduler: SchedulerService;
   pdf: PdfService;
-  google: GoogleService;
+  spreadsheet: SpreadsheetService;
   debt: DebtService;
 };
 
@@ -93,7 +93,7 @@ app.whenReady().then(async () => {
     budgetManager: null,
     scheduler: new SchedulerService(),
     pdf: new PdfService(),
-    google: new GoogleService(),
+    spreadsheet: new SpreadsheetService(),
     debt: new DebtService(),
   };
 
