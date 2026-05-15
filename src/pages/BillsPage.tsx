@@ -235,12 +235,15 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
   );
 }
 
+type BillSortMode = 'amount' | 'dueDate' | 'default';
+
 export default function BillsPage() {
   const { bills, incomes, createBill, updateBill, deleteBill } = useData();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [billSort, setBillSort] = useState<BillSortMode>('default');
 
   const handleCreate = async (data: BillInput) => {
     const success = await createBill(data);
@@ -294,10 +297,29 @@ export default function BillsPage() {
 
   const sortedBills = useMemo(() => {
     const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
+    const nameCmp = (a: Bill, b: Bill) => a.creditorName.localeCompare(b.creditorName, undefined, { sensitivity: 'base' });
+
     return [...filteredBills].sort((a, b) => {
-      return priorityOrder[a.priority] - priorityOrder[b.priority] || a.dueDay - b.dueDay;
+      if (billSort === 'amount') {
+        if (b.budgetedAmount !== a.budgetedAmount) return b.budgetedAmount - a.budgetedAmount;
+        return nameCmp(a, b);
+      }
+      if (billSort === 'dueDate') {
+        const aPay = !!a.isIncomeAttached;
+        const bPay = !!b.isIncomeAttached;
+        if (aPay !== bPay) return aPay ? -1 : 1;
+        if (aPay && bPay) return nameCmp(a, b);
+        if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay;
+        return nameCmp(a, b);
+      }
+      // default — priority, then due day, then name
+      const pa = priorityOrder[a.priority];
+      const pb = priorityOrder[b.priority];
+      if (pa !== pb) return pa - pb;
+      if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay;
+      return nameCmp(a, b);
     });
-  }, [filteredBills]);
+  }, [filteredBills, billSort]);
 
   return (
     <div className="space-y-6">
@@ -367,6 +389,27 @@ export default function BillsPage() {
               )}
             >
               {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {bills.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-[var(--color-text-secondary)]">Sort:</span>
+          {(['amount', 'dueDate', 'default'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setBillSort(mode)}
+              className={clsx(
+                'px-3 py-1 rounded-full text-sm transition-colors',
+                billSort === mode
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)]'
+              )}
+            >
+              {mode === 'amount' ? 'Amount' : mode === 'dueDate' ? 'Due date' : 'Default'}
             </button>
           ))}
         </div>

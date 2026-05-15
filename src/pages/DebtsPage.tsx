@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import {
   BarChart,
@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { CreditCard, Plus, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent } from 'lucide-react';
+import { CreditCard, Plus, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent, ChevronDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
 import Modal from '../components/Modal';
@@ -18,6 +18,65 @@ import EmptyState from '../components/EmptyState';
 import clsx from 'clsx';
 
 type TimePeriod = 3 | 6 | 12 | 'max';
+
+type DebtSortMode = 'name' | 'dueDay' | 'minPayment' | 'balance';
+
+/** Group key from `Prefix: Rest` on linked bill name; ungrouped → Other (rendered last). */
+function creditorPrefixGroupKey(creditorName: string): string {
+  const i = creditorName.indexOf(':');
+  if (i === -1) return 'Other';
+  const prefix = creditorName.slice(0, i).trim();
+  return prefix.length > 0 ? prefix : 'Other';
+}
+
+function compareTrackedDebts(a: DebtWithAmortization, b: DebtWithAmortization, mode: DebtSortMode): number {
+  const billA = a.bill;
+  const billB = b.bill;
+  if (!billA && !billB) return 0;
+  if (!billA) return 1;
+  if (!billB) return -1;
+  const nameA = billA.creditorName;
+  const nameB = billB.creditorName;
+  if (mode === 'name') {
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  }
+  if (mode === 'dueDay') {
+    if (billA.dueDay !== billB.dueDay) return billA.dueDay - billB.dueDay;
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  }
+  if (mode === 'minPayment') {
+    if (a.debt.monthlyPayment !== b.debt.monthlyPayment) return a.debt.monthlyPayment - b.debt.monthlyPayment;
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  }
+  if (b.debt.principalBalance !== a.debt.principalBalance) return b.debt.principalBalance - a.debt.principalBalance;
+  return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+}
+
+function compareUntrackedBills(a: Bill, b: Bill, mode: DebtSortMode): number {
+  const nameA = a.creditorName;
+  const nameB = b.creditorName;
+  if (mode === 'name') {
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  }
+  if (mode === 'dueDay') {
+    if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay;
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  }
+  if (mode === 'minPayment') {
+    if (a.budgetedAmount !== b.budgetedAmount) return a.budgetedAmount - b.budgetedAmount;
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  }
+  if (b.budgetedAmount !== a.budgetedAmount) return b.budgetedAmount - a.budgetedAmount;
+  return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+}
+
+function sortGroupKeys(keys: string[]): string[] {
+  return [...keys].sort((a, b) => {
+    if (a === 'Other') return 1;
+    if (b === 'Other') return -1;
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
+}
 
 const CHART_COLORS = {
   principal: '#3b82f6',
@@ -416,6 +475,7 @@ export default function DebtsPage() {
   const [editingDebt, setEditingDebt] = useState<DebtWithAmortization | null>(null);
   const [deleteDebt, setDeleteDebt] = useState<DebtWithAmortization | null>(null);
   const [preselectedBill, setPreselectedBill] = useState<Bill | null>(null);
+  const [debtSort, setDebtSort] = useState<DebtSortMode>('name');
 
   const loadDebts = useCallback(async () => {
     setIsLoading(true);
@@ -435,12 +495,46 @@ export default function DebtsPage() {
     loadDebts();
   }, [loadDebts]);
 
-  const existingDebtBillIds = new Set(debtsWithAmortization.map(d => d.debt.billId));
-  
-  const debtBills = bills.filter(b => b.category === 'Debt');
-  const untrackedDebtBills = debtBills.filter(b => !existingDebtBillIds.has(b.id));
+  const existingDebtBillIds = useMemo(
+    () => new Set(debtsWithAmortization.map((d) => d.debt.billId)),
+    [debtsWithAmortization]
+  );
+
+  const debtBills = useMemo(() => bills.filter((b) => b.category === 'Debt'), [bills]);
+
+  const untrackedDebtBills = useMemo(
+    () => debtBills.filter((b) => !existingDebtBillIds.has(b.id)),
+    [debtBills, existingDebtBillIds]
+  );
+
   const hasDebtBills = debtBills.length > 0;
   const hasAnyContent = debtsWithAmortization.length > 0 || untrackedDebtBills.length > 0;
+
+  const trackedDebtGroups = useMemo(() => {
+    const map = new Map<string, DebtWithAmortization[]>();
+    for (const d of debtsWithAmortization) {
+      const key = d.bill ? creditorPrefixGroupKey(d.bill.creditorName) : 'Other';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(d);
+    }
+    for (const arr of map.values()) {
+      arr.sort((a, b) => compareTrackedDebts(a, b, debtSort));
+    }
+    return sortGroupKeys([...map.keys()]).map((key) => ({ key, items: map.get(key)! }));
+  }, [debtsWithAmortization, debtSort]);
+
+  const untrackedBillGroups = useMemo(() => {
+    const map = new Map<string, Bill[]>();
+    for (const bill of untrackedDebtBills) {
+      const key = creditorPrefixGroupKey(bill.creditorName);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(bill);
+    }
+    for (const arr of map.values()) {
+      arr.sort((a, b) => compareUntrackedBills(a, b, debtSort));
+    }
+    return sortGroupKeys([...map.keys()]).map((key) => ({ key, items: map.get(key)! }));
+  }, [untrackedDebtBills, debtSort]);
 
   const handleCreateDebt = async (data: DebtInput) => {
     try {
@@ -531,6 +625,34 @@ export default function DebtsPage() {
         </button>
       </div>
 
+      {hasAnyContent && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-[var(--color-text-muted)]">Sort:</span>
+          {(
+            [
+              ['name', 'A–Z'],
+              ['dueDay', 'Due'],
+              ['minPayment', 'Min pay'],
+              ['balance', 'Balance'],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setDebtSort(mode)}
+              className={clsx(
+                'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                debtSort === mode
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {debtsWithAmortization.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -592,13 +714,29 @@ export default function DebtsPage() {
                   {untrackedDebtBills.length}
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {untrackedDebtBills.map((bill) => (
-                  <UnsetupDebtCard
-                    key={bill.id}
-                    bill={bill}
-                    onClick={() => handleSetupDebt(bill)}
-                  />
+              <div className="space-y-3">
+                {untrackedBillGroups.map((group) => (
+                  <details
+                    key={`untracked-${group.key}`}
+                    className="group rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] overflow-hidden"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] transition-transform group-open:rotate-180" />
+                        <span className="font-medium truncate">{group.key}</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">({group.items.length})</span>
+                      </div>
+                    </summary>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-[var(--color-border)] px-4 pb-4 pt-3">
+                      {group.items.map((bill) => (
+                        <UnsetupDebtCard
+                          key={bill.id}
+                          bill={bill}
+                          onClick={() => handleSetupDebt(bill)}
+                        />
+                      ))}
+                    </div>
+                  </details>
                 ))}
               </div>
             </div>
@@ -611,15 +749,40 @@ export default function DebtsPage() {
                   Tracking ({debtsWithAmortization.length})
                 </h2>
               )}
-              {debtsWithAmortization.map((debtData) => (
-                <DebtCard
-                  key={debtData.debt.id}
-                  debtData={debtData}
-                  timePeriod={timePeriod}
-                  onEdit={() => setEditingDebt(debtData)}
-                  onDelete={() => setDeleteDebt(debtData)}
-                />
-              ))}
+              <div className="space-y-3">
+                {trackedDebtGroups.map((group) => (
+                  <details
+                    key={`tracked-${group.key}`}
+                    className="group rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] overflow-hidden"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] transition-transform group-open:rotate-180" />
+                        <span className="font-medium truncate">{group.key}</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">({group.items.length})</span>
+                      </div>
+                      <span className="text-xs text-[var(--color-text-muted)] shrink-0 tabular-nums">
+                        $
+                        {group.items
+                          .reduce((sum, d) => sum + d.debt.principalBalance, 0)
+                          .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                        balance
+                      </span>
+                    </summary>
+                    <div className="space-y-4 border-t border-[var(--color-border)] px-4 pb-4 pt-3">
+                      {group.items.map((debtData) => (
+                        <DebtCard
+                          key={debtData.debt.id}
+                          debtData={debtData}
+                          timePeriod={timePeriod}
+                          onEdit={() => setEditingDebt(debtData)}
+                          onDelete={() => setDeleteDebt(debtData)}
+                        />
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
             </div>
           )}
         </div>
