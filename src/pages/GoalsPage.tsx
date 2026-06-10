@@ -4,9 +4,13 @@ import { Target, Plus, Pencil, Trash2, Check, AlertTriangle, Lightbulb } from 'l
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import Modal from '../components/Modal';
+import { useDraft } from '../context/DraftContext';
+import { useBudget } from '../context/BudgetContext';
 
 export default function GoalsPage() {
-  const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  const draft = useDraft();
+  const { isQuickBudget } = useBudget();
+  const goals = draft.goals;
   const [projections, setProjections] = useState<GoalProjection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -27,50 +31,26 @@ export default function GoalsPage() {
   const savedInputId = useId();
   const priorityInputId = useId();
 
-  // Load projections using the INDEPENDENT endpoint (glide-path algorithm)
-  // This produces consistent results regardless of which page generated the last schedule
   const loadProjections = useCallback(async () => {
     try {
-      const result = await window.electronAPI.goals.getProjections();
-      if (result.success && result.data) {
-        setProjections(result.data);
-      }
+      const data = await draft.getGoalProjections();
+      setProjections(data);
     } catch {
       // Projections will remain empty on error
     }
-  }, []);
+  }, [draft]);
 
-  const loadGoals = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await window.electronAPI.goals.getAll();
-      if (result.success && result.data) {
-        setGoals(result.data);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Load goals and projections on mount
   useEffect(() => {
     let isMounted = true;
-    
+
     const doLoad = async () => {
       setIsLoading(true);
       try {
-        const [goalsResult, projectionsResult] = await Promise.all([
-          window.electronAPI.goals.getAll(),
-          window.electronAPI.goals.getProjections()
-        ]);
-        
+        if (isQuickBudget) {
+          await draft.reloadSnapshot();
+        }
         if (isMounted) {
-          if (goalsResult.success && goalsResult.data) {
-            setGoals(goalsResult.data);
-          }
-          if (projectionsResult.success && projectionsResult.data) {
-            setProjections(projectionsResult.data);
-          }
+          await loadProjections();
         }
       } finally {
         if (isMounted) {
@@ -78,16 +58,14 @@ export default function GoalsPage() {
         }
       }
     };
-    
-    doLoad();
-    return () => { isMounted = false; };
-  }, []);
 
-  // Refresh both goals and projections
+    void doLoad();
+    return () => { isMounted = false; };
+  }, [draft.goals, draft.dirtyDomains.size, isQuickBudget, draft, loadProjections]);
+
   const refreshData = useCallback(async () => {
-    await loadGoals();
     await loadProjections();
-  }, [loadGoals, loadProjections]);
+  }, [loadProjections]);
 
   const resetForm = () => {
     setFormName('');
@@ -127,8 +105,15 @@ export default function GoalsPage() {
         alreadySaved: formSaved,
         priority: formPriority,
       };
-      const result = await window.electronAPI.goals.create(input);
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.goals.create(input);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          setShowCreateModal(false);
+          resetForm();
+          await refreshData();
+        }
+      } else if (draft.createGoal(input)) {
         setShowCreateModal(false);
         resetForm();
         await refreshData();
@@ -144,14 +129,22 @@ export default function GoalsPage() {
 
     setIsSaving(true);
     try {
-      const result = await window.electronAPI.goals.update(editingGoal.id, {
+      const updates = {
         name: formName.trim(),
         targetAmount: formAmount,
         targetDate: formDate,
         alreadySaved: formSaved,
         priority: formPriority,
-      });
-      if (result.success) {
+      };
+      if (isQuickBudget) {
+        const result = await window.electronAPI.goals.update(editingGoal.id, updates);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          setEditingGoal(null);
+          resetForm();
+          await refreshData();
+        }
+      } else if (draft.updateGoal(editingGoal.id, updates)) {
         setEditingGoal(null);
         resetForm();
         await refreshData();
@@ -162,8 +155,14 @@ export default function GoalsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const result = await window.electronAPI.goals.delete(id);
-    if (result.success) {
+    if (isQuickBudget) {
+      const result = await window.electronAPI.goals.delete(id);
+      if (result.success) {
+        await draft.reloadSnapshot();
+        setDeleteConfirm(null);
+        await refreshData();
+      }
+    } else if (draft.deleteGoal(id)) {
       setDeleteConfirm(null);
       await refreshData();
     }

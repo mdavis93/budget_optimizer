@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useBudget } from '../context/BudgetContext';
+import { useDraft } from '../context/DraftContext';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { Budget } from '../types';
 import { Briefcase, Plus, Pencil, Trash2, Check, X, Zap, ArrowRight } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -19,6 +21,8 @@ export default function BudgetsPage() {
     startQuickBudget,
     endQuickBudget,
   } = useBudget();
+  const draft = useDraft();
+  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newBudgetName, setNewBudgetName] = useState('');
@@ -65,12 +69,21 @@ export default function BudgetsPage() {
   const handleSaveEdit = async () => {
     if (!editingBudget || !editName.trim()) return;
 
-    await updateBudget(editingBudget.id, {
-      name: editName.trim(),
-      startingBalance: editBalance,
-      targetCashOnHand: editTargetCash,
-      minCashOnHand: editMinCash,
-    });
+    if (editingBudget.id === currentBudget?.id && draft.isDraftMode) {
+      draft.updateBudgetFields({
+        name: editName.trim(),
+        startingBalance: editBalance,
+        targetCashOnHand: editTargetCash,
+        minCashOnHand: editMinCash,
+      });
+    } else {
+      await updateBudget(editingBudget.id, {
+        name: editName.trim(),
+        startingBalance: editBalance,
+        targetCashOnHand: editTargetCash,
+        minCashOnHand: editMinCash,
+      });
+    }
     setEditingBudget(null);
   };
 
@@ -82,16 +95,19 @@ export default function BudgetsPage() {
   };
 
   const handleSwitchToBudget = async (id: string) => {
-    if (isQuickBudget) {
-      await endQuickBudget();
-    }
-    await switchBudget(id);
+    guardAction(async () => {
+      if (isQuickBudget) {
+        await endQuickBudget();
+      }
+      await switchBudget(id);
+    }, 'switch budgets');
   };
 
   const isCurrent = (id: string) => currentBudget?.id === id && !isQuickBudget;
 
   return (
     <div className="space-y-6">
+      {unsavedDialog}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Budgets</h2>

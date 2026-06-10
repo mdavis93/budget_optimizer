@@ -8,6 +8,7 @@ import { PdfService } from './services/pdf.service';
 import { SpreadsheetService } from './services/spreadsheet.service';
 import { BudgetManager } from './services/budget-manager.service';
 import { DebtService } from './services/debt.service';
+import { CredentialsService } from './services/credentials.service';
 import { registerIpcHandlers } from './ipc/handlers';
 import { logger } from './services/logger.service';
 
@@ -82,9 +83,17 @@ let services: {
   pdf: PdfService;
   spreadsheet: SpreadsheetService;
   debt: DebtService;
+  credentials: CredentialsService;
 };
 
 app.whenReady().then(async () => {
+  // Keep userData path consistent between dev (`npm run dev` / vite) and packaged builds
+  if (app.isPackaged) {
+    app.setName('Budget Optimizer');
+  } else {
+    app.setName('budget-optimizer');
+  }
+
   // Initialize services after app is ready
   services = {
     auth: new AuthService(),
@@ -95,6 +104,7 @@ app.whenReady().then(async () => {
     pdf: new PdfService(),
     spreadsheet: new SpreadsheetService(),
     debt: new DebtService(),
+    credentials: new CredentialsService(),
   };
 
   createWindow();

@@ -246,6 +246,20 @@ interface ApiResult<T = void> {
   error?: string;
 }
 
+interface DraftOverlay {
+  incomes?: import('./index').Income[];
+  bills?: import('./index').Bill[];
+  goals?: SavingsGoalData[];
+  debts?: DebtData[];
+  skippedBills?: import('./index').SkippedBill[];
+  billAssignments?: import('./index').BillAssignment[];
+  incomeOverrides?: import('./index').IncomeOverride[];
+  startingBalance?: number;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
+}
+
 interface ElectronAPI {
   platform: () => Promise<string>;
   checkBiometricAvailable: () => Promise<boolean>;
@@ -328,7 +342,7 @@ interface ElectronAPI {
     create: (input: SavingsGoalInput) => Promise<ApiResult<SavingsGoalData>>;
     update: (id: string, input: Partial<SavingsGoalInput>) => Promise<ApiResult<SavingsGoalData>>;
     delete: (id: string) => Promise<ApiResult>;
-    getProjections: () => Promise<ApiResult<GoalProjectionData[]>>;
+    getProjections: (overlay?: DraftOverlay) => Promise<ApiResult<GoalProjectionData[]>>;
   };
 
   debts: {
@@ -338,12 +352,12 @@ interface ElectronAPI {
     update: (id: string, input: Partial<DebtInput>) => Promise<ApiResult<DebtData>>;
     delete: (id: string) => Promise<ApiResult>;
     getAmortization: (debtId: string) => Promise<ApiResult<AmortizationScheduleData>>;
-    getAllWithAmortization: () => Promise<ApiResult<DebtWithAmortizationData[]>>;
+    getAllWithAmortization: (overlay?: DraftOverlay) => Promise<ApiResult<DebtWithAmortizationData[]>>;
   };
 
   schedule: {
     generate: (startDate: string, months: number) => Promise<ApiResult<ScheduleData>>;
-    optimize: (startDate: string, months: number, startingBalance: number) => Promise<ApiResult<ScheduleData>>;
+    optimize: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlay) => Promise<ApiResult<ScheduleData>>;
   };
 
   reconciliation: {
@@ -366,6 +380,14 @@ interface ElectronAPI {
   settings: {
     get: () => Promise<ApiResult<AppSettings>>;
     update: (settings: Partial<AppSettings>) => Promise<ApiResult<AppSettings>>;
+  };
+
+  credentials: {
+    save: (password: string) => Promise<ApiResult>;
+    get: () => Promise<ApiResult & { password?: string }>;
+    delete: () => Promise<ApiResult>;
+    has: () => Promise<boolean>;
+    offerSave: (password: string) => Promise<ApiResult & { saved?: boolean }>;
   };
 }
 

@@ -1,4 +1,4 @@
-import { IpcMain } from 'electron';
+import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import { addMonths, parseISO, isBefore } from 'date-fns';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
@@ -9,6 +9,9 @@ import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DebtService } from '../services/debt.service';
 import { ipcLogger } from '../services/logger.service';
+import { DraftOverlayInput, resolveScheduleInputs } from '../services/draft-overlay.service';
+import { CredentialsService } from '../services/credentials.service';
+import { resolveAppBrowserWindow } from '../utils/dialog';
 
 // Schedule is always calculated for 12 months - viewport filtering only affects display
 const SCHEDULE_CALCULATION_MONTHS = 12;
@@ -21,6 +24,39 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function buildDebtPayoffs(
+  debts: ReturnType<typeof resolveScheduleInputs>['debts'],
+  bills: ReturnType<typeof resolveScheduleInputs>['bills'],
+  debtService: DebtService
+): Map<string, DebtPayoffInfo> {
+  const debtPayoffs = new Map<string, DebtPayoffInfo>();
+
+  for (const debt of debts) {
+    const linkedBill = bills.find((b) => b.id === debt.billId);
+    if (linkedBill) {
+      const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
+      const amortization = debtService.calculateAmortization(
+        debt.principalBalance,
+        debt.apr,
+        debt.monthlyPayment,
+        extra,
+        extra > 0 ? 'monthly' : 'none'
+      );
+
+      if (amortization.monthsToPayoff > 0) {
+        const lastPayment = amortization.payments[amortization.payments.length - 1];
+        debtPayoffs.set(debt.billId, {
+          billId: debt.billId,
+          payoffDate: new Date(amortization.payoffDate),
+          finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
+        });
+      }
+    }
+  }
+
+  return debtPayoffs;
+}
+
 interface Services {
   auth: AuthService;
   crypto: CryptoService;
@@ -30,6 +66,25 @@ interface Services {
   pdf: PdfService;
   spreadsheet: SpreadsheetService;
   debt: DebtService;
+  credentials: CredentialsService;
+}
+
+function initializeDatabaseServices(services: Services): { success: true } | { success: false; error: string } {
+  try {
+    services.database = new DatabaseService(services.auth.getCryptoService());
+    services.database.initialize();
+    services.budgetManager = new BudgetManager(services.database);
+    return { success: true };
+  } catch (error) {
+    ipcLogger.error('database init failed:', error);
+    services.auth.lock();
+    services.database = null;
+    services.budgetManager = null;
+    return {
+      success: false,
+      error: `Failed to initialize database: ${getErrorMessage(error)}`,
+    };
+  }
 }
 
 export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void {
@@ -38,21 +93,38 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   });
 
   ipcMain.handle('auth:create-master-password', async (_, password: string) => {
-    const result = await services.auth.createMasterPassword(password);
-    if (result.success) {
-      services.database = new DatabaseService(services.auth.getCryptoService());
-      services.database.initialize();
-      services.budgetManager = new BudgetManager(services.database);
+    try {
+      const result = await services.auth.createMasterPassword(password);
+      if (result.success) {
+        try {
+          services.database = new DatabaseService(services.auth.getCryptoService());
+          services.database.initialize();
+          services.budgetManager = new BudgetManager(services.database);
+        } catch (error) {
+          ipcLogger.error('auth:create-master-password database init failed:', error);
+          services.auth.revertFirstTimeSetup();
+          services.database = null;
+          services.budgetManager = null;
+          return {
+            success: false,
+            error: `Failed to initialize database: ${getErrorMessage(error)}`,
+          };
+        }
+      }
+      return result;
+    } catch (error) {
+      ipcLogger.error('auth:create-master-password failed:', error);
+      return { success: false, error: getErrorMessage(error) };
     }
-    return result;
   });
 
   ipcMain.handle('auth:unlock', async (_, password: string) => {
     const result = await services.auth.unlock(password);
     if (result.success) {
-      services.database = new DatabaseService(services.auth.getCryptoService());
-      services.database.initialize();
-      services.budgetManager = new BudgetManager(services.database);
+      const dbResult = initializeDatabaseServices(services);
+      if (!dbResult.success) {
+        return dbResult;
+      }
     }
     return result;
   });
@@ -60,9 +132,10 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   ipcMain.handle('auth:unlock-with-biometric', async () => {
     const result = await services.auth.unlockWithBiometric();
     if (result.success) {
-      services.database = new DatabaseService(services.auth.getCryptoService());
-      services.database.initialize();
-      services.budgetManager = new BudgetManager(services.database);
+      const dbResult = initializeDatabaseServices(services);
+      if (!dbResult.success) {
+        return dbResult;
+      }
     }
     return result;
   });
@@ -97,7 +170,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   });
 
   ipcMain.handle('auth:change-password', async (_, oldPassword: string, newPassword: string) => {
-    return services.auth.changePassword(oldPassword, newPassword);
+    const result = await services.auth.changePassword(oldPassword, newPassword);
+    if (result.success) {
+      await services.credentials.savePassword(newPassword);
+    }
+    return result;
   });
 
   ipcMain.handle('auth:get-pending-recovery-key', () => {
@@ -131,6 +208,27 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   ipcMain.handle('auth:set-auto-lock', (_, minutes: number) => {
     services.auth.setAutoLock(minutes);
     return { success: true };
+  });
+
+  ipcMain.handle('credentials:save', async (_, password: string) => {
+    return services.credentials.savePassword(password);
+  });
+
+  ipcMain.handle('credentials:get', async () => {
+    return services.credentials.getPassword();
+  });
+
+  ipcMain.handle('credentials:delete', async () => {
+    return services.credentials.deletePassword();
+  });
+
+  ipcMain.handle('credentials:has', async () => {
+    return services.credentials.hasPassword();
+  });
+
+  ipcMain.handle('credentials:offer-save', async (event: IpcMainInvokeEvent, password: string) => {
+    const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
+    return services.credentials.offerSave(password, parentWindow);
   });
 
   // Budget Management
@@ -601,94 +699,49 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
-  // Goal projections - uses ACTUAL 12-month scheduler allocation
-  // Goals beyond 12 months are marked as isProjected with extrapolated estimates
-  ipcMain.handle('goals:get-projections', () => {
+  ipcMain.handle('goals:get-projections', (_, overlay?: DraftOverlayInput) => {
     if (!services.budgetManager || !services.database) {
       return { success: false, error: 'Not initialized' };
     }
     try {
-      const goals = services.budgetManager.getAllGoals();
-      if (goals.length === 0) {
+      const resolved = resolveScheduleInputs(services.budgetManager, services.database, overlay);
+      if (resolved.goals.length === 0) {
         return { success: true, data: [] };
       }
 
-      const incomes = services.budgetManager.getAllIncomes();
-      const bills = services.budgetManager.getAllBills();
-      const startingBalance = services.budgetManager.getStartingBalance();
-      const targetCashOnHand = services.budgetManager.getTargetCashOnHand();
-      const minCashOnHand = services.budgetManager.getMinCashOnHand();
-      const minSavingsPerPaycheck = services.budgetManager.getMinSavingsPerPaycheck();
-      const skippedBills = services.budgetManager.getSkippedBills();
-      const billAssignments = services.budgetManager.getBillAssignments();
-
-      // Create a Set of skipped bill keys for fast lookup
       const skippedSet = new Set(
-        skippedBills.map(sb => `${sb.billId}-${sb.skipDate}`)
+        resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
       );
 
-      // Create a Map of manual assignments (billId + billDueDate -> paycheckDate)
       const manualAssignments = new Map(
-        billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
+        resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
 
-      const incomeOverridesList = services.budgetManager.getIncomeOverrides();
       const incomeOverridesMap = new Map(
-        incomeOverridesList.map(o => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+        resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
       );
 
-      // Calculate debt payoff info for bills with linked debts
-      const debtPayoffs = new Map<string, DebtPayoffInfo>();
-      const state = services.budgetManager.getCurrentState();
-      if (state.budgetId) {
-        const debts = services.database.getDebts(state.budgetId);
-        for (const debt of debts) {
-          const linkedBill = bills.find(b => b.id === debt.billId);
-          if (linkedBill) {
-            const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
-            const amortization = services.debt.calculateAmortization(
-              debt.principalBalance,
-              debt.apr,
-              debt.monthlyPayment,
-              extra,
-              extra > 0 ? 'monthly' : 'none'
-            );
+      const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
 
-            if (amortization.monthsToPayoff > 0) {
-              const lastPayment = amortization.payments[amortization.payments.length - 1];
-              debtPayoffs.set(debt.billId, {
-                billId: debt.billId,
-                payoffDate: new Date(amortization.payoffDate),
-                finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
-              });
-            }
-          }
-        }
-      }
-
-      // Always use 12 months - consistent with schedule single source of truth
-      // Goals beyond 12 months will be marked as isProjected with extrapolated estimates
       const today = new Date();
       const startDate = today.toISOString().split('T')[0];
 
-      // Generate 12-month schedule for accurate goal projections
       const scheduleData = services.scheduler.generateSchedule(
-        incomes,
-        bills,
+        resolved.incomes,
+        resolved.bills,
         startDate,
-        SCHEDULE_CALCULATION_MONTHS,  // Always 12 months
-        startingBalance,
+        SCHEDULE_CALCULATION_MONTHS,
+        resolved.startingBalance,
         skippedSet,
         manualAssignments,
-        targetCashOnHand,
-        goals,
-        minCashOnHand,
-        minSavingsPerPaycheck,
+        resolved.targetCashOnHand,
+        resolved.goals,
+        resolved.minCashOnHand,
+        resolved.minSavingsPerPaycheck,
         debtPayoffs,
         incomeOverridesMap
       );
 
-      // Return the goal projections from the actual schedule
       return { success: true, data: scheduleData.goalProjections || [] };
     } catch (error) {
       ipcLogger.error('goals:get-projections failed:', error);
@@ -837,77 +890,40 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
-  ipcMain.handle('schedule:optimize', (_, startDate: string, months: number, startingBalance: number) => {
+  ipcMain.handle('schedule:optimize', (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {
     if (!services.budgetManager || !services.database) {
       return { success: false, error: 'Not initialized' };
     }
     try {
-      const incomes = services.budgetManager.getAllIncomes();
-      const bills = services.budgetManager.getAllBills();
-      const goals = services.budgetManager.getAllGoals();
-      const targetCashOnHand = services.budgetManager.getTargetCashOnHand();
-      const minCashOnHand = services.budgetManager.getMinCashOnHand();
-      const minSavingsPerPaycheck = services.budgetManager.getMinSavingsPerPaycheck();
-      const skippedBills = services.budgetManager.getSkippedBills();
-      const billAssignments = services.budgetManager.getBillAssignments();
-      
-      // Create a Set of skipped bill keys for fast lookup
+      const resolved = resolveScheduleInputs(services.budgetManager, services.database, overlay);
+      const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
+
       const skippedSet = new Set(
-        skippedBills.map(sb => `${sb.billId}-${sb.skipDate}`)
-      );
-      
-      // Create a Map of manual assignments (billId + billDueDate -> paycheckDate)
-      const manualAssignments = new Map(
-        billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
+        resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
       );
 
-      const incomeOverridesListOpt = services.budgetManager.getIncomeOverrides();
-      const incomeOverridesMapOpt = new Map(
-        incomeOverridesListOpt.map(o => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+      const manualAssignments = new Map(
+        resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
-      
-      // Calculate debt payoff info for bills with linked debts
-      const debtPayoffs = new Map<string, DebtPayoffInfo>();
-      const state = services.budgetManager.getCurrentState();
-      if (state.budgetId) {
-        const debts = services.database.getDebts(state.budgetId);
-        for (const debt of debts) {
-          const linkedBill = bills.find(b => b.id === debt.billId);
-          if (linkedBill) {
-            // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
-            const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
-            const amortization = services.debt.calculateAmortization(
-              debt.principalBalance,
-              debt.apr,
-              debt.monthlyPayment,
-              extra,
-              extra > 0 ? 'monthly' : 'none'
-            );
-            
-            if (amortization.monthsToPayoff > 0) {
-              const lastPayment = amortization.payments[amortization.payments.length - 1];
-              debtPayoffs.set(debt.billId, {
-                billId: debt.billId,
-                payoffDate: new Date(amortization.payoffDate),
-                finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
-              });
-            }
-          }
-        }
-      }
-      
+
+      const incomeOverridesMapOpt = new Map(
+        resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+      );
+
+      const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
+
       const data = services.scheduler.generateSchedule(
-        incomes, 
-        bills, 
-        startDate, 
-        months, 
-        startingBalance,
+        resolved.incomes,
+        resolved.bills,
+        startDate,
+        months,
+        effectiveStartingBalance,
         skippedSet,
         manualAssignments,
-        targetCashOnHand,
-        goals,
-        minCashOnHand,
-        minSavingsPerPaycheck,
+        resolved.targetCashOnHand,
+        resolved.goals,
+        resolved.minCashOnHand,
+        resolved.minSavingsPerPaycheck,
         debtPayoffs,
         incomeOverridesMapOpt
       );
@@ -1133,25 +1149,23 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
-  ipcMain.handle('debts:get-all-with-amortization', () => {
+  ipcMain.handle('debts:get-all-with-amortization', (_, overlay?: DraftOverlayInput) => {
     if (!services.budgetManager || !services.database) {
       return { success: false, error: 'Not initialized' };
     }
     try {
       const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
+      if (!state.budgetId && !overlay?.debts) {
         return { success: false, error: 'No budget selected' };
       }
-      
-      const debts = services.database.getDebts(state.budgetId);
-      const bills = services.budgetManager.getAllBills();
-      
-      const data = debts.map(debt => {
-        const linkedBill = bills.find(b => b.id === debt.billId);
-        
-        // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
+
+      const resolved = resolveScheduleInputs(services.budgetManager, services.database, overlay);
+      const debts = resolved.debts;
+      const bills = resolved.bills;
+
+      const data = debts.map((debt) => {
+        const linkedBill = bills.find((b) => b.id === debt.billId);
         const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
-        
         const amortization = services.debt.calculateAmortization(
           debt.principalBalance,
           debt.apr,
@@ -1159,14 +1173,14 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
           extra,
           extra > 0 ? 'monthly' : 'none'
         );
-        
-        return { 
-          debt, 
-          bill: linkedBill || null, 
-          amortization 
+
+        return {
+          debt,
+          bill: linkedBill || null,
+          amortization,
         };
       });
-      
+
       return { success: true, data };
     } catch (error) {
       ipcLogger.error('debts:get-all-with-amortization failed:', error);

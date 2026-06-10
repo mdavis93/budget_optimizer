@@ -228,6 +228,14 @@ export const createMockElectronAPI = () => {
       }),
       update: vi.fn().mockResolvedValue({ success: true, data: {} }),
     },
+
+    credentials: {
+      save: vi.fn().mockResolvedValue({ success: true }),
+      get: vi.fn().mockResolvedValue({ success: true, password: 'test-password' }),
+      delete: vi.fn().mockResolvedValue({ success: true }),
+      has: vi.fn().mockResolvedValue(false),
+      offerSave: vi.fn().mockResolvedValue({ success: true, saved: false }),
+    },
   };
 
   return mockAPI;

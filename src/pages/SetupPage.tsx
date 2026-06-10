@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Eye, EyeOff, AlertCircle, Check, Fingerprint } from 'lucide-react';
+import { Shield, Eye, EyeOff, AlertCircle, Check, Fingerprint, Wand2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
 import RecoveryKeyDisplay from '../components/RecoveryKeyDisplay';
+import { generateSecurePassword } from '../utils/generatePassword';
 
 type SetupStep = 'password' | 'recovery-key' | 'biometric' | 'complete';
 
@@ -18,6 +19,16 @@ export default function SetupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+
+  const handleGeneratePassword = () => {
+    const generated = generateSecurePassword();
+    setPassword(generated);
+    setConfirmPassword(generated);
+    setShowPassword(true);
+    setShowConfirm(true);
+    setValidationError(null);
+    clearError();
+  };
 
   const handleCreatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,17 +46,24 @@ export default function SetupPage() {
     }
     
     setIsLoading(true);
-    
-    const result = await window.electronAPI.auth.createMasterPassword(password);
-    
-    if (result.success && result.recoveryKey) {
-      setRecoveryKey(result.recoveryKey);
-      setStep('recovery-key');
-    } else {
-      setValidationError(result.error || 'Failed to create password');
+
+    try {
+      const result = await window.electronAPI.auth.createMasterPassword(password);
+
+      if (result.success && result.recoveryKey) {
+        setRecoveryKey(result.recoveryKey);
+        setStep('recovery-key');
+        // Prompt after advancing UI so the save dialog isn't hidden behind a loading state
+        void window.electronAPI.credentials.offerSave(password);
+      } else {
+        setValidationError(result.error || 'Failed to create password');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setValidationError(message);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleRecoveryKeyConfirmed = async () => {
@@ -137,6 +155,17 @@ export default function SetupPage() {
         </div>
         
         <form onSubmit={handleCreatePassword} className="space-y-4">
+          <input
+            type="text"
+            name="username"
+            value="Budget Optimizer"
+            autoComplete="username"
+            className="hidden"
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+
           {(error || validationError) && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -145,15 +174,27 @@ export default function SetupPage() {
           )}
           
           <div>
-            <label htmlFor="password" className="label">Master Password</label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="password" className="label mb-0">Master Password</label>
+              <button
+                type="button"
+                onClick={handleGeneratePassword}
+                className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                Generate strong password
+              </button>
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 id="password"
+                name="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input pr-10"
                 placeholder="Create a strong password"
+                autoComplete="new-password"
                 autoFocus
               />
               <button
@@ -173,10 +214,12 @@ export default function SetupPage() {
               <input
                 type={showConfirm ? 'text' : 'password'}
                 id="confirmPassword"
+                name="confirm-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="input pr-10"
                 placeholder="Confirm your password"
+                autoComplete="new-password"
               />
               <button
                 type="button"

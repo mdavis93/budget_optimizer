@@ -11,6 +11,8 @@ import {
 } from 'recharts';
 import { CreditCard, Plus, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent, ChevronDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useDraft } from '../context/DraftContext';
+import { useBudget } from '../context/BudgetContext';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -467,6 +469,8 @@ function UnsetupDebtCard({ bill, onClick }: UnsetupDebtCardProps) {
 
 export default function DebtsPage() {
   const { bills } = useData();
+  const draft = useDraft();
+  const { isQuickBudget } = useBudget();
   const [debtsWithAmortization, setDebtsWithAmortization] = useState<DebtWithAmortization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(12);
@@ -480,20 +484,18 @@ export default function DebtsPage() {
   const loadDebts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await window.electronAPI.debts.getAllWithAmortization();
-      if (result.success && result.data) {
-        setDebtsWithAmortization(result.data as DebtWithAmortization[]);
-      }
+      const data = await draft.getDebtsWithAmortization();
+      setDebtsWithAmortization(data);
     } catch {
       // Error loading debts
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [draft]);
 
   useEffect(() => {
-    loadDebts();
-  }, [loadDebts]);
+    void loadDebts();
+  }, [loadDebts, draft.debts, bills]);
 
   const existingDebtBillIds = useMemo(
     () => new Set(debtsWithAmortization.map((d) => d.debt.billId)),
@@ -538,8 +540,15 @@ export default function DebtsPage() {
 
   const handleCreateDebt = async (data: DebtInput) => {
     try {
-      const result = await window.electronAPI.debts.create(data);
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.debts.create(data);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          await loadDebts();
+          setIsModalOpen(false);
+          setPreselectedBill(null);
+        }
+      } else if (draft.createDebt(data)) {
         await loadDebts();
         setIsModalOpen(false);
         setPreselectedBill(null);
@@ -561,10 +570,16 @@ export default function DebtsPage() {
 
   const handleUpdateDebt = async (data: DebtInput) => {
     if (!editingDebt) return;
-    
+
     try {
-      const result = await window.electronAPI.debts.update(editingDebt.debt.id, data);
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.debts.update(editingDebt.debt.id, data);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          await loadDebts();
+          setEditingDebt(null);
+        }
+      } else if (draft.updateDebt(editingDebt.debt.id, data)) {
         await loadDebts();
         setEditingDebt(null);
       }
@@ -575,10 +590,16 @@ export default function DebtsPage() {
 
   const handleDeleteDebt = async () => {
     if (!deleteDebt) return;
-    
+
     try {
-      const result = await window.electronAPI.debts.delete(deleteDebt.debt.id);
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.debts.delete(deleteDebt.debt.id);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          await loadDebts();
+          setDeleteDebt(null);
+        }
+      } else if (draft.deleteDebt(deleteDebt.debt.id)) {
         await loadDebts();
         setDeleteDebt(null);
       }

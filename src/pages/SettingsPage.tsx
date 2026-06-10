@@ -12,11 +12,15 @@ import {
   AlertCircle,
   PiggyBank,
   Wallet,
-  Target
+  Target,
+  Wand2
 } from 'lucide-react';
+import { generateSecurePassword } from '../utils/generatePassword';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
+import { useDraft } from '../context/DraftContext';
+import { APP_VERSION } from '../constants/version';
 import Modal from '../components/Modal';
 import PasswordStrength from '../components/PasswordStrength';
 import RecoveryKeyDisplay from '../components/RecoveryKeyDisplay';
@@ -26,6 +30,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { biometricAvailable, biometricEnabled, enableBiometric } = useAuth();
   const { currentBudget, updateBudget } = useBudget();
+  const draft = useDraft();
   const [currency, setCurrency] = useState('USD');
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
   const [savingsAPY, setSavingsAPY] = useState(0);
@@ -66,14 +71,17 @@ export default function SettingsPage() {
     return () => { isMounted = false; };
   }, []);
 
-  // Load budget settings when current budget changes
   useEffect(() => {
-    if (currentBudget) {
+    if (draft.budgetFields) {
+      setTargetCashOnHand(draft.budgetFields.targetCashOnHand);
+      setMinCashOnHand(draft.budgetFields.minCashOnHand);
+      setMinSavingsPerPaycheck(draft.budgetFields.minSavingsPerPaycheck);
+    } else if (currentBudget) {
       setTargetCashOnHand(currentBudget.targetCashOnHand);
       setMinCashOnHand(currentBudget.minCashOnHand);
       setMinSavingsPerPaycheck(currentBudget.minSavingsPerPaycheck);
     }
-  }, [currentBudget]);
+  }, [currentBudget, draft.budgetFields]);
 
   // Save settings when they change
   const saveSettings = useCallback(async (updates: { currency?: string; autoLockMinutes?: number; savingsAPY?: number }) => {
@@ -109,46 +117,36 @@ export default function SettingsPage() {
     saveSettings({ savingsAPY: clampedValue });
   };
 
-  // Budget setting handlers
-  const handleTargetCashOnHandChange = async (value: number) => {
+  const handleTargetCashOnHandChange = (value: number) => {
     if (!currentBudget) return;
     const clampedValue = Math.max(0, value);
     setTargetCashOnHand(clampedValue);
-    try {
-      await updateBudget(currentBudget.id, { targetCashOnHand: clampedValue });
-      setStatus({ type: 'success', message: 'Budget settings saved' });
-      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to save budget settings' });
-      setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+    if (draft.isDraftMode) {
+      draft.updateBudgetFields({ targetCashOnHand: clampedValue });
+    } else {
+      void updateBudget(currentBudget.id, { targetCashOnHand: clampedValue });
     }
   };
 
-  const handleMinCashOnHandChange = async (value: number) => {
+  const handleMinCashOnHandChange = (value: number) => {
     if (!currentBudget) return;
     const clampedValue = Math.max(0, value);
     setMinCashOnHand(clampedValue);
-    try {
-      await updateBudget(currentBudget.id, { minCashOnHand: clampedValue });
-      setStatus({ type: 'success', message: 'Budget settings saved' });
-      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to save budget settings' });
-      setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+    if (draft.isDraftMode) {
+      draft.updateBudgetFields({ minCashOnHand: clampedValue });
+    } else {
+      void updateBudget(currentBudget.id, { minCashOnHand: clampedValue });
     }
   };
 
-  const handleMinSavingsPerPaycheckChange = async (value: number) => {
+  const handleMinSavingsPerPaycheckChange = (value: number) => {
     if (!currentBudget) return;
     const clampedValue = Math.max(0, value);
     setMinSavingsPerPaycheck(clampedValue);
-    try {
-      await updateBudget(currentBudget.id, { minSavingsPerPaycheck: clampedValue });
-      setStatus({ type: 'success', message: 'Budget settings saved' });
-      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to save budget settings' });
-      setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+    if (draft.isDraftMode) {
+      draft.updateBudgetFields({ minSavingsPerPaycheck: clampedValue });
+    } else {
+      void updateBudget(currentBudget.id, { minSavingsPerPaycheck: clampedValue });
     }
   };
 
@@ -434,7 +432,7 @@ export default function SettingsPage() {
       <div className="card bg-[var(--color-bg-tertiary)]">
         <h3 className="font-semibold mb-2">About Budget Optimizer</h3>
         <p className="text-sm text-[var(--color-text-secondary)]">
-          Version 2.7.0
+          Version {APP_VERSION}
         </p>
         <p className="text-sm text-[var(--color-text-secondary)] mt-2">
           A secure desktop app for managing your income and optimizing bill payments.
@@ -469,6 +467,17 @@ function ChangePasswordModal({ isOpen, onClose, onSuccess }: ChangePasswordModal
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newRecoveryKey, setNewRecoveryKey] = useState<string | null>(null);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const handleGeneratePassword = () => {
+    const generated = generateSecurePassword();
+    setNewPassword(generated);
+    setConfirmPassword(generated);
+    setShowNewPassword(true);
+    setShowConfirmPassword(true);
+    setError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -515,6 +524,8 @@ function ChangePasswordModal({ isOpen, onClose, onSuccess }: ChangePasswordModal
     setConfirmPassword('');
     setError(null);
     setNewRecoveryKey(null);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
     onClose();
   };
 
@@ -534,6 +545,17 @@ function ChangePasswordModal({ isOpen, onClose, onSuccess }: ChangePasswordModal
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Change Master Password">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          type="text"
+          name="username"
+          value="Budget Optimizer"
+          autoComplete="username"
+          className="hidden"
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -545,24 +567,38 @@ function ChangePasswordModal({ isOpen, onClose, onSuccess }: ChangePasswordModal
           <label htmlFor="change-current-password" className="label">Current Password</label>
           <input
             id="change-current-password"
+            name="password"
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             className="input"
             placeholder="Enter current password"
+            autoComplete="current-password"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="change-new-password" className="label">New Password</label>
+          <div className="flex items-center justify-between mb-1">
+            <label htmlFor="change-new-password" className="label mb-0">New Password</label>
+            <button
+              type="button"
+              onClick={handleGeneratePassword}
+              className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              Generate strong password
+            </button>
+          </div>
           <input
             id="change-new-password"
-            type="password"
+            name="new-password"
+            type={showNewPassword ? 'text' : 'password'}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             className="input"
             placeholder="Enter new password"
+            autoComplete="new-password"
             required
           />
           <PasswordStrength password={newPassword} />
@@ -572,11 +608,13 @@ function ChangePasswordModal({ isOpen, onClose, onSuccess }: ChangePasswordModal
           <label htmlFor="change-confirm-password" className="label">Confirm New Password</label>
           <input
             id="change-confirm-password"
-            type="password"
+            name="confirm-password"
+            type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="input"
             placeholder="Confirm new password"
+            autoComplete="new-password"
             required
           />
         </div>

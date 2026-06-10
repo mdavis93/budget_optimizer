@@ -18,27 +18,40 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
 import { useBudget } from '../context/BudgetContext';
+import { useDraft } from '../context/DraftContext';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
+import GlobalDraftBanner from './GlobalDraftBanner';
+import DraftSaveBar from './DraftSaveBar';
 import clsx from 'clsx';
+import { DraftDomain, ROUTE_DRAFT_DOMAIN } from '../types/draft';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/income', icon: Wallet, label: 'Income' },
-  { to: '/bills', icon: Receipt, label: 'Bills' },
-  { to: '/debts', icon: CreditCard, label: 'Debts' },
-  { to: '/schedule', icon: Calendar, label: 'Schedule' },
-  { to: '/goals', icon: Target, label: 'Goals' },
+  { to: '/income', icon: Wallet, label: 'Income', domain: 'income' as DraftDomain },
+  { to: '/bills', icon: Receipt, label: 'Bills', domain: 'bills' as DraftDomain },
+  { to: '/debts', icon: CreditCard, label: 'Debts', domain: 'debts' as DraftDomain },
+  { to: '/schedule', icon: Calendar, label: 'Schedule', domain: 'schedule' as DraftDomain },
+  { to: '/goals', icon: Target, label: 'Goals', domain: 'goals' as DraftDomain },
   { to: '/summary', icon: TrendingUp, label: 'Summary' },
-  { to: '/budgets', icon: Briefcase, label: 'Budgets' },
+  { to: '/budgets', icon: Briefcase, label: 'Budgets', domain: 'budget' as DraftDomain },
   { to: '/export', icon: Download, label: 'Export' },
 ];
 
 export default function Layout() {
   const { lock } = useAuth();
   const { currentBudget, isQuickBudget } = useBudget();
+  const { isDraftMode, isDomainDirty } = useDraft();
+  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
   const location = useLocation();
+  const currentDomain = ROUTE_DRAFT_DOMAIN[location.pathname];
+
+  const handleLock = () => {
+    guardAction(lock, 'lock the app');
+  };
 
   return (
     <DataProvider>
+      {unsavedDialog}
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
@@ -54,7 +67,6 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Current Budget Indicator */}
           <div className="px-4 py-3 border-b border-[var(--color-border)]">
             {isQuickBudget ? (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning-500 dark:bg-warning-600">
@@ -81,7 +93,7 @@ export default function Layout() {
           </div>
           
           <nav className="flex-1 p-4 space-y-1">
-            {navItems.map(({ to, icon: Icon, label }) => (
+            {navItems.map(({ to, icon: Icon, label, domain }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -95,7 +107,10 @@ export default function Layout() {
                 }
               >
                 <Icon className="w-5 h-5" />
-                {label}
+                <span className="flex-1">{label}</span>
+                {isDraftMode && domain && isDomainDirty(domain) && (
+                  <span className="w-2 h-2 rounded-full bg-warning-500" aria-label="Unsaved changes" />
+                )}
               </NavLink>
             ))}
           </nav>
@@ -113,10 +128,13 @@ export default function Layout() {
               }
             >
               <Settings className="w-5 h-5" />
-              Settings
+              <span className="flex-1">Settings</span>
+              {isDraftMode && isDomainDirty('budget') && (
+                <span className="w-2 h-2 rounded-full bg-warning-500" aria-label="Unsaved changes" />
+              )}
             </NavLink>
             <button
-              onClick={lock}
+              onClick={handleLock}
               className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
             >
               <Lock className="w-5 h-5" />
@@ -138,8 +156,12 @@ export default function Layout() {
               {location.pathname.split('/')[1] || 'Dashboard'}
             </h1>
           </div>
-          <div className="flex-1 overflow-auto p-6">
-            <Outlet />
+          <div className="flex-1 overflow-auto p-6 flex flex-col">
+            <GlobalDraftBanner />
+            <div className="flex-1">
+              <Outlet />
+            </div>
+            {currentDomain && <DraftSaveBar domain={currentDomain} />}
           </div>
         </main>
       </div>

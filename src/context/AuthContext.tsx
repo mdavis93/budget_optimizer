@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [isFirstTime, setIsFirstTime] = useState(false);
+  const [isFirstTime, setIsFirstTime] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -45,6 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Failed to check auth status:', err);
       setError('Failed to initialize application');
+      // Prefer setup over login when auth state cannot be read (e.g. preload/IPC unavailable)
+      setIsFirstTime(true);
+      setIsUnlocked(false);
     } finally {
       setIsLoading(false);
     }

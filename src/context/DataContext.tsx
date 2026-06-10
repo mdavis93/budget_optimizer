@@ -3,6 +3,7 @@ import { format, startOfMonth } from 'date-fns';
 import { Income, IncomeInput, Bill, BillInput, ScheduleData } from '../types';
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
+import { useDraft } from './DraftContext';
 
 interface DataContextType {
   incomes: Income[];
@@ -33,9 +34,9 @@ const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { isUnlocked } = useAuth();
-  const { currentBudget, isQuickBudget, hasBudgetSelected } = useBudget();
-  const [incomes, setIncomes] = useState<Income[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
+  const { isQuickBudget, hasBudgetSelected } = useBudget();
+  const draft = useDraft();
+
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,69 +44,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [scheduleMonths, setScheduleMonths] = useState(3);
   const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
 
+  const incomes = draft.incomes;
+  const bills = draft.bills;
+
   const refreshIncomes = useCallback(async () => {
     if (!isUnlocked) return;
-    try {
-      const result = await window.electronAPI.income.getAll();
-      if (result.success && result.data) {
-        setIncomes(result.data);
-      } else {
-        setError(result.error || 'Failed to load incomes');
-      }
-    } catch {
-      setError('Failed to load incomes');
-    }
-  }, [isUnlocked]);
+    await draft.reloadSnapshot();
+  }, [isUnlocked, draft]);
 
   const refreshBills = useCallback(async () => {
     if (!isUnlocked) return;
-    try {
-      const result = await window.electronAPI.bills.getAll();
-      if (result.success && result.data) {
-        setBills(result.data);
-      } else {
-        setError(result.error || 'Failed to load bills');
-      }
-    } catch {
-      setError('Failed to load bills');
-    }
-  }, [isUnlocked]);
+    await draft.reloadSnapshot();
+  }, [isUnlocked, draft]);
 
   const refreshAllData = useCallback(async () => {
     if (!isUnlocked || !hasBudgetSelected) return;
     setIsLoading(true);
     try {
-      await Promise.all([refreshIncomes(), refreshBills()]);
+      await draft.reloadSnapshot();
     } finally {
       setIsLoading(false);
     }
-  }, [isUnlocked, hasBudgetSelected, refreshIncomes, refreshBills]);
+  }, [isUnlocked, hasBudgetSelected, draft]);
 
-  // Reload data when budget changes
   useEffect(() => {
-    let isMounted = true;
-    
-    if (isUnlocked && hasBudgetSelected) {
-      setIsLoading(true);
-      Promise.all([refreshIncomes(), refreshBills()]).finally(() => {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      });
-    } else {
-      setIncomes([]);
-      setBills([]);
+    if (!isUnlocked || !hasBudgetSelected) {
       setSchedule(null);
     }
-    
-    return () => { isMounted = false; };
-  }, [isUnlocked, hasBudgetSelected, currentBudget?.id, isQuickBudget, refreshIncomes, refreshBills]);
+  }, [isUnlocked, hasBudgetSelected]);
 
-  const createIncome = useCallback(async (income: IncomeInput): Promise<boolean> => {
+  const createIncomeQuick = useCallback(async (income: IncomeInput): Promise<boolean> => {
     try {
       const result = await window.electronAPI.income.create(income);
       if (result.success) {
-        await refreshIncomes();
+        await draft.reloadSnapshot();
         return true;
       }
       setError(result.error || 'Failed to create income');
@@ -114,13 +86,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError('Failed to create income');
       return false;
     }
-  }, [refreshIncomes]);
+  }, [draft]);
 
-  const updateIncome = useCallback(async (id: string, income: IncomeInput): Promise<boolean> => {
+  const createIncome = useCallback(async (income: IncomeInput): Promise<boolean> => {
+    if (isQuickBudget) return createIncomeQuick(income);
+    if (draft.isDraftMode) {
+      return draft.createIncome(income);
+    }
+    return false;
+  }, [isQuickBudget, draft, createIncomeQuick]);
+
+  const updateIncomeQuick = useCallback(async (id: string, income: IncomeInput): Promise<boolean> => {
     try {
       const result = await window.electronAPI.income.update(id, income);
       if (result.success) {
-        await refreshIncomes();
+        await draft.reloadSnapshot();
         return true;
       }
       setError(result.error || 'Failed to update income');
@@ -129,13 +109,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError('Failed to update income');
       return false;
     }
-  }, [refreshIncomes]);
+  }, [draft]);
 
-  const deleteIncome = useCallback(async (id: string): Promise<boolean> => {
+  const updateIncome = useCallback(async (id: string, income: IncomeInput): Promise<boolean> => {
+    if (isQuickBudget) return updateIncomeQuick(id, income);
+    if (draft.isDraftMode) {
+      return draft.updateIncome(id, income);
+    }
+    return false;
+  }, [isQuickBudget, draft, updateIncomeQuick]);
+
+  const deleteIncomeQuick = useCallback(async (id: string): Promise<boolean> => {
     try {
       const result = await window.electronAPI.income.delete(id);
       if (result.success) {
-        await refreshIncomes();
+        await draft.reloadSnapshot();
         return true;
       }
       setError(result.error || 'Failed to delete income');
@@ -144,13 +132,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError('Failed to delete income');
       return false;
     }
-  }, [refreshIncomes]);
+  }, [draft]);
 
-  const createBill = useCallback(async (bill: BillInput): Promise<boolean> => {
+  const deleteIncome = useCallback(async (id: string): Promise<boolean> => {
+    if (isQuickBudget) return deleteIncomeQuick(id);
+    if (draft.isDraftMode) {
+      return draft.deleteIncome(id);
+    }
+    return false;
+  }, [isQuickBudget, draft, deleteIncomeQuick]);
+
+  const createBillQuick = useCallback(async (bill: BillInput): Promise<boolean> => {
     try {
       const result = await window.electronAPI.bills.create(bill);
       if (result.success) {
-        await refreshBills();
+        await draft.reloadSnapshot();
         return true;
       }
       setError(result.error || 'Failed to create bill');
@@ -159,13 +155,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError('Failed to create bill');
       return false;
     }
-  }, [refreshBills]);
+  }, [draft]);
 
-  const updateBill = useCallback(async (id: string, bill: BillInput): Promise<boolean> => {
+  const createBill = useCallback(async (bill: BillInput): Promise<boolean> => {
+    if (isQuickBudget) return createBillQuick(bill);
+    if (draft.isDraftMode) {
+      return draft.createBill(bill);
+    }
+    return false;
+  }, [isQuickBudget, draft, createBillQuick]);
+
+  const updateBillQuick = useCallback(async (id: string, bill: BillInput): Promise<boolean> => {
     try {
       const result = await window.electronAPI.bills.update(id, bill);
       if (result.success) {
-        await refreshBills();
+        await draft.reloadSnapshot();
         return true;
       }
       setError(result.error || 'Failed to update bill');
@@ -174,13 +178,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError('Failed to update bill');
       return false;
     }
-  }, [refreshBills]);
+  }, [draft]);
 
-  const deleteBill = useCallback(async (id: string): Promise<boolean> => {
+  const updateBill = useCallback(async (id: string, bill: BillInput): Promise<boolean> => {
+    if (isQuickBudget) return updateBillQuick(id, bill);
+    if (draft.isDraftMode) {
+      return draft.updateBill(id, bill);
+    }
+    return false;
+  }, [isQuickBudget, draft, updateBillQuick]);
+
+  const deleteBillQuick = useCallback(async (id: string): Promise<boolean> => {
     try {
       const result = await window.electronAPI.bills.delete(id);
       if (result.success) {
-        await refreshBills();
+        await draft.reloadSnapshot();
         return true;
       }
       setError(result.error || 'Failed to delete bill');
@@ -189,16 +201,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError('Failed to delete bill');
       return false;
     }
-  }, [refreshBills]);
+  }, [draft]);
+
+  const deleteBill = useCallback(async (id: string): Promise<boolean> => {
+    if (isQuickBudget) return deleteBillQuick(id);
+    if (draft.isDraftMode) {
+      return draft.deleteBill(id);
+    }
+    return false;
+  }, [isQuickBudget, draft, deleteBillQuick]);
 
   const generateSchedule = useCallback(async (
-    startDate: string, 
-    months: number, 
+    startDate: string,
+    months: number,
     startingBalance: number
   ): Promise<ScheduleData | null> => {
     setIsLoading(true);
     try {
-      const result = await window.electronAPI.schedule.optimize(startDate, months, startingBalance);
+      const overlay = draft.buildDraftOverlay();
+      const result = await window.electronAPI.schedule.optimize(
+        startDate,
+        months,
+        startingBalance,
+        overlay
+      );
       if (result.success && result.data) {
         setSchedule(result.data);
         return result.data;
@@ -211,7 +237,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [draft]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -221,7 +247,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     incomes,
     bills,
     schedule,
-    isLoading,
+    isLoading: isLoading || draft.isLoading,
     error,
     scheduleStartDate,
     scheduleMonths,
@@ -245,6 +271,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     bills,
     schedule,
     isLoading,
+    draft.isLoading,
     error,
     scheduleStartDate,
     scheduleMonths,

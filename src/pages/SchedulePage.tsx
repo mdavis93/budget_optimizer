@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
 import { Calendar, List, AlertTriangle, RefreshCw, PiggyBank, Target, ChevronDown } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useDraft } from '../context/DraftContext';
+import { useBudget } from '../context/BudgetContext';
 import { format, parseISO } from 'date-fns';
-import { PaycheckBill, BillAssignment, ProposedFix, IncomeOverride } from '../types';
+import { PaycheckBill, ProposedFix } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '../components/schedule';
@@ -23,13 +25,15 @@ export default function SchedulePage() {
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
   } = useData();
+  const { isQuickBudget } = useBudget();
+  const draft = useDraft();
+  const billAssignments = draft.billAssignments;
+  const incomeOverrides = draft.incomeOverrides;
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
   const [skippingBill, setSkippingBill] = useState<string | null>(null);
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
-  const [billAssignments, setBillAssignments] = useState<BillAssignment[]>([]);
-  const [incomeOverrides, setIncomeOverrides] = useState<IncomeOverride[]>([]);
   const [savingIncomeKey, setSavingIncomeKey] = useState<string | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [showReconciliation, setShowReconciliation] = useState(false);
@@ -76,18 +80,23 @@ export default function SchedulePage() {
   const handleApplyFixes = useCallback(async (fixes: ProposedFix[]) => {
     setIsApplyingFixes(true);
     try {
-      const result = await window.electronAPI.reconciliation.applyFixes(
-        fixes.map(f => ({
-          id: f.id,
-          type: f.type,
-          billId: f.billId,
-          billDueDate: f.billDueDate,
-          fromPaycheckDate: f.fromPaycheckDate,
-          toPaycheckDate: f.toPaycheckDate,
-        }))
-      );
-      
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.reconciliation.applyFixes(
+          fixes.map(f => ({
+            id: f.id,
+            type: f.type,
+            billId: f.billId,
+            billDueDate: f.billDueDate,
+            fromPaycheckDate: f.fromPaycheckDate,
+            toPaycheckDate: f.toPaycheckDate,
+          }))
+        );
+        if (result.success) {
+          setShowReconciliation(false);
+          setDismissedReconciliation(false);
+          generateSchedule(startDate, months, startingBalance);
+        }
+      } else if (draft.applyReconciliationFixes(fixes)) {
         setShowReconciliation(false);
         setDismissedReconciliation(false);
         generateSchedule(startDate, months, startingBalance);
@@ -97,48 +106,26 @@ export default function SchedulePage() {
     } finally {
       setIsApplyingFixes(false);
     }
-  }, [generateSchedule, startDate, months, startingBalance]);
+  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
   const handleSkipReconciliation = useCallback(() => {
     setDismissedReconciliation(true);
     setShowReconciliation(false);
   }, []);
 
-  // Load bill assignments
-  useEffect(() => {
-    let isMounted = true;
-    
-    const loadAssignments = async () => {
-      const result = await window.electronAPI.billAssignments.getAll();
-      if (isMounted && result.success && result.data) {
-        setBillAssignments(result.data);
-      }
-    };
-    loadAssignments();
-    
-    return () => { isMounted = false; };
-  }, [schedule]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadIncomeOverrides = async () => {
-      const result = await window.electronAPI.incomeOverrides.getAll();
-      if (isMounted && result.success && result.data) {
-        setIncomeOverrides(result.data);
-      }
-    };
-    loadIncomeOverrides();
-
-    return () => { isMounted = false; };
-  }, [schedule]);
+  const scheduleDataHash = useMemo(() => {
+    const skipped = draft.skippedBills.map(sb => `${sb.billId}-${sb.skipDate}`).sort().join('|');
+    const assignments = draft.billAssignments.map(a => `${a.billId}-${a.billDueDate}-${a.paycheckDate}`).sort().join('|');
+    const overrides = draft.incomeOverrides.map(o => `${o.incomeId}-${o.paycheckDate}-${o.amount}`).sort().join('|');
+    return `${skipped}::${assignments}::${overrides}`;
+  }, [draft.skippedBills, draft.billAssignments, draft.incomeOverrides]);
 
   // Create a stable hash of incomes and bills to detect actual data changes
   const dataHash = useMemo(() => {
     const incomeData = incomes.map(i => `${i.id}-${i.amount}-${i.sourceName}-${i.cadence}-${i.startDate}-${i.isActive}`).sort().join('|');
     const billData = bills.map(b => `${b.id}-${b.budgetedAmount}-${b.creditorName}-${b.dueDay}-${b.priority}`).sort().join('|');
-    return `${incomeData}::${billData}`;
-  }, [incomes, bills]);
+    return `${incomeData}::${billData}::${scheduleDataHash}`;
+  }, [incomes, bills, scheduleDataHash]);
 
   useEffect(() => {
     if (incomes.length > 0 || bills.length > 0) {
@@ -154,8 +141,13 @@ export default function SchedulePage() {
   const handleSkipBill = useCallback(async (billId: string, paycheckDate: string) => {
     setSkippingBill(`${billId}-${paycheckDate}`);
     try {
-      const result = await window.electronAPI.skippedBills.skip(billId, paycheckDate);
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.skippedBills.skip(billId, paycheckDate);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          generateSchedule(startDate, months, startingBalance);
+        }
+      } else if (draft.skipBill(billId, paycheckDate)) {
         generateSchedule(startDate, months, startingBalance);
       }
     } catch {
@@ -163,7 +155,7 @@ export default function SchedulePage() {
     } finally {
       setSkippingBill(null);
     }
-  }, [generateSchedule, startDate, months, startingBalance]);
+  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
   const handleDragStart = useCallback((bill: PaycheckBill, sourcePaycheckDate: string) => {
     setDraggedBill({
@@ -196,36 +188,37 @@ export default function SchedulePage() {
     const key = `${incomeId}-${paycheckDate}`;
     setSavingIncomeKey(key);
     try {
-      const result = await window.electronAPI.incomeOverrides.set(incomeId, paycheckDate, amount);
-      if (result.success && result.data) {
-        setIncomeOverrides((prev) => {
-          const rest = prev.filter(
-            (o) => !(o.incomeId === incomeId && o.paycheckDate === paycheckDate)
-          );
-          return [...rest, result.data!];
-        });
+      if (isQuickBudget) {
+        const result = await window.electronAPI.incomeOverrides.set(incomeId, paycheckDate, amount);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          await generateSchedule(startDate, months, startingBalance);
+        }
+      } else if (draft.setIncomeOverride(incomeId, paycheckDate, amount)) {
         await generateSchedule(startDate, months, startingBalance);
       }
     } finally {
       setSavingIncomeKey(null);
     }
-  }, [generateSchedule, startDate, months, startingBalance]);
+  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
   const handleClearIncomeOverride = useCallback(async (incomeId: string, paycheckDate: string) => {
     const key = `${incomeId}-${paycheckDate}`;
     setSavingIncomeKey(key);
     try {
-      const result = await window.electronAPI.incomeOverrides.remove(incomeId, paycheckDate);
-      if (result.success) {
-        setIncomeOverrides((prev) =>
-          prev.filter((o) => !(o.incomeId === incomeId && o.paycheckDate === paycheckDate))
-        );
+      if (isQuickBudget) {
+        const result = await window.electronAPI.incomeOverrides.remove(incomeId, paycheckDate);
+        if (result.success) {
+          await draft.reloadSnapshot();
+          await generateSchedule(startDate, months, startingBalance);
+        }
+      } else if (draft.removeIncomeOverride(incomeId, paycheckDate)) {
         await generateSchedule(startDate, months, startingBalance);
       }
     } finally {
       setSavingIncomeKey(null);
     }
-  }, [generateSchedule, startDate, months, startingBalance]);
+  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
   const handleDrop = useCallback(async (e: DragEvent, targetPaycheckDate: string) => {
     e.preventDefault();
@@ -238,15 +231,18 @@ export default function SchedulePage() {
     setIsAssigning(true);
 
     try {
-      // Use the actual bill due date as the key, not the paycheck date
       const billDueDate = draggedBill.billDate;
-      const result = await window.electronAPI.billAssignments.assign(
-        draggedBill.billId,
-        billDueDate,
-        targetPaycheckDate
-      );
-      
-      if (result.success) {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.billAssignments.assign(
+          draggedBill.billId,
+          billDueDate,
+          targetPaycheckDate
+        );
+        if (result.success) {
+          await draft.reloadSnapshot();
+          generateSchedule(startDate, months, startingBalance);
+        }
+      } else if (draft.assignBill(draggedBill.billId, billDueDate, targetPaycheckDate)) {
         generateSchedule(startDate, months, startingBalance);
       }
     } catch {
@@ -255,7 +251,7 @@ export default function SchedulePage() {
       setDraggedBill(null);
       setIsAssigning(false);
     }
-  }, [draggedBill, generateSchedule, startDate, months, startingBalance]);
+  }, [draggedBill, generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
   const togglePaycheck = useCallback((date: string) => {
     setExpandedPaychecks(prev => {

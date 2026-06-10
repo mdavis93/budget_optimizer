@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Eye, EyeOff, Fingerprint, AlertCircle, Key, ArrowLeft, Check } from 'lucide-react';
+import { Shield, Eye, EyeOff, Fingerprint, AlertCircle, Key, ArrowLeft, Check, Wand2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
 import RecoveryKeyDisplay from '../components/RecoveryKeyDisplay';
+import { generateSecurePassword } from '../utils/generatePassword';
 
 type LoginMode = 'login' | 'recovery' | 'new-password' | 'show-new-recovery';
 
@@ -24,6 +25,35 @@ export default function LoginPage() {
   const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
   
   const [newRecoveryKey, setNewRecoveryKey] = useState<string | null>(null);
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  useEffect(() => {
+    if (mode !== 'login') return;
+
+    let isMounted = true;
+    window.electronAPI.credentials.has().then((has) => {
+      if (isMounted) setHasSavedCredentials(has);
+    });
+
+    return () => { isMounted = false; };
+  }, [mode]);
+
+  const handleFillFromCredentials = async () => {
+    const result = await window.electronAPI.credentials.get();
+    if (result.success && result.password) {
+      setPassword(result.password);
+    }
+  };
+
+  const handleGenerateNewPassword = () => {
+    const generated = generateSecurePassword();
+    setNewPassword(generated);
+    setConfirmNewPassword(generated);
+    setShowNewPassword(true);
+    setShowConfirmNewPassword(true);
+    setNewPasswordError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,16 +116,21 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
-    const result = await window.electronAPI.auth.resetPasswordWithRecovery(recoveryKey, newPassword);
-    
-    if (result.success && result.newRecoveryKey) {
-      setNewRecoveryKey(result.newRecoveryKey);
-      setMode('show-new-recovery');
-    } else {
-      setNewPasswordError(result.error || 'Failed to reset password');
+    try {
+      const result = await window.electronAPI.auth.resetPasswordWithRecovery(recoveryKey, newPassword);
+
+      if (result.success && result.newRecoveryKey) {
+        setNewRecoveryKey(result.newRecoveryKey);
+        setMode('show-new-recovery');
+        void window.electronAPI.credentials.offerSave(newPassword);
+      } else {
+        setNewPasswordError(result.error || 'Failed to reset password');
+      }
+    } catch {
+      setNewPasswordError('An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleRecoveryComplete = async () => {
@@ -155,6 +190,17 @@ export default function LoginPage() {
           </div>
           
           <form onSubmit={handleResetPassword} className="space-y-4">
+            <input
+              type="text"
+              name="username"
+              value="Budget Optimizer"
+              autoComplete="username"
+              className="hidden"
+              readOnly
+              tabIndex={-1}
+              aria-hidden="true"
+            />
+
             {newPasswordError && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -163,15 +209,27 @@ export default function LoginPage() {
             )}
             
             <div>
-              <label htmlFor="newPassword" className="label">New Password</label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="newPassword" className="label mb-0">New Password</label>
+                <button
+                  type="button"
+                  onClick={handleGenerateNewPassword}
+                  className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  Generate strong password
+                </button>
+              </div>
               <div className="relative">
                 <input
                   type={showNewPassword ? 'text' : 'password'}
                   id="newPassword"
+                  name="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="input pr-10"
                   placeholder="Enter new password"
+                  autoComplete="new-password"
                   autoFocus
                 />
                 <button
@@ -188,12 +246,14 @@ export default function LoginPage() {
             <div>
               <label htmlFor="confirmNewPassword" className="label">Confirm New Password</label>
               <input
-                type="password"
+                type={showConfirmNewPassword ? 'text' : 'password'}
                 id="confirmNewPassword"
+                name="confirm-password"
                 value={confirmNewPassword}
                 onChange={(e) => setConfirmNewPassword(e.target.value)}
                 className="input"
                 placeholder="Confirm new password"
+                autoComplete="new-password"
               />
               {confirmNewPassword && newPassword === confirmNewPassword && (
                 <div className="flex items-center gap-1 mt-2 text-success-500 text-xs">
@@ -299,6 +359,17 @@ export default function LoginPage() {
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            name="username"
+            value="Budget Optimizer"
+            autoComplete="username"
+            className="hidden"
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -307,15 +378,29 @@ export default function LoginPage() {
           )}
           
           <div>
-            <label htmlFor="password" className="label">Master Password</label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="password" className="label mb-0">Master Password</label>
+              {hasSavedCredentials && (
+                <button
+                  type="button"
+                  onClick={handleFillFromCredentials}
+                  className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  Fill from Keychain
+                </button>
+              )}
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 id="password"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input pr-10"
                 placeholder="Enter your password"
+                autoComplete="current-password"
                 autoFocus
               />
               <button
@@ -326,6 +411,11 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
+            {hasSavedCredentials && (
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                Password saved in system credential store — click Fill from Keychain to use it.
+              </p>
+            )}
           </div>
           
           <button

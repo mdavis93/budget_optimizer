@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { BudgetProvider, useBudget } from './context/BudgetContext';
+import { DraftProvider } from './context/DraftContext';
 import Layout from './components/Layout';
 import BudgetPicker from './components/BudgetPicker';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -72,6 +73,7 @@ function App() {
       <ToastProvider>
         <HashRouter>
           <BudgetProvider>
+          <DraftProvider>
           <Routes>
             <Route 
               path="/login" 
@@ -105,6 +107,7 @@ function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+          </DraftProvider>
           </BudgetProvider>
         </HashRouter>
       </ToastProvider>

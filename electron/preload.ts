@@ -93,7 +93,7 @@ const api = {
     update: (id: string, input: Partial<SavingsGoalInput>) => 
       ipcRenderer.invoke('goals:update', id, input),
     delete: (id: string) => ipcRenderer.invoke('goals:delete', id),
-    getProjections: () => ipcRenderer.invoke('goals:get-projections'),
+    getProjections: (overlay?: DraftOverlayInput) => ipcRenderer.invoke('goals:get-projections', overlay),
   },
 
   debts: {
@@ -104,14 +104,15 @@ const api = {
       ipcRenderer.invoke('debts:update', id, input),
     delete: (id: string) => ipcRenderer.invoke('debts:delete', id),
     getAmortization: (debtId: string) => ipcRenderer.invoke('debts:get-amortization', debtId),
-    getAllWithAmortization: () => ipcRenderer.invoke('debts:get-all-with-amortization'),
+    getAllWithAmortization: (overlay?: DraftOverlayInput) =>
+      ipcRenderer.invoke('debts:get-all-with-amortization', overlay),
   },
 
   schedule: {
     generate: (startDate: string, months: number) => 
       ipcRenderer.invoke('schedule:generate', startDate, months),
-    optimize: (startDate: string, months: number, startingBalance: number) => 
-      ipcRenderer.invoke('schedule:optimize', startDate, months, startingBalance),
+    optimize: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => 
+      ipcRenderer.invoke('schedule:optimize', startDate, months, startingBalance, overlay),
   },
 
   reconciliation: {
@@ -137,6 +138,14 @@ const api = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (settings: AppSettings) => ipcRenderer.invoke('settings:update', settings),
+  },
+
+  credentials: {
+    save: (password: string) => ipcRenderer.invoke('credentials:save', password),
+    get: () => ipcRenderer.invoke('credentials:get'),
+    delete: () => ipcRenderer.invoke('credentials:delete'),
+    has: () => ipcRenderer.invoke('credentials:has'),
+    offerSave: (password: string) => ipcRenderer.invoke('credentials:offer-save', password),
   },
 };
 
@@ -198,6 +207,20 @@ interface ScheduleData {
     netBalance: number;
     shortfallCount: number;
   };
+}
+
+interface DraftOverlayInput {
+  incomes?: unknown[];
+  bills?: unknown[];
+  goals?: unknown[];
+  debts?: unknown[];
+  skippedBills?: unknown[];
+  billAssignments?: unknown[];
+  incomeOverrides?: unknown[];
+  startingBalance?: number;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
 }
 
 interface AppSettings {

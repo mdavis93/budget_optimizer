@@ -111,6 +111,21 @@ export class AuthService {
     this.pendingRecoveryKey = null;
   }
 
+  revertFirstTimeSetup(): void {
+    this.config = null;
+    this.isUnlocked = false;
+    this.pendingRecoveryKey = null;
+    this.crypto.clearKey();
+
+    try {
+      if (fs.existsSync(this.configPath)) {
+        fs.unlinkSync(this.configPath);
+      }
+    } catch (error) {
+      logger.warn('Failed to remove auth config during setup rollback:', error);
+    }
+  }
+
   async unlock(password: string): Promise<{ success: boolean; error?: string }> {
     if (!this.config) {
       return { success: false, error: 'No master password set' };

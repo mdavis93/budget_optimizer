@@ -47,9 +47,7 @@ export default defineConfig({
         },
       },
     ]),
-    renderer({
-      nodeIntegration: false,
-    }),
+    renderer(),
   ],
   resolve: {
     alias: {
