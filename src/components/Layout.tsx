@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -44,6 +45,26 @@ export default function Layout() {
   const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
   const location = useLocation();
   const currentDomain = ROUTE_DRAFT_DOMAIN[location.pathname];
+
+  useEffect(() => {
+    let lastPing = Date.now();
+    const pingActivity = () => {
+      const now = Date.now();
+      if (now - lastPing < 30_000) {
+        return;
+      }
+      lastPing = now;
+      void window.electronAPI.auth.activityPing();
+    };
+
+    window.addEventListener('mousedown', pingActivity);
+    window.addEventListener('keydown', pingActivity);
+
+    return () => {
+      window.removeEventListener('mousedown', pingActivity);
+      window.removeEventListener('keydown', pingActivity);
+    };
+  }, []);
 
   const handleLock = () => {
     guardAction(lock, 'lock the app');
@@ -156,13 +177,11 @@ export default function Layout() {
               {location.pathname.split('/')[1] || 'Dashboard'}
             </h1>
           </div>
-          <div className="flex-1 overflow-auto p-6 flex flex-col">
+          <div className="flex-1 min-h-0 overflow-auto p-6">
             <GlobalDraftBanner />
-            <div className="flex-1">
-              <Outlet />
-            </div>
-            {currentDomain && <DraftSaveBar domain={currentDomain} />}
+            <Outlet />
           </div>
+          {currentDomain && <DraftSaveBar domain={currentDomain} />}
         </main>
       </div>
     </DataProvider>

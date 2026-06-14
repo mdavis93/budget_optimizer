@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Fingerprint, AlertCircle, Key, ArrowLeft, Check, Wand2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -25,24 +25,14 @@ export default function LoginPage() {
   const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
   
   const [newRecoveryKey, setNewRecoveryKey] = useState<string | null>(null);
-  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+  const [filledFromKeychain, setFilledFromKeychain] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
-
-  useEffect(() => {
-    if (mode !== 'login') return;
-
-    let isMounted = true;
-    window.electronAPI.credentials.has().then((has) => {
-      if (isMounted) setHasSavedCredentials(has);
-    });
-
-    return () => { isMounted = false; };
-  }, [mode]);
 
   const handleFillFromCredentials = async () => {
     const result = await window.electronAPI.credentials.get();
     if (result.success && result.password) {
       setPassword(result.password);
+      setFilledFromKeychain(true);
     }
   };
 
@@ -380,16 +370,14 @@ export default function LoginPage() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label htmlFor="password" className="label mb-0">Master Password</label>
-              {hasSavedCredentials && (
-                <button
-                  type="button"
-                  onClick={handleFillFromCredentials}
-                  className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
-                >
-                  <Key className="w-3.5 h-3.5" />
-                  Fill from Keychain
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleFillFromCredentials}
+                className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Fill from Keychain
+              </button>
             </div>
             <div className="relative">
               <input
@@ -411,11 +399,11 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            {hasSavedCredentials && (
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                Password saved in system credential store — click Fill from Keychain to use it.
-              </p>
-            )}
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              {filledFromKeychain
+                ? 'Password filled from system credential store.'
+                : 'If you saved your password to Keychain, click Fill from Keychain to use it.'}
+            </p>
           </div>
           
           <button

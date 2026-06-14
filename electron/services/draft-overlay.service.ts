@@ -9,6 +9,7 @@ import {
 } from './database.service';
 import { BudgetManager } from './budget-manager.service';
 import { DatabaseService } from './database.service';
+import { assertValid, validateDraftOverlay } from './validation.service';
 
 export interface DraftOverlayInput {
   incomes?: Income[];
@@ -43,6 +44,10 @@ export function resolveScheduleInputs(
   database: DatabaseService,
   overlay?: DraftOverlayInput | null
 ): ResolvedScheduleInputs {
+  if (overlay) {
+    assertValid(validateDraftOverlay(overlay as Parameters<typeof validateDraftOverlay>[0]), 'Invalid draft overlay');
+  }
+
   const state = budgetManager.getCurrentState();
   const incomes = overlay?.incomes ?? budgetManager.getAllIncomes();
   const bills = overlay?.bills ?? budgetManager.getAllBills();

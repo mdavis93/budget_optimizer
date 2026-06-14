@@ -109,3 +109,244 @@ export function assertValid(result: ValidationResult, context: string): void {
     throw new ValidationError(`${context}: ${result.errors.join(', ')}`);
   }
 }
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ID_REGEX = /^[a-zA-Z0-9-]{8,64}$/;
+
+export function validateGoal(goal: {
+  name: string;
+  targetAmount: number;
+  targetDate: string;
+  alreadySaved?: number;
+  priority?: number;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  if (!goal.name || goal.name.trim().length === 0) {
+    errors.push('Goal name is required');
+  } else if (goal.name.length > 100) {
+    errors.push('Goal name must be 100 characters or less');
+  }
+
+  if (typeof goal.targetAmount !== 'number' || isNaN(goal.targetAmount) || goal.targetAmount <= 0) {
+    errors.push('Target amount must be greater than 0');
+  }
+
+  if (!DATE_REGEX.test(goal.targetDate)) {
+    errors.push('Target date must be in YYYY-MM-DD format');
+  }
+
+  if (goal.alreadySaved !== undefined && (typeof goal.alreadySaved !== 'number' || goal.alreadySaved < 0)) {
+    errors.push('Already saved must be a non-negative number');
+  }
+
+  if (goal.priority !== undefined && (!Number.isInteger(goal.priority) || goal.priority < 1 || goal.priority > 5)) {
+    errors.push('Priority must be an integer between 1 and 5');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateDebt(debt: {
+  billId: string;
+  principalBalance: number;
+  apr: number;
+  monthlyPayment: number;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  if (!debt.billId || !ID_REGEX.test(debt.billId)) {
+    errors.push('Bill ID is invalid');
+  }
+
+  if (typeof debt.principalBalance !== 'number' || debt.principalBalance < 0) {
+    errors.push('Principal balance must be a non-negative number');
+  }
+
+  if (typeof debt.apr !== 'number' || debt.apr < 0 || debt.apr > 100) {
+    errors.push('APR must be between 0 and 100');
+  }
+
+  if (typeof debt.monthlyPayment !== 'number' || debt.monthlyPayment < 0) {
+    errors.push('Monthly payment must be a non-negative number');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateBudget(budget: {
+  name: string;
+  startingBalance?: number;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  if (!budget.name || budget.name.trim().length === 0) {
+    errors.push('Budget name is required');
+  } else if (budget.name.length > 100) {
+    errors.push('Budget name must be 100 characters or less');
+  }
+
+  const numericFields: Array<[string, number | undefined]> = [
+    ['startingBalance', budget.startingBalance],
+    ['targetCashOnHand', budget.targetCashOnHand],
+    ['minCashOnHand', budget.minCashOnHand],
+    ['minSavingsPerPaycheck', budget.minSavingsPerPaycheck],
+  ];
+
+  for (const [field, value] of numericFields) {
+    if (value !== undefined && (typeof value !== 'number' || isNaN(value) || value < 0)) {
+      errors.push(`${field} must be a non-negative number`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+const ALLOWED_SETTINGS_KEYS = new Set([
+  'theme',
+  'autoLockMinutes',
+  'currency',
+  'defaultScheduleMonths',
+  'savingsAPY',
+  'lastBudgetId',
+]);
+
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+export function validateSettings(settings: Record<string, unknown>): ValidationResult {
+  const errors: string[] = [];
+
+  for (const key of Reflect.ownKeys(settings)) {
+    if (typeof key !== 'string') {
+      continue;
+    }
+    if (DANGEROUS_KEYS.has(key)) {
+      errors.push(`Invalid settings key: ${key}`);
+      continue;
+    }
+    if (!ALLOWED_SETTINGS_KEYS.has(key)) {
+      errors.push(`Unknown settings key: ${key}`);
+    }
+  }
+
+  if (settings.theme !== undefined && !['light', 'dark', 'system'].includes(String(settings.theme))) {
+    errors.push('Theme must be light, dark, or system');
+  }
+
+  if (settings.autoLockMinutes !== undefined) {
+    const minutes = Number(settings.autoLockMinutes);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      errors.push('Auto-lock minutes must be an integer between 0 and 1440');
+    }
+  }
+
+  if (settings.defaultScheduleMonths !== undefined) {
+    const months = Number(settings.defaultScheduleMonths);
+    if (!Number.isInteger(months) || months < 1 || months > 24) {
+      errors.push('Default schedule months must be an integer between 1 and 24');
+    }
+  }
+
+  if (settings.savingsAPY !== undefined) {
+    const apy = Number(settings.savingsAPY);
+    if (typeof apy !== 'number' || isNaN(apy) || apy < 0 || apy > 100) {
+      errors.push('Savings APY must be between 0 and 100');
+    }
+  }
+
+  if (settings.currency !== undefined && String(settings.currency).length > 10) {
+    errors.push('Currency code must be 10 characters or less');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateDraftOverlay(overlay: {
+  incomes?: Array<Parameters<typeof validateIncome>[0] & { id?: string }>;
+  bills?: Array<Parameters<typeof validateBill>[0] & { id?: string }>;
+  goals?: Array<Parameters<typeof validateGoal>[0] & { id?: string; budgetId?: string }>;
+  debts?: Array<Parameters<typeof validateDebt>[0] & { id?: string; budgetId?: string }>;
+  skippedBills?: Array<{ billId: string; skipDate: string }>;
+  billAssignments?: Array<{ billId: string; billDueDate: string; paycheckDate: string }>;
+  incomeOverrides?: Array<{ incomeId: string; paycheckDate: string; amount: number }>;
+  startingBalance?: number;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  overlay.incomes?.forEach((income, index) => {
+    const result = validateIncome(income);
+    if (!result.valid) {
+      errors.push(`Income[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  overlay.bills?.forEach((bill, index) => {
+    const result = validateBill(bill);
+    if (!result.valid) {
+      errors.push(`Bill[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  overlay.goals?.forEach((goal, index) => {
+    const result = validateGoal(goal);
+    if (!result.valid) {
+      errors.push(`Goal[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  overlay.debts?.forEach((debt, index) => {
+    const result = validateDebt(debt);
+    if (!result.valid) {
+      errors.push(`Debt[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  overlay.skippedBills?.forEach((skip, index) => {
+    if (!ID_REGEX.test(skip.billId) || !DATE_REGEX.test(skip.skipDate)) {
+      errors.push(`SkippedBill[${index}] has invalid identifiers or dates`);
+    }
+  });
+
+  overlay.billAssignments?.forEach((assignment, index) => {
+    if (
+      !ID_REGEX.test(assignment.billId) ||
+      !DATE_REGEX.test(assignment.billDueDate) ||
+      !DATE_REGEX.test(assignment.paycheckDate)
+    ) {
+      errors.push(`BillAssignment[${index}] has invalid identifiers or dates`);
+    }
+  });
+
+  overlay.incomeOverrides?.forEach((override, index) => {
+    if (
+      !ID_REGEX.test(override.incomeId) ||
+      !DATE_REGEX.test(override.paycheckDate) ||
+      typeof override.amount !== 'number' ||
+      override.amount < 0
+    ) {
+      errors.push(`IncomeOverride[${index}] is invalid`);
+    }
+  });
+
+  if (overlay.startingBalance !== undefined && (typeof overlay.startingBalance !== 'number' || isNaN(overlay.startingBalance))) {
+    errors.push('Starting balance must be a number');
+  }
+
+  for (const [field, value] of [
+    ['targetCashOnHand', overlay.targetCashOnHand],
+    ['minCashOnHand', overlay.minCashOnHand],
+    ['minSavingsPerPaycheck', overlay.minSavingsPerPaycheck],
+  ] as const) {
+    if (value !== undefined && (typeof value !== 'number' || isNaN(value) || value < 0)) {
+      errors.push(`${field} must be a non-negative number`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
