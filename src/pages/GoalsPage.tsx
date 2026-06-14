@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback, useId } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { SavingsGoal, SavingsGoalInput, GoalProjection } from '../types';
-import { Target, Plus, Pencil, Trash2, Check, AlertTriangle, Lightbulb } from 'lucide-react';
+import { Target, Plus, Pencil, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import Modal from '../components/Modal';
+import GoalAchievabilityPanel from '../components/goals/GoalAchievabilityPanel';
 import { useDraft } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
+import { buildGoalAchievabilityMessaging } from '../utils/goalAchievabilityMessaging';
 
 export default function GoalsPage() {
   const draft = useDraft();
+  const navigate = useNavigate();
   const { isQuickBudget } = useBudget();
   const goals = draft.goals;
   const [projections, setProjections] = useState<GoalProjection[]>([]);
@@ -172,33 +176,21 @@ export default function GoalsPage() {
     return projections.find(p => p.goalId === goalId);
   };
 
-  const getStatusColor = (status: GoalProjection['status']) => {
-    switch (status) {
-      case 'achievable':
-        return 'text-success-700 dark:text-success-400';
-      case 'partial':
-        return 'text-warning-700 dark:text-warning-400';
-      case 'impossible':
-        return 'text-danger-700 dark:text-danger-400';
-    }
-  };
+  const minCashOnHand = draft.budgetFields?.minCashOnHand ?? 100;
 
-  const getStatusBgColor = (status: GoalProjection['status']) => {
-    switch (status) {
-      case 'achievable':
-        return 'bg-success-100 dark:bg-success-900/30';
-      case 'partial':
-        return 'bg-warning-100 dark:bg-warning-900/30';
-      case 'impossible':
-        return 'bg-danger-100 dark:bg-danger-900/30';
-    }
-  };
+  const handleViewSchedule = useCallback(
+    (link: { goalId: string; highlightPaycheckDate?: string }) => {
+      const params = new URLSearchParams();
+      params.set('goalId', link.goalId);
+      if (link.highlightPaycheckDate) {
+        params.set('paycheck', link.highlightPaycheckDate);
+      }
+      navigate(`/schedule?${params.toString()}`);
+    },
+    [navigate]
+  );
 
-  const getProgressBarColor = (percent: number) => {
-    if (percent >= 100) return 'bg-success-500';
-    if (percent >= 50) return 'bg-warning-500';
-    return 'bg-danger-500';
-  };
+  const getProgressBarColor = () => 'bg-purple-500';
 
   const formatCurrency = (amount: number) => {
     return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -218,7 +210,7 @@ export default function GoalsPage() {
         <div>
           <h2 className="text-2xl font-semibold">Savings Goals</h2>
           <p className="text-[var(--color-text-secondary)]">
-            Set targets and track achievability based on your budget
+            See whether your goals fit your real paycheck schedule — and how much room you have left.
           </p>
         </div>
         
@@ -251,19 +243,22 @@ export default function GoalsPage() {
           {goals.map((goal) => {
             const projection = getProjection(goal.id);
             const remainingAmount = goal.targetAmount - goal.alreadySaved;
+            const messaging = projection
+              ? buildGoalAchievabilityMessaging(goal, projection, minCashOnHand)
+              : null;
+            const statusPercentColor =
+              projection && projection.achievabilityPercent >= 100
+                ? 'text-success-600 dark:text-success-400'
+                : projection && projection.achievabilityPercent >= 50
+                  ? 'text-warning-600 dark:text-warning-400'
+                  : 'text-danger-600 dark:text-danger-400';
             
             return (
               <div key={goal.id} className="card">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={clsx(
-                      'w-10 h-10 rounded-lg flex items-center justify-center',
-                      projection ? getStatusBgColor(projection.status) : 'bg-[var(--color-surface-hover)]'
-                    )}>
-                      <Target className={clsx(
-                        'w-5 h-5',
-                        projection ? getStatusColor(projection.status) : 'text-[var(--color-text-muted)]'
-                      )} />
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[var(--color-surface-hover)]">
+                      <Target className="w-5 h-5 text-[var(--color-text-muted)]" />
                     </div>
                     <div>
                       <h3 className="font-semibold">{goal.name}</h3>
@@ -310,87 +305,51 @@ export default function GoalsPage() {
                   </div>
                 </div>
 
-                {projection && (
+                {projection ? (
                   <>
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Achievability</span>
-                          {projection.isProjected && (
-                            <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded">
-                              Projected
-                            </span>
-                          )}
-                        </div>
-                        <span className={clsx('text-sm font-semibold', getStatusColor(projection.status))}>
+                        <span className="text-sm font-medium">Achievability</span>
+                        <span className={clsx('text-sm font-semibold', statusPercentColor)}>
                           {projection.achievabilityPercent}%
                         </span>
                       </div>
-                      {/* Progress bar with text overlay showing amount saved */}
                       <div className="relative w-full bg-[var(--color-surface-hover)] rounded-full h-5">
                         <div
-                          className={clsx('h-5 rounded-full transition-all', getProgressBarColor(projection.achievabilityPercent))}
+                          className={clsx('h-5 rounded-full transition-all', getProgressBarColor())}
                           style={{ width: `${Math.min(100, projection.achievabilityPercent)}%` }}
                         />
-                        {/* Text overlay - hidden at 90%+ to avoid clutter when nearly complete */}
                         {projection.achievabilityPercent < 90 && (
-                          <span 
+                          <span
                             className="absolute inset-0 flex items-center justify-center text-xs font-medium"
-                            style={{ 
+                            style={{
                               color: projection.achievabilityPercent > 30 ? 'white' : 'var(--color-text-secondary)',
-                              textShadow: projection.achievabilityPercent > 30 ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'
+                              textShadow: projection.achievabilityPercent > 30 ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
                             }}
                           >
                             {formatCurrency(goal.alreadySaved + (projection.actualAllocation || 0))} allocated
                           </span>
                         )}
                       </div>
-                      {projection.isProjected && projection.projectionNote && (
-                        <p className="text-xs text-[var(--color-text-muted)] mt-1 italic">
-                          {projection.projectionNote}
-                        </p>
-                      )}
                     </div>
 
-                    {projection.status === 'achievable' && (
-                      <div className="flex items-center gap-2 text-sm text-success-700 dark:text-success-400">
-                        <Check className="w-4 h-4" />
-                        <span>
-                          {projection.isProjected 
-                            ? 'Projected to be achievable based on current allocation rate'
-                            : 'Fully achievable with your current budget'
-                          }
-                        </span>
-                      </div>
-                    )}
-
-                    {projection.status === 'partial' && projection.suggestions.length > 0 && (
-                      <div className="mt-3 p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Lightbulb className="w-4 h-4 text-warning-700 dark:text-warning-400" />
-                          <span className="text-sm font-medium text-warning-800 dark:text-warning-300">Suggestions</span>
-                        </div>
-                        <ul className="space-y-1">
-                          {projection.suggestions.map((suggestion, idx) => (
-                            <li key={idx} className="text-sm text-warning-700 dark:text-warning-400">
-                              {suggestion.description}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {projection.status === 'impossible' && (
-                      <div className="mt-3 p-3 bg-danger-50 dark:bg-danger-900/20 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-danger-700 dark:text-danger-400" />
-                          <span className="text-sm text-danger-800 dark:text-danger-300">
-                            No surplus available for this goal. Increase priority or adjust other goals.
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    <GoalAchievabilityPanel
+                      goal={goal}
+                      projection={projection}
+                      messaging={messaging}
+                      minCashOnHand={minCashOnHand}
+                      isLoading={false}
+                      onViewSchedule={handleViewSchedule}
+                      onEditGoal={() => handleOpenEdit(goal)}
+                    />
                   </>
+                ) : (
+                  <GoalAchievabilityPanel
+                    goal={goal}
+                    projection={null}
+                    messaging={null}
+                    isLoading
+                  />
                 )}
               </div>
             );

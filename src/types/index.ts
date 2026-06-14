@@ -170,6 +170,7 @@ export interface PaycheckBill {
   category?: string;
   billDate: string; // The projected due date for this bill occurrence
   isIncomeAttached?: boolean;
+  isUnpayable?: boolean;
 }
 
 export interface GoalDeposit {
@@ -203,6 +204,12 @@ export interface GoalSuggestion {
   resultPercent: number;
 }
 
+export interface GoalScheduleHealth {
+  tightPaycheckCount: number;
+  shortfallCount: number;
+  savingsTotal: number;
+}
+
 export interface GoalProjection {
   goalId: string;
   goalName: string;
@@ -221,6 +228,13 @@ export interface GoalProjection {
   suggestions: GoalSuggestion[];
   isProjected: boolean;  // True if goal is beyond 12-month schedule window
   projectionNote?: string;  // Explanation when isProjected is true
+  avgAllocationPerPaycheck: number;
+  marginPerPaycheck: number;
+  paychecksToFullyFund: number | null;
+  estimatedFundedDate: string | null;
+  beatsDeadlineByPaychecks: number | null;
+  missesDeadlineByPaychecks: number | null;
+  scheduleHealth: GoalScheduleHealth;
 }
 
 export interface ScheduleData {
