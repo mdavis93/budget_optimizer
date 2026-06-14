@@ -80,6 +80,7 @@ describe('showTopMessageBox', () => {
   });
 
   it('shows the message box through an ephemeral always-on-top host window', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
     const appWindow = createMockWindow('http://localhost:5173/setup');
     const result = await showTopMessageBox(appWindow, options);
 
