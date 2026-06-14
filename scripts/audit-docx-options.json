@@ -1,0 +1,14 @@
+{
+  "documentType": "report",
+  "style": {
+    "fontFamily": "Calibri",
+    "heading1Alignment": "LEFT",
+    "heading2Alignment": "LEFT",
+    "paragraphAlignment": "LEFT",
+    "paragraphSize": 22,
+    "heading1Size": 32,
+    "heading2Size": 28,
+    "heading3Size": 24
+  },
+  "codeHighlighting": { "enabled": true }
+}
