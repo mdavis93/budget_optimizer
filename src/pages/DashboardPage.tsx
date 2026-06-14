@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   TrendingUp, 
@@ -10,7 +10,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { format, parseISO, startOfMonth, isWithinInterval, addDays } from 'date-fns';
+import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import clsx from 'clsx';
 import { getMonthlyBillEquivalent, getMonthlyIncomeEquivalent } from '../utils/cadence';
@@ -53,16 +53,22 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
 }
 
 export default function DashboardPage() {
-  const { incomes, bills, generateSchedule, schedule } = useData();
-  const [startingBalance, setStartingBalance] = useState(0);
+  const {
+    incomes,
+    bills,
+    generateSchedule,
+    schedule,
+    scheduleStartDate,
+    scheduleStartingBalance,
+    setScheduleStartingBalance,
+  } = useData();
 
   useEffect(() => {
     let isMounted = true;
     
     const loadSchedule = async () => {
-      const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
       if (isMounted) {
-        await generateSchedule(startDate, 3, startingBalance);
+        await generateSchedule(scheduleStartDate, 3, scheduleStartingBalance);
       }
     };
     
@@ -71,7 +77,7 @@ export default function DashboardPage() {
     }
     
     return () => { isMounted = false; };
-  }, [incomes, bills, generateSchedule, startingBalance]);
+  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance]);
 
   const totalMonthlyIncome = useMemo(() => {
     return incomes
@@ -137,8 +143,8 @@ export default function DashboardPage() {
           <label className="text-sm text-[var(--color-text-secondary)]">Starting Balance:</label>
           <input
             type="number"
-            value={startingBalance}
-            onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
+            value={scheduleStartingBalance}
+            onChange={(e) => setScheduleStartingBalance(parseFloat(e.target.value) || 0)}
             className="input w-32"
             placeholder="$0"
           />

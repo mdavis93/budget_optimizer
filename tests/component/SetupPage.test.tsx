@@ -8,6 +8,8 @@ const mockNavigate = vi.fn();
 const mockClearError = vi.fn();
 const mockCheckAuthStatus = vi.fn();
 const mockEnableBiometric = vi.fn();
+let mockBiometricAvailable = false;
+let mockAuthError: string | null = null;
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -20,8 +22,8 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     enableBiometric: mockEnableBiometric,
-    biometricAvailable: false,
-    error: null,
+    biometricAvailable: mockBiometricAvailable,
+    error: mockAuthError,
     clearError: mockClearError,
     checkAuthStatus: mockCheckAuthStatus,
   }),
@@ -32,6 +34,8 @@ describe('SetupPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBiometricAvailable = false;
+    mockAuthError = null;
     mockAPI = createMockElectronAPI();
     window.electronAPI = mockAPI as unknown as Window['electronAPI'];
     mockAPI.auth.createMasterPassword.mockResolvedValue({
@@ -131,5 +135,95 @@ describe('SetupPage', () => {
     expect(await screen.findByText('Passwords do not match')).toBeInTheDocument();
     expect(mockAPI.auth.createMasterPassword).not.toHaveBeenCalled();
     expect(mockAPI.credentials.offerSave).not.toHaveBeenCalled();
+  });
+
+  it('shows minimum length validation before IPC call', async () => {
+    renderSetupPage();
+    fireEvent.change(screen.getByLabelText('Master Password'), {
+      target: { value: 'short' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), {
+      target: { value: 'short' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /create password/i }));
+
+    expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+    expect(mockAPI.auth.createMasterPassword).not.toHaveBeenCalled();
+  });
+
+  it('shows API and thrown errors from create password path', async () => {
+    mockAPI.auth.createMasterPassword.mockResolvedValueOnce({ success: false, error: 'Create failed' });
+    renderSetupPage();
+
+    fireEvent.change(screen.getByLabelText('Master Password'), {
+      target: { value: 'GoodEnough123!' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), {
+      target: { value: 'GoodEnough123!' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /create password/i }));
+    expect(await screen.findByText('Create failed')).toBeInTheDocument();
+
+    mockAPI.auth.createMasterPassword.mockRejectedValueOnce(new Error('IPC exploded'));
+    fireEvent.click(screen.getByRole('button', { name: /create password/i }));
+    expect(await screen.findByText('IPC exploded')).toBeInTheDocument();
+  });
+
+  it('completes recovery key confirmation and biometric flow', async () => {
+    mockBiometricAvailable = true;
+    renderSetupPage();
+
+    fireEvent.change(screen.getByLabelText('Master Password'), {
+      target: { value: 'BiometricPass123!' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), {
+      target: { value: 'BiometricPass123!' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /create password/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Save Your Recovery Key')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText(/i have saved my recovery key in a safe place/i));
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+    await waitFor(() => {
+      expect(mockAPI.auth.clearPendingRecoveryKey).toHaveBeenCalled();
+      expect(screen.getByText('Enable Fingerprint Unlock')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /enable fingerprint/i }));
+    await waitFor(() => {
+      expect(mockEnableBiometric).toHaveBeenCalled();
+      expect(mockCheckAuthStatus).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  it('skips biometric when user chooses skip for now', async () => {
+    mockBiometricAvailable = true;
+    renderSetupPage();
+    fireEvent.change(screen.getByLabelText('Master Password'), {
+      target: { value: 'SkipBiometric123!' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), {
+      target: { value: 'SkipBiometric123!' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /create password/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Save Your Recovery Key')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByLabelText(/i have saved my recovery key in a safe place/i));
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /skip for now/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
+    await waitFor(() => {
+      expect(mockCheckAuthStatus).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    });
   });
 });

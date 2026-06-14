@@ -23,6 +23,7 @@ export interface DraftOverlayInput {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }
 
 export interface ResolvedScheduleInputs {
@@ -37,6 +38,7 @@ export interface ResolvedScheduleInputs {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  scheduleStartDate: string;
 }
 
 export function resolveScheduleInputs(
@@ -68,6 +70,7 @@ export function resolveScheduleInputs(
   const minCashOnHand = overlay?.minCashOnHand ?? budgetManager.getMinCashOnHand();
   const minSavingsPerPaycheck =
     overlay?.minSavingsPerPaycheck ?? budgetManager.getMinSavingsPerPaycheck();
+  const scheduleStartDate = overlay?.scheduleStartDate ?? budgetManager.getScheduleStartDate();
 
   return {
     incomes,
@@ -81,5 +84,6 @@ export function resolveScheduleInputs(
     targetCashOnHand,
     minCashOnHand,
     minSavingsPerPaycheck,
+    scheduleStartDate,
   };
 }

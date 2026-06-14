@@ -6,6 +6,7 @@ import {
   countPaychecksInRange,
   countPaychecksUntilDate,
   getPaycheckDatesUntilGoal,
+  calculateAveragePaycheckIncome,
   calculateGlidePath,
   calculateAllocationMultiplier,
   estimateAchievableAmount,
@@ -37,6 +38,24 @@ describe('paycheck-calculator', () => {
       const date = parseISO('2026-01-15');
       const next = getNextIncomeDate(date, 'semimonthly');
       expect(format(next, 'yyyy-MM-dd')).toBe('2026-02-01');
+    });
+
+    it('handles semimonthly mid-month before the 15th', () => {
+      const date = parseISO('2026-01-10');
+      const next = getNextIncomeDate(date, 'semimonthly');
+      expect(format(next, 'yyyy-MM-dd')).toBe('2026-01-15');
+    });
+
+    it('handles semimonthly mid-month after the 15th', () => {
+      const date = parseISO('2026-01-20');
+      const next = getNextIncomeDate(date, 'semimonthly');
+      expect(format(next, 'yyyy-MM-dd')).toBe('2026-02-01');
+    });
+
+    it('falls back to monthly cadence for unknown cadence values', () => {
+      const date = parseISO('2026-01-15');
+      const next = getNextIncomeDate(date, 'unknown' as Income['cadence']);
+      expect(format(next, 'yyyy-MM-dd')).toBe('2026-02-15');
     });
 
     it('adds 1 month for monthly cadence', () => {
@@ -179,6 +198,89 @@ describe('paycheck-calculator', () => {
       // 6 months biweekly = ~13 paychecks
       expect(count).toBeGreaterThanOrEqual(12);
       expect(count).toBeLessThanOrEqual(14);
+    });
+  });
+
+  describe('getPaycheckDatesUntilGoal', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns paycheck dates from today through the goal deadline', () => {
+      const income: Income = {
+        id: 'income-1',
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const dates = getPaycheckDatesUntilGoal([income], parseISO('2026-03-01'));
+      expect(dates.length).toBeGreaterThanOrEqual(4);
+      expect(dates[0].getTime()).toBeLessThanOrEqual(parseISO('2026-03-01').getTime());
+    });
+  });
+
+  describe('calculateAveragePaycheckIncome', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns zero when no incomes are provided', () => {
+      expect(calculateAveragePaycheckIncome([])).toBe(0);
+    });
+
+    it('ignores inactive incomes when averaging paycheck income', () => {
+      const active: Income = {
+        id: 'income-1',
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const inactive: Income = {
+        ...active,
+        id: 'income-2',
+        sourceName: 'Side',
+        amount: 5000,
+        isActive: false,
+      };
+
+      const average = calculateAveragePaycheckIncome([active, inactive]);
+      expect(average).toBe(2000);
+    });
+
+    it('averages income across unique paycheck dates in a three-month window', () => {
+      const income: Income = {
+        id: 'income-1',
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const average = calculateAveragePaycheckIncome([income]);
+      expect(average).toBeGreaterThan(0);
+      expect(average).toBeLessThanOrEqual(3000);
     });
   });
 

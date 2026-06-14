@@ -1,20 +1,22 @@
-interface BudgetInput {
-  name: string;
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-  minSavingsPerPaycheck?: number;
-}
-
-interface BudgetData {
+export interface Budget {
   id: string;
   name: string;
   startingBalance: number;
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  scheduleStartDate: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface BudgetInput {
+  name: string;
+  startingBalance?: number;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+  minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }
 
 interface SavingsGoalInput {
@@ -40,6 +42,8 @@ interface BudgetStats {
   incomeCount: number;
   billCount: number;
 }
+
+type BudgetData = Budget;
 
 interface BudgetDataWithStats extends BudgetData, BudgetStats {}
 

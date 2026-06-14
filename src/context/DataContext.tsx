@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { format, startOfMonth } from 'date-fns';
 import { Income, IncomeInput, Bill, BillInput, ScheduleData } from '../types';
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
 import { useDraft } from './DraftContext';
+import { applyScheduleViewport } from '../utils/scheduleViewport';
 
 interface DataContextType {
   incomes: Income[];
@@ -32,20 +33,30 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | null>(null);
 
+function defaultScheduleStartDate(): string {
+  return format(startOfMonth(new Date()), 'yyyy-MM-dd');
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const { isUnlocked } = useAuth();
-  const { isQuickBudget, hasBudgetSelected } = useBudget();
+  const { isQuickBudget, hasBudgetSelected, currentBudget } = useBudget();
   const draft = useDraft();
 
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scheduleStartDate, setScheduleStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [scheduleMonths, setScheduleMonths] = useState(3);
+  const [scheduleMonths, setScheduleMonthsState] = useState(3);
   const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
+  const [quickBudgetStartDate, setQuickBudgetStartDate] = useState(defaultScheduleStartDate);
+
+  const fullScheduleRef = useRef<ScheduleData | null>(null);
 
   const incomes = draft.incomes;
   const bills = draft.bills;
+
+  const scheduleStartDate = isQuickBudget
+    ? (currentBudget?.scheduleStartDate ?? quickBudgetStartDate)
+    : (draft.budgetFields?.scheduleStartDate ?? defaultScheduleStartDate());
 
   const refreshIncomes = useCallback(async () => {
     if (!isUnlocked) return;
@@ -70,8 +81,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isUnlocked || !hasBudgetSelected) {
       setSchedule(null);
+      fullScheduleRef.current = null;
     }
   }, [isUnlocked, hasBudgetSelected]);
+
+  useEffect(() => {
+    if (draft.budgetFields?.startingBalance !== undefined) {
+      setScheduleStartingBalance(draft.budgetFields.startingBalance);
+    } else if (currentBudget?.startingBalance !== undefined) {
+      setScheduleStartingBalance(currentBudget.startingBalance);
+    }
+  }, [draft.budgetFields?.startingBalance, currentBudget?.startingBalance]);
 
   const createIncomeQuick = useCallback(async (income: IncomeInput): Promise<boolean> => {
     try {
@@ -211,6 +231,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return false;
   }, [isQuickBudget, draft, deleteBillQuick]);
 
+  const setScheduleStartDate = useCallback((date: string) => {
+    if (isQuickBudget) {
+      setQuickBudgetStartDate(date);
+      return;
+    }
+    draft.updateBudgetFields({ scheduleStartDate: date });
+  }, [isQuickBudget, draft]);
+
+  const setScheduleMonths = useCallback((months: number) => {
+    setScheduleMonthsState(months);
+    if (fullScheduleRef.current) {
+      setSchedule(applyScheduleViewport(
+        fullScheduleRef.current,
+        months,
+        bills,
+        scheduleStartingBalance
+      ));
+    }
+  }, [bills, scheduleStartingBalance]);
+
   const generateSchedule = useCallback(async (
     startDate: string,
     months: number,
@@ -226,7 +266,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         overlay
       );
       if (result.success && result.data) {
+        fullScheduleRef.current = {
+          ...result.data,
+          paychecks: result.data.fullPaychecks,
+          viewportMonths: 12,
+        };
         setSchedule(result.data);
+        setScheduleMonthsState(result.data.viewportMonths);
         return result.data;
       }
       setError(result.error || 'Failed to generate schedule');
@@ -276,6 +322,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     scheduleStartDate,
     scheduleMonths,
     scheduleStartingBalance,
+    setScheduleStartDate,
+    setScheduleMonths,
     refreshIncomes,
     refreshBills,
     refreshAllData,

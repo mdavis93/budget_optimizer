@@ -17,6 +17,7 @@ export interface DraftBudgetFields {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  scheduleStartDate: string;
 }
 
 export interface DraftState {
@@ -42,6 +43,7 @@ export interface DraftOverlay {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }
 
 export const DRAFT_DOMAIN_LABELS: Record<DraftDomain, string> = {
@@ -87,6 +89,7 @@ export function budgetToDraftFields(budget: Budget): DraftBudgetFields {
     targetCashOnHand: budget.targetCashOnHand,
     minCashOnHand: budget.minCashOnHand,
     minSavingsPerPaycheck: budget.minSavingsPerPaycheck,
+    scheduleStartDate: budget.scheduleStartDate,
   };
 }
 

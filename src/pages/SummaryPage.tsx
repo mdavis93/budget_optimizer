@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { format, parseISO, startOfMonth, differenceInDays } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import {
   AreaChart,
   Area,
@@ -48,7 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function SummaryPage() {
-  const { incomes, bills, generateSchedule, scheduleStartingBalance } = useData();
+  const { incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance } = useData();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(3);
   const [scheduleData, setScheduleData] = useState<{
     paychecks: Array<{
@@ -96,8 +96,7 @@ export default function SummaryPage() {
       
       setIsLoading(true);
       try {
-        const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-        const result = await generateSchedule(startDate, timePeriod, scheduleStartingBalance);
+        const result = await generateSchedule(scheduleStartDate, timePeriod, scheduleStartingBalance);
         if (isMounted && result) {
           setScheduleData({
             paychecks: result.paychecks,
@@ -114,7 +113,7 @@ export default function SummaryPage() {
     loadScheduleData();
     
     return () => { isMounted = false; };
-  }, [incomes, bills, timePeriod, generateSchedule, scheduleStartingBalance]);
+  }, [incomes, bills, timePeriod, generateSchedule, scheduleStartDate, scheduleStartingBalance]);
 
   const handleAPYChange = async (newAPY: number) => {
     setSavingsAPY(newAPY);

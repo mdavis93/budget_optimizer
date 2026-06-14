@@ -91,6 +91,42 @@ describe('CredentialsService', () => {
     });
   });
 
+  describe('deletePassword', () => {
+    it('removes the password from the system credential store', async () => {
+      const result = await service.deletePassword();
+
+      expect(mocks.deletePassword).toHaveBeenCalledWith('Budget Optimizer', 'master');
+      expect(result).toEqual({ success: true });
+    });
+
+    it('returns an error when keytar delete fails', async () => {
+      mocks.deletePassword.mockRejectedValue(new Error('keychain denied'));
+
+      const result = await service.deletePassword();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to delete password from system credential store');
+    });
+  });
+
+  describe('getPassword error paths', () => {
+    it('returns an error when keytar get fails', async () => {
+      mocks.getPassword.mockRejectedValue(new Error('keychain unavailable'));
+
+      const result = await service.getPassword();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to retrieve password from system credential store');
+    });
+  });
+
+  describe('hasPassword error paths', () => {
+    it('returns false when keytar get throws', async () => {
+      mocks.getPassword.mockRejectedValue(new Error('keychain unavailable'));
+      expect(await service.hasPassword()).toBe(false);
+    });
+  });
+
   describe('offerSave', () => {
     it('shows the save dialog with Keychain messaging on macOS', async () => {
       Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
@@ -107,6 +143,19 @@ describe('CredentialsService', () => {
           title: 'Save Password',
           message: 'Save password to Keychain?',
           detail: expect.stringContaining('fill it on future logins'),
+        })
+      );
+    });
+
+    it('shows generic system password store messaging on Linux', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+      await service.offerSave('new-password', parentWindow);
+
+      expect(mocks.showTopMessageBox).toHaveBeenCalledWith(
+        parentWindow,
+        expect.objectContaining({
+          message: 'Save password to system password store?',
         })
       );
     });

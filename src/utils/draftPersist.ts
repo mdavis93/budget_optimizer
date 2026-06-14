@@ -74,7 +74,8 @@ function budgetEquals(a: DraftBudgetFields, b: DraftBudgetFields): boolean {
     a.startingBalance === b.startingBalance &&
     a.targetCashOnHand === b.targetCashOnHand &&
     a.minCashOnHand === b.minCashOnHand &&
-    a.minSavingsPerPaycheck === b.minSavingsPerPaycheck
+    a.minSavingsPerPaycheck === b.minSavingsPerPaycheck &&
+    a.scheduleStartDate === b.scheduleStartDate
   );
 }
 
@@ -390,6 +391,7 @@ export async function persistBudgetDomain(
     targetCashOnHand: draft.budget.targetCashOnHand,
     minCashOnHand: draft.budget.minCashOnHand,
     minSavingsPerPaycheck: draft.budget.minSavingsPerPaycheck,
+    scheduleStartDate: draft.budget.scheduleStartDate,
   });
 
   if (!result.success) {

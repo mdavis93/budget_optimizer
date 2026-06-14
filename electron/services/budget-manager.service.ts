@@ -162,6 +162,18 @@ export class BudgetManager {
     }
   }
 
+  getScheduleStartDate(): string {
+    if (this.isQuickBudgetMode) {
+      return this.quickBudgetService.getScheduleStartDate();
+    }
+    if (!this.currentBudgetId) {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    }
+    const budget = this.database.getBudgetById(this.currentBudgetId);
+    return budget?.scheduleStartDate ?? `${budget?.createdAt.slice(0, 7)}-01`;
+  }
+
   // Income Operations (routed based on mode)
   getAllIncomes(): Income[] {
     if (this.isQuickBudgetMode) {

@@ -246,6 +246,7 @@ export function validateBudget(budget: {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }): ValidationResult {
   const errors: string[] = [];
 
@@ -253,6 +254,12 @@ export function validateBudget(budget: {
     errors.push('Budget name is required');
   } else if (budget.name.length > 100) {
     errors.push('Budget name must be 100 characters or less');
+  }
+
+  if (budget.scheduleStartDate !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(budget.scheduleStartDate)) {
+      errors.push('scheduleStartDate must be in YYYY-MM-DD format');
+    }
   }
 
   const numericFields: Array<[string, number | undefined]> = [

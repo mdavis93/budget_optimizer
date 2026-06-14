@@ -20,6 +20,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:check": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test"
   },

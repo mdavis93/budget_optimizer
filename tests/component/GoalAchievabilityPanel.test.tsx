@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import GoalAchievabilityPanel from '../../src/components/goals/GoalAchievabilityPanel';
 import { buildGoalAchievabilityMessaging } from '../../src/utils/goalAchievabilityMessaging';
 import { GoalProjection, SavingsGoal } from '../../src/types';
@@ -68,5 +69,79 @@ describe('GoalAchievabilityPanel', () => {
       <GoalAchievabilityPanel goal={goal} projection={null} messaging={null} isLoading />
     );
     expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+  });
+
+  it('expands suggestions and triggers schedule/edit callbacks', async () => {
+    const user = userEvent.setup();
+    const onViewSchedule = vi.fn();
+    const onEditGoal = vi.fn();
+    const projectionWithSuggestions: GoalProjection = {
+      ...projection,
+      status: 'partial',
+      achievabilityPercent: 72,
+      actualAllocation: 7920,
+      achievableAmount: 7920,
+      marginPerPaycheck: -58.46,
+      suggestions: [
+        {
+          type: 'increase_priority',
+          description: 'Increase minimum savings by $60 per paycheck',
+          newValue: 1,
+          resultPercent: 90,
+        },
+      ],
+    };
+    const messaging = buildGoalAchievabilityMessaging(goal, projectionWithSuggestions);
+    render(
+      <GoalAchievabilityPanel
+        goal={goal}
+        projection={projectionWithSuggestions}
+        messaging={messaging}
+        onViewSchedule={onViewSchedule}
+        onEditGoal={onEditGoal}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Show suggestions/i }));
+    expect(screen.getByText(/Increase minimum savings by \$60 per paycheck/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /View funding on Schedule/i }));
+    expect(onViewSchedule).toHaveBeenCalled();
+    expect(onEditGoal).not.toHaveBeenCalled();
+  });
+
+  it('renders unavailable state and supports edit callback without schedule link', async () => {
+    const user = userEvent.setup();
+    const onEditGoal = vi.fn();
+    const unachievableProjection: GoalProjection = {
+      ...projection,
+      status: 'impossible',
+      achievabilityPercent: 0,
+      actualAllocation: 0,
+      achievableAmount: 0,
+      marginPerPaycheck: -150,
+      missesDeadlineByPaychecks: 8,
+      beatsDeadlineByPaychecks: null,
+      suggestions: [{ type: 'extend_deadline', description: 'Extend target date', newValue: '2028-01-01', resultPercent: 80 }],
+    };
+    const messaging = buildGoalAchievabilityMessaging(goal, unachievableProjection);
+    render(
+      <GoalAchievabilityPanel
+        goal={goal}
+        projection={unachievableProjection}
+        messaging={messaging}
+        onEditGoal={onEditGoal}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: /No Room In This Budget/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Show suggestions/i }));
+    await user.click(screen.getByRole('button', { name: /Hide suggestions/i }));
+    await user.click(screen.getByRole('button', { name: /Adjust priority or deadline/i }));
+    expect(onEditGoal).toHaveBeenCalledWith('goal-1');
+  });
+
+  it('renders error state when projection messaging is unavailable', () => {
+    render(<GoalAchievabilityPanel goal={goal} projection={null} messaging={null} error />);
+    expect(screen.getByText(/Couldn't load funding outlook/i)).toBeInTheDocument();
   });
 });

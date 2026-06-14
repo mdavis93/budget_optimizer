@@ -85,7 +85,7 @@ export default function SchedulePage() {
   // Reset dismissed state when schedule parameters change
   useEffect(() => {
     setDismissedReconciliation(false);
-  }, [startDate, months]);
+  }, [startDate, startingBalance]);
 
   const handleApplyFixes = useCallback(async (fixes: ProposedFix[]) => {
     setIsApplyingFixes(true);
@@ -141,8 +141,8 @@ export default function SchedulePage() {
     if (incomes.length > 0 || bills.length > 0) {
       generateSchedule(startDate, months, startingBalance);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: generateSchedule excluded; dataHash tracks data changes
-  }, [startDate, months, startingBalance, dataHash]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
+  }, [startDate, startingBalance, dataHash]);
 
   const handleRefresh = () => {
     generateSchedule(startDate, months, startingBalance);
