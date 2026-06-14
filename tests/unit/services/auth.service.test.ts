@@ -134,6 +134,7 @@ describe('AuthService recovery salt', () => {
 
 describe('AuthService lock and password paths', () => {
   beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
