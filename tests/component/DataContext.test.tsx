@@ -99,6 +99,7 @@ function DataHarness() {
         update-bill
       </button>
       <button onClick={() => void data.deleteBill('bill-1')}>delete-bill</button>
+      <button onClick={() => data.setScheduleStartingBalance(900)}>set-starting-balance</button>
       <button onClick={() => data.clearError()}>clear-error</button>
     </div>
   );
@@ -274,6 +275,40 @@ describe('DataContext', () => {
       fireEvent.click(screen.getByText('clear-error'));
       expect(screen.getByTestId('error')).toHaveTextContent('');
     });
+
+    it('surfaces update/delete failures in quick-budget mode', async () => {
+      mockUseBudget.mockReturnValue({
+        isQuickBudget: true,
+        hasBudgetSelected: true,
+        currentBudget: { id: 'budget-1', name: 'QB', startingBalance: 0, scheduleStartDate: '2026-01-01' },
+      });
+      mockAPI.income.update.mockResolvedValue({ success: false, error: 'update income failed' });
+      mockAPI.bills.delete.mockResolvedValue({ success: false, error: 'delete bill failed' });
+
+      renderProvider();
+      fireEvent.click(screen.getByText('update-income'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('update income failed');
+      });
+
+      fireEvent.click(screen.getByText('delete-bill'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('delete bill failed');
+      });
+    });
+
+    it('no-ops refresh helpers when locked', async () => {
+      const draft = createDraftMock();
+      mockUseAuth.mockReturnValue({ isUnlocked: false });
+      mockUseDraft.mockReturnValue(draft);
+
+      renderProvider();
+      fireEvent.click(screen.getByText('refresh-income'));
+      fireEvent.click(screen.getByText('refresh-bills'));
+      fireEvent.click(screen.getByText('refresh-all'));
+
+      expect(draft.reloadSnapshot).not.toHaveBeenCalled();
+    });
   });
 
   describe('hostile', () => {
@@ -334,6 +369,34 @@ describe('DataContext', () => {
         expect(mockAPI.income.create).toHaveBeenCalled();
         expect(mockAPI.bills.create).toHaveBeenCalled();
       });
+    });
+
+    it('routes draft-mode CRUD through draft helpers and updates starting balance', async () => {
+      const draft = createDraftMock();
+      mockUseDraft.mockReturnValue(draft);
+
+      renderProvider();
+      fireEvent.click(screen.getByText('create-income'));
+      fireEvent.click(screen.getByText('update-bill'));
+      fireEvent.click(screen.getByText('delete-income'));
+      fireEvent.click(screen.getByText('set-starting-balance'));
+
+      expect(draft.createIncome).toHaveBeenCalled();
+      expect(draft.updateBill).toHaveBeenCalled();
+      expect(draft.deleteIncome).toHaveBeenCalled();
+    });
+
+    it('uses quick budget local start date when budget has no scheduleStartDate', async () => {
+      mockUseBudget.mockReturnValue({
+        isQuickBudget: true,
+        hasBudgetSelected: true,
+        currentBudget: { id: 'budget-1', name: 'QB', startingBalance: 0 },
+      });
+
+      renderProvider();
+      fireEvent.click(screen.getByText('set-start-date'));
+
+      expect(screen.getByTestId('schedule-start-date')).toHaveTextContent('2026-07-01');
     });
   });
 

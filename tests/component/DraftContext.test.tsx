@@ -88,6 +88,31 @@ function DraftHarness() {
       <button onClick={() => void draft.saveDomain('bills')}>save-bills</button>
       <button onClick={() => void draft.saveAll()}>save-all</button>
       <button onClick={() => draft.discardDomain('bills')}>discard-bills</button>
+      <button onClick={() => draft.discardDomain('income')}>discard-income</button>
+      <button onClick={() => draft.discardDomain('goals')}>discard-goals</button>
+      <button onClick={() => draft.discardDomain('debts')}>discard-debts</button>
+      <button onClick={() => draft.discardDomain('schedule')}>discard-schedule</button>
+      <button onClick={() => draft.discardDomain('budget')}>discard-budget</button>
+      <button onClick={() => void draft.saveDomain('budget')}>save-budget</button>
+      <button onClick={() => draft.skipBill('bill-1', '2026-01-15')}>duplicate-skip</button>
+      <button
+        onClick={() =>
+          draft.applyReconciliationFixes([
+            {
+              id: 'fix-dup-skip',
+              type: 'skip_bill',
+              billId: 'bill-1',
+              billDueDate: '2026-01-15',
+              fromPaycheckDate: '2026-01-15',
+            },
+          ])
+        }
+      >
+        apply-duplicate-skip
+      </button>
+      <button onClick={() => void draft.saveDomain('income')}>save-income-clean</button>
+      <button onClick={() => void draft.saveAll()}>save-all-clean</button>
+      <div data-testid="overlay-present">{draft.buildDraftOverlay() ? 'yes' : 'no'}</div>
       <button onClick={() => draft.discardAll()}>discard-all</button>
       <button onClick={() => void draft.reloadSnapshot()}>reload-snapshot</button>
       <button onClick={() => draft.deleteIncome('income-1')}>delete-income</button>
@@ -402,6 +427,59 @@ describe('DraftContext', () => {
       fireEvent.click(screen.getByText('discard-all'));
       expect(screen.getByTestId('dirty-bills')).toHaveTextContent('false');
     });
+
+    it('discards individual domains and saves budget changes with refresh', async () => {
+      const refreshCurrentBudget = vi.fn().mockResolvedValue(undefined);
+      const loadBudgets = vi.fn().mockResolvedValue(undefined);
+      mockUseBudget.mockReturnValue({
+        currentBudget: {
+          id: 'budget-1',
+          name: 'Main',
+          startingBalance: 1000,
+          targetCashOnHand: 500,
+          minCashOnHand: 100,
+          minSavingsPerPaycheck: 50,
+          scheduleStartDate: '2026-01-01',
+        },
+        isQuickBudget: false,
+        hasBudgetSelected: true,
+        refreshCurrentBudget,
+        loadBudgets,
+      });
+
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-income'));
+      fireEvent.click(screen.getByText('discard-income'));
+      expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+
+      fireEvent.click(screen.getByText('create-goal'));
+      fireEvent.click(screen.getByText('discard-goals'));
+      expect(screen.getByTestId('goal-count')).toHaveTextContent('1');
+
+      fireEvent.click(screen.getByText('create-debt'));
+      fireEvent.click(screen.getByText('discard-debts'));
+      expect(screen.getByTestId('debt-count')).toHaveTextContent('0');
+
+      fireEvent.click(screen.getByText('skip-bill'));
+      fireEvent.click(screen.getByText('discard-schedule'));
+      expect(screen.getByTestId('skipped-count')).toHaveTextContent('0');
+
+      fireEvent.click(screen.getByText('update-budget'));
+      expect(screen.getByTestId('overlay-present')).toHaveTextContent('yes');
+      fireEvent.click(screen.getByText('discard-budget'));
+      expect(screen.getByTestId('budget-starting-balance')).toHaveTextContent('1000');
+
+      fireEvent.click(screen.getByText('update-budget'));
+      fireEvent.click(screen.getByText('save-budget'));
+      await waitFor(() => {
+        expect(refreshCurrentBudget).toHaveBeenCalled();
+        expect(loadBudgets).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('sad', () => {
@@ -436,6 +514,23 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('amortization-result')).toHaveTextContent('0');
         expect(screen.getByTestId('goal-projection-result')).toHaveTextContent('0');
       });
+    });
+
+    it('keeps dirty state when saveAll fails', async () => {
+      mockPersistDomains.mockResolvedValueOnce({ success: false, error: 'save all failed' });
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('update-bill'));
+      fireEvent.click(screen.getByText('save-all'));
+
+      await waitFor(() => {
+        expect(mockPersistDomains).toHaveBeenCalled();
+      });
+      expect(screen.getByTestId('dirty-bills')).toHaveTextContent('true');
     });
   });
 
@@ -503,6 +598,97 @@ describe('DraftContext', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('true');
+      });
+    });
+
+    it('ignores duplicate skip entries in draft mode', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('skip-bill'));
+      fireEvent.click(screen.getByText('duplicate-skip'));
+      expect(screen.getByTestId('skipped-count')).toHaveTextContent('1');
+    });
+
+    it('ignores duplicate skip fixes during reconciliation apply', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('skip-bill'));
+      fireEvent.click(screen.getByText('apply-duplicate-skip'));
+      expect(screen.getByTestId('skipped-count')).toHaveTextContent('1');
+    });
+
+    it('no-ops saveDomain when domain is already clean', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('save-income-clean'));
+      await waitFor(() => {
+        expect(mockPersistDomains).not.toHaveBeenCalled();
+      });
+    });
+
+    it('no-ops saveAll when nothing is dirty', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('save-all-clean'));
+      await waitFor(() => {
+        expect(mockPersistDomains).not.toHaveBeenCalled();
+      });
+    });
+
+    it('reloads quick-budget snapshot with debts when current budget exists', async () => {
+      mockUseBudget.mockReturnValue({
+        currentBudget: {
+          id: 'budget-1',
+          name: 'Quick',
+          startingBalance: 500,
+          scheduleStartDate: '2026-01-01',
+        },
+        isQuickBudget: true,
+        hasBudgetSelected: true,
+        refreshCurrentBudget: vi.fn().mockResolvedValue(undefined),
+        loadBudgets: vi.fn().mockResolvedValue(undefined),
+      });
+      (mockAPI as unknown as { debts: { getAll: ReturnType<typeof vi.fn> } }).debts.getAll.mockResolvedValue({
+        success: true,
+        data: [{ id: 'debt-1', billId: 'bill-1', budgetId: 'budget-1', principalBalance: 500, apr: 0.1, monthlyPayment: 50, createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
+      });
+
+      renderProvider();
+      fireEvent.click(screen.getByText('reload-snapshot'));
+
+      await waitFor(() => {
+        expect(mockAPI.debts.getAll).toHaveBeenCalled();
+      });
+    });
+
+    it('removes linked debt when deleting a bill that has debt attached', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
+      });
+
+      fireEvent.click(screen.getByText('create-debt'));
+      await waitFor(() => {
+        expect(screen.getByTestId('debt-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('delete-bill'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('debt-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('dirty-bills')).toHaveTextContent('true');
       });
     });
 

@@ -61,6 +61,19 @@ describe('ThemeContext', () => {
       );
       expect(screen.getByTestId('theme')).toHaveTextContent('system');
     });
+
+    it('restores stored explicit theme on mount', () => {
+      localStorage.setItem('theme', 'light');
+      renderWithRouter(
+        <ThemeProvider>
+          <ThemeHarness />
+        </ThemeProvider>,
+        { mockAPI }
+      );
+      expect(screen.getByTestId('theme')).toHaveTextContent('light');
+      expect(screen.getByTestId('resolved')).toHaveTextContent('light');
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+    });
   });
 
   describe('hostile', () => {
@@ -93,6 +106,25 @@ describe('ThemeContext', () => {
         expect(screen.getByTestId('resolved')).toHaveTextContent('dark');
       });
       expect(document.documentElement.classList.contains('dark')).toBe(true);
+    });
+
+    it('resolves dark system preference on initial load', () => {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: vi.fn().mockImplementation(() => ({
+          matches: true,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        })),
+      });
+
+      renderWithRouter(
+        <ThemeProvider>
+          <ThemeHarness />
+        </ThemeProvider>,
+        { mockAPI }
+      );
+      expect(screen.getByTestId('resolved')).toHaveTextContent('dark');
     });
 
     it('throws when useTheme is used outside provider', () => {

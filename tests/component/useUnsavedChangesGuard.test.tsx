@@ -92,5 +92,49 @@ describe('useUnsavedChangesGuard', () => {
         expect(screen.getByText('next-page')).toBeInTheDocument();
       });
     });
+
+    it('continues after successful save-all', async () => {
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: true,
+        isSaving: false,
+        saveAll: vi.fn().mockResolvedValue(true),
+        discardAll: vi.fn(),
+      });
+
+      renderGuard();
+      fireEvent.click(screen.getByText('go-next'));
+      fireEvent.click(screen.getByText('Save All Changes'));
+
+      await waitFor(() => {
+        expect(screen.getByText('next-page')).toBeInTheDocument();
+      });
+    });
+
+    it('closes the dialog without navigating when cancel is clicked', () => {
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: true,
+        isSaving: false,
+        saveAll: vi.fn().mockResolvedValue(true),
+        discardAll: vi.fn(),
+      });
+
+      renderGuard();
+      fireEvent.click(screen.getByText('go-next'));
+      fireEvent.click(screen.getByText('Cancel'));
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/');
+    });
+
+    it('shows saving state while save-all is in progress', () => {
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: true,
+        isSaving: true,
+        saveAll: vi.fn(),
+        discardAll: vi.fn(),
+      });
+
+      renderGuard();
+      fireEvent.click(screen.getByText('go-next'));
+      expect(screen.getByText('Saving...')).toBeInTheDocument();
+    });
   });
 });

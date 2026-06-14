@@ -95,6 +95,24 @@ describe('AuthContext', () => {
       });
     });
 
+    it('uses default error when createPassword fails without message', async () => {
+      mockAPI.auth.createMasterPassword.mockResolvedValue({ success: false });
+      renderProvider();
+      fireEvent.click(screen.getByText('create'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Failed to create password');
+      });
+    });
+
+    it('uses default error when unlock fails without message', async () => {
+      mockAPI.auth.unlock.mockResolvedValue({ success: false });
+      renderProvider();
+      fireEvent.click(screen.getByText('unlock'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Invalid password');
+      });
+    });
+
     it('sets error when unlock returns unsuccessful result', async () => {
       mockAPI.auth.unlock.mockResolvedValue({ success: false, error: 'Bad password' });
 
@@ -145,6 +163,12 @@ describe('AuthContext', () => {
       await waitFor(() => {
         expect(screen.getByTestId('error')).toHaveTextContent('No match');
       });
+
+      mockAPI.auth.unlockWithBiometric.mockResolvedValueOnce({ success: false });
+      fireEvent.click(screen.getByText('unlock-bio'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Biometric authentication failed');
+      });
     });
 
     it('handles enableBiometric failure and clearError', async () => {
@@ -162,6 +186,47 @@ describe('AuthContext', () => {
       });
       fireEvent.click(screen.getByText('clear-error'));
       expect(screen.getByTestId('error')).toHaveTextContent('');
+    });
+
+    it('enables biometric auth when IPC succeeds', async () => {
+      mockAPI.auth.enableBiometric.mockResolvedValue({ success: true });
+      renderProvider();
+      fireEvent.click(screen.getByText('enable-bio'));
+      await waitFor(() => {
+        expect(screen.getByTestId('bio-enabled')).toHaveTextContent('true');
+      });
+    });
+
+    it('handles createPassword unexpected errors', async () => {
+      mockAPI.auth.createMasterPassword.mockRejectedValue(new Error('IPC down'));
+      renderProvider();
+      fireEvent.click(screen.getByText('create'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('An unexpected error occurred');
+      });
+    });
+
+    it('skips biometric-enabled lookup during first-time setup check', async () => {
+      mockAPI.auth.isFirstTimeSetup.mockResolvedValue(true);
+      mockAPI.checkBiometricAvailable.mockResolvedValue(false);
+      mockAPI.auth.isUnlocked.mockResolvedValue(false);
+
+      renderProvider();
+      fireEvent.click(screen.getByText('check'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('first-time')).toHaveTextContent('true');
+      });
+      expect(mockAPI.auth.isBiometricEnabled).not.toHaveBeenCalled();
+    });
+
+    it('returns false when enableBiometric throws', async () => {
+      mockAPI.auth.enableBiometric.mockRejectedValue(new Error('biometric unavailable'));
+      renderProvider();
+      fireEvent.click(screen.getByText('enable-bio'));
+      await waitFor(() => {
+        expect(screen.getByTestId('bio-enabled')).toHaveTextContent('false');
+      });
     });
 
     it('throws when useAuth is used outside provider', () => {
