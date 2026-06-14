@@ -48,4 +48,26 @@ describe('formatGoalCopy', () => {
     expect(result.marginFact).toContain('3 paychecks');
     expect(result.ariaMessage).toContain('No Room In This Budget');
   });
+
+  it('overrides margin fact for partial tier when shortfalls exist', () => {
+    const result = formatGoalCopy('partial', { ...baseVars, shortfallCount: 4, achievabilityPercent: 72 });
+    expect(result.marginFact).toContain('4 paychecks already show shortfalls');
+  });
+
+  it('shows suggestions for partial tier when underfunded', () => {
+    const underfunded = formatGoalCopy('partial', { ...baseVars, achievabilityPercent: 80 });
+    expect(underfunded.showSuggestions).toBe(true);
+  });
+
+  it('uses if_partial suggestion rule for projected tier', () => {
+    const underfunded = formatGoalCopy('projected', { ...baseVars, achievabilityPercent: 70 });
+    const funded = formatGoalCopy('projected', { ...baseVars, achievabilityPercent: 100 });
+    expect(underfunded.showSuggestions).toBe(true);
+    expect(funded.showSuggestions).toBe(false);
+  });
+
+  it('uses if_any suggestion rule for tight tier', () => {
+    const result = formatGoalCopy('achievable_tight', baseVars);
+    expect(result.showSuggestions).toBe(false);
+  });
 });

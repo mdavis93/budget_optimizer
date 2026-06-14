@@ -124,6 +124,154 @@ describe('PdfService.generateHtml', () => {
       expect(emptyHtml).not.toContain('<script>alert(1)</script>');
     });
 
+    it('renders goal deposits, shortfalls, and cross-month bill due labels', () => {
+      const service = new PdfService();
+      const html = service.generateHtml({
+        ...schedule,
+        paychecks: [
+          {
+            ...schedule.paychecks[0],
+            isShortfall: true,
+            budgetRemaining: -25,
+            totalGoalDeposits: 75,
+            savingsDeposit: 40,
+            bills: [
+              {
+                billId: 'b1',
+                billDate: '2026-02-02',
+                creditorName: 'Rent',
+                amount: 1200,
+                dueDay: 2,
+                priority: 'critical',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b2',
+                billDate: '2026-01-20',
+                creditorName: '401k',
+                amount: 100,
+                dueDay: 20,
+                priority: 'normal',
+                isIncomeAttached: true,
+              },
+            ],
+          },
+          {
+            date: '2026-02-15',
+            incomeSources: [{ name: 'Salary', amount: 1000 }],
+            bills: [],
+            goalDeposits: [],
+            totalIncome: 1000,
+            totalBills: 0,
+            totalGoalDeposits: 0,
+            savingsDeposit: 0,
+            budgetRemaining: 1000,
+            totalSavings: 0,
+            isShortfall: false,
+          },
+        ],
+      });
+
+      expect(html).toContain('paycheck-shortfall');
+      expect(html).toContain('to goals');
+      expect(html).toContain('to savings');
+      expect(html).toContain('Per Paycheck');
+      expect(html).toContain('Due: Feb 2nd');
+      expect(html).toContain('2 bills');
+    });
+
+    it('renders ordinal due-day suffixes and sorts cross-month bills', () => {
+      const service = new PdfService();
+      const html = service.generateHtml({
+        ...schedule,
+        paychecks: [
+          {
+            ...schedule.paychecks[0],
+            bills: [
+              {
+                billId: 'b1',
+                billDate: '2026-01-01',
+                creditorName: 'First',
+                amount: 10,
+                dueDay: 1,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b2',
+                billDate: '2026-01-01',
+                creditorName: 'Second',
+                amount: 20,
+                dueDay: 2,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b3',
+                billDate: '2026-01-01',
+                creditorName: 'Third',
+                amount: 30,
+                dueDay: 3,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b4',
+                billDate: '2026-01-01',
+                creditorName: 'Fourth',
+                amount: 40,
+                dueDay: 4,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(html).toContain('Due: 1st');
+      expect(html).toContain('Due: 2nd');
+      expect(html).toContain('Due: 3rd');
+      expect(html).toContain('Due: 4th');
+    });
+
+    it('writes html export to .html path derived from pdf filename', async () => {
+      const service = new PdfService();
+      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+      const result = await service.generateHtmlFile(schedule, '/tmp/report.pdf');
+      expect(result).toEqual({ success: true });
+      expect(writeSpy).toHaveBeenCalledWith('/tmp/report.html', expect.any(String));
+      vi.restoreAllMocks();
+    });
+
+    it('ignores temp-file cleanup failures after pdf generation', async () => {
+      const service = new PdfService();
+      const loadFile = vi.fn(async () => {});
+      const printToPDF = vi.fn(async () => Buffer.from('pdf-bytes'));
+      const destroy = vi.fn();
+      const isDestroyed = vi.fn(() => false);
+
+      vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {
+        throw new Error('cleanup failed');
+      });
+
+      vi.mocked(BrowserWindow).mockImplementation(
+        () =>
+          ({
+            loadFile,
+            webContents: { printToPDF },
+            destroy,
+            isDestroyed,
+          }) as unknown as BrowserWindow
+      );
+
+      const result = await service.generatePdf(schedule, '/tmp/budget-report.pdf');
+      expect(result).toEqual({ success: true });
+      vi.restoreAllMocks();
+    });
+
     it('writes PDF output when BrowserWindow succeeds', async () => {
       const service = new PdfService();
       const loadFile = vi.fn(async () => {});

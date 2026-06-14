@@ -94,12 +94,25 @@ describe('deriveComfortTier', () => {
     expect(tier).toBe('projected');
   });
 
-  it('returns projected_funded when projected and fully achievable', () => {
+  it('returns achievable when margin ratio is moderate', () => {
+    const tier = deriveComfortTier(baseGoal, makeProjection({ marginPerPaycheck: 40, requiredPerPaycheck: 200 }));
+    expect(tier).toBe('achievable');
+  });
+
+  it('returns achievable when required per paycheck is zero', () => {
     const tier = deriveComfortTier(
       baseGoal,
-      makeProjection({ isProjected: true, status: 'achievable', achievabilityPercent: 100 })
+      makeProjection({ requiredPerPaycheck: 0, marginPerPaycheck: 0, status: 'achievable', achievabilityPercent: 100 })
     );
-    expect(tier).toBe('projected_funded');
+    expect(tier).toBe('achievable');
+  });
+
+  it('returns partial when achievability percent is positive but status is not partial', () => {
+    const tier = deriveComfortTier(
+      baseGoal,
+      makeProjection({ status: 'achievable', achievabilityPercent: 40, actualAllocation: 4400 })
+    );
+    expect(tier).toBe('partial');
   });
 });
 
@@ -220,5 +233,32 @@ describe('buildGoalAchievabilityMessaging', () => {
     );
     expect(messaging.comfortTier).toBe('achievable_tight');
     expect(messaging.showSuggestions).toBe(true);
+  });
+
+  it('uses shortfall margin fact when schedule has shortfalls', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        status: 'impossible',
+        achievabilityPercent: 0,
+        actualAllocation: 0,
+        scheduleHealth: { tightPaycheckCount: 2, shortfallCount: 3, savingsTotal: 0 },
+      })
+    );
+    expect(messaging.marginFact).toContain('3 paychecks already run short');
+  });
+
+  it('marks timeline as meets when funded on deadline', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        estimatedFundedDate: '2027-05-30',
+        beatsDeadlineByPaychecks: 0,
+        missesDeadlineByPaychecks: 0,
+        status: 'achievable',
+        achievabilityPercent: 100,
+      })
+    );
+    expect(messaging.timeline?.relativeToDeadline).toBe('meets');
   });
 });

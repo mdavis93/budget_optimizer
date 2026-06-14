@@ -177,8 +177,10 @@ describe('DatabaseService', () => {
       expect(db.getSkippedBills(budget.id)).toHaveLength(1);
       expect(db.unskipBill(budget.id, bill.id, '2026-02-05')).toBe(true);
       expect(db.unskipBill(budget.id, bill.id, '2026-02-05')).toBe(false);
+      expect(db.isSkipped(budget.id, bill.id, '2026-02-05')).toBe(false);
 
       db.skipBill(budget.id, bill.id, '2026-01-05');
+      expect(db.isSkipped(budget.id, bill.id, '2026-01-05')).toBe(true);
       db.skipBill(budget.id, bill.id, '2026-03-05');
       expect(db.clearOldSkippedBills(budget.id, '2026-02-01')).toBe(1);
 
@@ -207,11 +209,21 @@ describe('DatabaseService', () => {
         autoLockMinutes: 20,
         currency: 'CAD',
         theme: 'dark',
+        savingsAPY: 4.25,
+        defaultScheduleMonths: 6,
       });
       expect(updated.autoLockMinutes).toBe(20);
       expect(updated.currency).toBe('CAD');
       expect(updated.theme).toBe('dark');
-      expect(updated.defaultScheduleMonths).toBe(3);
+      expect(updated.savingsAPY).toBe(4.25);
+      expect(updated.defaultScheduleMonths).toBe(6);
+    });
+
+    it('updates budget with partial fields only', () => {
+      const budget = db.createBudget({ name: 'Partial Update Budget' });
+      const updated = db.updateBudget(budget.id, { startingBalance: 2500 });
+      expect(updated?.startingBalance).toBe(2500);
+      expect(updated?.name).toBe('Partial Update Budget');
     });
 
     it('deletes a budget with associated cascade data', () => {
@@ -332,6 +344,101 @@ describe('DatabaseService', () => {
       expect(() => db.updateSettings({ autoLockMinutes: -5 })).toThrow(/Invalid settings data/);
       expect(() => db.setIncomeOverride(budget.id, 'income-1', '2026-02-01', -1)).toThrow(
         'Income override amount must be a non-negative number'
+      );
+    });
+
+    it('returns null or false for missing income and bill updates', () => {
+      const budget = db.createBudget({ name: 'Edge Case Budget' });
+      const income = db.createIncome(budget.id, {
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      const bill = db.createBillEntry(budget.id, {
+        creditorName: 'Rent',
+        budgetedAmount: 1000,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical',
+      });
+
+      expect(
+        db.updateIncome('missing-income', budget.id, {
+          sourceName: 'X',
+          amount: 1,
+          cadence: 'weekly',
+          startDate: '2026-01-01',
+          isActive: true,
+        })
+      ).toBeNull();
+      expect(db.deleteIncome('missing-income', budget.id)).toBe(false);
+      expect(
+        db.updateBillEntry('missing-bill', budget.id, {
+          creditorName: 'X',
+          budgetedAmount: 1,
+          dueDay: 1,
+          isRecurring: true,
+          priority: 'normal',
+        })
+      ).toBeNull();
+      expect(db.deleteBillEntry('missing-bill', budget.id)).toBe(false);
+
+      expect(db.deleteIncome(income.id, budget.id)).toBe(true);
+      expect(db.deleteBillEntry(bill.id, budget.id)).toBe(true);
+      expect(db.getAllIncomes(budget.id)).toHaveLength(0);
+      expect(db.getAllBills(budget.id)).toHaveLength(0);
+    });
+
+    it('returns budget stats and assignment lookups', () => {
+      const budget = db.createBudget({ name: 'Stats Budget' });
+      db.createIncome(budget.id, {
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      const bill = db.createBillEntry(budget.id, {
+        creditorName: 'Rent',
+        budgetedAmount: 1200,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical',
+      });
+      db.assignBillToPaycheck(budget.id, bill.id, '2026-02-01', '2026-01-29');
+
+      expect(db.getBudgetStats(budget.id)).toEqual({ incomeCount: 1, billCount: 1 });
+      expect(db.getAllBudgetsWithStats().some(
+        (entry) => entry.id === budget.id && entry.incomeCount === 1 && entry.billCount === 1
+      )).toBe(true);
+      expect(db.getBillAssignments(budget.id)).toHaveLength(1);
+      expect(db.getBillAssignment(budget.id, bill.id, '2026-02-01')).toEqual(
+        expect.objectContaining({ paycheckDate: '2026-01-29' })
+      );
+      expect(db.removeBillAssignment(budget.id, bill.id, '2026-02-01')).toBe(true);
+      expect(db.getBillAssignment(budget.id, bill.id, '2026-02-01')).toBeNull();
+    });
+
+    it('finds debt by linked bill id', () => {
+      const budget = db.createBudget({ name: 'Debt Lookup Budget' });
+      const bill = db.createBillEntry(budget.id, {
+        creditorName: 'Card',
+        budgetedAmount: 200,
+        dueDay: 10,
+        isRecurring: true,
+        priority: 'normal',
+      });
+      const debt = db.createDebt(budget.id, {
+        billId: bill.id,
+        principalBalance: 1500,
+        apr: 18,
+        monthlyPayment: 75,
+      });
+
+      expect(db.getDebtByBillId(bill.id, budget.id)).toEqual(
+        expect.objectContaining({ id: debt.id, billId: bill.id })
       );
     });
   });

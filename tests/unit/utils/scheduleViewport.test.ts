@@ -171,5 +171,106 @@ describe('applyScheduleViewport', () => {
       expect(viewport.reconciliation?.shortfalls).toHaveLength(1);
       expect(viewport.reconciliation?.needsReconciliation).toBe(true);
     });
+
+    it('builds legacy entries for income, goals, and savings transfers', () => {
+      const fullSchedule = buildSchedule({
+        paychecks: [
+          createMockPaycheck({
+            date: '2026-01-01',
+            incomeSources: [
+              { id: 'income-1', name: 'Salary', amount: 2000 },
+              { id: 'income-2', name: 'Bonus', amount: 200 },
+            ],
+            goalDeposits: [{ goalId: 'goal-1', goalName: 'Trip', amount: 100 }],
+            savingsDeposit: 50,
+            totalIncome: 2200,
+            totalBills: 500,
+            totalGoalDeposits: 100,
+            budgetRemaining: 1550,
+            totalSavings: 0,
+            isShortfall: false,
+          }),
+        ],
+        fullPaychecks: [
+          createMockPaycheck({
+            date: '2026-01-01',
+            incomeSources: [
+              { id: 'income-1', name: 'Salary', amount: 2000 },
+              { id: 'income-2', name: 'Bonus', amount: 200 },
+            ],
+            goalDeposits: [{ goalId: 'goal-1', goalName: 'Trip', amount: 100 }],
+            savingsDeposit: 50,
+            totalIncome: 2200,
+            totalBills: 500,
+            totalGoalDeposits: 100,
+            budgetRemaining: 1550,
+            totalSavings: 0,
+            isShortfall: false,
+          }),
+        ],
+      });
+
+      const viewport = applyScheduleViewport(fullSchedule, 3, [], 1000);
+      expect(viewport.entries.some((entry) => entry.type === 'income')).toBe(true);
+      expect(viewport.entries.some((entry) => entry.description.includes('Goal:'))).toBe(true);
+      expect(viewport.entries.some((entry) => entry.description === 'Transfer to Savings')).toBe(true);
+      expect(viewport.recommendations.some((rec) => rec.includes('Your budget looks balanced'))).toBe(true);
+    });
+
+    it('keeps reconciliation fixes without paycheck dates', () => {
+      const fullSchedule = buildSchedule({
+        reconciliation: {
+          needsReconciliation: false,
+          shortfalls: [],
+          proposedFixes: [{
+            id: 'fix-no-date',
+            type: 'move_bill',
+            billId: 'bill-1',
+            billName: 'Bill',
+            billAmount: 10,
+            fromPaycheckDate: undefined as unknown as string,
+            billDueDate: '2026-01-01',
+            reason: 'x',
+            impact: 1,
+          }],
+          canBeFullyResolved: true,
+          totalDeficit: 0,
+          estimatedResolution: 0,
+        },
+      });
+
+      const viewport = applyScheduleViewport(fullSchedule, 3, [], 1000);
+      expect(viewport.reconciliation?.proposedFixes).toHaveLength(1);
+    });
+
+    it('adds rebalanced and heavy-paycheck recommendations', () => {
+      const fullSchedule = buildSchedule({
+        paychecks: [
+          createMockPaycheck({
+            date: '2026-01-01',
+            totalIncome: 1000,
+            totalBills: 1100,
+            savingsDeposit: 0,
+            budgetRemaining: 50,
+            isShortfall: false,
+          }),
+        ],
+        fullPaychecks: [
+          createMockPaycheck({
+            date: '2026-01-01',
+            totalIncome: 1000,
+            totalBills: 1100,
+            savingsDeposit: 0,
+            budgetRemaining: 50,
+            isShortfall: false,
+          }),
+        ],
+        reconciliation: undefined,
+      });
+
+      const viewport = applyScheduleViewport(fullSchedule, 3, [], 1000);
+      expect(viewport.recommendations.some((rec) => rec.includes('Budget optimized'))).toBe(true);
+      expect(viewport.recommendations.some((rec) => rec.includes('over 90% of income'))).toBe(true);
+    });
   });
 });

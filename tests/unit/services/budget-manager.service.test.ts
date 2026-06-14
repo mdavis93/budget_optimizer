@@ -141,6 +141,28 @@ describe('BudgetManager', () => {
       expect(manager.getScheduleStartDate()).toBe('2026-04-01');
     });
 
+    it('persists allocation settings through database in normal mode', () => {
+      manager.setCurrentBudget('budget-1');
+      manager.setStartingBalance(1500);
+      manager.setTargetCashOnHand(400);
+      manager.setMinCashOnHand(75);
+      manager.setMinSavingsPerPaycheck(25);
+
+      expect(database.updateBudget).toHaveBeenCalledWith('budget-1', { startingBalance: 1500 });
+      expect(database.updateBudget).toHaveBeenCalledWith('budget-1', { targetCashOnHand: 400 });
+      expect(database.updateBudget).toHaveBeenCalledWith('budget-1', { minCashOnHand: 75 });
+      expect(database.updateBudget).toHaveBeenCalledWith('budget-1', { minSavingsPerPaycheck: 25 });
+    });
+
+    it('exposes current state and ends quick budget mode', () => {
+      manager.startQuickBudget();
+      expect(manager.getCurrentState()).toEqual({ budgetId: null, isQuickBudget: true });
+
+      manager.endQuickBudget();
+      expect(manager.isQuickBudget()).toBe(false);
+      expect(manager.getCurrentState()).toEqual({ budgetId: null, isQuickBudget: false });
+    });
+
     it('routes income operations to database when not in quick mode', () => {
       manager.setCurrentBudget('budget-1');
       const incomeInput = {
@@ -475,6 +497,16 @@ describe('BudgetManager', () => {
         'No budget selected'
       );
       expect(() => manager.setIncomeOverride('income-1', '2026-01-01', 100)).toThrow('No budget selected');
+    });
+
+    it('updates and deletes non-current budgets through database', () => {
+      database.updateBudget.mockReturnValueOnce({ ...baseBudget, id: 'budget-2', name: 'Updated' });
+      database.deleteBudget.mockReturnValueOnce(true);
+      manager.setCurrentBudget('budget-1');
+
+      expect(manager.updateBudget('budget-2', { name: 'Updated' })?.name).toBe('Updated');
+      expect(manager.deleteBudget('budget-2')).toBe(true);
+      expect(database.deleteBudget).toHaveBeenCalledWith('budget-2');
     });
   });
 });

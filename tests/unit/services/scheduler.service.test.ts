@@ -2128,6 +2128,91 @@ describe('SchedulerService', () => {
         estimatedResolution: 0,
       });
     });
+
+    it('generates savings and heavy-paycheck recommendations', () => {
+      const income: Income = {
+        id: 'income-monthly',
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const heavyBill: Bill = {
+        id: 'bill-heavy',
+        creditorName: 'Rent',
+        budgetedAmount: 2800,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [heavyBill],
+        '2026-01-01',
+        3,
+        500,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        50,
+        0
+      );
+
+      expect(schedule.recommendations.length).toBeGreaterThan(0);
+      expect(
+        schedule.recommendations.some((rec) =>
+          rec.includes('balanced') || rec.includes('90%') || rec.includes('save')
+        )
+      ).toBe(true);
+    });
+
+    it('reports reconciliation metrics when shortfalls remain after rebalance', () => {
+      const lowIncome: Income = {
+        ...biweeklyIncome,
+        amount: 800,
+      };
+
+      const criticalBill: Bill = {
+        id: 'bill-critical',
+        creditorName: 'Critical',
+        budgetedAmount: 1500,
+        dueDay: 14,
+        isRecurring: true,
+        priority: 'critical',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [lowIncome],
+        [criticalBill],
+        '2026-01-01',
+        2,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0
+      );
+
+      const report = scheduler.analyzeAndProposeFixes(schedule);
+      if (report.needsReconciliation) {
+        expect(report.totalDeficit).toBeGreaterThan(0);
+        expect(report.shortfalls.length).toBeGreaterThan(0);
+      } else {
+        expect(schedule.paychecks.some((p) => p.isShortfall)).toBe(false);
+      }
+    });
   });
 
   describe('applyViewportFilter', () => {

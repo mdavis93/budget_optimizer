@@ -56,6 +56,80 @@ describe('SpreadsheetService', () => {
       expect(workbook.getWorksheet('By Paycheck')).toBeDefined();
       expect(workbook.getWorksheet('Schedule')).toBeDefined();
     });
+
+    it('writes income, bill, goal, and savings rows with shortfall highlighting', async () => {
+      const service = new SpreadsheetService();
+      const schedule = createMockSchedule({
+        recommendations: [],
+        paychecks: [
+          createMockPaycheck({
+            bills: [
+              {
+                billId: 'bill-1',
+                creditorName: 'Rent',
+                amount: 1500,
+                dueDay: 1,
+                priority: 'critical' as const,
+                category: 'housing',
+                billDate: '2026-01-01',
+                isIncomeAttached: false,
+                isUnpayable: false,
+              },
+              {
+                billId: 'bill-2',
+                creditorName: 'Phone',
+                amount: 80,
+                dueDay: 15,
+                priority: 'normal' as const,
+                category: 'utilities',
+                billDate: '2026-01-15',
+                isIncomeAttached: true,
+                isUnpayable: false,
+              },
+            ],
+            goalDeposits: [{ goalId: 'goal-1', goalName: 'Emergency', amount: 100 }],
+            savingsDeposit: 75,
+          }),
+          createMockPaycheck({
+            date: '2026-02-15',
+            isShortfall: true,
+            totalIncome: 1800,
+            totalBills: 1900,
+            budgetRemaining: -100,
+            savingsDeposit: 0,
+            incomeSources: [{ id: 'income-1', name: 'Salary', amount: 1800 }],
+            bills: [{
+              billId: 'bill-3',
+              creditorName: 'Utilities',
+              amount: 1900,
+              dueDay: 15,
+              priority: 'high' as const,
+              category: 'utilities',
+              billDate: '2026-02-15',
+              isIncomeAttached: false,
+              isUnpayable: false,
+            }],
+            goalDeposits: [],
+            totalGoalDeposits: 0,
+          }),
+        ],
+      });
+      const outputPath = path.join(os.tmpdir(), `budget-optimizer-spreadsheet-rich-${Date.now()}.xlsx`);
+      createdFiles.push(outputPath);
+
+      const result = await service.generateXlsx(schedule as never, outputPath);
+      expect(result.success).toBe(true);
+
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(outputPath);
+      const scheduleSheet = workbook.getWorksheet('Schedule');
+      const paycheckSheet = workbook.getWorksheet('By Paycheck');
+      expect(scheduleSheet).toBeDefined();
+      expect(paycheckSheet).toBeDefined();
+      expect(scheduleSheet!.rowCount).toBeGreaterThan(4);
+      expect(paycheckSheet!.getRow(2).getCell(9).value).toBe('');
+      expect(paycheckSheet!.getRow(3).getCell(9).value).toBe('Yes');
+    });
   });
 
   describe('sad', () => {

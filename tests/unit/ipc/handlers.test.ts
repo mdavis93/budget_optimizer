@@ -806,6 +806,36 @@ describe('ipc handlers', () => {
       });
     });
 
+    it('returns budget not found when budget:update succeeds without data', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          updateBudget: vi.fn(() => null),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('budget:update', 'missing-budget', { name: 'X' })).resolves.toEqual({
+        success: false,
+        error: 'Budget not found',
+      });
+    });
+
+    it('returns delete error when budget cannot be deleted', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          deleteBudget: vi.fn(() => false),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('budget:delete', 'budget-1')).resolves.toEqual({
+        success: false,
+        error: 'Cannot delete budget (may be current budget)',
+      });
+    });
+
     it('returns export errors when exporter throws', async () => {
       const services = createServices({
         pdf: {

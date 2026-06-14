@@ -88,6 +88,19 @@ describe('reconciliationCopy', () => {
     expect(summary.body).toContain('paycheck silo');
   });
 
+  it('summarizes partially resolvable reconciliation reports', () => {
+    const summary = formatReconciliationSummary({
+      shortfalls: [
+        { paycheckDate: '2026-03-15', deficit: 100, bills: [] },
+        { paycheckDate: '2026-04-15', deficit: 50, bills: [] },
+      ],
+      totalDeficit: 150,
+      canBeFullyResolved: false,
+    });
+    expect(summary.headline).toBe('Some shortfalls need manual changes');
+    expect(summary.body).toContain('Applied fixes may not cover everything');
+  });
+
   it('labels unfundable reason codes for accessibility', () => {
     const copy = formatUnfundableReasonCopy('no_eligible_earlier_paycheck', {
       billName: 'Insurance',
