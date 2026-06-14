@@ -93,6 +93,14 @@ describe('deriveComfortTier', () => {
     );
     expect(tier).toBe('projected');
   });
+
+  it('returns projected_funded when projected and fully achievable', () => {
+    const tier = deriveComfortTier(
+      baseGoal,
+      makeProjection({ isProjected: true, status: 'achievable', achievabilityPercent: 100 })
+    );
+    expect(tier).toBe('projected_funded');
+  });
 });
 
 describe('buildGoalAchievabilityMessaging', () => {
@@ -115,5 +123,102 @@ describe('buildGoalAchievabilityMessaging', () => {
     const messaging = buildGoalAchievabilityMessaging(baseGoal, makeProjection());
     expect(messaging.scheduleLink?.goalId).toBe('goal-1');
     expect(messaging.scheduleLink?.highlightPaycheckDate).toBe('2027-04-15');
+  });
+
+  it('uses unknown timeline for impossible goals with no allocation', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        status: 'impossible',
+        achievabilityPercent: 0,
+        actualAllocation: 0,
+        estimatedFundedDate: null,
+        paychecksToFullyFund: null,
+      })
+    );
+    expect(messaging.timeline?.relativeToDeadline).toBe('unknown');
+    expect(messaging.margin).toBeNull();
+  });
+
+  it('does not show suggestions when there are none for tight goals', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        status: 'achievable',
+        achievabilityPercent: 100,
+        marginPerPaycheck: 1,
+        requiredPerPaycheck: 200,
+        suggestions: [],
+      })
+    );
+    expect(messaging.comfortTier).toBe('achievable_tight');
+    expect(messaging.showSuggestions).toBe(false);
+  });
+
+  it('adds projected modifier when projection is complete but marked projected', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      { ...baseGoal, alreadySaved: 11000 },
+      makeProjection({
+        isProjected: true,
+        status: 'achievable',
+        achievabilityPercent: 100,
+        remainingAmount: 0,
+      })
+    );
+    expect(messaging.comfortTier).toBe('complete');
+    expect(messaging.modifiers).toEqual(['projected']);
+  });
+
+  it('marks timeline as misses when funded date is after deadline', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        estimatedFundedDate: '2027-06-30',
+        beatsDeadlineByPaychecks: null,
+        missesDeadlineByPaychecks: 3,
+        status: 'partial',
+        achievabilityPercent: 85,
+      })
+    );
+    expect(messaging.timeline?.relativeToDeadline).toBe('misses');
+    expect(messaging.timeline?.paycheckDeltaFromDeadline).toBe(-3);
+  });
+
+  it('keeps timeline unknown when impossible without funded date', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        status: 'impossible',
+        actualAllocation: 0,
+        achievabilityPercent: 0,
+        estimatedFundedDate: null,
+        paychecksToFullyFund: null,
+      })
+    );
+    expect(messaging.timeline?.estimatedFundedDate).toBeNull();
+    expect(messaging.timeline?.relativeToDeadline).toBe('unknown');
+  });
+
+  it('shows suggestions for tight goals when suggestions exist', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        status: 'achievable',
+        achievabilityPercent: 100,
+        marginPerPaycheck: 1,
+        requiredPerPaycheck: 200,
+        suggestions: [
+          {
+            id: 'suggestion-1',
+            type: 'adjust_target_date',
+            title: 'Move deadline',
+            description: 'Push by one month',
+            impactAmount: 50,
+          },
+        ],
+      })
+    );
+    expect(messaging.comfortTier).toBe('achievable_tight');
+    expect(messaging.showSuggestions).toBe(true);
   });
 });
