@@ -441,5 +441,41 @@ describe('DatabaseService', () => {
         expect.objectContaining({ id: debt.id, billId: bill.id })
       );
     });
+
+    it('rejects rename to an existing budget name', () => {
+      const alpha = db.createBudget({ name: 'Alpha Budget' });
+      db.createBudget({ name: 'Beta Budget' });
+      expect(() => db.updateBudget(alpha.id, { name: 'beta budget' })).toThrow('Budget name already exists');
+    });
+
+    it('defaults scheduleStartDate when omitted on create', () => {
+      const created = db.createBudget({ name: 'Default Schedule' });
+      expect(created.scheduleStartDate).toMatch(/^\d{4}-\d{2}-01$/);
+    });
+
+    it('deletes income overrides when income is removed', () => {
+      const budget = db.createBudget({ name: 'Override Cleanup' });
+      const income = db.createIncome(budget.id, {
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      db.setIncomeOverride(budget.id, income.id, '2026-01-29', 3200);
+      expect(db.getIncomeOverrides(budget.id)).toHaveLength(1);
+
+      expect(db.deleteIncome(income.id, budget.id)).toBe(true);
+      expect(db.getIncomeOverrides(budget.id)).toHaveLength(0);
+    });
+
+    it('falls back to raw settings value when JSON parse fails', () => {
+      const internalDb = (db as unknown as { db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } } }).db;
+      internalDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(
+        'theme',
+        'dark-mode'
+      );
+      expect(db.getSettings().theme).toBe('dark-mode');
+    });
   });
 });

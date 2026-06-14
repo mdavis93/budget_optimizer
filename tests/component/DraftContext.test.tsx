@@ -116,6 +116,19 @@ function DraftHarness() {
       <button onClick={() => draft.discardAll()}>discard-all</button>
       <button onClick={() => void draft.reloadSnapshot()}>reload-snapshot</button>
       <button onClick={() => draft.deleteIncome('income-1')}>delete-income</button>
+      <button
+        onClick={() =>
+          draft.updateIncome('income-1', {
+            sourceName: 'Primary Job Updated',
+            amount: 2600,
+            cadence: 'biweekly',
+            startDate: '2026-01-01',
+            isActive: true,
+          })
+        }
+      >
+        update-income
+      </button>
       <button onClick={() => draft.skipBill('bill-1', '2026-01-15')}>skip-bill</button>
       <button onClick={() => draft.unskipBill('bill-1', '2026-01-15')}>unskip-bill</button>
       <button onClick={() => draft.assignBill('bill-1', '2026-01-15', '2026-01-29')}>assign-bill</button>
@@ -373,6 +386,31 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('income-count')).toHaveTextContent('2');
       });
       expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+    });
+
+    it('updates income and marks income domain dirty', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('update-income'));
+      await waitFor(() => {
+        expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+      });
+    });
+
+    it('hides draft overlay after discard-all', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
+      });
+
+      fireEvent.click(screen.getByText('update-bill'));
+      expect(screen.getByTestId('overlay-present')).toHaveTextContent('yes');
+      fireEvent.click(screen.getByText('discard-all'));
+      expect(screen.getByTestId('overlay-present')).toHaveTextContent('no');
     });
 
     it('updates bill, marks bills dirty, and saves bills domain', async () => {

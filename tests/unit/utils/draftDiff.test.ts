@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntityDiff,
   computeKeyedDiff,
   applyIdMap,
+  applyIdMapToField,
   remapBillReferences,
   remapDebtBillIds,
+  persistEntityDiff,
 } from '../../../src/utils/draftDiff';
 
 interface TestEntity {
@@ -78,6 +80,32 @@ describe('draftDiff', () => {
       expect(diff.changed).toHaveLength(1);
     });
 
+    it('detects removed keyed entries absent from draft', () => {
+      const committed = [
+        { billId: 'b1', skipDate: '2026-01-01', reason: 'manual' },
+        { billId: 'b2', skipDate: '2026-02-01', reason: 'manual' },
+      ];
+      const draft = [{ billId: 'b1', skipDate: '2026-01-01', reason: 'manual' }];
+
+      const diff = computeKeyedDiff(
+        committed,
+        draft,
+        (item) => `${item.billId}-${item.skipDate}`,
+        (a, b) =>
+          a.billId === b.billId &&
+          a.skipDate === b.skipDate &&
+          a.reason === b.reason
+      );
+
+      expect(diff.removed).toHaveLength(1);
+      expect(diff.removed[0].billId).toBe('b2');
+    });
+
+    it('maps string field ids through applyIdMapToField', () => {
+      const idMap = new Map([['draft-a', 'real-a']]);
+      expect(applyIdMapToField(['draft-a', 'real-b'], idMap)).toEqual(['real-a', 'real-b']);
+    });
+
     it('replaces draft ids with persisted ids', () => {
       const idMap = new Map([['draft-1', 'real-1']]);
       const items = [{ id: 'draft-1', name: 'Test', amount: 1 }];
@@ -99,6 +127,83 @@ describe('draftDiff', () => {
       const debts = [{ id: 'debt-1', billId: 'draft-bill' }];
       const mapped = remapDebtBillIds(debts, idMap);
       expect(mapped[0].billId).toBe('bill-1');
+    });
+
+    it('leaves bill ids unchanged when no mapping exists', () => {
+      const mapped = remapDebtBillIds([{ id: 'debt-1', billId: 'bill-1' }], new Map());
+      expect(mapped[0].billId).toBe('bill-1');
+    });
+  });
+
+  describe('persistEntityDiff', () => {
+    const baseOptions = {
+      isDraftId: (id: string) => id.startsWith('draft-'),
+      toCreateInput: (item: TestEntity) => ({ name: item.name, amount: item.amount }),
+      toUpdateInput: (item: TestEntity) => ({ name: item.name, amount: item.amount }),
+      create: async () => ({ success: true, data: { id: 'real-1', name: 'A', amount: 1 } }),
+      update: async () => ({ success: true, data: { id: '1', name: 'A', amount: 1 } }),
+      remove: async () => ({ success: true }),
+    };
+
+    it('skips draft ids on delete and update', async () => {
+      const remove = vi.fn(async () => ({ success: true }));
+      const update = vi.fn(async () => ({ success: true }));
+
+      const result = await persistEntityDiff(
+        {
+          created: [],
+          updated: [{ id: 'draft-2', name: 'B', amount: 2 }],
+          deleted: ['draft-1', 'real-9'],
+        },
+        { ...baseOptions, remove, update }
+      );
+
+      expect(result.success).toBe(true);
+      expect(remove).toHaveBeenCalledWith('real-9');
+      expect(remove).not.toHaveBeenCalledWith('draft-1');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('returns failure when delete, update, or create fails', async () => {
+      await expect(
+        persistEntityDiff(
+          { created: [], updated: [], deleted: ['real-1'] },
+          { ...baseOptions, remove: async () => ({ success: false }) }
+        )
+      ).resolves.toEqual({ success: false, error: 'Failed to delete item' });
+
+      await expect(
+        persistEntityDiff(
+          { created: [], updated: [{ id: 'real-1', name: 'A', amount: 2 }], deleted: [] },
+          { ...baseOptions, update: async () => ({ success: false, error: 'nope' }) }
+        )
+      ).resolves.toEqual({ success: false, error: 'nope' });
+
+      await expect(
+        persistEntityDiff(
+          { created: [{ id: 'draft-1', name: 'New', amount: 1 }], updated: [], deleted: [] },
+          { ...baseOptions, create: async () => ({ success: true }) }
+        )
+      ).resolves.toEqual({ success: false, error: 'Failed to create item' });
+    });
+
+    it('maps created draft ids to persisted ids', async () => {
+      const result = await persistEntityDiff(
+        {
+          created: [{ id: 'draft-1', name: 'New', amount: 5 }],
+          updated: [],
+          deleted: [],
+        },
+        {
+          ...baseOptions,
+          create: async () => ({ success: true, data: { id: 'persisted-1', name: 'New', amount: 5 } }),
+        }
+      );
+
+      expect(result).toEqual({
+        success: true,
+        idMap: new Map([['draft-1', 'persisted-1']]),
+      });
     });
   });
 

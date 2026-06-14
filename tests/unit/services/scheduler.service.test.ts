@@ -151,6 +151,35 @@ describe('SchedulerService', () => {
       
       expect(result[0].priority).toBe('critical');
     });
+
+    it('stops projecting after debt payoff and uses final payment amount', () => {
+      const payoffDate = parseISO('2026-02-15');
+      const result = scheduler.projectBills(
+        baseBill,
+        parseISO('2026-01-01'),
+        parseISO('2026-04-30'),
+        {
+          billId: 'bill-1',
+          payoffDate,
+          finalPaymentAmount: 75,
+        }
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[1].amount).toBe(75);
+      expect(format(result[1].date, 'yyyy-MM-dd')).toBe('2026-02-15');
+    });
+
+    it('projects only one occurrence for non-recurring bills', () => {
+      const oneTime = { ...baseBill, isRecurring: false };
+      const result = scheduler.projectBills(
+        oneTime,
+        parseISO('2026-01-01'),
+        parseISO('2026-06-30')
+      );
+
+      expect(result).toHaveLength(1);
+    });
   });
 
   describe('generateSchedule', () => {

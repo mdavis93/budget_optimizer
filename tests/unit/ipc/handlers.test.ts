@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerIpcHandlers } from '../../../electron/ipc/handlers';
 import { approveExportPath } from '../../../electron/utils/exportPaths';
+import { DatabaseService } from '../../../electron/services/database.service';
 
 vi.mock('electron', () => ({
   app: {
@@ -177,6 +178,72 @@ describe('ipc handlers', () => {
         success: false,
         error: 'no biometric',
       });
+    });
+
+    it('reverts first-time setup when database initialization fails', async () => {
+      const services = createServices({
+        auth: {
+          ...createServices().auth,
+          createMasterPassword: vi.fn(async () => ({ success: true })),
+        },
+      });
+      const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => {
+        throw new Error('disk full');
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('auth:create-master-password', 'pw')).resolves.toEqual({
+        success: false,
+        error: 'Failed to initialize database: disk full',
+      });
+      expect(services.auth.revertFirstTimeSetup).toHaveBeenCalled();
+      initSpy.mockRestore();
+    });
+
+    it('returns database init error when unlock succeeds but services fail to initialize', async () => {
+      const services = createServices();
+      const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => {
+        throw new Error('locked db');
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('auth:unlock', 'pw')).resolves.toEqual({
+        success: false,
+        error: expect.stringContaining('locked db'),
+      });
+      initSpy.mockRestore();
+    });
+
+    it('uses extra payment amortization when linked bill budgets above minimum', async () => {
+      const services = createServices({
+        database: {
+          getDebts: vi.fn(() => []),
+          getSettings: vi.fn(() => ({ autoLockMinutes: 5 })),
+          close: vi.fn(),
+          getDebtById: vi.fn(() => ({
+            id: 'debt-1',
+            billId: 'bill-1',
+            principalBalance: 1000,
+            apr: 12,
+            monthlyPayment: 100,
+          })),
+        },
+        budgetManager: {
+          ...createServices().budgetManager,
+          getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 150 }]),
+        },
+        debt: {
+          calculateAmortization: vi.fn(() => ({
+            monthsToPayoff: 10,
+            payments: [{ payment: 120 }],
+            payoffDate: '2026-10-01',
+          })),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await ipcMain.invoke('debts:get-amortization', 'debt-1');
+      expect(services.debt.calculateAmortization).toHaveBeenCalledWith(1000, 12, 100, 50, 'monthly');
     });
 
     it('invokes schedule:build and returns schedule payload', async () => {

@@ -105,6 +105,32 @@ describe('DebtsPage', () => {
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
       expect(screen.getByText('Total Debt Balance')).toBeInTheDocument();
+      expect(screen.getByText(/\+ \$20\.00 extra/)).toBeInTheDocument();
+    });
+
+    it('groups tracked debts by creditor prefix and renders Other last', async () => {
+      getDebtsWithAmortization.mockResolvedValue([
+        {
+          debt: { id: 'debt-1', billId: 'bill-1', principalBalance: 1200, apr: 0.22, monthlyPayment: 100 },
+          bill: { id: 'bill-1', creditorName: 'CardOne: Platinum', budgetedAmount: 120, dueDay: 10 },
+          amortization: { monthsToPayoff: 12, payoffDate: '2026-12-01', totalInterest: 140, totalPayments: 1340, totalPrincipal: 1200, payments: [] },
+        },
+        {
+          debt: { id: 'debt-2', billId: 'bill-3', principalBalance: 500, apr: 0.15, monthlyPayment: 50 },
+          bill: { id: 'bill-3', creditorName: 'Store Card', budgetedAmount: 50, dueDay: 5 },
+          amortization: { monthsToPayoff: 10, payoffDate: '2026-10-01', totalInterest: 40, totalPayments: 540, totalPrincipal: 500, payments: [] },
+        },
+      ]);
+      mockUseData.mockReturnValue({
+        bills: [
+          { id: 'bill-1', creditorName: 'CardOne: Platinum', budgetedAmount: 120, category: 'Debt', dueDay: 10, priority: 'high', isRecurring: true },
+          { id: 'bill-3', creditorName: 'Store Card', budgetedAmount: 50, category: 'Debt', dueDay: 5, priority: 'normal', isRecurring: true },
+        ],
+      });
+
+      renderWithRouter(<DebtsPage />, { mockAPI });
+      expect(await screen.findByText('CardOne')).toBeInTheDocument();
+      expect(screen.getByText('Other')).toBeInTheDocument();
     });
 
     it('adds, edits, deletes, and changes chart window for a debt', async () => {
@@ -176,6 +202,20 @@ describe('DebtsPage', () => {
       });
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('No debts to track')).toBeInTheDocument();
+    });
+
+    it('omits debt cards when bill or amortization data is missing', async () => {
+      getDebtsWithAmortization.mockResolvedValue([
+        {
+          debt: { id: 'debt-1', billId: 'bill-1', principalBalance: 1200, apr: 0.22, monthlyPayment: 100 },
+          bill: null,
+          amortization: null,
+        },
+      ]);
+      renderWithRouter(<DebtsPage />, { mockAPI });
+      await waitFor(() => {
+        expect(screen.queryByText('CardOne: Platinum')).not.toBeInTheDocument();
+      });
     });
   });
 
