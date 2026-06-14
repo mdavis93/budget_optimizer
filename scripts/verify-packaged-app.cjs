@@ -39,6 +39,14 @@ if (fs.existsSync(asarPath) && fs.existsSync(asarCli)) {
       process.exit(1);
     }
   }
+
+  const forbiddenPatterns = ['7289/ingest', '#region agent log', 'debug-f84ef2', 'VITE_DEV_SERVER_URL'];
+  for (const pattern of forbiddenPatterns) {
+    if (asarListing.includes(pattern)) {
+      console.error(`Packaged asar contains forbidden pattern: ${pattern}`);
+      process.exit(1);
+    }
+  }
 }
 
 const resourcesPath = path.join(appDir, 'Contents/Resources');
@@ -61,14 +69,27 @@ const result = spawnSync(binary, ['-e', verifyCode], {
   encoding: 'utf8',
   timeout: 60000,
   cwd: os.tmpdir(),
-  env: { ...process.env, NODE_PATH: '' },
+  env: {
+    ...process.env,
+    NODE_PATH: '',
+    ELECTRON_RUN_AS_NODE: '1',
+  },
 });
 
 const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
 
 if (result.status !== 0 || !output.includes('PACKAGED_DB_OK')) {
   console.error('Packaged SQLite verification failed.');
+  if (result.signal) {
+    console.error(`Process terminated by signal: ${result.signal}`);
+  }
+  if (result.status != null && result.status !== 0) {
+    console.error(`Exit code: ${result.status}`);
+  }
   if (output) console.error(output);
+  else if (!result.signal && result.status == null) {
+    console.error('No output from packaged app (did the GUI launch instead of headless verify?)');
+  }
   process.exit(1);
 }
 
