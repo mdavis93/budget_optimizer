@@ -10,7 +10,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { format, parseISO, startOfMonth, isWithinInterval, addDays } from 'date-fns';
+import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import clsx from 'clsx';
 import { getMonthlyBillEquivalent, getMonthlyIncomeEquivalent } from '../utils/cadence';
@@ -53,16 +53,14 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
 }
 
 export default function DashboardPage() {
-  const { incomes, bills, generateSchedule, schedule } = useData();
-  const [startingBalance, setStartingBalance] = useState(0);
+  const { incomes, bills, generateSchedule, schedule, scheduleStartDate, scheduleStartingBalance } = useData();
 
   useEffect(() => {
     let isMounted = true;
     
     const loadSchedule = async () => {
-      const startDate = format(startOfMonth(new Date()), 'yyyy-MM-dd');
       if (isMounted) {
-        await generateSchedule(startDate, 3, startingBalance);
+        await generateSchedule(scheduleStartDate, 3, scheduleStartingBalance);
       }
     };
     
@@ -71,7 +69,7 @@ export default function DashboardPage() {
     }
     
     return () => { isMounted = false; };
-  }, [incomes, bills, generateSchedule, startingBalance]);
+  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance]);
 
   const totalMonthlyIncome = useMemo(() => {
     return incomes

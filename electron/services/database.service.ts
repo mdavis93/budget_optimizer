@@ -6,6 +6,13 @@ import { CryptoService } from './crypto.service';
 import { validateBill, validateIncome, validateGoal, validateDebt, validateBudget, validateSettings, assertValid } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
 
+function defaultScheduleStartDate(createdAt: string): string {
+  const created = new Date(createdAt);
+  const year = created.getFullYear();
+  const month = String(created.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-01`;
+}
+
 interface BudgetRow {
   id: string;
   data: string;
@@ -20,6 +27,7 @@ export interface Budget {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  scheduleStartDate: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +38,7 @@ export interface BudgetInput {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }
 
 interface GoalRow {
@@ -852,6 +861,7 @@ export class DatabaseService {
     return {
       id: row.id,
       ...decrypted,
+      scheduleStartDate: decrypted.scheduleStartDate ?? defaultScheduleStartDate(row.created_at),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -990,6 +1000,7 @@ export class DatabaseService {
       targetCashOnHand: input.targetCashOnHand ?? 250,
       minCashOnHand: input.minCashOnHand ?? 100,
       minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? 0,
+      scheduleStartDate: input.scheduleStartDate ?? defaultScheduleStartDate(now),
     };
     const encryptedData = this.crypto.encryptObject(payload);
     
@@ -1022,6 +1033,7 @@ export class DatabaseService {
         targetCashOnHand: input.targetCashOnHand ?? existing.targetCashOnHand,
         minCashOnHand: input.minCashOnHand ?? existing.minCashOnHand,
         minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? existing.minSavingsPerPaycheck,
+        scheduleStartDate: input.scheduleStartDate ?? existing.scheduleStartDate,
       }),
       'Invalid budget data'
     );
@@ -1042,6 +1054,7 @@ export class DatabaseService {
       targetCashOnHand: input.targetCashOnHand ?? existing.targetCashOnHand,
       minCashOnHand: input.minCashOnHand ?? existing.minCashOnHand,
       minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? existing.minSavingsPerPaycheck,
+      scheduleStartDate: input.scheduleStartDate ?? existing.scheduleStartDate,
     };
     const encryptedData = this.crypto.encryptObject(payload);
     

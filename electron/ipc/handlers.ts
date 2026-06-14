@@ -2,7 +2,7 @@ import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
 import { DatabaseService, DebtInput } from '../services/database.service';
-import { SchedulerService, DebtPayoffInfo } from '../services/scheduler.service';
+import { SchedulerService, DebtPayoffInfo, SCHEDULE_CALCULATION_MONTHS } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
 import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
@@ -25,10 +25,6 @@ import {
   ReconciliationFixInput,
 } from '../services/validation.service';
 
-// Schedule is always calculated for 12 months - viewport filtering only affects display
-const SCHEDULE_CALCULATION_MONTHS = 12;
-
-// Helper to extract error message from unknown error type
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -486,13 +482,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
       );
       const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
-      const today = new Date();
-      const startDate = today.toISOString().split('T')[0];
 
       const scheduleData = services.scheduler.generateSchedule(
         resolved.incomes,
         resolved.bills,
-        startDate,
+        resolved.scheduleStartDate,
         SCHEDULE_CALCULATION_MONTHS,
         resolved.startingBalance,
         skippedSet,

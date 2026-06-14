@@ -13,6 +13,10 @@ export class QuickBudgetService {
   private targetCashOnHand: number = 250;
   private minCashOnHand: number = 100;
   private minSavingsPerPaycheck: number = 0;
+  private scheduleStartDate: string = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  })();
 
   private generateId(): string {
     return uuidv4();
@@ -29,6 +33,8 @@ export class QuickBudgetService {
     this.targetCashOnHand = 250;
     this.minCashOnHand = 100;
     this.minSavingsPerPaycheck = 0;
+    const now = new Date();
+    this.scheduleStartDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   }
 
   getStartingBalance(): number {
@@ -61,6 +67,14 @@ export class QuickBudgetService {
 
   setMinSavingsPerPaycheck(amount: number): void {
     this.minSavingsPerPaycheck = amount;
+  }
+
+  getScheduleStartDate(): string {
+    return this.scheduleStartDate;
+  }
+
+  setScheduleStartDate(date: string): void {
+    this.scheduleStartDate = date;
   }
 
   // Income Management

@@ -30,6 +30,7 @@ const DEFAULT_TARGET_CASH_ON_HAND = 250;
 const DEFAULT_MIN_CASH_ON_HAND = 100;
 const MIN_BREATHING_ROOM = 50; // Minimum balance to maintain after bills
 const MAX_PREPAY_DAYS = 14; // Bills cannot be paid more than 14 days early
+export const SCHEDULE_CALCULATION_MONTHS = 12;
 
 type RebalanceStrategy = 'deficit_killer' | 'prepay_minimizer' | 'goal_guardian';
 
@@ -308,7 +309,7 @@ export class SchedulerService {
     incomeOverrides: Map<string, number> = new Map()
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
-    const endDate = addMonths(startDate, months);
+    const endDate = addMonths(startDate, SCHEDULE_CALCULATION_MONTHS);
 
     const allIncomes: ProjectedIncome[] = [];
     for (const income of incomes) {
@@ -382,22 +383,72 @@ export class SchedulerService {
       minSavingsPerPaycheck
     );
 
-    const entries = this.convertToLegacyEntries(paychecks, startingBalance);
-
-    const summary = this.calculateSummary(paychecks, startingBalance, maxBudgetRemaining);
-    const recommendations = this.generateRecommendations(paychecks, bills, startingBalance);
-
-    return {
+    const fullSchedule: ScheduleData = {
       startDate: format(startDate, 'yyyy-MM-dd'),
       endDate: format(endDate, 'yyyy-MM-dd'),
       paychecks,
-      fullPaychecks: paychecks,  // Will be same as paychecks when called directly
-      viewportMonths: months,    // Will be updated by IPC handler for viewport filtering
-      entries,
-      summary,
-      recommendations,
+      fullPaychecks: paychecks,
+      viewportMonths: SCHEDULE_CALCULATION_MONTHS,
+      entries: this.convertToLegacyEntries(paychecks, startingBalance),
+      summary: this.calculateSummary(paychecks, startingBalance, maxBudgetRemaining),
+      recommendations: this.generateRecommendations(paychecks, bills, startingBalance),
       maxBudgetRemaining,
       goalProjections,
+    };
+
+    return this.applyViewportFilter(fullSchedule, months, bills, startingBalance);
+  }
+
+  /**
+   * Slice a full 12-month schedule to the requested viewport without recalculating assignments.
+   */
+  applyViewportFilter(
+    fullSchedule: ScheduleData,
+    viewportMonths: number,
+    bills: Bill[],
+    startingBalance: number
+  ): ScheduleData {
+    if (viewportMonths >= SCHEDULE_CALCULATION_MONTHS) {
+      return {
+        ...fullSchedule,
+        paychecks: fullSchedule.fullPaychecks,
+        viewportMonths,
+        entries: this.convertToLegacyEntries(fullSchedule.fullPaychecks, startingBalance),
+        summary: this.calculateSummary(
+          fullSchedule.fullPaychecks,
+          startingBalance,
+          fullSchedule.maxBudgetRemaining
+        ),
+        recommendations: this.generateRecommendations(
+          fullSchedule.fullPaychecks,
+          bills,
+          startingBalance
+        ),
+      };
+    }
+
+    const viewportEndDate = startOfDay(
+      addMonths(parseISO(fullSchedule.startDate), viewportMonths)
+    );
+    const viewportPaychecks = fullSchedule.fullPaychecks.filter((paycheck) => {
+      const paycheckDate = startOfDay(parseISO(paycheck.date));
+      return !isAfter(paycheckDate, viewportEndDate);
+    });
+
+    const viewportEnd = format(viewportEndDate, 'yyyy-MM-dd');
+
+    return {
+      ...fullSchedule,
+      endDate: viewportEnd,
+      paychecks: viewportPaychecks,
+      viewportMonths,
+      entries: this.convertToLegacyEntries(viewportPaychecks, startingBalance),
+      summary: this.calculateSummary(
+        viewportPaychecks,
+        startingBalance,
+        fullSchedule.maxBudgetRemaining
+      ),
+      recommendations: this.generateRecommendations(viewportPaychecks, bills, startingBalance),
     };
   }
 
@@ -1469,6 +1520,7 @@ export class SchedulerService {
       const totalIncome = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
       const fundedBills = uniqueBills.filter(bill => !bill.isUnpayable);
       const totalBillsAmount = fundedBills.reduce((sum, bill) => sum + bill.amount, 0);
+      const hasUnpayableBills = uniqueBills.some(bill => bill.isUnpayable);
 
       // Each paycheck is standalone: income - bills. Starting checking balance applies only
       // to the first paycheck (cash on hand at schedule start; no cross-paycheck carry).
@@ -1477,6 +1529,7 @@ export class SchedulerService {
       const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
 
       // GLIDE-PATH ALLOCATION ALGORITHM:
+      // Bills must be fully funded before any savings or goal deposits.
       // 1. Calculate available surplus above minimum cash on hand
       // 2. Minimum savings gets first priority
       // 3. Goals get allocated using glide-path multipliers
@@ -1486,8 +1539,10 @@ export class SchedulerService {
       let totalGoalDeposits = 0;
       let savingsDeposit = 0;
 
-      // Calculate available surplus above minimum cash on hand
-      const availableSurplus = Math.max(0, budgetRemaining - minCashOnHand);
+      const canFundExtras = !hasUnpayableBills && budgetRemaining >= minCashOnHand;
+      const availableSurplus = canFundExtras
+        ? Math.max(0, budgetRemaining - minCashOnHand)
+        : 0;
 
       if (availableSurplus <= 0) {
         // No surplus - nothing to allocate to savings or goals
@@ -1574,7 +1629,7 @@ export class SchedulerService {
           isUnpayable: bill.isUnpayable,
           unfundableReason: bill.unfundableReason,
         })),
-        totalBills: totalBillsAmount,
+        totalBills: Math.round(totalBillsAmount * 100) / 100,
         goalDeposits,
         totalGoalDeposits: Math.round(totalGoalDeposits * 100) / 100,
         budgetRemaining: Math.round(budgetRemaining * 100) / 100,

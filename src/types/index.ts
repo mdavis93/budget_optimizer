@@ -5,6 +5,7 @@ export interface Budget {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  scheduleStartDate: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -15,6 +16,7 @@ export interface BudgetInput {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }
 
 export interface SavingsGoal {

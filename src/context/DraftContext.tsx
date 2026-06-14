@@ -229,6 +229,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       targetCashOnHand: draft.budget?.targetCashOnHand,
       minCashOnHand: draft.budget?.minCashOnHand,
       minSavingsPerPaycheck: draft.budget?.minSavingsPerPaycheck,
+      scheduleStartDate: draft.budget?.scheduleStartDate,
     };
   }, [isDraftMode, dirtyDomains.size, draft]);
 

@@ -37,8 +37,8 @@ export default function ExportPage() {
     if ((incomes.length > 0 || bills.length > 0) && !schedule) {
       generateSchedule(startDate, months, startingBalance);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: generateSchedule/schedule excluded to prevent infinite loops
-  }, [incomes, bills, startDate, months, startingBalance]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
+  }, [incomes, bills, startDate, startingBalance]);
 
   const runExport = async (kind: ExportKind) => {
     if (!schedule) {
