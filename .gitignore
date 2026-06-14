@@ -37,3 +37,4 @@ coverage/
 
 # User data (for development)
 userData/
+.pnpm-store/

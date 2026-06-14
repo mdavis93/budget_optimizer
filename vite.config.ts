@@ -8,9 +8,21 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
+    {
+      name: 'production-csp',
+      transformIndexHtml(html) {
+        if (mode === 'production') {
+          return html.replace(
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "script-src 'self' 'unsafe-inline'"
+          );
+        }
+        return html;
+      },
+    },
     electron([
       {
         entry: 'electron/main.ts',
@@ -58,4 +70,4 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
-});
+}));
