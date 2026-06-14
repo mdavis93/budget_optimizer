@@ -1594,7 +1594,7 @@ describe('SchedulerService', () => {
 
         // Calculate expected behavior:
         // After rent and minCashOnHand and minSavings, remaining should go to goals
-        const totalGoalDeposits = schedule.paychecks.reduce(
+        const totalGoalDeposits = schedule.fullPaychecks.reduce(
           (sum, p) => sum + p.totalGoalDeposits, 0
         );
         
@@ -2107,6 +2107,139 @@ describe('SchedulerService', () => {
       const skipFix = report.proposedFixes.find((f) => f.type === 'skip_bill');
       if (skipFix) {
         expect(skipFix.reasonCode).toBeDefined();
+      }
+    });
+
+    it('returns fully resolved reconciliation report when no shortfalls exist', () => {
+      const schedule = scheduler.generateSchedule(
+        [biweeklyIncome],
+        [],
+        '2026-01-01',
+        1,
+        0
+      );
+      const report = scheduler.analyzeAndProposeFixes(schedule);
+      expect(report).toEqual({
+        needsReconciliation: false,
+        shortfalls: [],
+        proposedFixes: [],
+        canBeFullyResolved: true,
+        totalDeficit: 0,
+        estimatedResolution: 0,
+      });
+    });
+  });
+
+  describe('applyViewportFilter', () => {
+    it('returns consistent shortfalls across viewport sizes for the same period', () => {
+      const lowIncome: Income = {
+        id: 'income-low',
+        sourceName: 'Part Time',
+        amount: 800,
+        cadence: 'biweekly',
+        startDate: '2026-06-01',
+        isActive: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+
+      const heavyBill: Bill = {
+        id: 'bill-heavy',
+        creditorName: 'Rent',
+        budgetedAmount: 1800,
+        dueDay: 1,
+        category: 'housing',
+        isRecurring: true,
+        priority: 'critical',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+
+      const startDate = '2026-06-01';
+      const schedule3 = scheduler.generateSchedule([lowIncome], [heavyBill], startDate, 3, 0);
+      const schedule6 = scheduler.generateSchedule([lowIncome], [heavyBill], startDate, 6, 0);
+      const schedule12 = scheduler.generateSchedule([lowIncome], [heavyBill], startDate, 12, 0);
+
+      expect(schedule3.fullPaychecks.length).toBeGreaterThan(schedule3.paychecks.length);
+      expect(schedule3.summary.shortfallCount).toBe(
+        schedule12.paychecks
+          .filter((paycheck) => schedule3.paychecks.some((p) => p.date === paycheck.date && p.isShortfall))
+          .length
+      );
+      expect(schedule6.summary.shortfallCount).toBeGreaterThanOrEqual(schedule3.summary.shortfallCount);
+      expect(schedule12.fullPaychecks.length).toBe(schedule3.fullPaychecks.length);
+    });
+  });
+
+  describe('goal allocation with unpaid bills', () => {
+    it('does not allocate to goals when bills are marked unpayable', () => {
+      const lowIncome: Income = {
+        id: 'income-low',
+        sourceName: 'Part Time',
+        amount: 500,
+        cadence: 'biweekly',
+        startDate: '2026-06-01',
+        isActive: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+
+      const bills: Bill[] = [
+        {
+          id: 'bill-rent',
+          creditorName: 'Rent',
+          budgetedAmount: 1500,
+          dueDay: 1,
+          category: 'housing',
+          isRecurring: true,
+          priority: 'critical',
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-low',
+          creditorName: 'Streaming',
+          budgetedAmount: 50,
+          dueDay: 15,
+          category: 'subscriptions',
+          isRecurring: true,
+          priority: 'low',
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ];
+
+      const goals: SavingsGoal[] = [{
+        id: 'goal-1',
+        budgetId: 'budget-1',
+        name: 'Emergency Fund',
+        targetAmount: 5000,
+        targetDate: '2027-06-01',
+        alreadySaved: 0,
+        priority: 1,
+        createdAt: '2026-06-01T00:00:00.000Z',
+      }];
+
+      const schedule = scheduler.generateSchedule(
+        [lowIncome],
+        bills,
+        '2026-06-01',
+        12,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        goals,
+        100,
+        0
+      );
+
+      const paychecksWithUnpayable = schedule.fullPaychecks.filter((paycheck) =>
+        paycheck.bills.some((bill) => bill.isUnpayable)
+      );
+
+      for (const paycheck of paychecksWithUnpayable) {
+        expect(paycheck.totalGoalDeposits).toBe(0);
       }
     });
   });
