@@ -13,8 +13,10 @@ import {
   AlertTriangle,
   RefreshCw,
   Pencil,
+  RotateCcw,
 } from 'lucide-react';
 import { PaycheckEntry, PaycheckBill, PRIORITY_LABELS, BillAssignment, IncomeOverride } from '../../types';
+import { filterPaycheckBills, isBillMovedToPaycheck } from '../../utils/scheduleBills';
 import clsx from 'clsx';
 
 interface DraggedBill {
@@ -36,6 +38,8 @@ interface PaycheckViewProps {
   maxBudgetRemaining: number;
   onSkipBill: (billId: string, paycheckDate: string) => void;
   skippingBill: string | null;
+  onRestoreBill: (billId: string, billDueDate: string) => void;
+  restoringBill: string | null;
   onDragStart: (bill: PaycheckBill, sourcePaycheckDate: string) => void;
   onDragEnd: () => void;
   onDragOver: (e: DragEvent<HTMLDivElement>, paycheckDate: string) => void;
@@ -61,6 +65,8 @@ export default function PaycheckView({
   maxBudgetRemaining,
   onSkipBill,
   skippingBill,
+  onRestoreBill,
+  restoringBill,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -104,6 +110,7 @@ export default function PaycheckView({
 
       <div className="space-y-4">
         {paychecks.map((paycheck) => {
+          const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
           const isExpanded = expandedPaychecks.has(paycheck.date);
           const isDropTarget = dropTargetDate === paycheck.date;
           const isDragSource = draggedBill?.sourcePaycheckDate === paycheck.date;
@@ -148,7 +155,7 @@ export default function PaycheckView({
                     <div className="flex items-center gap-4 text-sm text-[var(--color-text-secondary)]">
                       <span>{paycheck.incomeSources.map(s => s.name).join(' + ')}</span>
                       <span>•</span>
-                      <span>{paycheck.bills.length} bill{paycheck.bills.length !== 1 ? 's' : ''}</span>
+                      <span>{visibleBills.length} bill{visibleBills.length !== 1 ? 's' : ''}</span>
                       {paycheck.goalDeposits && paycheck.goalDeposits.length > 0 && (
                         <>
                           <span>•</span>
@@ -198,6 +205,8 @@ export default function PaycheckView({
                   formatCurrency={formatCurrency}
                   onSkipBill={onSkipBill}
                   skippingBill={skippingBill}
+                  onRestoreBill={onRestoreBill}
+                  restoringBill={restoringBill}
                   onDragStart={onDragStart}
                   onDragEnd={onDragEnd}
                   draggedBill={draggedBill}
@@ -222,6 +231,8 @@ interface PaycheckDetailsProps {
   formatCurrency: (amount: number) => string;
   onSkipBill: (billId: string, paycheckDate: string) => void;
   skippingBill: string | null;
+  onRestoreBill: (billId: string, billDueDate: string) => void;
+  restoringBill: string | null;
   onDragStart: (bill: PaycheckBill, sourcePaycheckDate: string) => void;
   onDragEnd: () => void;
   draggedBill: DraggedBill | null;
@@ -250,6 +261,8 @@ function PaycheckDetails({
   formatCurrency,
   onSkipBill,
   skippingBill,
+  onRestoreBill,
+  restoringBill,
   onDragStart,
   onDragEnd,
   draggedBill,
@@ -262,6 +275,10 @@ function PaycheckDetails({
 }: PaycheckDetailsProps) {
   const [editingIncomeKey, setEditingIncomeKey] = useState<string | null>(null);
   const [draftIncomeAmount, setDraftIncomeAmount] = useState('');
+  const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
+  const visibleTotalBills = visibleBills
+    .filter(bill => !bill.isUnpayable)
+    .reduce((sum, bill) => sum + bill.amount, 0);
 
   return (
     <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
@@ -372,16 +389,16 @@ function PaycheckDetails({
           </div>
         </div>
         
-        {paycheck.bills.length > 0 && (
+        {visibleBills.length > 0 && (
           <div>
             <h4 className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 flex items-center gap-2">
               <Receipt className="w-4 h-4" />
-              Bills to Pay ({paycheck.bills.length})
+              Bills to Pay ({visibleBills.length})
               <span className="text-xs text-[var(--color-text-muted)]">• Drag bills to move between paychecks</span>
               {isAssigning && <RefreshCw className="w-3 h-3 animate-spin text-primary-500" />}
             </h4>
             <div className="space-y-2">
-              {[...paycheck.bills].sort((a, b) => {
+              {[...visibleBills].sort((a, b) => {
                 const paycheckDate = parseISO(paycheck.date);
                 const paycheckMonth = getMonth(paycheckDate);
                 const paycheckYear = getYear(paycheckDate);
@@ -398,8 +415,12 @@ function PaycheckDetails({
                 return a.dueDay - b.dueDay;
               }).map((bill, idx) => {
                 const isSkipping = skippingBill === `${bill.billId}-${paycheck.date}`;
-                const isManuallyAssigned = billAssignments.some(
-                  a => a.billId === bill.billId && a.billDueDate === bill.billDate
+                const isRestoring = restoringBill === `${bill.billId}-${bill.billDate}`;
+                const isManuallyAssigned = isBillMovedToPaycheck(
+                  billAssignments,
+                  bill.billId,
+                  bill.billDate,
+                  paycheck.date
                 );
                 const isDragging = draggedBill?.billId === bill.billId && draggedBill?.billDate === bill.billDate;
                 
@@ -411,20 +432,31 @@ function PaycheckDetails({
                 return (
                   <div 
                     key={idx} 
-                    draggable
-                    onDragStart={() => onDragStart(bill, paycheck.date)}
+                    draggable={!bill.isUnpayable}
+                    onDragStart={() => !bill.isUnpayable && onDragStart(bill, paycheck.date)}
                     onDragEnd={onDragEnd}
                     className={clsx(
-                      'flex items-center justify-between py-2 px-3 rounded-lg group cursor-move',
-                      isManuallyAssigned 
-                        ? 'bg-primary-50 dark:bg-primary-500/10 border-2 border-primary-300 dark:border-primary-700' 
-                        : 'bg-danger-50 dark:bg-danger-500/10',
+                      'flex items-center justify-between py-2 px-3 rounded-lg group',
+                      bill.isUnpayable
+                        ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-700/50'
+                        : isManuallyAssigned 
+                          ? 'bg-primary-50 dark:bg-primary-500/10 border-2 border-primary-300 dark:border-primary-700 cursor-move' 
+                          : 'bg-danger-50 dark:bg-danger-500/10 cursor-move',
                       isDragging && 'opacity-50'
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <GripVertical className="w-4 h-4 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <span className="font-medium">{bill.creditorName}</span>
+                      {!bill.isUnpayable && (
+                        <GripVertical className="w-4 h-4 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                      <span className={clsx('font-medium', bill.isUnpayable && 'line-through text-[var(--color-text-muted)]')}>
+                        {bill.creditorName}
+                      </span>
+                      {bill.isUnpayable && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100">
+                          Unpayable
+                        </span>
+                      )}
                       {isManuallyAssigned && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-primary-200 text-primary-800 dark:bg-primary-800 dark:text-primary-200">
                           Moved
@@ -446,6 +478,20 @@ function PaycheckDetails({
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
+                      {isManuallyAssigned && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRestoreBill(bill.billId, bill.billDate);
+                          }}
+                          disabled={isRestoring}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-500 flex items-center gap-1 shadow-sm"
+                          title="Restore to original paycheck"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          {isRestoring ? 'Restoring...' : 'Restore'}
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -458,7 +504,12 @@ function PaycheckDetails({
                         <SkipForward className="w-3 h-3" />
                         {isSkipping ? 'Skipping...' : 'Skip'}
                       </button>
-                      <span className="font-mono font-semibold text-danger-600 dark:text-danger-500">
+                      <span className={clsx(
+                        'font-mono font-semibold',
+                        bill.isUnpayable
+                          ? 'text-amber-600 dark:text-amber-400 line-through'
+                          : 'text-danger-600 dark:text-danger-500'
+                      )}>
                         -{formatCurrency(bill.amount)}
                       </span>
                     </div>
@@ -468,7 +519,7 @@ function PaycheckDetails({
               <div className="flex items-center justify-between py-2 px-3 bg-[var(--color-bg-tertiary)] rounded-lg font-semibold">
                 <span>Total Bills</span>
                 <span className="font-mono text-danger-600 dark:text-danger-500">
-                  -{formatCurrency(paycheck.totalBills)}
+                  -{formatCurrency(visibleTotalBills)}
                 </span>
               </div>
             </div>

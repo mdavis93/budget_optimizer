@@ -18,7 +18,7 @@ export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
 
   return (
     <>
-      <div className="sticky bottom-0 z-20 -mx-6 -mb-6 mt-6 border-t border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-900/20 px-6 py-4">
+      <div className="shrink-0 border-t border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950 px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-warning-800 dark:text-warning-200">
             Unsaved changes on {DRAFT_DOMAIN_LABELS[domain]}

@@ -13,6 +13,7 @@ import { useData } from '../context/DataContext';
 import { format, parseISO, startOfMonth, isWithinInterval, addDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import clsx from 'clsx';
+import { getMonthlyBillEquivalent, getMonthlyIncomeEquivalent } from '../utils/cadence';
 
 interface StatCardProps {
   label: string;
@@ -75,21 +76,12 @@ export default function DashboardPage() {
   const totalMonthlyIncome = useMemo(() => {
     return incomes
       .filter(i => i.isActive)
-      .reduce((sum, income) => {
-        let monthly = income.amount;
-        switch (income.cadence) {
-          case 'weekly': monthly = income.amount * 4.33; break;
-          case 'biweekly': monthly = income.amount * 2.17; break;
-          case 'semimonthly': monthly = income.amount * 2; break;
-          case 'monthly': monthly = income.amount; break;
-        }
-        return sum + monthly;
-      }, 0);
+      .reduce((sum, income) => sum + getMonthlyIncomeEquivalent(income), 0);
   }, [incomes]);
 
   const totalMonthlyBills = useMemo(() => {
-    return bills.reduce((sum, bill) => sum + bill.budgetedAmount, 0);
-  }, [bills]);
+    return bills.reduce((sum, bill) => sum + getMonthlyBillEquivalent(bill, incomes), 0);
+  }, [bills, incomes]);
 
   const upcomingPayments = useMemo(() => {
     if (!schedule?.entries) return [];

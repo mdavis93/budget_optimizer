@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import clsx from 'clsx';
+import { getMonthlyBillEquivalent } from '../utils/cadence';
 
 interface BillFormProps {
   bill?: Bill;
@@ -280,9 +281,14 @@ export default function BillsPage() {
     [bills, filterCategory]
   );
 
-  const totalMonthlyBills = useMemo(() => 
-    bills.reduce((sum, b) => sum + b.budgetedAmount, 0),
+  const hasIncomeAttachedBills = useMemo(
+    () => bills.some((b) => b.isIncomeAttached),
     [bills]
+  );
+
+  const totalMonthlyBills = useMemo(
+    () => bills.reduce((sum, b) => sum + getMonthlyBillEquivalent(b, incomes), 0),
+    [bills, incomes]
   );
   
   const criticalBills = useMemo(() => 
@@ -340,7 +346,9 @@ export default function BillsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="card bg-danger-50 dark:bg-danger-500/10 border-danger-200 dark:border-danger-800">
             <div className="flex items-center justify-between">
-              <span className="text-danger-700 dark:text-danger-400">Total Monthly Bills</span>
+              <span className="text-danger-700 dark:text-danger-400">
+                Total Monthly Bills{hasIncomeAttachedBills ? ' (estimated)' : ''}
+              </span>
               <span className="text-2xl font-semibold text-danger-600 dark:text-danger-500">
                 {formatCurrency(totalMonthlyBills)}
               </span>
@@ -482,7 +490,7 @@ export default function BillsPage() {
                 <div className="text-right">
                   <p className="text-lg font-semibold">{formatCurrency(bill.budgetedAmount)}</p>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    {bill.isRecurring ? 'Monthly' : 'One-time'}
+                    {bill.isIncomeAttached ? 'Per Paycheck' : bill.isRecurring ? 'Monthly' : 'One-time'}
                   </p>
                 </div>
                 

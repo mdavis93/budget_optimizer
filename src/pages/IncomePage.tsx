@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Pencil, Trash2, Wallet, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { Income, IncomeInput, CADENCE_LABELS } from '../types';
+import { getMonthlyIncomeEquivalent } from '../utils/cadence';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -156,20 +157,9 @@ export default function IncomePage() {
     }).format(amount);
   };
 
-  const getMonthlyEquivalent = (income: Income) => {
-    let monthly = income.amount;
-    switch (income.cadence) {
-      case 'weekly': monthly = income.amount * 4.33; break;
-      case 'biweekly': monthly = income.amount * 2.17; break;
-      case 'semimonthly': monthly = income.amount * 2; break;
-      case 'monthly': monthly = income.amount; break;
-    }
-    return monthly;
-  };
-
   const totalMonthlyIncome = incomes
     .filter(i => i.isActive)
-    .reduce((sum, i) => sum + getMonthlyEquivalent(i), 0);
+    .reduce((sum, i) => sum + getMonthlyIncomeEquivalent(i), 0);
 
   return (
     <div className="space-y-6">
@@ -243,7 +233,7 @@ export default function IncomePage() {
                 <div className="text-right">
                   <p className="text-lg font-semibold">{formatCurrency(income.amount)}</p>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    ~{formatCurrency(getMonthlyEquivalent(income))}/mo
+                    ~{formatCurrency(getMonthlyIncomeEquivalent(income))}/mo
                   </p>
                 </div>
                 
