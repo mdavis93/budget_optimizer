@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   TrendingUp, 
@@ -53,7 +53,15 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
 }
 
 export default function DashboardPage() {
-  const { incomes, bills, generateSchedule, schedule, scheduleStartDate, scheduleStartingBalance } = useData();
+  const {
+    incomes,
+    bills,
+    generateSchedule,
+    schedule,
+    scheduleStartDate,
+    scheduleStartingBalance,
+    setScheduleStartingBalance,
+  } = useData();
 
   useEffect(() => {
     let isMounted = true;
@@ -135,8 +143,8 @@ export default function DashboardPage() {
           <label className="text-sm text-[var(--color-text-secondary)]">Starting Balance:</label>
           <input
             type="number"
-            value={startingBalance}
-            onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
+            value={scheduleStartingBalance}
+            onChange={(e) => setScheduleStartingBalance(parseFloat(e.target.value) || 0)}
             className="input w-32"
             placeholder="$0"
           />

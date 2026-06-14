@@ -56,7 +56,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const scheduleStartDate = isQuickBudget
     ? (currentBudget?.scheduleStartDate ?? quickBudgetStartDate)
-    : (draft.budget?.scheduleStartDate ?? defaultScheduleStartDate());
+    : (draft.budgetFields?.scheduleStartDate ?? defaultScheduleStartDate());
 
   const refreshIncomes = useCallback(async () => {
     if (!isUnlocked) return;
@@ -86,12 +86,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [isUnlocked, hasBudgetSelected]);
 
   useEffect(() => {
-    if (draft.budget?.startingBalance !== undefined) {
-      setScheduleStartingBalance(draft.budget.startingBalance);
+    if (draft.budgetFields?.startingBalance !== undefined) {
+      setScheduleStartingBalance(draft.budgetFields.startingBalance);
     } else if (currentBudget?.startingBalance !== undefined) {
       setScheduleStartingBalance(currentBudget.startingBalance);
     }
-  }, [draft.budget?.startingBalance, currentBudget?.startingBalance]);
+  }, [draft.budgetFields?.startingBalance, currentBudget?.startingBalance]);
 
   const createIncomeQuick = useCallback(async (income: IncomeInput): Promise<boolean> => {
     try {
@@ -322,6 +322,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     scheduleStartDate,
     scheduleMonths,
     scheduleStartingBalance,
+    setScheduleStartDate,
+    setScheduleMonths,
     refreshIncomes,
     refreshBills,
     refreshAllData,

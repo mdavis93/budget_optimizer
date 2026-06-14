@@ -109,7 +109,7 @@ function createDraftMock() {
   return {
     incomes: [{ id: 'income-1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true, createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
     bills: [{ id: 'bill-1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, isRecurring: true, priority: 'critical', createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
-    budget: {
+    budgetFields: {
       startingBalance: 400,
       targetCashOnHand: 100,
       minCashOnHand: 50,

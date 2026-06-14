@@ -107,7 +107,7 @@ function convertToLegacyEntries(paychecks: PaycheckEntry[], startingBalance: num
 function generateRecommendations(
   paychecks: PaycheckEntry[],
   bills: Bill[],
-  startingBalance: number
+  _startingBalance: number
 ): string[] {
   const recommendations: string[] = [];
   const shortfallPaychecks = paychecks.filter((p) => p.isShortfall);

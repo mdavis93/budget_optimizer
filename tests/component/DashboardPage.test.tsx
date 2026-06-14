@@ -34,8 +34,7 @@ describe('DashboardPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (globalThis as unknown as { startingBalance: number }).startingBalance = 700;
-    (globalThis as unknown as { setStartingBalance: (v: number) => void }).setStartingBalance = vi.fn();
+    const setScheduleStartingBalance = vi.fn();
 
     mockUseData.mockReturnValue({
       incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
@@ -48,6 +47,7 @@ describe('DashboardPage', () => {
       },
       scheduleStartDate: '2026-01-01',
       scheduleStartingBalance: 700,
+      setScheduleStartingBalance,
     });
   });
 
@@ -95,6 +95,12 @@ describe('DashboardPage', () => {
   describe('hostile', () => {
     it('generates schedule on mount and reflects starting-balance edits', async () => {
       const user = userEvent.setup();
+      const setScheduleStartingBalance = vi.fn();
+      mockUseData.mockReturnValue({
+        ...mockUseData(),
+        setScheduleStartingBalance,
+      });
+
       render(
         <MemoryRouter>
           <DashboardPage />
@@ -108,7 +114,7 @@ describe('DashboardPage', () => {
       const startingBalance = screen.getByPlaceholderText('$0');
       await user.clear(startingBalance);
       await user.type(startingBalance, '1200');
-      expect((globalThis as unknown as { setStartingBalance: ReturnType<typeof vi.fn> }).setStartingBalance).toHaveBeenCalled();
+      expect(setScheduleStartingBalance).toHaveBeenCalled();
     });
 
     it('renders upcoming shortfall entries when schedule has near-term events', () => {

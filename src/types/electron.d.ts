@@ -43,6 +43,8 @@ interface BudgetStats {
   billCount: number;
 }
 
+type BudgetData = Budget;
+
 interface BudgetDataWithStats extends BudgetData, BudgetStats {}
 
 interface CurrentBudgetState {
