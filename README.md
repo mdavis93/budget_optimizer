@@ -4,16 +4,15 @@ A secure desktop application for managing income, tracking bills, and optimizing
 
 ## Features
 
-- **Secure Data Storage**: All financial data is encrypted using AES-256-GCM encryption
-- **Master Password Protection**: Your data is protected by a master password with PBKDF2 key derivation
+- **Secure Data Storage**: Financial records are encrypted at rest using AES-256-GCM
+- **Master Password Protection**: Your data is protected by a master password with PBKDF2 key derivation (310,000 iterations)
 - **Biometric Unlock**: Support for Touch ID (macOS) and Windows Hello for quick, secure access
+- **Auto-Lock**: Automatically locks after configurable inactivity; resets on user activity
 - **Income Management**: Track multiple income sources with various payment cadences (weekly, bi-weekly, semi-monthly, monthly)
 - **Bill Tracking**: Manage recurring bills with priority levels and categories
-- **Payment Optimization**: Automatically generates optimized payment schedules to avoid shortfalls
+- **Payment Scheduling**: Generates payment schedules with rebalance recommendations to reduce shortfalls
 - **Visual Dashboard**: Overview of your financial health with balance projections
-- **Export Options**: 
-  - Export to PDF for printing
-  - Export to Google Sheets for collaborative editing
+- **Export Options**: Export schedules to PDF, HTML, or spreadsheet formats
 
 ## Tech Stack
 
@@ -57,14 +56,41 @@ npm run electron:build
 
 This will create distributable packages in the `release` directory.
 
+### Troubleshooting
+
+#### "Failed to initialize database" / NODE_MODULE_VERSION mismatch
+
+Native modules must be compiled for the bundled Electron version. If unlock fails with a message like `compiled against a different Node.js version using NODE_MODULE_VERSION 119` while Electron requires `130`:
+
+```bash
+pnpm install
+pnpm run rebuild:native
+pnpm run electron:build
+```
+
+Launch the app from the **new** build in `release/` (not an older copy). The build should end with `Packaged SQLite verification passed.` The post-build SQLite check runs headlessly — it should not open the app window.
+
+Use `pnpm run electron:build` for production packages — not `pnpm run build`, which skips native rebuild steps.
+
+#### Repeated macOS Keychain prompts after rebuilding
+
+After each rebuild, macOS may ask for Keychain access again until you choose **Always Allow**. The login screen only accesses Keychain when you click **Fill from Keychain** (not on startup).
+
 ## Security
 
 ### Data Protection
 
-- **Encryption**: All sensitive data (income amounts, bill details, creditor names) is encrypted using AES-256-GCM before storage
-- **Key Derivation**: Your master password is used to derive an encryption key via PBKDF2 with 100,000 iterations
-- **No Password Storage**: Your actual password is never stored; only a hash is kept for verification
-- **Local Storage Only**: All data stays on your device - nothing is sent to external servers (except Google Sheets exports if you choose)
+- **Encryption at rest**: Income payloads, bill payloads, budget metadata, savings goals, debt details, and schedule junction data (bill assignments, skipped bills, income overrides) are encrypted with AES-256-GCM before being written to SQLite
+- **Key derivation**: Your master password derives the encryption key via PBKDF2-SHA512 with **310,000** iterations
+- **No password storage**: Your master password is never stored; only a salted hash is kept for verification
+- **Local storage only**: Data stays on your device. The app does not transmit financial data to external servers
+- **Session controls**: Sensitive IPC channels require an unlocked session; exports are limited to user-selected save paths
+- **Auth hardening**: Failed unlock/recovery attempts use exponential backoff and temporary lockout
+
+### Development vs production
+
+- DevTools open only in unpackaged development builds
+- Production builds use a stricter Content Security Policy (no `unsafe-eval`)
 
 ### Biometric Authentication
 
@@ -107,17 +133,8 @@ The encryption key is stored in the system's secure keychain and released only a
 ### Exporting
 
 1. Navigate to "Export"
-2. Choose PDF or Google Sheets
-3. For Google Sheets, you'll need to authorize the app with your Google account
-
-## Google Sheets Integration
-
-To enable Google Sheets export:
-
-1. Create a project in Google Cloud Console
-2. Enable the Google Sheets API
-3. Create OAuth 2.0 credentials (Desktop application)
-4. The app will prompt you to authorize when you first try to export
+2. Choose PDF, HTML, or spreadsheet format
+3. Select a save location when prompted
 
 ## Project Structure
 
@@ -132,7 +149,7 @@ budget-optimizer/
 │   │   ├── database.service.ts
 │   │   ├── scheduler.service.ts
 │   │   ├── pdf.service.ts
-│   │   └── google.service.ts
+│   │   └── spreadsheet.service.ts
 │   └── ipc/
 │       └── handlers.ts
 ├── src/                # React renderer
