@@ -39,6 +39,9 @@ jobs:
       - name: Test
         run: pnpm test:run
 
+      - name: Verify production CSP
+        run: pnpm run build:vite && pnpm run verify:csp
+
       - name: Production audit
         run: npm audit --production --audit-level=critical
         continue-on-error: false

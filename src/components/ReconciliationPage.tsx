@@ -3,6 +3,12 @@ import { AlertTriangle, Check, ArrowRight, Calendar, DollarSign, SkipForward } f
 import { format, parseISO } from 'date-fns';
 import { ReconciliationReport, ProposedFix, ShortfallDetail, PaycheckBill } from '../types';
 import clsx from 'clsx';
+import {
+  formatProposedFixCopy,
+  formatReconciliationSummary,
+  formatShortfallCopy,
+  formatUnfundableReasonCopy,
+} from '../utils/reconciliationCopy';
 
 interface ReconciliationPageProps {
   report: ReconciliationReport;
@@ -58,6 +64,8 @@ export default function ReconciliationPage({
   const formatCurrency = (amount: number) => 
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const summaryCopy = useMemo(() => formatReconciliationSummary(report), [report]);
+
   return (
     <div className="space-y-6">
       <div className="bg-warning-50 dark:bg-warning-900/30 border border-warning-300 dark:border-warning-700 rounded-xl p-6">
@@ -67,14 +75,10 @@ export default function ReconciliationPage({
           </div>
           <div className="flex-1">
             <h2 className="text-xl font-semibold text-warning-900 dark:text-warning-100">
-              Budget Reconciliation Required
+              {summaryCopy.headline}
             </h2>
-            <p className="mt-1 text-warning-800 dark:text-warning-200">
-              {report.shortfalls.length} paycheck{report.shortfalls.length !== 1 ? 's' : ''} have 
-              shortfalls totaling {formatCurrency(report.totalDeficit)}. 
-              {report.canBeFullyResolved 
-                ? ' We can suggest fixes to resolve these issues.'
-                : ' Some issues may require manual adjustments.'}
+            <p className="mt-1 text-warning-800 dark:text-warning-200" aria-live="polite">
+              {summaryCopy.body}
             </p>
           </div>
         </div>
@@ -108,14 +112,18 @@ export default function ReconciliationPage({
           </div>
 
           <div className="space-y-3">
-            {report.proposedFixes.map((fix) => (
-              <FixCard 
-                key={fix.id} 
-                fix={fix} 
-                isSelected={selectedFixes.has(fix.id)}
-                onToggle={() => toggleFix(fix.id)}
-              />
-            ))}
+            {report.proposedFixes.map((fix) => {
+              const shortfall = report.shortfalls.find((s) => s.paycheckDate === fix.fromPaycheckDate);
+              return (
+                <FixCard 
+                  key={fix.id} 
+                  fix={fix} 
+                  isSelected={selectedFixes.has(fix.id)}
+                  onToggle={() => toggleFix(fix.id)}
+                  deficitAmount={shortfall?.deficit}
+                />
+              );
+            })}
           </div>
 
           <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
@@ -190,6 +198,8 @@ function ShortfallCard({ shortfall }: { shortfall: ShortfallDetail }) {
   const formatCurrency = (amount: number) => 
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const shortfallCopy = useMemo(() => formatShortfallCopy(shortfall), [shortfall]);
+
   return (
     <div className="card border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-900/10">
       <div className="flex items-center justify-between mb-3">
@@ -203,6 +213,10 @@ function ShortfallCard({ shortfall }: { shortfall: ShortfallDetail }) {
           -{formatCurrency(shortfall.deficit)}
         </span>
       </div>
+
+      <p className="text-sm text-danger-800 dark:text-danger-200 mb-3">
+        {shortfallCopy.explanation}
+      </p>
       
       <div className="space-y-1">
         {shortfall.bills.slice(0, 5).map((bill, idx) => (
@@ -222,6 +236,14 @@ function BillItem({ bill }: { bill: PaycheckBill }) {
   const formatCurrency = (amount: number) => 
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const reasonCopy = useMemo(() => {
+    if (!bill.isUnpayable || !bill.unfundableReason) return null;
+    return formatUnfundableReasonCopy(bill.unfundableReason, {
+      billName: bill.creditorName,
+      fromPaycheckDate: format(parseISO(bill.billDate), 'MMM d'),
+    });
+  }, [bill]);
+
   const priorityColors: Record<string, string> = {
     critical: 'text-danger-500',
     high: 'text-warning-500',
@@ -230,22 +252,32 @@ function BillItem({ bill }: { bill: PaycheckBill }) {
   };
 
   return (
-    <div className="flex items-center justify-between text-sm">
-      <div className="flex items-center gap-2">
-        <div className={clsx('w-1.5 h-1.5 rounded-full', {
-          'bg-danger-500': bill.priority === 'critical',
-          'bg-warning-500': bill.priority === 'high',
-          'bg-primary-500': bill.priority === 'normal',
-          'bg-gray-400': bill.priority === 'low',
-        })} />
-        <span>{bill.creditorName}</span>
-        <span className={clsx('text-xs', priorityColors[bill.priority])}>
-          ({bill.priority})
+    <div className="text-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={clsx('w-1.5 h-1.5 rounded-full', {
+            'bg-danger-500': bill.priority === 'critical',
+            'bg-warning-500': bill.priority === 'high',
+            'bg-primary-500': bill.priority === 'normal',
+            'bg-gray-400': bill.priority === 'low',
+          })} />
+          <span>{bill.creditorName}</span>
+          <span className={clsx('text-xs', priorityColors[bill.priority])}>
+            ({bill.priority})
+          </span>
+          {bill.isUnpayable && (
+            <span className="text-xs text-danger-500">unfunded</span>
+          )}
+        </div>
+        <span className="text-[var(--color-text-secondary)]">
+          {formatCurrency(bill.amount)}
         </span>
       </div>
-      <span className="text-[var(--color-text-secondary)]">
-        {formatCurrency(bill.amount)}
-      </span>
+      {reasonCopy && (
+        <p className="mt-0.5 pl-3.5 text-xs text-[var(--color-text-muted)]">
+          {reasonCopy.label}: {reasonCopy.poolHint}
+        </p>
+      )}
     </div>
   );
 }
@@ -253,14 +285,21 @@ function BillItem({ bill }: { bill: PaycheckBill }) {
 function FixCard({ 
   fix, 
   isSelected, 
-  onToggle 
+  onToggle,
+  deficitAmount,
 }: { 
   fix: ProposedFix; 
   isSelected: boolean; 
   onToggle: () => void;
+  deficitAmount?: number;
 }) {
   const formatCurrency = (amount: number) => 
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const fixCopy = useMemo(
+    () => formatProposedFixCopy(fix, { deficitAmount }),
+    [fix, deficitAmount]
+  );
 
   return (
     <label 
@@ -270,6 +309,7 @@ function FixCard({
           ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
           : 'border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)]'
       )}
+      aria-label={fixCopy.ariaMessage}
     >
       <input
         type="checkbox"
@@ -283,30 +323,22 @@ function FixCard({
           {fix.type === 'move_bill' ? (
             <>
               <ArrowRight className="w-4 h-4 text-primary-500" />
-              <span className="font-medium">Move "{fix.billName}"</span>
+              <span className="font-medium">{fixCopy.headline}</span>
             </>
           ) : (
             <>
               <SkipForward className="w-4 h-4 text-warning-500" />
-              <span className="font-medium">Skip "{fix.billName}"</span>
+              <span className="font-medium">{fixCopy.headline}</span>
             </>
           )}
         </div>
         
-        <div className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          {fix.type === 'move_bill' && fix.toPaycheckDate ? (
-            <span>
-              From {format(parseISO(fix.fromPaycheckDate), 'MMM d')} → {format(parseISO(fix.toPaycheckDate), 'MMM d')}
-            </span>
-          ) : (
-            <span>
-              Skip on {format(parseISO(fix.fromPaycheckDate), 'MMM d')} paycheck
-            </span>
-          )}
+        <div className="mt-1 text-sm font-medium text-primary-700 dark:text-primary-300">
+          {fixCopy.counterfactual}
         </div>
         
         <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-          {fix.reason}
+          {fixCopy.detail}
         </p>
       </div>
 

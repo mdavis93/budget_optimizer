@@ -19,6 +19,11 @@ import {
   asReadyServices,
 } from './guards';
 import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
+import {
+  assertValid,
+  validateReconciliationFixes,
+  ReconciliationFixInput,
+} from '../services/validation.service';
 
 // Schedule is always calculated for 12 months - viewport filtering only affects display
 const SCHEDULE_CALCULATION_MONTHS = 12;
@@ -504,8 +509,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     })
   ));
 
-  ipcMain.handle('schedule:optimize', withBudgetGuard(services, (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
-    ipcData('schedule:optimize', () => {
+  ipcMain.handle('schedule:build', withBudgetGuard(services, (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
+    ipcData('schedule:build', () => {
       const { budgetManager, database } = ready();
       const resolved = resolveScheduleInputs(budgetManager, database, overlay);
       const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
@@ -578,14 +583,9 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   }));
 
   // Reconciliation handlers
-  ipcMain.handle('reconciliation:apply-fixes', withBudgetGuard(services, (_, fixes: Array<{
-    id: string;
-    type: 'move_bill' | 'skip_bill';
-    billId: string;
-    billDueDate: string;
-    fromPaycheckDate: string;
-    toPaycheckDate?: string;
-  }>) => ipcVoid('reconciliation:apply-fixes', async () => {
+  ipcMain.handle('reconciliation:apply-fixes', withBudgetGuard(services, (_, fixes: ReconciliationFixInput[]) =>
+    ipcVoid('reconciliation:apply-fixes', async () => {
+    assertValid(validateReconciliationFixes(fixes), 'Invalid reconciliation fixes');
     const { budgetManager } = ready();
     for (const fix of fixes) {
       if (fix.type === 'move_bill' && fix.toPaycheckDate) {

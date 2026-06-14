@@ -11,7 +11,7 @@ interface AuthConfig {
   biometricEnabled: boolean;
   recoveryKeyHash: string;
   encryptedKeyBackup: string;
-  recoverySalt?: string; // Per-user salt for recovery key derivation (v1.5+)
+  recoverySalt?: string; // Per-user salt for recovery key derivation (required for recovery)
 }
 
 export class AuthService {
@@ -169,31 +169,6 @@ export class AuthService {
     this.failedAttempts.clear();
   }
 
-  private migrateLegacyRecoverySalt(normalizedRecoveryKey: string): void {
-    if (!this.config || this.config.recoverySalt) {
-      return;
-    }
-
-    const legacyDerivedKey = this.crypto.deriveKeyFromRecovery(normalizedRecoveryKey);
-    const encryptionKeyHex = this.crypto.decryptWithKey(
-      this.config.encryptedKeyBackup,
-      legacyDerivedKey
-    );
-
-    const newRecoverySalt = this.crypto.generateSalt();
-    const newRecoveryDerivedKey = this.crypto.deriveKeyFromRecovery(
-      normalizedRecoveryKey,
-      newRecoverySalt
-    );
-    this.config.encryptedKeyBackup = this.crypto.encryptWithKey(
-      encryptionKeyHex,
-      newRecoveryDerivedKey
-    );
-    this.config.recoverySalt = newRecoverySalt;
-    this.saveConfig();
-    logger.info('Migrated legacy recovery salt to per-user salt');
-  }
-
   async unlock(password: string): Promise<{ success: boolean; error?: string }> {
     if (!this.config) {
       return { success: false, error: 'No master password set' };
@@ -244,7 +219,6 @@ export class AuthService {
         return { success: false, error: 'Invalid recovery key' };
       }
 
-      this.migrateLegacyRecoverySalt(normalizedKey);
       this.clearFailedAttempts('verify-recovery');
       
       return { success: true };
@@ -279,12 +253,17 @@ export class AuthService {
         return { success: false, error: 'Invalid recovery key' };
       }
 
-      this.migrateLegacyRecoverySalt(normalizedKey);
+      if (!this.config.recoverySalt) {
+        return {
+          success: false,
+          error: 'This account is missing a recovery salt and cannot reset the password.',
+        };
+      }
+
       this.clearFailedAttempts('reset-recovery');
       
-      // Use stored recovery salt if available (v1.5+), otherwise fall back to legacy
       const recoveryDerivedKey = this.crypto.deriveKeyFromRecovery(
-        normalizedKey, 
+        normalizedKey,
         this.config.recoverySalt
       );
       const encryptionKeyHex = this.crypto.decryptWithKey(

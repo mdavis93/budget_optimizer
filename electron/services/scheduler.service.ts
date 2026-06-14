@@ -23,11 +23,30 @@ import {
   getNextIncomeDate,
 } from '../utils/paycheck-calculator';
 import { PRIORITY_ORDER, formatCurrency, roundCurrency } from '../utils/constants';
+import { scoreEligiblePaycheck as scoreEligiblePaycheckUtil } from '../utils/scheduleScoring';
+import { solvePaycheckDeficit } from '../utils/rebalanceMicroSolver';
 
 const DEFAULT_TARGET_CASH_ON_HAND = 250;
 const DEFAULT_MIN_CASH_ON_HAND = 100;
 const MIN_BREATHING_ROOM = 50; // Minimum balance to maintain after bills
 const MAX_PREPAY_DAYS = 14; // Bills cannot be paid more than 14 days early
+
+type RebalanceStrategy = 'deficit_killer' | 'prepay_minimizer' | 'goal_guardian';
+
+export type UnfundableReason =
+  | 'no_eligible_earlier_paycheck'
+  | 'all_movable_bills_locked'
+  | 'insufficient_income_this_paycheck'
+  | 'goal_reserve_conflict';
+
+const REBALANCE_STRATEGIES: RebalanceStrategy[] = [
+  'deficit_killer',
+  'prepay_minimizer',
+  'goal_guardian',
+];
+
+/** Max movable bills considered by the Phase F micro-solver per deficit paycheck. */
+const MICRO_SOLVER_MAX_BILLS = 8;
 
 export interface DebtPayoffInfo {
   billId: string;
@@ -45,6 +64,7 @@ export interface PaycheckBill {
   billDate: string; // The projected due date for this bill occurrence
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  unfundableReason?: UnfundableReason;
 }
 
 export interface GoalDeposit {
@@ -104,6 +124,7 @@ export interface ProposedFix {
   billDueDate: string;
   reason: string;
   impact: number;
+  reasonCode?: UnfundableReason;
 }
 
 export interface ShortfallDetail {
@@ -193,6 +214,7 @@ interface ProjectedBill {
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  unfundableReason?: UnfundableReason;
 }
 
 export class SchedulerService {
@@ -398,6 +420,78 @@ export class SchedulerService {
     return `${billId}-${format(date, 'yyyy-MM-dd')}`;
   }
 
+  private buildPaycheckPressureSnapshot(
+    paycheck: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] },
+    paycheckIndex: number,
+    goalReservePerPaycheck: number[]
+  ): { billLoadRatio: number; goalReserve: number; income: number; billTotal: number } {
+    const income = paycheck.incomes.reduce((sum, inc) => sum + inc.amount, 0);
+    const billTotal = paycheck.bills
+      .filter(b => !b.isUnpayable)
+      .reduce((sum, bill) => sum + bill.amount, 0);
+    const billLoadRatio = income > 0 ? billTotal / income : billTotal > 0 ? 2 : 0;
+    const goalReserve = goalReservePerPaycheck[paycheckIndex] ?? 0;
+    return { billLoadRatio, goalReserve, income, billTotal };
+  }
+
+  private scoreEligiblePaycheck(
+    daysEarly: number,
+    pressure: { billLoadRatio: number; goalReserve: number; income: number; billTotal: number },
+    billAmount: number,
+    minCashOnHand: number,
+    minSavingsPerPaycheck: number
+  ): number {
+    return scoreEligiblePaycheckUtil(
+      daysEarly,
+      pressure,
+      billAmount,
+      minCashOnHand,
+      minSavingsPerPaycheck
+    );
+  }
+
+  private findScoredAutomaticPaycheck(
+    bill: ProjectedBill,
+    paycheckAssignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    skippedBills: Set<string>,
+    goals: SavingsGoal[],
+    minCashOnHand: number,
+    minSavingsPerPaycheck: number
+  ): string | null {
+    const goalReservePerPaycheck = this.buildGoalReservePerPaycheck(paycheckAssignments, goals);
+    let bestPaycheck: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] } | null = null;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < paycheckAssignments.length; i++) {
+      const paycheck = paycheckAssignments[i];
+      const paycheckDateStr = format(paycheck.date, 'yyyy-MM-dd');
+
+      const skipKey = `${bill.billId}-${paycheckDateStr}`;
+      if (skippedBills.has(skipKey)) continue;
+
+      if (isAfter(paycheck.date, bill.date)) continue;
+
+      const daysEarly = differenceInDays(bill.date, paycheck.date);
+      if (daysEarly > MAX_PREPAY_DAYS) continue;
+
+      const pressure = this.buildPaycheckPressureSnapshot(paycheck, i, goalReservePerPaycheck);
+      const score = this.scoreEligiblePaycheck(
+        daysEarly,
+        pressure,
+        bill.amount,
+        minCashOnHand,
+        minSavingsPerPaycheck
+      );
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestPaycheck = paycheck;
+      }
+    }
+
+    return bestPaycheck ? format(bestPaycheck.date, 'yyyy-MM-dd') : null;
+  }
+
   private findPreferredPaycheck(
     bill: ProjectedBill,
     paycheckAssignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
@@ -440,30 +534,74 @@ export class SchedulerService {
     return bestPaycheck ? format(bestPaycheck.date, 'yyyy-MM-dd') : null;
   }
 
-  private findAutomaticPaycheck(
-    bill: ProjectedBill,
-    paycheckAssignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
-    skippedBills: Set<string>
-  ): string | null {
-    let bestPaycheck: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] } | null = null;
+  private clonePaycheckAssignments(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[]
+  ): { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[] {
+    return assignments.map((assignment) => ({
+      date: assignment.date,
+      incomes: [...assignment.incomes],
+      bills: assignment.bills.map((bill) => ({
+        ...bill,
+        date: new Date(bill.date.getTime()),
+      })),
+    }));
+  }
 
-    for (const paycheck of paycheckAssignments) {
-      const paycheckDateStr = format(paycheck.date, 'yyyy-MM-dd');
+  private dedupeAssignmentBills(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[]
+  ): void {
+    for (const assignment of assignments) {
+      const seen = new Set<string>();
+      assignment.bills = assignment.bills.filter((bill) => {
+        const key = this.billOccurrenceKey(bill.billId, bill.date);
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+    }
+  }
 
-      const skipKey = `${bill.billId}-${paycheckDateStr}`;
-      if (skippedBills.has(skipKey)) continue;
-
-      if (isAfter(paycheck.date, bill.date)) continue;
-
-      const daysEarly = differenceInDays(bill.date, paycheck.date);
-      if (daysEarly > MAX_PREPAY_DAYS) continue;
-
-      if (!bestPaycheck || isAfter(paycheck.date, bestPaycheck.date)) {
-        bestPaycheck = paycheck;
+  private calculateScheduleScore(paychecks: PaycheckEntry[], goals: SavingsGoal[]): number {
+    let totalDaysEarly = 0;
+    for (const paycheck of paychecks) {
+      for (const bill of paycheck.bills) {
+        totalDaysEarly += differenceInDays(parseISO(bill.billDate), parseISO(paycheck.date));
       }
     }
 
-    return bestPaycheck ? format(bestPaycheck.date, 'yyyy-MM-dd') : null;
+    const shortfallCount = paychecks.filter((p) => p.isShortfall).length;
+    const totalDeficit = paychecks
+      .filter((p) => p.isShortfall)
+      .reduce((sum, p) => sum + Math.abs(p.budgetRemaining), 0);
+    const criticalUnpayable = paychecks.reduce(
+      (sum, p) => sum + p.bills.filter((b) => b.priority === 'critical' && b.isUnpayable).length,
+      0
+    );
+    const tightPaycheckCount = paychecks.filter(
+      (p) => !p.isShortfall && p.totalBills > p.totalIncome * 0.9 && p.savingsDeposit === 0
+    ).length;
+
+    let goalProgressRatio = 0;
+    for (const goal of goals) {
+      const remaining = goal.targetAmount - goal.alreadySaved;
+      if (remaining <= 0) continue;
+      const deposited = paychecks.reduce(
+        (sum, p) => sum + (p.goalDeposits.find((d) => d.goalId === goal.id)?.amount ?? 0),
+        0
+      );
+      goalProgressRatio += deposited / remaining;
+    }
+
+    return (
+      -1000 * shortfallCount -
+      100 * totalDeficit -
+      10 * criticalUnpayable -
+      totalDaysEarly -
+      0.3 * tightPaycheckCount +
+      0.2 * goalProgressRatio
+    );
   }
 
   private assignBillsToPaychecks(
@@ -589,10 +727,13 @@ export class SchedulerService {
       const billKey = this.billOccurrenceKey(bill.billId, bill.date);
       if (assignedPreferenceBills.has(billKey)) continue;
 
-      const paycheckDateStr = this.findAutomaticPaycheck(
+      const paycheckDateStr = this.findScoredAutomaticPaycheck(
         bill,
         paycheckAssignments,
-        skippedBills
+        skippedBills,
+        goals,
+        minCashOnHand,
+        minSavingsPerPaycheck
       );
 
       if (paycheckDateStr) {
@@ -612,48 +753,117 @@ export class SchedulerService {
       });
     }
 
-    // Step 2: Rebalance to eliminate deficits by prepaying bills
-    this.rebalanceBills(paycheckAssignments, startingBalance, manuallyAssignedBills);
+    // Step 2–3: Ensemble rebalance (three strategies) and pick best schedule
+    const assignmentSnapshot = this.clonePaycheckAssignments(paycheckAssignments);
+    let bestPaychecks: PaycheckEntry[] = [];
+    let bestScore = -Infinity;
 
-    // Step 2b: Triage remaining deficits by funding priority (Critical > High > Normal > Low)
-    this.applyFundingPriority(paycheckAssignments, manuallyAssignedBills);
-
-    // FINAL DEDUPLICATION - ensure no duplicates in any paycheck
-    for (const assignment of paycheckAssignments) {
-      const seen = new Set<string>();
-      assignment.bills = assignment.bills.filter(bill => {
-        const key = this.billOccurrenceKey(bill.billId, bill.date);
-        if (seen.has(key)) {
-          return false;
-        }
-        seen.add(key);
-        return true;
-      });
+    for (const strategy of REBALANCE_STRATEGIES) {
+      const trial = this.clonePaycheckAssignments(assignmentSnapshot);
+      this.rebalanceBills(
+        trial,
+        manuallyAssignedBills,
+        goals,
+        minCashOnHand,
+        minSavingsPerPaycheck,
+        strategy
+      );
+      this.applyFundingPriority(
+        trial,
+        manuallyAssignedBills,
+        goals,
+        minCashOnHand,
+        minSavingsPerPaycheck,
+        strategy
+      );
+      this.dedupeAssignmentBills(trial);
+      const paychecks = this.buildPaycheckEntries(
+        trial,
+        startingBalance,
+        maxBudgetRemaining,
+        goals,
+        minCashOnHand,
+        minSavingsPerPaycheck
+      );
+      const score = this.calculateScheduleScore(paychecks, goals);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPaychecks = paychecks;
+      }
     }
 
-    // Step 3: Build final paycheck entries with balances, savings, and goal deposits
-    return this.buildPaycheckEntries(paycheckAssignments, startingBalance, maxBudgetRemaining, goals, minCashOnHand, minSavingsPerPaycheck);
+    return bestPaychecks;
+  }
+
+  private buildGoalReservePerPaycheck(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    goals: SavingsGoal[]
+  ): number[] {
+    const reserves = new Array(assignments.length).fill(0);
+    if (goals.length === 0) {
+      return reserves;
+    }
+
+    const requirements = this.calculateGoalRequirementsPerPaycheck(goals, assignments);
+
+    for (let i = 0; i < assignments.length; i++) {
+      const paycheckDate = assignments[i].date;
+      for (const goal of goals) {
+        if (goal.targetAmount - goal.alreadySaved <= 0) {
+          continue;
+        }
+        const goalDate = parseISO(goal.targetDate);
+        if (isAfter(paycheckDate, goalDate)) {
+          continue;
+        }
+        reserves[i] += requirements.get(goal.id) ?? 0;
+      }
+    }
+
+    return reserves;
   }
 
   // Type for rebalance helper functions (passed to phase methods)
   private createRebalanceHelpers(
     assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
-    lockedBills: Set<string> = new Set()
+    lockedBills: Set<string> = new Set(),
+    poolOptions: {
+      minCashOnHand: number;
+      minSavingsPerPaycheck: number;
+      goalReservePerPaycheck: number[];
+    },
+    strategy: RebalanceStrategy = 'deficit_killer'
   ) {
-    const getBalance = (index: number): number => {
-      const income = assignments[index].incomes.reduce((sum, inc) => sum + inc.amount, 0);
-      const bills = assignments[index].bills
+    const { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck } = poolOptions;
+
+    const getBillTotal = (index: number): number =>
+      assignments[index].bills
         .filter(b => !b.isUnpayable)
         .reduce((sum, bill) => sum + bill.amount, 0);
-      return income - bills;
+
+    const getIncome = (index: number): number =>
+      assignments[index].incomes.reduce((sum, inc) => sum + inc.amount, 0);
+
+    const getBalance = (index: number): number => getIncome(index) - getBillTotal(index);
+
+    /** Income minus bills and all three-pool commitments for this paycheck silo. */
+    const getAvailableAfterCommitments = (index: number): number => {
+      const goalReserve = goalReservePerPaycheck[index] ?? 0;
+      return (
+        getIncome(index) -
+        getBillTotal(index) -
+        minCashOnHand -
+        minSavingsPerPaycheck -
+        goalReserve
+      );
     };
 
     const getSurplus = (index: number): number => {
-      return Math.max(0, getBalance(index) - MIN_BREATHING_ROOM);
+      return Math.max(0, getAvailableAfterCommitments(index));
     };
 
     const getDeficit = (index: number): number => {
-      return Math.max(0, MIN_BREATHING_ROOM - getBalance(index));
+      return Math.max(0, -getAvailableAfterCommitments(index));
     };
 
     const getTotalDeficit = (): number => {
@@ -701,13 +911,31 @@ export class SchedulerService {
     };
 
     const getMovableBills = (index: number): ProjectedBill[] => {
-      return [...assignments[index].bills]
-        .filter(b => !b.isIncomeAttached && !b.isUnpayable)
-        .sort((a, b) => {
+      const bills = [...assignments[index].bills].filter(
+        (b) => !b.isIncomeAttached && !b.isUnpayable
+      );
+
+      if (strategy === 'prepay_minimizer') {
+        return bills.sort((a, b) => {
+          const daysEarlyA = differenceInDays(a.date, assignments[index].date);
+          const daysEarlyB = differenceInDays(b.date, assignments[index].date);
+          return daysEarlyA - daysEarlyB;
+        });
+      }
+
+      if (strategy === 'goal_guardian') {
+        return bills.sort((a, b) => {
           const priorityDiff = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
           if (priorityDiff !== 0) return priorityDiff;
-          return b.amount - a.amount;
+          return a.amount - b.amount;
         });
+      }
+
+      return bills.sort((a, b) => {
+        const priorityDiff = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        return b.amount - a.amount;
+      });
     };
 
     return { getBalance, getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills };
@@ -879,7 +1107,8 @@ export class SchedulerService {
 
   private rebalancePhase4_EvenOut(
     assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
-    helpers: ReturnType<typeof this.createRebalanceHelpers>
+    helpers: ReturnType<typeof this.createRebalanceHelpers>,
+    minCashOnHand: number
   ): void {
     const { getBalance, getSurplus, moveBill, getMovableBills } = helpers;
     let maxPasses = 50;
@@ -892,12 +1121,12 @@ export class SchedulerService {
       for (let i = 1; i < assignments.length; i++) {
         const balance = getBalance(i);
         
-        if (balance >= MIN_BREATHING_ROOM && balance < MIN_BREATHING_ROOM * 3) {
+        if (balance >= minCashOnHand && balance < minCashOnHand * 3) {
           const movableBills = getMovableBills(i);
 
           for (const bill of movableBills) {
             for (let j = i - 1; j >= 0; j--) {
-              if (getSurplus(j) >= bill.amount + MIN_BREATHING_ROOM) {
+              if (getSurplus(j) >= bill.amount + minCashOnHand) {
                 if (moveBill(i, j, bill)) {
                   madeProgress = true;
                   break;
@@ -910,6 +1139,156 @@ export class SchedulerService {
         if (madeProgress) break;
       }
     }
+  }
+
+  private rebalanceBacktrackSearch(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    helpers: ReturnType<typeof this.createRebalanceHelpers>,
+    maxDepth = 4
+  ): void {
+    const { getTotalDeficit, getDeficit, getSurplus, moveBill, getMovableBills } = helpers;
+
+    for (let depth = 0; depth < maxDepth && getTotalDeficit() > 0; depth++) {
+      let madeProgress = false;
+
+      for (let i = assignments.length - 1; i >= 0; i--) {
+        if (getDeficit(i) <= 0) continue;
+
+        for (const bill of getMovableBills(i)) {
+          for (let j = i - 1; j >= 0; j--) {
+            if (getSurplus(j) >= bill.amount && moveBill(i, j, bill)) {
+              madeProgress = true;
+              break;
+            }
+          }
+          if (getDeficit(i) === 0) break;
+        }
+        if (madeProgress) break;
+      }
+
+      if (!madeProgress) break;
+    }
+  }
+
+  private rebalanceMicroSolver(
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    helpers: ReturnType<typeof this.createRebalanceHelpers>
+  ): void {
+    const { getDeficit, getTotalDeficit, getSurplus, moveBill, getMovableBills } = helpers;
+
+    if (getTotalDeficit() <= 0) {
+      return;
+    }
+
+    let madeProgress = true;
+    while (madeProgress && getTotalDeficit() > 0) {
+      madeProgress = false;
+
+      for (let i = assignments.length - 1; i >= 0; i--) {
+        const deficitAmount = getDeficit(i);
+        if (deficitAmount <= 0) continue;
+
+        const movableBills = getMovableBills(i);
+        if (movableBills.length === 0) continue;
+
+        const earlierPaychecks = assignments.slice(0, i).map((assignment, index) => ({
+          index,
+          dateMs: assignment.date.getTime(),
+          surplus: getSurplus(index),
+        }));
+
+        const solverBills = movableBills.map((bill) => ({
+          key: this.billOccurrenceKey(bill.billId, bill.date),
+          amount: bill.amount,
+          dueDateMs: bill.date.getTime(),
+        }));
+
+        const plan = solvePaycheckDeficit(
+          i,
+          deficitAmount,
+          earlierPaychecks,
+          solverBills,
+          MAX_PREPAY_DAYS,
+          MICRO_SOLVER_MAX_BILLS
+        );
+
+        if (!plan || plan.moves.length === 0) {
+          continue;
+        }
+
+        const billByKey = new Map(
+          movableBills.map((bill) => [this.billOccurrenceKey(bill.billId, bill.date), bill])
+        );
+
+        for (const move of plan.moves) {
+          const bill = billByKey.get(move.billKey);
+          if (bill && moveBill(i, move.toIndex, bill)) {
+            madeProgress = true;
+          }
+        }
+      }
+    }
+  }
+
+  private diagnoseUnfundableReason(
+    paycheckIndex: number,
+    bill: ProjectedBill,
+    assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
+    lockedBills: Set<string>,
+    minCashOnHand: number,
+    minSavingsPerPaycheck: number,
+    goalReservePerPaycheck: number[]
+  ): UnfundableReason {
+    const income = assignments[paycheckIndex].incomes.reduce((sum, inc) => sum + inc.amount, 0);
+    const billTotal = assignments[paycheckIndex].bills
+      .filter((b) => !b.isUnpayable)
+      .reduce((sum, b) => sum + b.amount, 0);
+    const goalReserve = goalReservePerPaycheck[paycheckIndex] ?? 0;
+
+    if (income < billTotal + minCashOnHand + minSavingsPerPaycheck + goalReserve) {
+      if (goalReserve > 0 && income >= billTotal + minCashOnHand + minSavingsPerPaycheck) {
+        return 'goal_reserve_conflict';
+      }
+      return 'insufficient_income_this_paycheck';
+    }
+
+    let hasEligibleEarlier = false;
+    let hasUnlockedEligibleMove = false;
+    const billKey = this.billOccurrenceKey(bill.billId, bill.date);
+
+    for (let j = paycheckIndex - 1; j >= 0; j--) {
+      const paycheckDate = assignments[j].date;
+      if (isAfter(paycheckDate, bill.date)) continue;
+      const daysEarly = differenceInDays(bill.date, paycheckDate);
+      if (daysEarly > MAX_PREPAY_DAYS) continue;
+
+      const targetIncome = assignments[j].incomes.reduce((sum, inc) => sum + inc.amount, 0);
+      const targetBills = assignments[j].bills
+        .filter((b) => !b.isUnpayable)
+        .reduce((sum, b) => sum + b.amount, 0);
+      const targetGoalReserve = goalReservePerPaycheck[j] ?? 0;
+      const headroom =
+        targetIncome -
+        targetBills -
+        minCashOnHand -
+        minSavingsPerPaycheck -
+        targetGoalReserve;
+
+      if (headroom >= bill.amount) {
+        hasEligibleEarlier = true;
+        if (!lockedBills.has(billKey) && !bill.isIncomeAttached) {
+          hasUnlockedEligibleMove = true;
+        }
+      }
+    }
+
+    if (!hasEligibleEarlier) {
+      return 'no_eligible_earlier_paycheck';
+    }
+    if (!hasUnlockedEligibleMove) {
+      return 'all_movable_bills_locked';
+    }
+    return 'insufficient_income_this_paycheck';
   }
 
   private rebalanceFinalCleanup(
@@ -936,10 +1315,15 @@ export class SchedulerService {
 
   private rebalanceBills(
     assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
-    _startingBalance: number,
-    lockedBills: Set<string> = new Set()
+    lockedBills: Set<string> = new Set(),
+    goals: SavingsGoal[] = [],
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0,
+    strategy: RebalanceStrategy = 'deficit_killer'
   ): void {
-    const helpers = this.createRebalanceHelpers(assignments, lockedBills);
+    const goalReservePerPaycheck = this.buildGoalReservePerPaycheck(assignments, goals);
+    const poolOptions = { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck };
+    const helpers = this.createRebalanceHelpers(assignments, lockedBills, poolOptions, strategy);
     
     // Phase 1: Direct moves - move bills from deficit to surplus paychecks
     this.rebalancePhase1_DirectMoves(assignments, helpers);
@@ -951,7 +1335,13 @@ export class SchedulerService {
     this.rebalancePhase3_DeepCascade(assignments, helpers);
     
     // Phase 4: Even out paychecks for better breathing room
-    this.rebalancePhase4_EvenOut(assignments, helpers);
+    this.rebalancePhase4_EvenOut(assignments, helpers, minCashOnHand);
+
+    // Phase 5: Bounded backtrack search when deficits remain
+    this.rebalanceBacktrackSearch(assignments, helpers);
+
+    // Phase 6: Exact micro-solver for stubborn single-paycheck deficits
+    this.rebalanceMicroSolver(assignments, helpers);
     
     // Final cleanup: deduplicate and sort
     this.rebalanceFinalCleanup(assignments);
@@ -959,9 +1349,15 @@ export class SchedulerService {
 
   private applyFundingPriority(
     assignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[],
-    lockedBills: Set<string> = new Set()
+    lockedBills: Set<string> = new Set(),
+    goals: SavingsGoal[] = [],
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0,
+    strategy: RebalanceStrategy = 'deficit_killer'
   ): void {
-    const helpers = this.createRebalanceHelpers(assignments, lockedBills);
+    const goalReservePerPaycheck = this.buildGoalReservePerPaycheck(assignments, goals);
+    const poolOptions = { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck };
+    const helpers = this.createRebalanceHelpers(assignments, lockedBills, poolOptions, strategy);
     const { getDeficit, getSurplus, moveBill, getMovableBills } = helpers;
 
     // Retry prepay moves after rebalance
@@ -1001,6 +1397,15 @@ export class SchedulerService {
             b => b.priority === tier && !b.isUnpayable && !b.isIncomeAttached
           );
           if (!billToDrop) break;
+          billToDrop.unfundableReason = this.diagnoseUnfundableReason(
+            i,
+            billToDrop,
+            assignments,
+            lockedBills,
+            minCashOnHand,
+            minSavingsPerPaycheck,
+            goalReservePerPaycheck
+          );
           billToDrop.isUnpayable = true;
         }
       }
@@ -1167,6 +1572,7 @@ export class SchedulerService {
           billDate: format(bill.date, 'yyyy-MM-dd'),
           isIncomeAttached: bill.isIncomeAttached,
           isUnpayable: bill.isUnpayable,
+          unfundableReason: bill.unfundableReason,
         })),
         totalBills: totalBillsAmount,
         goalDeposits,
@@ -1880,6 +2286,7 @@ export class SchedulerService {
             billDueDate: bill.billDate,
             reason: `Skip this ${bill.priority}-priority bill for this cycle`,
             impact: bill.amount,
+            reasonCode: bill.unfundableReason,
           });
 
           proposedBillMoves.add(billKey);

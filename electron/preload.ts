@@ -110,8 +110,9 @@ const api = {
   },
 
   schedule: {
-    optimize: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => 
-      ipcRenderer.invoke('schedule:optimize', startDate, months, startingBalance, overlay),
+    /** Full schedule: project incomes/bills, rebalance, allocate goals, attach reconciliation analysis. */
+    build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
+      ipcRenderer.invoke('schedule:build', startDate, months, startingBalance, overlay),
   },
 
   reconciliation: {

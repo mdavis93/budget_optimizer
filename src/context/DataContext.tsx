@@ -219,7 +219,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const overlay = draft.buildDraftOverlay();
-      const result = await window.electronAPI.schedule.optimize(
+      const result = await window.electronAPI.schedule.build(
         startDate,
         months,
         startingBalance,

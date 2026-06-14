@@ -8,6 +8,15 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/** Applied to dist/index.html when mode === 'production'. Dev keeps relaxed CSP in index.html for HMR. */
+export const PRODUCTION_CSP =
+  "default-src 'self'; " +
+  "script-src 'self'; " +
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+  "img-src 'self' data:; " +
+  "font-src 'self' https://fonts.gstatic.com; " +
+  "connect-src 'self';";
+
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
@@ -16,8 +25,8 @@ export default defineConfig(({ mode }) => ({
       transformIndexHtml(html) {
         if (mode === 'production') {
           return html.replace(
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-            "script-src 'self' 'unsafe-inline'"
+            /<meta http-equiv="Content-Security-Policy" content="[^"]*">/,
+            `<meta http-equiv="Content-Security-Policy" content="${PRODUCTION_CSP}">`
           );
         }
         return html;

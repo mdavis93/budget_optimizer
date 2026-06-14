@@ -113,6 +113,72 @@ export function assertValid(result: ValidationResult, context: string): void {
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ID_REGEX = /^[a-zA-Z0-9-]{8,64}$/;
 
+export interface ReconciliationFixInput {
+  id: string;
+  type: 'move_bill' | 'skip_bill';
+  billId: string;
+  billDueDate: string;
+  fromPaycheckDate: string;
+  toPaycheckDate?: string;
+}
+
+export function validateReconciliationFix(fix: ReconciliationFixInput): ValidationResult {
+  const errors: string[] = [];
+
+  if (!fix.id || typeof fix.id !== 'string' || fix.id.length > 128) {
+    errors.push('Fix id is required and must be 128 characters or less');
+  }
+
+  if (fix.type !== 'move_bill' && fix.type !== 'skip_bill') {
+    errors.push('Fix type must be move_bill or skip_bill');
+  }
+
+  if (!ID_REGEX.test(fix.billId)) {
+    errors.push('Invalid billId');
+  }
+
+  if (!DATE_REGEX.test(fix.billDueDate)) {
+    errors.push('Invalid billDueDate');
+  }
+
+  if (!DATE_REGEX.test(fix.fromPaycheckDate)) {
+    errors.push('Invalid fromPaycheckDate');
+  }
+
+  if (fix.type === 'move_bill') {
+    if (!fix.toPaycheckDate || !DATE_REGEX.test(fix.toPaycheckDate)) {
+      errors.push('move_bill requires a valid toPaycheckDate');
+    }
+  }
+
+  if (fix.type === 'skip_bill' && fix.toPaycheckDate !== undefined && !DATE_REGEX.test(fix.toPaycheckDate)) {
+    errors.push('Invalid toPaycheckDate');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateReconciliationFixes(fixes: ReconciliationFixInput[]): ValidationResult {
+  const errors: string[] = [];
+
+  if (!Array.isArray(fixes)) {
+    return { valid: false, errors: ['Fixes must be an array'] };
+  }
+
+  if (fixes.length > 100) {
+    errors.push('Too many fixes in one request');
+  }
+
+  fixes.forEach((fix, index) => {
+    const result = validateReconciliationFix(fix);
+    if (!result.valid) {
+      errors.push(`Fix[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  return { valid: errors.length === 0, errors };
+}
+
 export function validateGoal(goal: {
   name: string;
   targetAmount: number;

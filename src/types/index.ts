@@ -161,6 +161,12 @@ export interface ScheduleEntry {
   recommendation?: string;
 }
 
+export type UnfundableReason =
+  | 'no_eligible_earlier_paycheck'
+  | 'all_movable_bills_locked'
+  | 'insufficient_income_this_paycheck'
+  | 'goal_reserve_conflict';
+
 export interface PaycheckBill {
   billId: string;
   creditorName: string;
@@ -171,6 +177,7 @@ export interface PaycheckBill {
   billDate: string; // The projected due date for this bill occurrence
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  unfundableReason?: UnfundableReason;
 }
 
 export interface GoalDeposit {
@@ -262,6 +269,7 @@ export interface ProposedFix {
   billDueDate: string;
   reason: string;
   impact: number;
+  reasonCode?: UnfundableReason;
 }
 
 export interface ShortfallDetail {

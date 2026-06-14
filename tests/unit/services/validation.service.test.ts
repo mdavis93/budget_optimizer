@@ -5,6 +5,8 @@ import {
   validateDebt,
   validateBudget,
   validateDraftOverlay,
+  validateReconciliationFix,
+  validateReconciliationFixes,
 } from '../../../electron/services/validation.service';
 
 describe('validation.service', () => {
@@ -45,5 +47,32 @@ describe('validation.service', () => {
     });
 
     expect(result.valid).toBe(false);
+  });
+
+  it('validates reconciliation fix payloads', () => {
+    expect(validateReconciliationFix({
+      id: 'fix-1',
+      type: 'move_bill',
+      billId: 'draft-12345678-abcd',
+      billDueDate: '2026-03-15',
+      fromPaycheckDate: '2026-03-01',
+      toPaycheckDate: '2026-02-15',
+    }).valid).toBe(true);
+
+    expect(validateReconciliationFix({
+      id: 'fix-2',
+      type: 'skip_bill',
+      billId: 'draft-12345678-abcd',
+      billDueDate: '2026-03-15',
+      fromPaycheckDate: '2026-03-01',
+    }).valid).toBe(true);
+
+    expect(validateReconciliationFixes([{
+      id: 'fix-bad',
+      type: 'move_bill',
+      billId: 'bad',
+      billDueDate: '2026-03-15',
+      fromPaycheckDate: '2026-03-01',
+    }]).valid).toBe(false);
   });
 });

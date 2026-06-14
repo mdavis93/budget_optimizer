@@ -565,6 +565,60 @@ describe('SchedulerService', () => {
           expect(keys.length).toBe(new Set(keys).size);
         }
       });
+
+      it('rebalance reserves min cash, savings, and goal headroom per paycheck silo', () => {
+        const biweeklyIncome: Income = {
+          id: 'income-biweekly',
+          sourceName: 'Salary',
+          amount: 1200,
+          cadence: 'biweekly',
+          startDate: '2026-01-15',
+          isActive: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        };
+
+        const midMonthBill: Bill = {
+          id: 'bill-mid',
+          creditorName: 'Mid Bill',
+          budgetedAmount: 900,
+          dueDay: 20,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        };
+
+        const goal: SavingsGoal = {
+          id: 'goal-1',
+          budgetId: 'budget-1',
+          name: 'Emergency',
+          targetAmount: 1200,
+          targetDate: '2026-06-30',
+          alreadySaved: 0,
+          priority: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        };
+
+        const schedule = scheduler.generateSchedule(
+          [biweeklyIncome],
+          [midMonthBill],
+          '2026-01-01',
+          2,
+          0,
+          new Set(),
+          new Map(),
+          250,
+          [goal],
+          100,
+          50
+        );
+
+        const jan15 = schedule.paychecks.find((p) => p.date === '2026-01-15');
+        expect(jan15).toBeDefined();
+        expect(jan15!.isShortfall).toBe(false);
+        expect(jan15!.totalGoalDeposits).toBeGreaterThan(0);
+      });
     });
 
     it('applies incomeOverrides to projected paycheck amounts', () => {
@@ -777,6 +831,8 @@ describe('SchedulerService', () => {
       expect(lowOnPaycheck?.isUnpayable).toBe(true);
       expect(normalOnPaycheck?.isUnpayable).toBe(true);
       expect(criticalOnPaycheck?.isUnpayable).toBeFalsy();
+      expect(lowOnPaycheck?.unfundableReason).toBe('insufficient_income_this_paycheck');
+      expect(normalOnPaycheck?.unfundableReason).toBe('insufficient_income_this_paycheck');
       expect(junPaycheck!.totalBills).toBe(400);
     });
 
@@ -1949,6 +2005,108 @@ describe('SchedulerService', () => {
             expect(moveIndex).toBeLessThan(skipIndex);
           }
         }
+      }
+    });
+
+    it('marks triaged bills with structured unfundable reason codes', () => {
+      const monthlyIncome: Income = {
+        ...biweeklyIncome,
+        cadence: 'monthly',
+        startDate: '2026-06-01',
+        amount: 500,
+      };
+
+      const criticalBill: Bill = {
+        id: 'bill-critical',
+        creditorName: 'Critical',
+        budgetedAmount: 400,
+        dueDay: 1,
+        isRecurring: false,
+        priority: 'critical',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const lowBill: Bill = {
+        id: 'bill-low',
+        creditorName: 'Low',
+        budgetedAmount: 50,
+        dueDay: 10,
+        isRecurring: false,
+        priority: 'low',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        [criticalBill, lowBill],
+        '2026-06-01',
+        1,
+        0
+      );
+
+      const dropped = schedule.paychecks
+        .flatMap((p) => p.bills)
+        .find((b) => b.billId === 'bill-low' && b.isUnpayable);
+
+      expect(dropped?.unfundableReason).toBeDefined();
+      expect([
+        'no_eligible_earlier_paycheck',
+        'insufficient_income_this_paycheck',
+        'all_movable_bills_locked',
+        'goal_reserve_conflict',
+      ]).toContain(dropped?.unfundableReason);
+    });
+
+    it('analyzeAndProposeFixes attaches reasonCode to skip proposals from unfundable bills', () => {
+      const monthlyIncome: Income = {
+        ...biweeklyIncome,
+        cadence: 'monthly',
+        startDate: '2026-06-01',
+        amount: 600,
+      };
+
+      const criticalBill: Bill = {
+        id: 'bill-critical',
+        creditorName: 'Critical',
+        budgetedAmount: 500,
+        dueDay: 1,
+        isRecurring: false,
+        priority: 'critical',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const optionalBill: Bill = {
+        id: 'bill-optional',
+        creditorName: 'Optional',
+        budgetedAmount: 200,
+        dueDay: 15,
+        isRecurring: false,
+        priority: 'low',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        [criticalBill, optionalBill],
+        '2026-06-01',
+        1,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0
+      );
+
+      const report = scheduler.analyzeAndProposeFixes(schedule);
+      const skipFix = report.proposedFixes.find((f) => f.type === 'skip_bill');
+      if (skipFix) {
+        expect(skipFix.reasonCode).toBeDefined();
       }
     });
   });

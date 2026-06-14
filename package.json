@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build && electron-builder",
     "build:vite": "vite build",
+    "verify:csp": "node scripts/verify-production-csp.cjs",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:reinstall": "node scripts/fix-electron-install.cjs",

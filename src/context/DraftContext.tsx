@@ -280,7 +280,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     if (!isDraftMode) return;
 
     setDraft((prev) => {
-      let next = { ...prev };
+      const next = { ...prev };
       if (domain === 'income') next.incomes = structuredClone(committed.incomes);
       if (domain === 'bills') next.bills = structuredClone(committed.bills);
       if (domain === 'debts') next.debts = structuredClone(committed.debts);
@@ -607,7 +607,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     if (isQuickBudget) return false;
     if (isDraftMode) {
       updateDraft((prev) => {
-        let next = { ...prev };
+        const next = { ...prev };
         for (const fix of fixes) {
           if (fix.type === 'move_bill' && fix.toPaycheckDate) {
             next.billAssignments = [

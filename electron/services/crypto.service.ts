@@ -232,12 +232,12 @@ export class CryptoService {
     return words.join(' ');
   }
 
-  deriveKeyFromRecovery(recoveryKey: string, salt?: string): Buffer {
+  deriveKeyFromRecovery(recoveryKey: string, salt: string): Buffer {
     const normalizedKey = recoveryKey.toLowerCase().trim().split(/\s+/).join(' ');
-    // Use provided salt or generate a deterministic one from the recovery key for backwards compatibility
-    const saltBuffer = salt 
-      ? Buffer.from(salt, 'hex')
-      : Buffer.from('budget-optimizer-recovery-v1'); // Fallback for old accounts
+    if (!salt || !/^[0-9a-f]{64}$/i.test(salt)) {
+      throw new Error('Recovery salt is required');
+    }
+    const saltBuffer = Buffer.from(salt, 'hex');
     return crypto.pbkdf2Sync(
       normalizedKey,
       saltBuffer,

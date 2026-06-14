@@ -67,6 +67,12 @@ interface BillInput {
   isIncomeAttached?: boolean;
 }
 
+type UnfundableReason =
+  | 'no_eligible_earlier_paycheck'
+  | 'all_movable_bills_locked'
+  | 'insufficient_income_this_paycheck'
+  | 'goal_reserve_conflict';
+
 interface PaycheckBillData {
   billId: string;
   creditorName: string;
@@ -77,6 +83,7 @@ interface PaycheckBillData {
   billDate: string;
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  unfundableReason?: UnfundableReason;
 }
 
 interface GoalDepositData {
@@ -114,6 +121,7 @@ interface ProposedFix {
   billDueDate: string;
   reason: string;
   impact: number;
+  reasonCode?: UnfundableReason;
 }
 
 interface ShortfallDetail {
@@ -371,7 +379,7 @@ interface ElectronAPI {
   };
 
   schedule: {
-    optimize: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlay) => Promise<ApiResult<ScheduleData>>;
+    build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlay) => Promise<ApiResult<ScheduleData>>;
   };
 
   reconciliation: {

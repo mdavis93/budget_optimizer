@@ -145,7 +145,7 @@ export async function persistIncomeDomain(
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
-  let nextIncomes = applyIdMap(draft.incomes, idMap);
+  const nextIncomes = applyIdMap(draft.incomes, idMap);
   let nextDraft = { ...draft, incomes: nextIncomes };
   const nextCommitted = { ...committed, incomes: structuredClone(nextIncomes) };
 
