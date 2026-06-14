@@ -15,12 +15,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["./src/*"],
       "@electron/*": ["./electron/*"]
-    },
-    "baseUrl": "."
+    }
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
