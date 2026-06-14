@@ -14,9 +14,18 @@ vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Line: () => <div>Line</div>,
-  XAxis: () => <div>XAxis</div>,
-  YAxis: () => <div>YAxis</div>,
-  Tooltip: () => <div>Tooltip</div>,
+  XAxis: ({ tickFormatter }: { tickFormatter?: (value: string) => string }) => {
+    tickFormatter?.('2026-01-15');
+    return <div>XAxis</div>;
+  },
+  YAxis: ({ tickFormatter }: { tickFormatter?: (value: number) => string }) => {
+    tickFormatter?.(1500);
+    return <div>YAxis</div>;
+  },
+  Tooltip: ({ formatter }: { formatter?: (value: number) => string }) => {
+    formatter?.(2000);
+    return <div>Tooltip</div>;
+  },
   ReferenceLine: () => <div>ReferenceLine</div>,
 }));
 

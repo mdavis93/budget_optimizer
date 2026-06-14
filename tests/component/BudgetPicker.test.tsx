@@ -78,5 +78,26 @@ describe('BudgetPicker', () => {
         expect(onBudgetSelected).toHaveBeenCalled();
       });
     });
+
+    it('cancels create-budget form without creating', () => {
+      renderWithRouter(<BudgetPicker onBudgetSelected={onBudgetSelected} />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: /Create New Budget/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(createBudget).not.toHaveBeenCalled();
+    });
+
+    it('shows create actions when no budgets exist', () => {
+      mockUseBudget.mockReturnValue({
+        budgets: [],
+        loadBudgets,
+        isLoading: false,
+        switchBudget,
+        startQuickBudget,
+        createBudget,
+      });
+      renderWithRouter(<BudgetPicker onBudgetSelected={onBudgetSelected} />, { mockAPI });
+      expect(screen.getByRole('button', { name: /Create New Budget/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Quick Budget/i })).toBeInTheDocument();
+    });
   });
 });

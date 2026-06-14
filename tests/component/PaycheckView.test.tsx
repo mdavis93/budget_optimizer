@@ -144,5 +144,49 @@ describe('PaycheckView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
       expect(props.onClearIncomeOverride).toHaveBeenCalledWith('inc-1', expandedDate);
     });
+
+    it('renders shortfall styling and unpayable bill indicators', () => {
+      const props = baseProps();
+      const expandedDate = '2026-01-15';
+      renderWithRouter(
+        <PaycheckView
+          {...props}
+          expandedPaychecks={new Set([expandedDate])}
+          paychecks={[
+            createMockPaycheck({
+              date: expandedDate,
+              isShortfall: true,
+              budgetRemaining: -50,
+              bills: [
+                {
+                  billId: 'bill-1',
+                  creditorName: 'Rent',
+                  amount: 900,
+                  dueDay: 1,
+                  billDate: '2026-01-01',
+                  priority: 'critical',
+                  isIncomeAttached: false,
+                  isUnpayable: true,
+                  unfundableReason: 'insufficient_funds',
+                },
+                {
+                  billId: 'bill-2',
+                  creditorName: '401k',
+                  amount: 100,
+                  dueDay: 15,
+                  billDate: '2026-01-15',
+                  priority: 'normal',
+                  isIncomeAttached: true,
+                },
+              ],
+            }),
+          ]}
+        />
+      );
+
+      expect(screen.getByText('Unpayable')).toBeInTheDocument();
+      expect(screen.getByText('Per Paycheck')).toBeInTheDocument();
+      expect(screen.getAllByText('$-50.00').length).toBeGreaterThan(0);
+    });
   });
 });

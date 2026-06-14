@@ -81,5 +81,33 @@ describe('Layout', () => {
       await user.click(screen.getByRole('button', { name: /Lock App/i }));
       expect(lock).toHaveBeenCalled();
     });
+
+    it('shows quick budget badge and dirty-domain indicators', async () => {
+      mockUseBudget.mockReturnValue({
+        currentBudget: { id: 'budget-1', name: 'Family Budget' },
+        isQuickBudget: true,
+      });
+      mockUseDraft.mockReturnValue({
+        isDraftMode: true,
+        isDomainDirty: vi.fn((domain: string) => domain === 'income' || domain === 'budget'),
+      });
+
+      renderWithRouter(<Layout />, { route: '/income', mockAPI });
+      expect(screen.getByText('Quick Budget')).toBeInTheDocument();
+      expect(screen.getAllByLabelText('Unsaved changes').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('pings activity on user input after throttle window', async () => {
+      vi.useFakeTimers();
+      renderWithRouter(<Layout />, { route: '/dashboard', mockAPI });
+
+      window.dispatchEvent(new MouseEvent('mousedown'));
+      expect(mockAPI.auth.activityPing).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(31_000);
+      window.dispatchEvent(new KeyboardEvent('keydown'));
+      expect(mockAPI.auth.activityPing).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
   });
 });

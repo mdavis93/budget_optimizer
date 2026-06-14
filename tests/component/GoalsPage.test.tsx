@@ -145,9 +145,7 @@ describe('GoalsPage', () => {
       });
 
       await user.click(screen.getByRole('button', { name: /Edit Emergency Fund/i }));
-      const editName = screen.getByLabelText('Goal Name');
-      await user.clear(editName);
-      await user.type(editName, 'Emergency Fund Plus');
+      fireEvent.change(screen.getByLabelText('Goal Name'), { target: { value: 'Emergency Fund Plus' } });
       await user.click(screen.getByRole('button', { name: /Save Changes/i }));
       await waitFor(() => {
         expect(baseDraft.updateGoal).toHaveBeenCalledWith(
@@ -168,6 +166,71 @@ describe('GoalsPage', () => {
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       await user.click(screen.getByRole('button', { name: 'panel-edit' }));
+    });
+
+    it('updates priority and already saved fields when editing', async () => {
+      const user = userEvent.setup();
+      render(<GoalsPage />);
+      await user.click(await screen.findByRole('button', { name: /Edit Emergency Fund/i }));
+
+      fireEvent.change(screen.getByLabelText('Already Saved'), { target: { value: '500' } });
+      await user.selectOptions(screen.getByLabelText('Priority'), '2');
+      await user.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(baseDraft.updateGoal).toHaveBeenCalledWith(
+          'goal-1',
+          expect.objectContaining({ alreadySaved: 500, priority: 2 })
+        );
+      });
+    });
+
+    it('navigates to schedule from achievability panel link', async () => {
+      const user = userEvent.setup();
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        getGoalProjections: vi.fn(async () => [
+          {
+            goalId: 'goal-1',
+            goalName: 'Emergency Fund',
+            targetAmount: 5000,
+            alreadySaved: 0,
+            remainingAmount: 5000,
+            targetDate: '2026-12-31',
+            paycheckCount: 20,
+            requiredPerPaycheck: 250,
+            adjustedRequiredPerPaycheck: 250,
+            availablePerPaycheck: 300,
+            actualAllocation: 5000,
+            achievableAmount: 5000,
+            achievabilityPercent: 100,
+            status: 'achievable',
+            suggestions: [],
+            isProjected: false,
+            avgAllocationPerPaycheck: 250,
+            marginPerPaycheck: 50,
+            paychecksToFullyFund: 18,
+            estimatedFundedDate: '2026-10-31',
+            beatsDeadlineByPaychecks: 2,
+            missesDeadlineByPaychecks: null,
+            scheduleHealth: { tightPaycheckCount: 0, shortfallCount: 0, savingsTotal: 1000 },
+          },
+        ]),
+      });
+
+      render(<GoalsPage />);
+      await user.click(await screen.findByRole('button', { name: 'go-to-schedule' }));
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/schedule?goalId=goal-1&paycheck=2026-10-31'
+      );
+    });
+
+    it('cancels delete confirmation without deleting', async () => {
+      const user = userEvent.setup();
+      render(<GoalsPage />);
+      await user.click(await screen.findByRole('button', { name: /Delete Emergency Fund/i }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(baseDraft.deleteGoal).not.toHaveBeenCalled();
     });
 
     it('uses quick-budget IPC create/update/delete handlers', async () => {

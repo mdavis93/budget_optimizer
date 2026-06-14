@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SummaryPage from '../../src/pages/SummaryPage';
@@ -22,9 +23,33 @@ vi.mock('recharts', () => {
     PieChart: Mock,
     Pie: Mock,
     Cell: Mock,
-    XAxis: Mock,
-    YAxis: Mock,
-    Tooltip: Mock,
+    XAxis: ({ tickFormatter }: { tickFormatter?: (value: number) => string }) => {
+      tickFormatter?.(1500);
+      return null;
+    },
+    YAxis: ({ tickFormatter }: { tickFormatter?: (value: number) => string }) => {
+      tickFormatter?.(2500);
+      return null;
+    },
+    Tooltip: ({
+      content,
+      formatter,
+    }: {
+      content?: React.ReactElement;
+      formatter?: (value: number, name: string) => [string, string];
+    }) => {
+      formatter?.(1200, 'income');
+      formatter?.(900, 'expenses');
+      formatter?.(500, 'total');
+      if (content && React.isValidElement(content)) {
+        return React.cloneElement(content, {
+          active: true,
+          payload: [{ payload: { total: 500, principal: 400, interest: 100 } }],
+          label: 'Jan',
+        });
+      }
+      return null;
+    },
     Legend: Mock,
   };
 });
@@ -130,6 +155,47 @@ describe('SummaryPage', () => {
       expect(screen.getByText('No data available')).toBeInTheDocument();
       expect(screen.getByText('No expense data available')).toBeInTheDocument();
       expect(screen.getByText('No savings data available')).toBeInTheDocument();
+    });
+
+    it('renders category breakdown and savings projection with APY interest', async () => {
+      generateSchedule.mockResolvedValue({
+        paychecks: [
+          {
+            date: '2026-01-15',
+            totalIncome: 2000,
+            totalBills: 1200,
+            budgetRemaining: 800,
+            savingsDeposit: 150,
+            totalSavings: 150,
+            bills: [
+              { category: 'Housing', amount: 900 },
+              { category: 'Food', amount: 300 },
+              { amount: 50 },
+            ],
+          },
+          {
+            date: '2026-02-15',
+            totalIncome: 2000,
+            totalBills: 1000,
+            budgetRemaining: 1000,
+            savingsDeposit: 200,
+            totalSavings: 350,
+            bills: [{ category: 'Housing', amount: 700 }],
+          },
+        ],
+        summary: {
+          totalIncome: 4000,
+          totalExpenses: 2200,
+          totalSavingsDeposits: 350,
+          finalSavingsBalance: 350,
+        },
+      });
+
+      renderWithRouter(<SummaryPage />, { mockAPI });
+      expect(await screen.findByText('Income vs Expenses')).toBeInTheDocument();
+      expect(screen.getByText('Housing')).toBeInTheDocument();
+      expect(screen.getByText('Food')).toBeInTheDocument();
+      expect(screen.getByText('Savings Projection')).toBeInTheDocument();
     });
   });
 });

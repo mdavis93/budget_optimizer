@@ -32,6 +32,10 @@ describe('SettingsPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAPI.auth.changePassword.mockResolvedValue({
+      success: true,
+      newRecoveryKey: 'NEW-RECOVERY-KEY-1234',
+    });
     mockUseTheme.mockReturnValue({ theme: 'system', setTheme });
     mockUseAuth.mockReturnValue({
       biometricAvailable: true,
@@ -126,17 +130,76 @@ describe('SettingsPage', () => {
       });
 
       await user.click(screen.getByRole('button', { name: 'Change' }));
-      await user.type(screen.getByLabelText('Current Password'), 'old-password');
-      await user.type(screen.getByLabelText('New Password'), 'new-password-123');
-      await user.type(screen.getByLabelText('Confirm New Password'), 'new-password-123');
+      fireEvent.change(screen.getByLabelText('Current Password'), { target: { value: 'old-password' } });
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'new-password-123' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'new-password-123' } });
       await user.click(screen.getByRole('button', { name: 'Change Password' }));
 
       await waitFor(() => {
         expect(mockAPI.auth.changePassword).toHaveBeenCalledWith('old-password', 'new-password-123');
       });
 
+      await user.click(screen.getByLabelText('I have saved my recovery key in a safe place'));
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      await waitFor(() => {
+        expect(mockAPI.auth.clearPendingRecoveryKey).toHaveBeenCalled();
+      });
+    });
+
+    it('shows change-password error when auth update fails', async () => {
+      const user = userEvent.setup();
+      mockAPI.auth.changePassword.mockResolvedValueOnce({ success: false, error: 'Wrong current password' });
+      renderWithRouter(<SettingsPage />, { mockAPI });
+
       await user.click(screen.getByRole('button', { name: 'Change' }));
-      await user.click(screen.getByRole('button', { name: /Close dialog/i }));
+      fireEvent.change(screen.getByLabelText('Current Password'), { target: { value: 'old-password' } });
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'new-password-123' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'new-password-123' } });
+      await user.click(screen.getByRole('button', { name: 'Change Password' }));
+
+      expect(await screen.findByText('Wrong current password')).toBeInTheDocument();
+    });
+
+    it('validates password form before calling auth IPC', async () => {
+      const user = userEvent.setup();
+      renderWithRouter(<SettingsPage />, { mockAPI });
+
+      await user.click(screen.getByRole('button', { name: 'Change' }));
+      const form = screen.getByRole('button', { name: 'Change Password' }).closest('form')!;
+      fireEvent.change(screen.getByLabelText('Current Password'), { target: { value: 'old-password' } });
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'short' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'short' } });
+      fireEvent.submit(form);
+      expect(await screen.findByText('New password must be at least 8 characters')).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'long-enough' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'different' } });
+      fireEvent.submit(form);
+      expect(await screen.findByText('Passwords do not match')).toBeInTheDocument();
+      expect(mockAPI.auth.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('routes budget field updates through draft context in draft mode', async () => {
+      const user = userEvent.setup();
+      mockUseDraft.mockReturnValue({
+        isDraftMode: true,
+        budgetFields: {
+          targetCashOnHand: 500,
+          minCashOnHand: 100,
+          minSavingsPerPaycheck: 50,
+        },
+        updateBudgetFields,
+      });
+
+      renderWithRouter(<SettingsPage />, { mockAPI });
+      const targetCash = screen.getByLabelText('Target Cash on Hand');
+      await user.clear(targetCash);
+      await user.type(targetCash, '700');
+
+      await waitFor(() => {
+        expect(updateBudgetFields).toHaveBeenCalledWith({ targetCashOnHand: 700 });
+      });
+      expect(updateBudget).not.toHaveBeenCalled();
     });
   });
 });

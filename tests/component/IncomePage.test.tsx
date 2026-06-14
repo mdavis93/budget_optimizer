@@ -91,5 +91,22 @@ describe('IncomePage', () => {
         expect(deleteIncome).toHaveBeenCalledWith('income-1');
       });
     });
+
+    it('updates cadence and active status when editing income', async () => {
+      const user = userEvent.setup();
+      render(<IncomePage />);
+
+      await user.click(screen.getByRole('button', { name: /Edit Primary Job/i }));
+      await user.selectOptions(screen.getByLabelText('Payment Frequency'), 'monthly');
+      await user.click(screen.getByText('Active Income Source').closest('div')!.querySelector('button')!);
+      await user.click(screen.getByRole('button', { name: 'Update Income' }));
+
+      await waitFor(() => {
+        expect(updateIncome).toHaveBeenCalledWith(
+          'income-1',
+          expect.objectContaining({ cadence: 'monthly', isActive: false })
+        );
+      });
+    });
   });
 });

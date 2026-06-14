@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BillsPage from '../../src/pages/BillsPage';
 import { createMockBill, createMockIncome } from '../mocks/electron-api.mock';
@@ -74,11 +74,11 @@ describe('BillsPage', () => {
       render(<BillsPage />);
 
       await user.click(screen.getByRole('button', { name: /Add Bill/i }));
-      await user.type(screen.getByLabelText('Creditor / Vendor Name'), 'Phone');
-      await user.type(screen.getByLabelText('Budgeted Amount'), '65');
+      fireEvent.change(screen.getByLabelText('Creditor / Vendor Name'), { target: { value: 'Phone' } });
+      fireEvent.change(screen.getByLabelText('Budgeted Amount'), { target: { value: '65' } });
       await user.click(screen.getByRole('button', { name: 'Per Paycheck' }));
       await user.selectOptions(screen.getByLabelText('Attach to Income Source'), 'inc-1');
-      await user.click(screen.getAllByRole('button', { name: 'Add Bill' })[1]);
+      await user.click(screen.getAllByRole('button', { name: 'Add Bill' }).at(-1)!);
 
       await waitFor(() => {
         expect(createBill).toHaveBeenCalledWith(
@@ -93,14 +93,14 @@ describe('BillsPage', () => {
       });
 
       await user.click(screen.getAllByRole('button', { name: /Add Bill/i })[0]);
-      await user.type(screen.getByLabelText('Creditor / Vendor Name'), 'Gym');
-      await user.type(screen.getByLabelText('Budgeted Amount'), '40');
+      fireEvent.change(screen.getByLabelText('Creditor / Vendor Name'), { target: { value: 'Gym' } });
+      fireEvent.change(screen.getByLabelText('Budgeted Amount'), { target: { value: '40' } });
       await user.selectOptions(screen.getByLabelText('Due Day of Month'), '15');
       await user.selectOptions(screen.getByLabelText(/Preferred Income Source \(Optional\)/i), 'inc-1');
       await user.selectOptions(screen.getByLabelText(/Category \(Optional\)/i), 'Healthcare');
       await user.click(screen.getByRole('button', { name: 'Critical' }));
       await user.click(screen.getByLabelText('Recurring monthly bill'));
-      await user.click(screen.getAllByRole('button', { name: 'Add Bill' })[1]);
+      await user.click(screen.getAllByRole('button', { name: 'Add Bill' }).at(-1)!);
 
       await waitFor(() => {
         expect(createBill).toHaveBeenCalledWith(

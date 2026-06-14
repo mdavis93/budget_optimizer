@@ -113,5 +113,29 @@ describe('LoginPage', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
       });
     });
+
+    it('shows auth error and toggles password visibility', async () => {
+      const user = userEvent.setup();
+      unlock.mockResolvedValue(false);
+      mockUseAuth.mockReturnValue({
+        unlock,
+        unlockWithBiometric,
+        biometricAvailable: false,
+        biometricEnabled: false,
+        error: 'Invalid password',
+        clearError,
+      });
+      renderWithRouter(<LoginPage />, { mockAPI });
+
+      expect(screen.getByText('Invalid password')).toBeInTheDocument();
+      const passwordInput = screen.getByLabelText('Master Password') as HTMLInputElement;
+      expect(passwordInput.type).toBe('password');
+      const toggleButton = passwordInput.parentElement?.querySelector('button');
+      expect(toggleButton).toBeTruthy();
+      await user.click(toggleButton!);
+      expect(passwordInput.type).toBe('text');
+      await user.click(toggleButton!);
+      expect(passwordInput.type).toBe('password');
+    });
   });
 });
