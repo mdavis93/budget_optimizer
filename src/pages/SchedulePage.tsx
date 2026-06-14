@@ -7,9 +7,17 @@ import { format, parseISO } from 'date-fns';
 import { PaycheckBill, ProposedFix } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '../components/schedule';
+import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
 
 type ViewMode = 'paycheck' | 'calendar';
+
+interface PendingAssignment {
+  billId: string;
+  billDueDate: string;
+  paycheckDate: string;
+}
 
 export default function SchedulePage() {
   const { 
@@ -32,6 +40,7 @@ export default function SchedulePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
   const [skippingBill, setSkippingBill] = useState<string | null>(null);
+  const [restoringBill, setRestoringBill] = useState<string | null>(null);
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
   const [savingIncomeKey, setSavingIncomeKey] = useState<string | null>(null);
@@ -40,6 +49,7 @@ export default function SchedulePage() {
   const [dismissedReconciliation, setDismissedReconciliation] = useState(false);
   const [isApplyingFixes, setIsApplyingFixes] = useState(false);
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
+  const [pendingAssignment, setPendingAssignment] = useState<PendingAssignment | null>(null);
 
   // Calculate total goal deposits from all paychecks
   const totalGoalDeposits = useMemo(() => {
@@ -157,6 +167,24 @@ export default function SchedulePage() {
     }
   }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
+  const handleRestoreBill = useCallback(async (billId: string, billDueDate: string) => {
+    setRestoringBill(`${billId}-${billDueDate}`);
+    try {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.billAssignments.remove(billId, billDueDate);
+        if (result.success) {
+          await draft.reloadSnapshot();
+        }
+      } else {
+        draft.removeBillAssignment(billId, billDueDate);
+      }
+    } catch {
+      // Error handling done through UI state
+    } finally {
+      setRestoringBill(null);
+    }
+  }, [isQuickBudget, draft]);
+
   const handleDragStart = useCallback((bill: PaycheckBill, sourcePaycheckDate: string) => {
     setDraggedBill({
       billId: bill.billId,
@@ -220,6 +248,33 @@ export default function SchedulePage() {
     }
   }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
 
+  const applyBillAssignment = useCallback(async (
+    billId: string,
+    billDueDate: string,
+    targetPaycheckDate: string
+  ) => {
+    setIsAssigning(true);
+    try {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.billAssignments.assign(
+          billId,
+          billDueDate,
+          targetPaycheckDate
+        );
+        if (result.success) {
+          await draft.reloadSnapshot();
+          generateSchedule(startDate, months, startingBalance);
+        }
+      } else {
+        draft.assignBill(billId, billDueDate, targetPaycheckDate);
+      }
+    } catch {
+      // Error handling done through UI state
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
+
   const handleDrop = useCallback(async (e: DragEvent, targetPaycheckDate: string) => {
     e.preventDefault();
     setDropTargetDate(null);
@@ -228,30 +283,27 @@ export default function SchedulePage() {
       return;
     }
 
-    setIsAssigning(true);
+    const { billId, billDate: billDueDate } = draggedBill;
 
-    try {
-      const billDueDate = draggedBill.billDate;
-      if (isQuickBudget) {
-        const result = await window.electronAPI.billAssignments.assign(
-          draggedBill.billId,
-          billDueDate,
-          targetPaycheckDate
-        );
-        if (result.success) {
-          await draft.reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance);
-        }
-      } else if (draft.assignBill(draggedBill.billId, billDueDate, targetPaycheckDate)) {
-        generateSchedule(startDate, months, startingBalance);
-      }
-    } catch {
-      // Error handling done through UI state
-    } finally {
+    if (needsAssignmentConfirmation(billDueDate, targetPaycheckDate)) {
+      setPendingAssignment({ billId, billDueDate, paycheckDate: targetPaycheckDate });
       setDraggedBill(null);
-      setIsAssigning(false);
+      return;
     }
-  }, [draggedBill, generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
+
+    await applyBillAssignment(billId, billDueDate, targetPaycheckDate);
+    setDraggedBill(null);
+  }, [draggedBill, applyBillAssignment]);
+
+  const handleConfirmAssignment = useCallback(async () => {
+    if (!pendingAssignment) return;
+    await applyBillAssignment(
+      pendingAssignment.billId,
+      pendingAssignment.billDueDate,
+      pendingAssignment.paycheckDate
+    );
+    setPendingAssignment(null);
+  }, [pendingAssignment, applyBillAssignment]);
 
   const togglePaycheck = useCallback((date: string) => {
     setExpandedPaychecks(prev => {
@@ -516,6 +568,8 @@ export default function SchedulePage() {
           maxBudgetRemaining={schedule?.maxBudgetRemaining || 250}
           onSkipBill={handleSkipBill}
           skippingBill={skippingBill}
+          onRestoreBill={handleRestoreBill}
+          restoringBill={restoringBill}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragOver={handleDragOver}
@@ -533,6 +587,20 @@ export default function SchedulePage() {
       ) : (
         <CalendarView paychecks={schedule?.paychecks || []} />
       )}
+
+      <ConfirmDialog
+        isOpen={pendingAssignment !== null}
+        onClose={() => setPendingAssignment(null)}
+        onConfirm={handleConfirmAssignment}
+        title="Unusual bill assignment"
+        message={
+          pendingAssignment
+            ? `This bill is due ${format(parseISO(pendingAssignment.billDueDate), 'MMM d, yyyy')} but assigned to ${format(parseISO(pendingAssignment.paycheckDate), 'MMM d, yyyy')}. Continue?`
+            : ''
+        }
+        confirmText="Continue"
+        variant="warning"
+      />
     </div>
   );
-} 
+}
