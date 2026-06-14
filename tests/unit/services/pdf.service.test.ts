@@ -85,15 +85,14 @@ describe('PdfService.generateHtml', () => {
       const destroy = vi.fn();
       const isDestroyed = vi.fn(() => false);
 
-      vi.mocked(BrowserWindow).mockImplementation(
-        () =>
-          ({
-            loadFile,
-            webContents: { printToPDF },
-            destroy,
-            isDestroyed,
-          }) as unknown as BrowserWindow
-      );
+      vi.mocked(BrowserWindow).mockImplementation(function () {
+        return {
+          loadFile,
+          webContents: { printToPDF },
+          destroy,
+          isDestroyed,
+        } as unknown as BrowserWindow;
+      });
 
       const result = await service.generatePdf(schedule, '/tmp/budget-report.pdf');
       expect(result).toEqual({ success: false, error: 'pdf failure' });
@@ -257,15 +256,14 @@ describe('PdfService.generateHtml', () => {
         throw new Error('cleanup failed');
       });
 
-      vi.mocked(BrowserWindow).mockImplementation(
-        () =>
-          ({
-            loadFile,
-            webContents: { printToPDF },
-            destroy,
-            isDestroyed,
-          }) as unknown as BrowserWindow
-      );
+      vi.mocked(BrowserWindow).mockImplementation(function () {
+        return {
+          loadFile,
+          webContents: { printToPDF },
+          destroy,
+          isDestroyed,
+        } as unknown as BrowserWindow;
+      });
 
       const result = await service.generatePdf(schedule, '/tmp/budget-report.pdf');
       expect(result).toEqual({ success: true });
@@ -282,15 +280,14 @@ describe('PdfService.generateHtml', () => {
       const unlinkSpy = vi.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
       const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
 
-      vi.mocked(BrowserWindow).mockImplementation(
-        () =>
-          ({
-            loadFile,
-            webContents: { printToPDF },
-            destroy,
-            isDestroyed,
-          }) as unknown as BrowserWindow
-      );
+      vi.mocked(BrowserWindow).mockImplementation(function () {
+        return {
+          loadFile,
+          webContents: { printToPDF },
+          destroy,
+          isDestroyed,
+        } as unknown as BrowserWindow;
+      });
 
       const result = await service.generatePdf(schedule, '/tmp/budget-report');
       expect(result).toEqual({ success: true });
