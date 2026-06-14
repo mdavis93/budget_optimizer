@@ -1,5 +1,4 @@
 import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
-import { addMonths, parseISO, isBefore } from 'date-fns';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
 import { DatabaseService, DebtInput } from '../services/database.service';
@@ -12,6 +11,14 @@ import { ipcLogger } from '../services/logger.service';
 import { DraftOverlayInput, resolveScheduleInputs } from '../services/draft-overlay.service';
 import { CredentialsService } from '../services/credentials.service';
 import { resolveAppBrowserWindow } from '../utils/dialog';
+import {
+  withUnlockGuard,
+  withBudgetGuard,
+  ipcData,
+  ipcVoid,
+  asReadyServices,
+} from './guards';
+import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
 
 // Schedule is always calculated for 12 months - viewport filtering only affects display
 const SCHEDULE_CALCULATION_MONTHS = 12;
@@ -74,6 +81,8 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
     services.database = new DatabaseService(services.auth.getCryptoService());
     services.database.initialize();
     services.budgetManager = new BudgetManager(services.database);
+    const settings = services.database.getSettings();
+    services.auth.setAutoLock(settings.autoLockMinutes);
     return { success: true };
   } catch (error) {
     ipcLogger.error('database init failed:', error);
@@ -143,6 +152,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   ipcMain.handle('auth:lock', () => {
     try {
       services.auth.lock();
+      clearApprovedExportPaths();
       if (services.budgetManager) {
         services.budgetManager = null;
       }
@@ -169,27 +179,26 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return services.auth.isBiometricEnabled();
   });
 
-  ipcMain.handle('auth:change-password', async (_, oldPassword: string, newPassword: string) => {
+  ipcMain.handle('auth:change-password', async (event: IpcMainInvokeEvent, oldPassword: string, newPassword: string) => {
     const result = await services.auth.changePassword(oldPassword, newPassword);
     if (result.success) {
-      await services.credentials.savePassword(newPassword);
+      const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
+      await services.credentials.offerSave(newPassword, parentWindow);
     }
     return result;
   });
 
-  ipcMain.handle('auth:get-pending-recovery-key', () => {
-    return services.auth.getPendingRecoveryKey();
-  });
+  ipcMain.handle(
+    'auth:get-pending-recovery-key',
+    withUnlockGuard(services, () => services.auth.getPendingRecoveryKey())
+  );
 
-  ipcMain.handle('auth:clear-pending-recovery-key', () => {
-    try {
-      services.auth.clearPendingRecoveryKey();
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('auth:clear-pending-recovery-key failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle(
+    'auth:clear-pending-recovery-key',
+    withUnlockGuard(services, () =>
+      ipcVoid('auth:clear-pending-recovery-key', () => services.auth.clearPendingRecoveryKey())
+    )
+  );
 
   ipcMain.handle('auth:verify-recovery-key', async (_, recoveryKey: string) => {
     return services.auth.verifyRecoveryKey(recoveryKey);
@@ -210,519 +219,268 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return { success: true };
   });
 
-  ipcMain.handle('credentials:save', async (_, password: string) => {
-    return services.credentials.savePassword(password);
+  ipcMain.handle('auth:activity-ping', () => {
+    services.auth.recordActivity();
+    return { success: true };
   });
 
-  ipcMain.handle('credentials:get', async () => {
-    return services.credentials.getPassword();
-  });
+  ipcMain.handle(
+    'credentials:save',
+    withUnlockGuard(services, (_, password: string) => services.credentials.savePassword(password))
+  );
 
-  ipcMain.handle('credentials:delete', async () => {
-    return services.credentials.deletePassword();
-  });
+  ipcMain.handle(
+    'credentials:get',
+    withUnlockGuard(services, () => services.credentials.getPassword())
+  );
 
-  ipcMain.handle('credentials:has', async () => {
-    return services.credentials.hasPassword();
-  });
+  ipcMain.handle(
+    'credentials:delete',
+    withUnlockGuard(services, () => services.credentials.deletePassword())
+  );
 
-  ipcMain.handle('credentials:offer-save', async (event: IpcMainInvokeEvent, password: string) => {
-    const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
-    return services.credentials.offerSave(password, parentWindow);
-  });
+  // Intentionally unguarded: pre-unlock login probe; returns boolean only, not the password.
+  ipcMain.handle('credentials:has', async () => services.credentials.hasPassword());
+
+  ipcMain.handle(
+    'credentials:offer-save',
+    withUnlockGuard(services, async (event: IpcMainInvokeEvent, password: string) => {
+      const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
+      return services.credentials.offerSave(password, parentWindow);
+    })
+  );
 
   // Budget Management
-  ipcMain.handle('budget:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getAllBudgets();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('budget:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  const ready = () => asReadyServices(services);
 
-  ipcMain.handle('budget:get-all-with-stats', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getAllBudgetsWithStats();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('budget:get-all-with-stats failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:get-all', withBudgetGuard(services, () =>
+    ipcData('budget:get-all', () => ready().budgetManager.getAllBudgets())
+  ));
 
-  ipcMain.handle('budget:get-current', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      const budget = state.budgetId ? services.budgetManager.getBudgetById(state.budgetId) : null;
-      return { 
-        success: true, 
-        data: { 
-          budget, 
-          isQuickBudget: state.isQuickBudget 
-        } 
-      };
-    } catch (error) {
-      ipcLogger.error('budget:get-current failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:get-all-with-stats', withBudgetGuard(services, () =>
+    ipcData('budget:get-all-with-stats', () => ready().budgetManager.getAllBudgetsWithStats())
+  ));
 
-  ipcMain.handle('budget:get-stats', (_, budgetId: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getBudgetStats(budgetId);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('budget:get-stats failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:get-current', withBudgetGuard(services, () =>
+    ipcData('budget:get-current', () => {
+      const { budgetManager } = ready();
+      const state = budgetManager.getCurrentState();
+      const budget = state.budgetId ? budgetManager.getBudgetById(state.budgetId) : null;
+      return { budget, isQuickBudget: state.isQuickBudget };
+    })
+  ));
 
-  ipcMain.handle('budget:create', (_, input: { name: string; startingBalance?: number }) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.createBudget(input);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('budget:create failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:get-stats', withBudgetGuard(services, (_, budgetId: string) =>
+    ipcData('budget:get-stats', () => ready().budgetManager.getBudgetStats(budgetId))
+  ));
 
-  ipcMain.handle('budget:update', (_, id: string, input: { name?: string; startingBalance?: number }) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.updateBudget(id, input);
-      if (!data) {
-        return { success: false, error: 'Budget not found' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('budget:update failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:create', withBudgetGuard(services, (_, input: { name: string; startingBalance?: number }) =>
+    ipcData('budget:create', () => ready().budgetManager.createBudget(input))
+  ));
 
-  ipcMain.handle('budget:delete', (_, id: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('budget:update', withBudgetGuard(services, async (_, id: string, input: { name?: string; startingBalance?: number }) => {
+    const result = await ipcData('budget:update', () => ready().budgetManager.updateBudget(id, input));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Budget not found' };
     }
-    try {
-      const deleted = services.budgetManager.deleteBudget(id);
+    return result;
+  }));
+
+  ipcMain.handle('budget:delete', withBudgetGuard(services, async (_, id: string) => {
+    const result = await ipcVoid('budget:delete', () => {
+      const deleted = ready().budgetManager.deleteBudget(id);
       if (!deleted) {
-        return { success: false, error: 'Cannot delete budget (may be current budget)' };
+        throw new Error('Cannot delete budget (may be current budget)');
       }
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('budget:delete failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    });
+    return result;
+  }));
 
-  ipcMain.handle('budget:switch', (_, id: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('budget:switch', withBudgetGuard(services, async (_, id: string) => {
+    const result = await ipcData('budget:switch', () => ready().budgetManager.setCurrentBudget(id));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Budget not found' };
     }
-    try {
-      const data = services.budgetManager.setCurrentBudget(id);
-      if (!data) {
-        return { success: false, error: 'Budget not found' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('budget:switch failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return result;
+  }));
 
-  ipcMain.handle('budget:start-quick', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      services.budgetManager.startQuickBudget();
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('budget:start-quick failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:start-quick', withBudgetGuard(services, () =>
+    ipcVoid('budget:start-quick', () => { ready().budgetManager.startQuickBudget(); })
+  ));
 
-  ipcMain.handle('budget:end-quick', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      services.budgetManager.endQuickBudget();
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('budget:end-quick failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('budget:end-quick', withBudgetGuard(services, () =>
+    ipcVoid('budget:end-quick', () => { ready().budgetManager.endQuickBudget(); })
+  ));
 
   // Income Management (via BudgetManager)
-  ipcMain.handle('income:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getAllIncomes();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('income:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('income:get-all', withBudgetGuard(services, () =>
+    ipcData('income:get-all', () => ready().budgetManager.getAllIncomes())
+  ));
 
-  ipcMain.handle('income:create', (_, income) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.createIncome(income);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('income:create failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('income:create', withBudgetGuard(services, (_, income) =>
+    ipcData('income:create', () => ready().budgetManager.createIncome(income))
+  ));
 
-  ipcMain.handle('income:update', (_, id: string, income) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('income:update', withBudgetGuard(services, async (_, id: string, income) => {
+    const result = await ipcData('income:update', () => ready().budgetManager.updateIncome(id, income));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Income not found' };
     }
-    try {
-      const data = services.budgetManager.updateIncome(id, income);
-      if (!data) {
-        return { success: false, error: 'Income not found' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('income:update failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return result;
+  }));
 
-  ipcMain.handle('income:delete', (_, id: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const deleted = services.budgetManager.deleteIncome(id);
+  ipcMain.handle('income:delete', withBudgetGuard(services, async (_, id: string) => {
+    const result = await ipcVoid('income:delete', () => {
+      const deleted = ready().budgetManager.deleteIncome(id);
       if (!deleted) {
-        return { success: false, error: 'Income not found' };
+        throw new Error('Income not found');
       }
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('income:delete failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    });
+    return result;
+  }));
 
   // Bills Management (via BudgetManager)
-  ipcMain.handle('bills:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getAllBills();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('bills:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('bills:get-all', withBudgetGuard(services, () =>
+    ipcData('bills:get-all', () => ready().budgetManager.getAllBills())
+  ));
 
-  ipcMain.handle('bills:create', (_, bill) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.createBill(bill);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('bills:create failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('bills:create', withBudgetGuard(services, (_, bill) =>
+    ipcData('bills:create', () => ready().budgetManager.createBill(bill))
+  ));
 
-  ipcMain.handle('bills:update', (_, id: string, bill) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('bills:update', withBudgetGuard(services, async (_, id: string, bill) => {
+    const result = await ipcData('bills:update', () => ready().budgetManager.updateBill(id, bill));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Bill not found' };
     }
-    try {
-      const data = services.budgetManager.updateBill(id, bill);
-      if (!data) {
-        return { success: false, error: 'Bill not found' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('bills:update failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return result;
+  }));
 
-  ipcMain.handle('bills:delete', (_, id: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const deleted = services.budgetManager.deleteBill(id);
+  ipcMain.handle('bills:delete', withBudgetGuard(services, async (_, id: string) => {
+    const result = await ipcVoid('bills:delete', () => {
+      const deleted = ready().budgetManager.deleteBill(id);
       if (!deleted) {
-        return { success: false, error: 'Bill not found' };
+        throw new Error('Bill not found');
       }
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('bills:delete failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    });
+    return result;
+  }));
 
   // Skipped Bills (via BudgetManager)
-  ipcMain.handle('skipped-bills:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getSkippedBills();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('skipped-bills:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('skipped-bills:get-all', withBudgetGuard(services, () =>
+    ipcData('skipped-bills:get-all', () => ready().budgetManager.getSkippedBills())
+  ));
 
-  ipcMain.handle('skipped-bills:skip', (_, billId: string, skipDate: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.skipBill(billId, skipDate);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('skipped-bills:skip failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('skipped-bills:skip', withBudgetGuard(services, (_, billId: string, skipDate: string) =>
+    ipcData('skipped-bills:skip', () => ready().budgetManager.skipBill(billId, skipDate))
+  ));
 
-  ipcMain.handle('skipped-bills:unskip', (_, billId: string, skipDate: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('skipped-bills:unskip', withBudgetGuard(services, async (_, billId: string, skipDate: string) => {
+    const result = await ipcData('skipped-bills:unskip', () =>
+      ready().budgetManager.unskipBill(billId, skipDate)
+    );
+    if (!result.success) {
+      return result;
     }
-    try {
-      const success = services.budgetManager.unskipBill(billId, skipDate);
-      return { success };
-    } catch (error) {
-      ipcLogger.error('skipped-bills:unskip failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return { success: result.data };
+  }));
 
-  ipcMain.handle('skipped-bills:is-skipped', (_, billId: string, skipDate: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const isSkipped = services.budgetManager.isSkipped(billId, skipDate);
-      return { success: true, data: isSkipped };
-    } catch (error) {
-      ipcLogger.error('skipped-bills:is-skipped failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('skipped-bills:is-skipped', withBudgetGuard(services, (_, billId: string, skipDate: string) =>
+    ipcData('skipped-bills:is-skipped', () => ready().budgetManager.isSkipped(billId, skipDate))
+  ));
 
   // Bill Assignments (via BudgetManager)
-  ipcMain.handle('bill-assignments:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getBillAssignments();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('bill-assignments:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('bill-assignments:get-all', withBudgetGuard(services, () =>
+    ipcData('bill-assignments:get-all', () => ready().budgetManager.getBillAssignments())
+  ));
 
-  ipcMain.handle('bill-assignments:assign', (_, billId: string, billDueDate: string, paycheckDate: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.assignBillToPaycheck(billId, billDueDate, paycheckDate);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('bill-assignments:assign failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('bill-assignments:assign', withBudgetGuard(services, (_, billId: string, billDueDate: string, paycheckDate: string) =>
+    ipcData('bill-assignments:assign', () =>
+      ready().budgetManager.assignBillToPaycheck(billId, billDueDate, paycheckDate)
+    )
+  ));
 
-  ipcMain.handle('bill-assignments:remove', (_, billId: string, billDueDate: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('bill-assignments:remove', withBudgetGuard(services, async (_, billId: string, billDueDate: string) => {
+    const result = await ipcData('bill-assignments:remove', () =>
+      ready().budgetManager.removeBillAssignment(billId, billDueDate)
+    );
+    if (!result.success) {
+      return result;
     }
-    try {
-      const success = services.budgetManager.removeBillAssignment(billId, billDueDate);
-      return { success };
-    } catch (error) {
-      ipcLogger.error('bill-assignments:remove failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return { success: result.data };
+  }));
 
-  ipcMain.handle('income-overrides:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getIncomeOverrides();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('income-overrides:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('income-overrides:get-all', withBudgetGuard(services, () =>
+    ipcData('income-overrides:get-all', () => ready().budgetManager.getIncomeOverrides())
+  ));
 
-  ipcMain.handle('income-overrides:set', (_, incomeId: string, paycheckDate: string, amount: number) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.setIncomeOverride(incomeId, paycheckDate, amount);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('income-overrides:set failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('income-overrides:set', withBudgetGuard(services, (_, incomeId: string, paycheckDate: string, amount: number) =>
+    ipcData('income-overrides:set', () =>
+      ready().budgetManager.setIncomeOverride(incomeId, paycheckDate, amount)
+    )
+  ));
 
-  ipcMain.handle('income-overrides:remove', (_, incomeId: string, paycheckDate: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const removed = services.budgetManager.removeIncomeOverride(incomeId, paycheckDate);
-      return { success: true, data: removed };
-    } catch (error) {
-      ipcLogger.error('income-overrides:remove failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('income-overrides:remove', withBudgetGuard(services, (_, incomeId: string, paycheckDate: string) =>
+    ipcData('income-overrides:remove', () =>
+      ready().budgetManager.removeIncomeOverride(incomeId, paycheckDate)
+    )
+  ));
 
   // Savings Goals Management (via BudgetManager)
-  ipcMain.handle('goals:get-all', () => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.getAllGoals();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('goals:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('goals:get-all', withBudgetGuard(services, () =>
+    ipcData('goals:get-all', () => ready().budgetManager.getAllGoals())
+  ));
 
-  ipcMain.handle('goals:create', (_, input: { 
-    name: string; 
-    targetAmount: number; 
+  ipcMain.handle('goals:create', withBudgetGuard(services, (_, input: {
+    name: string;
+    targetAmount: number;
     targetDate: string;
     alreadySaved?: number;
     priority?: number;
-  }) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const data = services.budgetManager.createGoal(input);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('goals:create failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  }) => ipcData('goals:create', () => ready().budgetManager.createGoal(input))));
 
-  ipcMain.handle('goals:update', (_, id: string, input: { 
-    name?: string; 
-    targetAmount?: number; 
+  ipcMain.handle('goals:update', withBudgetGuard(services, async (_, id: string, input: {
+    name?: string;
+    targetAmount?: number;
     targetDate?: string;
     alreadySaved?: number;
     priority?: number;
   }) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
+    const result = await ipcData('goals:update', () => ready().budgetManager.updateGoal(id, input));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Goal not found' };
     }
-    try {
-      const data = services.budgetManager.updateGoal(id, input);
-      if (!data) {
-        return { success: false, error: 'Goal not found' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('goals:update failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return result;
+  }));
 
-  ipcMain.handle('goals:delete', (_, id: string) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const deleted = services.budgetManager.deleteGoal(id);
+  ipcMain.handle('goals:delete', withBudgetGuard(services, async (_, id: string) => {
+    const result = await ipcVoid('goals:delete', () => {
+      const deleted = ready().budgetManager.deleteGoal(id);
       if (!deleted) {
-        return { success: false, error: 'Goal not found' };
+        throw new Error('Goal not found');
       }
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('goals:delete failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    });
+    return result;
+  }));
 
-  ipcMain.handle('goals:get-projections', (_, overlay?: DraftOverlayInput) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const resolved = resolveScheduleInputs(services.budgetManager, services.database, overlay);
+  ipcMain.handle('goals:get-projections', withBudgetGuard(services, (_, overlay?: DraftOverlayInput) =>
+    ipcData('goals:get-projections', () => {
+      const { budgetManager, database } = ready();
+      const resolved = resolveScheduleInputs(budgetManager, database, overlay);
       if (resolved.goals.length === 0) {
-        return { success: true, data: [] };
+        return [];
       }
 
       const skippedSet = new Set(
         resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
       );
-
       const manualAssignments = new Map(
         resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
-
       const incomeOverridesMap = new Map(
         resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
       );
-
       const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
-
       const today = new Date();
       const startDate = today.toISOString().split('T')[0];
 
@@ -742,174 +500,25 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         incomeOverridesMap
       );
 
-      return { success: true, data: scheduleData.goalProjections || [] };
-    } catch (error) {
-      ipcLogger.error('goals:get-projections failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+      return scheduleData.goalProjections || [];
+    })
+  ));
 
-  // Schedule Generation (via BudgetManager)
-  // Always calculates 12 months internally - viewportMonths only affects what's displayed
-  ipcMain.handle('schedule:generate', (_, startDate: string, viewportMonths: number) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const incomes = services.budgetManager.getAllIncomes();
-      const bills = services.budgetManager.getAllBills();
-      const goals = services.budgetManager.getAllGoals();
-      const startingBalance = services.budgetManager.getStartingBalance();
-      const targetCashOnHand = services.budgetManager.getTargetCashOnHand();
-      const minCashOnHand = services.budgetManager.getMinCashOnHand();
-      const minSavingsPerPaycheck = services.budgetManager.getMinSavingsPerPaycheck();
-      const skippedBills = services.budgetManager.getSkippedBills();
-      const billAssignments = services.budgetManager.getBillAssignments();
-      
-      // Create a Set of skipped bill keys for fast lookup
-      const skippedSet = new Set(
-        skippedBills.map(sb => `${sb.billId}-${sb.skipDate}`)
-      );
-      
-      // Create a Map of manual assignments (billId + billDueDate -> paycheckDate)
-      const manualAssignments = new Map(
-        billAssignments.map(a => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
-      );
-
-      const incomeOverridesListGen = services.budgetManager.getIncomeOverrides();
-      const incomeOverridesMapGen = new Map(
-        incomeOverridesListGen.map(o => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
-      );
-      
-      // Calculate debt payoff info for bills with linked debts
-      const debtPayoffs = new Map<string, DebtPayoffInfo>();
-      const state = services.budgetManager.getCurrentState();
-      if (state.budgetId) {
-        const debts = services.database.getDebts(state.budgetId);
-        for (const debt of debts) {
-          const linkedBill = bills.find(b => b.id === debt.billId);
-          if (linkedBill) {
-            // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
-            const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
-            const amortization = services.debt.calculateAmortization(
-              debt.principalBalance,
-              debt.apr,
-              debt.monthlyPayment,
-              extra,
-              extra > 0 ? 'monthly' : 'none'
-            );
-            
-            if (amortization.monthsToPayoff > 0) {
-              const lastPayment = amortization.payments[amortization.payments.length - 1];
-              debtPayoffs.set(debt.billId, {
-                billId: debt.billId,
-                payoffDate: new Date(amortization.payoffDate),
-                finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
-              });
-            }
-          }
-        }
-      }
-      
-      // ALWAYS calculate 12 months for consistent data - viewport only affects display
-      const data = services.scheduler.generateSchedule(
-        incomes, 
-        bills, 
-        startDate, 
-        SCHEDULE_CALCULATION_MONTHS, // Always 12 months
-        startingBalance,
-        skippedSet,
-        manualAssignments,
-        targetCashOnHand,
-        goals,
-        minCashOnHand,
-        minSavingsPerPaycheck,
-        debtPayoffs,
-        incomeOverridesMapGen
-      );
-      
-      // FINAL DEDUPLICATION - nuclear option
-      if (data.paychecks) {
-        for (const paycheck of data.paychecks) {
-          const seen = new Set<string>();
-          paycheck.bills = paycheck.bills.filter(bill => {
-            // Use creditorName + dueDay as unique key per paycheck
-            const key = `${bill.creditorName}-${bill.dueDay}`;
-            if (seen.has(key)) {
-              return false;
-            }
-            seen.add(key);
-            return true;
-          });
-          // Recalculate totals
-          paycheck.totalBills = paycheck.bills.reduce((sum, b) => sum + b.amount, 0);
-          const grossRemaining = paycheck.totalIncome - paycheck.totalBills - paycheck.totalGoalDeposits;
-          paycheck.budgetRemaining = grossRemaining > targetCashOnHand 
-            ? targetCashOnHand 
-            : grossRemaining;
-          if (grossRemaining > targetCashOnHand) {
-            paycheck.savingsDeposit = grossRemaining - targetCashOnHand;
-          }
-          paycheck.isShortfall = paycheck.budgetRemaining < 0;
-        }
-      }
-      
-      // Store full 12-month paychecks before filtering
-      const fullPaychecks = [...data.paychecks];
-      
-      // Filter paychecks for the requested viewport
-      const viewportEndDate = addMonths(parseISO(startDate), viewportMonths);
-      const viewportPaychecks = data.paychecks.filter(p => 
-        isBefore(parseISO(p.date), viewportEndDate)
-      );
-      
-      // Update data with viewport-filtered paychecks and full schedule
-      data.paychecks = viewportPaychecks;
-      data.fullPaychecks = fullPaychecks;
-      data.viewportMonths = viewportMonths;
-      
-      // Recalculate summary for viewport (for display purposes)
-      const viewportSummary = {
-        ...data.summary,
-        totalIncome: viewportPaychecks.reduce((sum, p) => sum + p.totalIncome, 0),
-        totalExpenses: viewportPaychecks.reduce((sum, p) => sum + p.totalBills, 0),
-        totalSavingsDeposits: viewportPaychecks.reduce((sum, p) => sum + p.savingsDeposit, 0),
-        shortfallCount: viewportPaychecks.filter(p => p.isShortfall).length,
-      };
-      viewportSummary.netBalance = viewportSummary.totalIncome - viewportSummary.totalExpenses;
-      data.summary = viewportSummary;
-      
-      // Analyze for shortfalls and generate fix proposals
-      const reconciliation = services.scheduler.analyzeAndProposeFixes(data);
-      data.reconciliation = reconciliation;
-      
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('schedule:generate failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
-
-  ipcMain.handle('schedule:optimize', (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const resolved = resolveScheduleInputs(services.budgetManager, services.database, overlay);
+  ipcMain.handle('schedule:optimize', withBudgetGuard(services, (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
+    ipcData('schedule:optimize', () => {
+      const { budgetManager, database } = ready();
+      const resolved = resolveScheduleInputs(budgetManager, database, overlay);
       const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
 
       const skippedSet = new Set(
         resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
       );
-
       const manualAssignments = new Map(
         resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
       );
-
       const incomeOverridesMapOpt = new Map(
         resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
       );
-
       const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
 
       const data = services.scheduler.generateSchedule(
@@ -927,244 +536,166 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         debtPayoffs,
         incomeOverridesMapOpt
       );
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('schedule:optimize failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+      data.reconciliation = services.scheduler.analyzeAndProposeFixes(data);
+      return data;
+    })
+  ));
 
-  ipcMain.handle('export:to-pdf', async (_, schedule, filePath: string) => {
+  ipcMain.handle('export:to-pdf', withBudgetGuard(services, async (_, schedule, filePath: string) => {
+    if (!validateExportPath(filePath)) {
+      return { success: false, error: 'Invalid export path' };
+    }
     try {
       return await services.pdf.generatePdf(schedule, filePath);
     } catch (error) {
       ipcLogger.error('export:to-pdf failed:', error);
       return { success: false, error: getErrorMessage(error) };
     }
-  });
+  }));
 
-  ipcMain.handle('export:to-html', async (_, schedule, filePath: string) => {
+  ipcMain.handle('export:to-html', withBudgetGuard(services, async (_, schedule, filePath: string) => {
+    if (!validateExportPath(filePath)) {
+      return { success: false, error: 'Invalid export path' };
+    }
     try {
       return await services.pdf.generateHtmlFile(schedule, filePath);
     } catch (error) {
       ipcLogger.error('export:to-html failed:', error);
       return { success: false, error: getErrorMessage(error) };
     }
-  });
+  }));
 
-  ipcMain.handle('export:to-spreadsheet', async (_, schedule, filePath: string) => {
+  ipcMain.handle('export:to-spreadsheet', withBudgetGuard(services, async (_, schedule, filePath: string) => {
+    if (!validateExportPath(filePath)) {
+      return { success: false, error: 'Invalid export path' };
+    }
     try {
       return await services.spreadsheet.generateXlsx(schedule, filePath);
     } catch (error) {
       ipcLogger.error('export:to-spreadsheet failed:', error);
       return { success: false, error: getErrorMessage(error) };
     }
-  });
+  }));
 
   // Reconciliation handlers
-  ipcMain.handle('reconciliation:apply-fixes', (_, fixes: Array<{
+  ipcMain.handle('reconciliation:apply-fixes', withBudgetGuard(services, (_, fixes: Array<{
     id: string;
     type: 'move_bill' | 'skip_bill';
     billId: string;
     billDueDate: string;
     fromPaycheckDate: string;
     toPaycheckDate?: string;
-  }>) => {
-    if (!services.budgetManager) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      for (const fix of fixes) {
-        if (fix.type === 'move_bill' && fix.toPaycheckDate) {
-          // Create a bill assignment to move the bill to a different paycheck
-          services.budgetManager.assignBillToPaycheck(
-            fix.billId,
-            fix.billDueDate,
-            fix.toPaycheckDate
-          );
-        } else if (fix.type === 'skip_bill') {
-          // Skip the bill for this date
-          services.budgetManager.skipBill(fix.billId, fix.fromPaycheckDate);
-        }
+  }>) => ipcVoid('reconciliation:apply-fixes', async () => {
+    const { budgetManager } = ready();
+    for (const fix of fixes) {
+      if (fix.type === 'move_bill' && fix.toPaycheckDate) {
+        budgetManager.assignBillToPaycheck(fix.billId, fix.billDueDate, fix.toPaycheckDate);
+      } else if (fix.type === 'skip_bill') {
+        budgetManager.skipBill(fix.billId, fix.fromPaycheckDate);
       }
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('reconciliation:apply-fixes failed:', error);
-      return { success: false, error: getErrorMessage(error) };
     }
-  });
+  })));
 
-  ipcMain.handle('settings:get', () => {
-    if (!services.database) {
-      return { success: false, error: 'Database not initialized' };
-    }
-    try {
-      const data = services.database.getSettings();
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('settings:get failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('settings:get', withBudgetGuard(services, () =>
+    ipcData('settings:get', () => ready().database.getSettings())
+  ));
 
-  ipcMain.handle('settings:update', (_, settings) => {
-    if (!services.database) {
-      return { success: false, error: 'Database not initialized' };
-    }
-    try {
-      const data = services.database.updateSettings(settings);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('settings:update failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+  ipcMain.handle('settings:update', withBudgetGuard(services, (_, settings) =>
+    ipcData('settings:update', () => ready().database.updateSettings(settings))
+  ));
 
   // Debt Management
-  ipcMain.handle('debts:get-all', () => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('debts:get-all', withBudgetGuard(services, () => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return Promise.resolve({ success: false as const, error: 'No budget selected' });
     }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
-        return { success: false, error: 'No budget selected' };
-      }
-      const data = services.database.getDebts(state.budgetId);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('debts:get-all failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return ipcData('debts:get-all', () => database.getDebts(state.budgetId!));
+  }));
 
-  ipcMain.handle('debts:get-by-bill', (_, billId: string) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('debts:get-by-bill', withBudgetGuard(services, (_, billId: string) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return Promise.resolve({ success: false as const, error: 'No budget selected' });
     }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
-        return { success: false, error: 'No budget selected' };
-      }
-      const data = services.database.getDebtByBillId(billId, state.budgetId);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('debts:get-by-bill failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return ipcData('debts:get-by-bill', () => database.getDebtByBillId(billId, state.budgetId!));
+  }));
 
-  ipcMain.handle('debts:create', (_, input: DebtInput) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('debts:create', withBudgetGuard(services, (_, input: DebtInput) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return Promise.resolve({ success: false as const, error: 'No budget selected' });
     }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
-        return { success: false, error: 'No budget selected' };
-      }
-      const data = services.database.createDebt(state.budgetId, input);
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('debts:create failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    return ipcData('debts:create', () => database.createDebt(state.budgetId!, input));
+  }));
 
-  ipcMain.handle('debts:update', (_, id: string, input: Partial<DebtInput>) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('debts:update', withBudgetGuard(services, async (_, id: string, input: Partial<DebtInput>) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
     }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
-        return { success: false, error: 'No budget selected' };
-      }
-      const data = services.database.updateDebt(id, state.budgetId, input);
-      if (!data) {
-        return { success: false, error: 'Debt not found' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('debts:update failed:', error);
-      return { success: false, error: getErrorMessage(error) };
+    const result = await ipcData('debts:update', () => database.updateDebt(id, state.budgetId!, input));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Debt not found' };
     }
-  });
+    return result;
+  }));
 
-  ipcMain.handle('debts:delete', (_, id: string) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('debts:delete', withBudgetGuard(services, async (_, id: string) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
     }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
-        return { success: false, error: 'No budget selected' };
-      }
-      const deleted = services.database.deleteDebt(id, state.budgetId);
+    return ipcVoid('debts:delete', () => {
+      const deleted = database.deleteDebt(id, state.budgetId!);
       if (!deleted) {
-        return { success: false, error: 'Debt not found' };
+        throw new Error('Debt not found');
       }
-      return { success: true };
-    } catch (error) {
-      ipcLogger.error('debts:delete failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    });
+  }));
 
-  ipcMain.handle('debts:get-amortization', (_, debtId: string) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
+  ipcMain.handle('debts:get-amortization', withBudgetGuard(services, async (_, debtId: string) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
     }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId) {
-        return { success: false, error: 'No budget selected' };
-      }
-      
-      const debt = services.database.getDebtById(debtId, state.budgetId);
-      if (!debt) {
-        return { success: false, error: 'Debt not found' };
-      }
-      
-      // Get linked bill to calculate extra payment from budget overage
-      const bills = services.budgetManager.getAllBills();
-      const linkedBill = bills.find(b => b.id === debt.billId);
-      
-      // Extra payment = bill budget - minimum payment (if budgeting more than minimum)
+
+    const debt = database.getDebtById(debtId, state.budgetId);
+    if (!debt) {
+      return { success: false, error: 'Debt not found' };
+    }
+
+    return ipcData('debts:get-amortization', () => {
+      const bills = budgetManager.getAllBills();
+      const linkedBill = bills.find((b) => b.id === debt.billId);
       const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
-      
-      const amortization = services.debt.calculateAmortization(
+      return services.debt.calculateAmortization(
         debt.principalBalance,
         debt.apr,
         debt.monthlyPayment,
         extra,
         extra > 0 ? 'monthly' : 'none'
       );
-      
-      return { success: true, data: amortization };
-    } catch (error) {
-      ipcLogger.error('debts:get-amortization failed:', error);
-      return { success: false, error: getErrorMessage(error) };
+    });
+  }));
+
+  ipcMain.handle('debts:get-all-with-amortization', withBudgetGuard(services, (_, overlay?: DraftOverlayInput) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId && !overlay?.debts) {
+      return Promise.resolve({ success: false as const, error: 'No budget selected' });
     }
-  });
 
-  ipcMain.handle('debts:get-all-with-amortization', (_, overlay?: DraftOverlayInput) => {
-    if (!services.budgetManager || !services.database) {
-      return { success: false, error: 'Not initialized' };
-    }
-    try {
-      const state = services.budgetManager.getCurrentState();
-      if (!state.budgetId && !overlay?.debts) {
-        return { success: false, error: 'No budget selected' };
-      }
-
-      const resolved = resolveScheduleInputs(services.budgetManager, services.database, overlay);
-      const debts = resolved.debts;
-      const bills = resolved.bills;
-
-      const data = debts.map((debt) => {
-        const linkedBill = bills.find((b) => b.id === debt.billId);
+    return ipcData('debts:get-all-with-amortization', () => {
+      const resolved = resolveScheduleInputs(budgetManager, database, overlay);
+      return resolved.debts.map((debt) => {
+        const linkedBill = resolved.bills.find((b) => b.id === debt.billId);
         const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
         const amortization = services.debt.calculateAmortization(
           debt.principalBalance,
@@ -1173,18 +704,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
           extra,
           extra > 0 ? 'monthly' : 'none'
         );
-
-        return {
-          debt,
-          bill: linkedBill || null,
-          amortization,
-        };
+        return { debt, bill: linkedBill || null, amortization };
       });
-
-      return { success: true, data };
-    } catch (error) {
-      ipcLogger.error('debts:get-all-with-amortization failed:', error);
-      return { success: false, error: getErrorMessage(error) };
-    }
-  });
+    });
+  }));
 }

@@ -98,10 +98,23 @@ export const createMockGoalProjection = (overrides = {}) => ({
   requiredPerPaycheck: 208.33,
   adjustedRequiredPerPaycheck: 208.33,
   availablePerPaycheck: 300,
+  actualAllocation: 5000,
   achievableAmount: 5000,
   achievabilityPercent: 100,
   status: 'achievable' as const,
   suggestions: [],
+  isProjected: false,
+  avgAllocationPerPaycheck: 250,
+  marginPerPaycheck: 41.67,
+  paychecksToFullyFund: 20,
+  estimatedFundedDate: '2026-11-15',
+  beatsDeadlineByPaychecks: 2,
+  missesDeadlineByPaychecks: null,
+  scheduleHealth: {
+    tightPaycheckCount: 0,
+    shortfallCount: 0,
+    savingsTotal: 1200,
+  },
   ...overrides,
 });
 
@@ -148,6 +161,7 @@ export const createMockElectronAPI = () => {
       verifyRecoveryKey: vi.fn().mockResolvedValue({ success: true }),
       resetPasswordWithRecovery: vi.fn().mockResolvedValue({ success: true, newRecoveryKey: 'new-key' }),
       setAutoLock: vi.fn().mockResolvedValue({ success: true }),
+      activityPing: vi.fn().mockResolvedValue({ success: true }),
     },
 
     income: {
@@ -201,7 +215,6 @@ export const createMockElectronAPI = () => {
     },
 
     schedule: {
-      generate: vi.fn().mockResolvedValue({ success: true, data: createMockSchedule() }),
       optimize: vi.fn().mockResolvedValue({ success: true, data: createMockSchedule() }),
     },
 

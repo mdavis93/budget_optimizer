@@ -43,6 +43,7 @@ const api = {
       ipcRenderer.invoke('auth:reset-password-with-recovery', recoveryKey, newPassword),
     setAutoLock: (minutes: number) =>
       ipcRenderer.invoke('auth:set-auto-lock', minutes),
+    activityPing: () => ipcRenderer.invoke('auth:activity-ping'),
   },
 
   income: {
@@ -109,8 +110,6 @@ const api = {
   },
 
   schedule: {
-    generate: (startDate: string, months: number) => 
-      ipcRenderer.invoke('schedule:generate', startDate, months),
     optimize: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => 
       ipcRenderer.invoke('schedule:optimize', startDate, months, startingBalance, overlay),
   },

@@ -76,6 +76,7 @@ interface PaycheckBillData {
   category?: string;
   billDate: string;
   isIncomeAttached?: boolean;
+  isUnpayable?: boolean;
 }
 
 interface GoalDepositData {
@@ -137,6 +138,12 @@ interface GoalSuggestionData {
   resultPercent: number;
 }
 
+interface GoalScheduleHealthData {
+  tightPaycheckCount: number;
+  shortfallCount: number;
+  savingsTotal: number;
+}
+
 interface GoalProjectionData {
   goalId: string;
   goalName: string;
@@ -155,6 +162,13 @@ interface GoalProjectionData {
   suggestions: GoalSuggestionData[];
   isProjected: boolean;
   projectionNote?: string;
+  avgAllocationPerPaycheck: number;
+  marginPerPaycheck: number;
+  paychecksToFullyFund: number | null;
+  estimatedFundedDate: string | null;
+  beatsDeadlineByPaychecks: number | null;
+  missesDeadlineByPaychecks: number | null;
+  scheduleHealth: GoalScheduleHealthData;
 }
 
 interface ScheduleData {
@@ -302,6 +316,7 @@ interface ElectronAPI {
     verifyRecoveryKey: (recoveryKey: string) => Promise<ApiResult>;
     resetPasswordWithRecovery: (recoveryKey: string, newPassword: string) => Promise<ApiResult & { newRecoveryKey?: string }>;
     setAutoLock: (minutes: number) => Promise<ApiResult>;
+    activityPing: () => Promise<ApiResult>;
   };
 
   income: {
@@ -356,7 +371,6 @@ interface ElectronAPI {
   };
 
   schedule: {
-    generate: (startDate: string, months: number) => Promise<ApiResult<ScheduleData>>;
     optimize: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlay) => Promise<ApiResult<ScheduleData>>;
   };
 

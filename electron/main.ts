@@ -11,6 +11,7 @@ import { DebtService } from './services/debt.service';
 import { CredentialsService } from './services/credentials.service';
 import { registerIpcHandlers } from './ipc/handlers';
 import { logger } from './services/logger.service';
+import { approveExportPath } from './utils/exportPaths';
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
@@ -61,7 +62,7 @@ function createWindow() {
     ? VITE_DEV_SERVER_URL 
     : path.join(__dirname, '../dist/index.html');
 
-  if (VITE_DEV_SERVER_URL) {
+  if (VITE_DEV_SERVER_URL && !app.isPackaged) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   } else {
@@ -161,7 +162,11 @@ ipcMain.handle('app:get-platform', () => process.platform);
 
 ipcMain.handle('app:show-save-dialog', async (_, options) => {
   if (!mainWindow) return { canceled: true };
-  return dialog.showSaveDialog(mainWindow, options);
+  const result = await dialog.showSaveDialog(mainWindow, options);
+  if (!result.canceled && result.filePath) {
+    approveExportPath(result.filePath);
+  }
+  return result;
 });
 
 ipcMain.handle('app:show-open-dialog', async (_, options) => {

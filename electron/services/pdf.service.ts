@@ -4,6 +4,7 @@ import path from 'path';
 import { BrowserWindow } from 'electron';
 import { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
+import { escapeHtml } from '../utils/escapeHtml';
 
 const PRIORITY_LABELS: Record<'critical' | 'high' | 'normal' | 'low', string> = {
   critical: 'Critical',
@@ -109,7 +110,7 @@ export class PdfService {
         return a.dueDay - b.dueDay;
       });
 
-      const incomeSourceNames = paycheck.incomeSources.map(s => s.name).join(' + ');
+      const incomeSourceNames = paycheck.incomeSources.map(s => escapeHtml(s.name)).join(' + ');
       const budgetClass = paycheck.budgetRemaining >= 0 ? 'positive' : 'negative';
 
       const dueDaySuffix = (d: number) => d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
@@ -144,7 +145,7 @@ export class PdfService {
           <div class="row-group-title">Income</div>
           ${paycheck.incomeSources.map(src => `
             <div class="row row-income">
-              <span class="row-label">${src.name}</span>
+              <span class="row-label">${escapeHtml(src.name)}</span>
               <span class="row-amount income">+${formatCurrency(src.amount)}</span>
             </div>
           `).join('')}
@@ -167,9 +168,9 @@ export class PdfService {
             return `
               <div class="row row-bill">
                 <div class="row-label">
-                  <span class="bill-name">${bill.creditorName}</span>
+                  <span class="bill-name">${escapeHtml(bill.creditorName)}</span>
                   <span class="badge badge-${bill.priority}">${PRIORITY_LABELS[bill.priority]}</span>
-                  <span class="bill-due">${dueLabel}</span>
+                  <span class="bill-due">${escapeHtml(dueLabel)}</span>
                 </div>
                 <span class="row-amount expense">-${formatCurrency(bill.amount)}</span>
               </div>
@@ -187,7 +188,7 @@ export class PdfService {
           <div class="row-group-title">Goal Deposits (${paycheck.goalDeposits.length})</div>
           ${paycheck.goalDeposits.map(gd => `
             <div class="row row-goal">
-              <span class="row-label">Goal: ${gd.goalName}</span>
+              <span class="row-label">Goal: ${escapeHtml(gd.goalName)}</span>
               <span class="row-amount goal">-${formatCurrency(gd.amount)}</span>
             </div>
           `).join('')}
@@ -626,7 +627,7 @@ export class PdfService {
   <div class="recommendations">
     <h3>Recommendations</h3>
     <ul>
-      ${recommendations.map(r => `<li>${r}</li>`).join('')}
+      ${recommendations.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
     </ul>
   </div>
   ` : ''}
