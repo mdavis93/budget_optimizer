@@ -123,6 +123,17 @@ describe('ipc guards', () => {
         error: 'boom',
       });
     });
+
+    it('wraps non-Error throws', async () => {
+      await expect(
+        ipcData('test-channel', () => {
+          throw 'plain string';
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'plain string',
+      });
+    });
   });
 
   describe('ipcVoid', () => {

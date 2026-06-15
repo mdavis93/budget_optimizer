@@ -70,12 +70,33 @@ describe('App', () => {
   });
 
   describe('sad', () => {
+    it('shows loading screen while auth status is loading', async () => {
+      authState.isLoading = true;
+      render(<App />);
+      expect(await screen.findByText('Loading...')).toBeInTheDocument();
+    });
+
+    it('redirects locked users to login', async () => {
+      authState.isUnlocked = false;
+      authState.isFirstTime = false;
+      window.location.hash = '#/dashboard';
+      render(<App />);
+      expect(await screen.findByText('Login Page')).toBeInTheDocument();
+    });
+
     it('routes first-time users to setup', async () => {
       authState.isUnlocked = false;
       authState.isFirstTime = true;
       window.location.hash = '#/login';
       render(<App />);
       expect(await screen.findByText('Setup Page')).toBeInTheDocument();
+    });
+
+    it('redirects non-first-time users away from setup', async () => {
+      authState.isFirstTime = false;
+      window.location.hash = '#/setup';
+      render(<App />);
+      expect(await screen.findByText('Login Page')).toBeInTheDocument();
     });
   });
 

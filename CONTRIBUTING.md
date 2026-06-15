@@ -16,34 +16,44 @@ Thank you for contributing. This project uses a two-phase CI model:
 
 To hold a PR despite green checks, add the `do-not-automerge` label before or after opening the PR. Draft PRs never receive auto-merge.
 
-### Local checks before pushing
+### Local quality gates (Husky)
+
+Husky hooks enforce quality before changes reach `origin`. Run `pnpm install` once to activate them (`prepare` → `husky`).
+
+| Hook | When | What runs |
+|------|------|-----------|
+| `commit-msg` | Every commit | Commitlint (Conventional Commits) |
+| `pre-push` | Every push | [`scripts/pre-push-quality.sh`](scripts/pre-push-quality.sh) — same checks as PR Gate quality |
+
+Pre-push runs:
 
 ```bash
+pnpm rebuild better-sqlite3
 pnpm typecheck
 pnpm lint
-pnpm test:coverage:check
+pnpm test:coverage:check   # with clean-output verification
 pnpm run build:vite && pnpm run verify:csp
+pnpm audit --prod --audit-level critical
 ```
 
-Commit messages are validated locally via Husky (`commit-msg` hook) when you run `pnpm install` (which triggers `prepare` → `husky`).
+Run manually anytime: `pnpm prepush`.
+
+**Paranoia layers:** (1) Husky before push → (2) PR Gate on the PR → (3) Main Stability after merge to `main`.
 
 ## Pull request descriptions
 
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) pre-fills new PRs with **Summary** and **Test plan** sections.
 
-**Test plan checkboxes are for pre-PR verification only.** Check an item when you ran that validation locally before opening the PR. Leave items unchecked if they do not apply or were not run.
+**Test plan checkboxes are for verification beyond Husky and CI.** Commitlint and the PR Gate quality suite run automatically via Husky on commit/push and again in CI before merge — do not checkbox those.
+
+Check an item when you ran that extra validation before opening the PR:
 
 | Checkbox | Typical local command / method |
 |----------|--------------------------------|
-| Commitlint | Husky on commit, or `pnpm exec commitlint --from origin/main` |
-| Unit tests | `pnpm test:run` or `pnpm test:coverage:check` |
-| Integration tests | Vitest suites that span multiple modules/services (when touched) |
-| Acceptance tests | Scenario-level checks against acceptance criteria |
 | E2E tests | `pnpm test:e2e` |
+| Acceptance tests | Scenario-level checks against acceptance criteria |
 | AI-assisted verification | Cursor or other agent review of the change |
 | Manual smoke test | Hands-on exercise of the affected UI or workflow |
-
-Do **not** use the Test plan for CI status (`pr-gate / quality`, `commitlint` on the PR). Those checks are enforced separately and auto-merge when green; they are not manually ticked in the description.
 
 ## Commit message format
 

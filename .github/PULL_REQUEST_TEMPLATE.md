@@ -6,14 +6,24 @@
 
 ## Test plan
 
-Check only what you verified **locally before opening** this PR. Required CI checks (`pr-gate / quality`, `commitlint`) run automatically on the PR and are not listed here.
+### Enforced locally (Husky — no checkbox needed)
 
-- [ ] Commitlint (local Husky hook or `pnpm exec commitlint --from origin/main`)
-- [ ] Unit tests (`pnpm test:run` / `pnpm test:coverage:check`)
-- [ ] Integration tests
-- [ ] Acceptance tests
+These run automatically when you commit or push:
+
+| Hook | Checks |
+|------|--------|
+| `commit-msg` | Commitlint (Conventional Commits) |
+| `pre-push` | PR Gate quality parity: typecheck, lint, Vitest coverage, clean test output, production CSP build, critical production dependency audit |
+
+CI re-runs the same quality suite on the PR before auto-merge. Main Stability validates packaging after merge.
+
+### Additional verification (check what applies)
+
+Check items you ran **beyond** the hooks above:
+
 - [ ] E2E tests (`pnpm test:e2e`)
+- [ ] Acceptance tests (scenario-level checks against acceptance criteria)
 - [ ] AI-assisted verification
 - [ ] Manual smoke test
 
-<!-- Optional: note environments, scenarios, or anything CI does not cover -->
+<!-- Optional: note environments, scenarios, or anything hooks and CI do not cover -->
