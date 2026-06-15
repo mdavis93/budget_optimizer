@@ -73,6 +73,7 @@ vi.mock('../../src/components/schedule', () => ({
         mock-drag-start-late
       </button>
       <button onClick={() => onDrop({ preventDefault: vi.fn() }, '2026-01-29')}>mock-drop-late</button>
+      <button onClick={() => onDrop({ preventDefault: vi.fn() }, '2026-01-15')}>mock-drop-same</button>
     </div>
   ),
   CalendarView: () => <div>Mock Calendar View</div>,
@@ -329,6 +330,30 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: /Budget Insights/i }));
       expect(screen.getByText('Increase target cash buffer')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Budget Insights/i }));
+    });
+
+    it('no-ops drag-drop when dropping on the same paycheck', async () => {
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'mock-drag-start' }));
+      fireEvent.click(screen.getByRole('button', { name: 'mock-drop-same' }));
+      expect(screen.queryByRole('button', { name: 'confirm-assignment' })).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(assignBill).not.toHaveBeenCalled();
+      });
+    });
+
+    it('assigns bills through quick-budget IPC on drop', async () => {
+      mockUseBudget.mockReturnValue({ isQuickBudget: true });
+      mockAPI.billAssignments.assign = vi.fn().mockResolvedValue({ success: true });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'mock-drag-start' }));
+      fireEvent.click(screen.getByRole('button', { name: 'mock-drop' }));
+
+      await waitFor(() => {
+        expect(mockAPI.billAssignments.assign).toHaveBeenCalled();
+        expect(reloadSnapshot).toHaveBeenCalled();
+      });
     });
   });
 });

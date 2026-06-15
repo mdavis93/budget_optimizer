@@ -2357,4 +2357,874 @@ describe('SchedulerService', () => {
       }
     });
   });
+
+  describe('skipped bills and preferred income assignment', () => {
+    const monthlyIncome: Income = {
+      id: 'income-monthly',
+      sourceName: 'Salary',
+      amount: 3000,
+      cadence: 'monthly',
+      startDate: '2026-01-01',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const recurringBill: Bill = {
+      id: 'bill-1',
+      creditorName: 'Rent',
+      budgetedAmount: 1200,
+      dueDay: 15,
+      isRecurring: true,
+      priority: 'critical',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('omits skipped bill occurrences but keeps later ones', () => {
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        [recurringBill],
+        '2026-01-01',
+        3,
+        0,
+        new Set(['bill-1-2026-01-15'])
+      );
+
+      const janOccurrence = schedule.fullPaychecks
+        .flatMap((paycheck) => paycheck.bills)
+        .find((bill) => bill.billDate === '2026-01-15');
+      const febOccurrence = schedule.fullPaychecks
+        .flatMap((paycheck) => paycheck.bills)
+        .find((bill) => bill.billDate === '2026-02-15');
+
+      expect(janOccurrence).toBeUndefined();
+      expect(febOccurrence).toBeDefined();
+    });
+
+    it('assigns preferred-income bills to the matching paycheck stream', () => {
+      const michaelIncome: Income = {
+        id: 'income-michael',
+        sourceName: 'Michael',
+        amount: 800,
+        cadence: 'weekly',
+        startDate: '2026-06-19',
+        isActive: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+      const angelaIncome: Income = {
+        id: 'income-angela',
+        sourceName: 'Angela',
+        amount: 500,
+        cadence: 'weekly',
+        startDate: '2026-06-12',
+        isActive: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+      const preferredBill: Bill = {
+        id: 'bill-pref',
+        creditorName: 'Preferred Bill',
+        budgetedAmount: 200,
+        dueDay: 21,
+        isRecurring: false,
+        priority: 'normal',
+        preferredIncomeSourceId: 'income-michael',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [angelaIncome, michaelIncome],
+        [preferredBill],
+        '2026-06-12',
+        1,
+        0
+      );
+
+      const assignment = schedule.fullPaychecks
+        .flatMap((paycheck) => paycheck.bills.map((bill) => ({ paycheck, bill })))
+        .find((entry) => entry.bill.billId === 'bill-pref');
+
+      expect(assignment).toBeDefined();
+      expect(assignment?.paycheck.incomeSources.some((source) => source.id === 'income-michael')).toBe(true);
+      expect(assignment?.paycheck.date).toBe('2026-06-19');
+    });
+  });
+
+  describe('goal suggestions and beyond-schedule projections', () => {
+    it('marks long-horizon goals as projected with guidance suggestions', () => {
+      const income: Income = {
+        id: 'income-1',
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const goal: SavingsGoal = {
+        id: 'goal-far',
+        budgetId: 'budget-1',
+        name: 'Car Down Payment',
+        targetAmount: 100000,
+        targetDate: '2028-06-30',
+        alreadySaved: 1000,
+        priority: 3,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [],
+        '2026-01-01',
+        12,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [goal],
+        100,
+        200
+      );
+
+      const projection = schedule.goalProjections.find((entry) => entry.goalId === 'goal-far');
+      expect(projection?.isProjected).toBe(true);
+      expect(projection?.projectionNote).toContain('12-month allocation rate');
+      expect(projection?.suggestions?.length).toBeGreaterThan(0);
+      expect(projection?.suggestions?.some((s) => s.type === 'extend_deadline' || s.type === 'reduce_target')).toBe(true);
+    });
+
+    it('diagnoses unfundable reason codes when triage cannot prepay', () => {
+      const monthlyIncome: Income = {
+        id: 'income-1',
+        sourceName: 'Salary',
+        amount: 500,
+        cadence: 'monthly',
+        startDate: '2026-06-01',
+        isActive: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+      const criticalBill: Bill = {
+        id: 'bill-critical',
+        creditorName: 'Critical',
+        budgetedAmount: 400,
+        dueDay: 1,
+        isRecurring: false,
+        priority: 'critical',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+      const lowBill: Bill = {
+        id: 'bill-low',
+        creditorName: 'Low',
+        budgetedAmount: 100,
+        dueDay: 1,
+        isRecurring: false,
+        priority: 'low',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        [criticalBill, lowBill],
+        '2026-06-01',
+        1,
+        0
+      );
+
+      const dropped = schedule.paychecks
+        .flatMap((paycheck) => paycheck.bills)
+        .find((bill) => bill.billId === 'bill-low' && bill.isUnpayable);
+
+      expect(dropped?.unfundableReason).toBeDefined();
+      expect([
+        'no_eligible_earlier_paycheck',
+        'insufficient_income_this_paycheck',
+      ]).toContain(dropped?.unfundableReason);
+    });
+  });
+
+  describe('rebalance phase 3 deep cascade', () => {
+    it('frees mid-paycheck capacity via chained moves to resolve a later deficit', () => {
+      const weeklyIncome: Income = {
+        id: 'income-weekly',
+        sourceName: 'Salary',
+        amount: 700,
+        cadence: 'weekly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const bills: Bill[] = [
+        {
+          id: 'bill-a',
+          creditorName: 'A',
+          budgetedAmount: 100,
+          dueDay: 10,
+          isRecurring: false,
+          priority: 'low',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-b',
+          creditorName: 'B',
+          budgetedAmount: 300,
+          dueDay: 14,
+          isRecurring: false,
+          priority: 'low',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-c',
+          creditorName: 'C',
+          budgetedAmount: 400,
+          dueDay: 18,
+          isRecurring: false,
+          priority: 'low',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-d',
+          creditorName: 'D',
+          budgetedAmount: 650,
+          dueDay: 25,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-e',
+          creditorName: 'E',
+          budgetedAmount: 200,
+          dueDay: 24,
+          isRecurring: false,
+          priority: 'low',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
+
+      const schedule = scheduler.generateSchedule(
+        [weeklyIncome],
+        bills,
+        '2026-01-01',
+        1,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0
+      );
+
+      const jan8 = schedule.paychecks.find((p) => p.date === '2026-01-08');
+      const jan15 = schedule.paychecks.find((p) => p.date === '2026-01-15');
+      const jan22 = schedule.paychecks.find((p) => p.date === '2026-01-22');
+
+      expect(jan8).toBeDefined();
+      expect(jan15).toBeDefined();
+      expect(jan22).toBeDefined();
+      expect(schedule.paychecks.every((p) => !p.isShortfall)).toBe(true);
+      expect(
+        jan8!.bills.some((b) => b.billId === 'bill-c' && b.billDate === '2026-01-18')
+      ).toBe(true);
+      expect(
+        jan15!.bills.some((b) => b.billId === 'bill-e' && b.billDate === '2026-01-24')
+      ).toBe(true);
+      expect(
+        jan22!.bills.some((b) => b.billId === 'bill-d' && b.billDate === '2026-01-25')
+      ).toBe(true);
+      expect(jan22!.bills.some((b) => b.billId === 'bill-e')).toBe(false);
+    });
+  });
+
+  describe('rebalance phase 4 even out', () => {
+    it('redistributes bills from a tight paycheck to an earlier surplus paycheck', () => {
+      const weeklyIncome: Income = {
+        id: 'income-weekly',
+        sourceName: 'Salary',
+        amount: 800,
+        cadence: 'weekly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const lightBill: Bill = {
+        id: 'bill-light',
+        creditorName: 'Light',
+        budgetedAmount: 50,
+        dueDay: 10,
+        isRecurring: false,
+        priority: 'low',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const tightBill: Bill = {
+        id: 'bill-tight',
+        creditorName: 'Tight',
+        budgetedAmount: 550,
+        dueDay: 18,
+        isRecurring: false,
+        priority: 'normal',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [weeklyIncome],
+        [lightBill, tightBill],
+        '2026-01-01',
+        1,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0
+      );
+
+      const jan8 = schedule.paychecks.find((p) => p.date === '2026-01-08');
+      const jan15 = schedule.paychecks.find((p) => p.date === '2026-01-15');
+
+      expect(jan8).toBeDefined();
+      expect(jan15).toBeDefined();
+      expect(jan8!.isShortfall).toBe(false);
+      expect(jan15!.isShortfall).toBe(false);
+      expect(
+        jan8!.bills.some((b) => b.billId === 'bill-tight' && b.billDate === '2026-01-18')
+      ).toBe(true);
+      expect(jan15!.bills.some((b) => b.billId === 'bill-tight')).toBe(false);
+    });
+  });
+
+  describe('goal funding timeline deadline metrics', () => {
+    it('reports beatsDeadlineByPaychecks when goal is fully funded before target date', () => {
+      const paychecks = [
+        {
+          date: '2026-01-15',
+          isShortfall: false,
+          goalDeposits: [{ goalId: 'goal-early', goalName: 'Quick Goal', amount: 500 }],
+          incomeSources: [],
+          totalIncome: 0,
+          bills: [],
+          totalBills: 0,
+          totalGoalDeposits: 500,
+          budgetRemaining: 0,
+          savingsDeposit: 0,
+          totalSavings: 0,
+        },
+        {
+          date: '2026-06-15',
+          isShortfall: false,
+          goalDeposits: [],
+          incomeSources: [],
+          totalIncome: 0,
+          bills: [],
+          totalBills: 0,
+          totalGoalDeposits: 0,
+          budgetRemaining: 0,
+          savingsDeposit: 0,
+          totalSavings: 0,
+        },
+      ];
+
+      const timeline = (
+        scheduler as unknown as {
+          computeGoalFundingTimeline: (
+            goalId: string,
+            remainingAmount: number,
+            paychecks: typeof paychecks,
+            goalDate: Date
+          ) => {
+            missesDeadlineByPaychecks: number | null;
+            beatsDeadlineByPaychecks: number | null;
+            estimatedFundedDate: string | null;
+          };
+        }
+      ).computeGoalFundingTimeline(
+        'goal-early',
+        500,
+        paychecks,
+        parseISO('2026-12-31')
+      );
+
+      expect(timeline.estimatedFundedDate).toBe('2026-01-15');
+      expect(timeline.beatsDeadlineByPaychecks).toBeGreaterThan(0);
+      expect(timeline.missesDeadlineByPaychecks).toBeNull();
+    });
+
+    it('reports missesDeadlineByPaychecks when funding completes after target date', () => {
+      const paychecks = [
+        {
+          date: '2026-06-01',
+          isShortfall: false,
+          goalDeposits: [{ goalId: 'goal-late', goalName: 'Late Goal', amount: 400 }],
+          incomeSources: [],
+          totalIncome: 0,
+          bills: [],
+          totalBills: 0,
+          totalGoalDeposits: 400,
+          budgetRemaining: 0,
+          savingsDeposit: 0,
+          totalSavings: 0,
+        },
+        {
+          date: '2026-06-15',
+          isShortfall: false,
+          goalDeposits: [{ goalId: 'goal-late', goalName: 'Late Goal', amount: 400 }],
+          incomeSources: [],
+          totalIncome: 0,
+          bills: [],
+          totalBills: 0,
+          totalGoalDeposits: 400,
+          budgetRemaining: 0,
+          savingsDeposit: 0,
+          totalSavings: 0,
+        },
+      ];
+
+      const timeline = (
+        scheduler as unknown as {
+          computeGoalFundingTimeline: (
+            goalId: string,
+            remainingAmount: number,
+            paychecks: typeof paychecks,
+            goalDate: Date
+          ) => {
+            missesDeadlineByPaychecks: number | null;
+            beatsDeadlineByPaychecks: number | null;
+            estimatedFundedDate: string | null;
+          };
+        }
+      ).computeGoalFundingTimeline(
+        'goal-late',
+        500,
+        paychecks,
+        parseISO('2026-06-14')
+      );
+
+      expect(timeline.estimatedFundedDate).toBe('2026-06-15');
+      expect(timeline.missesDeadlineByPaychecks).toBeGreaterThan(0);
+      expect(timeline.beatsDeadlineByPaychecks).toBeNull();
+    });
+  });
+
+  describe('generateGoalSuggestions increase_priority', () => {
+    it('suggests increasing priority for lower-priority partial goals', () => {
+      const income: Income = {
+        id: 'income-1',
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const rentBill: Bill = {
+        id: 'bill-rent',
+        creditorName: 'Rent',
+        budgetedAmount: 1200,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const secondaryGoal: SavingsGoal = {
+        id: 'goal-secondary',
+        budgetId: 'budget-1',
+        name: 'Secondary Fund',
+        targetAmount: 50000,
+        targetDate: '2026-12-31',
+        alreadySaved: 0,
+        priority: 2,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [rentBill],
+        '2026-01-01',
+        12,
+        0,
+        new Set(),
+        new Map(),
+        200,
+        [secondaryGoal],
+        100,
+        200
+      );
+
+      const projection = schedule.goalProjections!.find((p) => p.goalId === 'goal-secondary');
+      expect(projection?.status).toBe('partial');
+      const prioritySuggestion = projection?.suggestions.find((s) => s.type === 'increase_priority');
+      expect(prioritySuggestion).toBeDefined();
+      expect(prioritySuggestion!.newValue).toBe(1);
+      expect(prioritySuggestion!.description).toContain('Increase priority');
+    });
+  });
+
+  describe('generateRecommendations shortfall', () => {
+    it('includes unresolved shortfall guidance when deficits remain after rebalance', () => {
+      const lowIncome: Income = {
+        id: 'income-low',
+        sourceName: 'Part Time',
+        amount: 600,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const rentBill: Bill = {
+        id: 'bill-rent',
+        creditorName: 'Rent',
+        budgetedAmount: 1500,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [lowIncome],
+        [rentBill],
+        '2026-01-01',
+        3,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0
+      );
+
+      const shortfallPaycheck = schedule.paychecks.find((p) => p.isShortfall);
+      expect(shortfallPaycheck).toBeDefined();
+
+      const shortfallRec = schedule.recommendations.find((rec) =>
+        rec.includes('Budget shortfall') && rec.includes('couldn\'t be resolved by prepaying bills')
+      );
+      expect(shortfallRec).toBeDefined();
+      expect(shortfallRec).toContain('Jan');
+    });
+  });
+
+  describe('analyzeAndProposeFixes prepay rejection', () => {
+    it('does not propose moves that would prepay bills more than 14 days early', () => {
+      const schedule = scheduler.generateSchedule(
+        [],
+        [],
+        '2026-01-01',
+        1,
+        0
+      );
+
+      schedule.paychecks = [
+        {
+          date: '2026-01-01',
+          incomeSources: [{ id: 'income-1', name: 'Salary', amount: 1200 }],
+          totalIncome: 1200,
+          bills: [],
+          totalBills: 0,
+          goalDeposits: [],
+          totalGoalDeposits: 0,
+          budgetRemaining: 600,
+          savingsDeposit: 0,
+          totalSavings: 0,
+          isShortfall: false,
+        },
+        {
+          date: '2026-01-22',
+          incomeSources: [{ id: 'income-1', name: 'Salary', amount: 1200 }],
+          totalIncome: 1200,
+          bills: [
+            {
+              billId: 'bill-late',
+              creditorName: 'Late Due',
+              amount: 500,
+              dueDay: 30,
+              priority: 'low' as const,
+              billDate: '2026-01-30',
+            },
+          ],
+          totalBills: 500,
+          goalDeposits: [],
+          totalGoalDeposits: 0,
+          budgetRemaining: -200,
+          savingsDeposit: 0,
+          totalSavings: 0,
+          isShortfall: true,
+        },
+      ];
+
+      const report = scheduler.analyzeAndProposeFixes(schedule);
+      expect(report.needsReconciliation).toBe(true);
+
+      const lateBillMove = report.proposedFixes.find(
+        (f) => f.type === 'move_bill' && f.billId === 'bill-late'
+      );
+      expect(lateBillMove).toBeUndefined();
+
+      const skipFix = report.proposedFixes.find(
+        (f) => f.type === 'skip_bill' && f.billId === 'bill-late'
+      );
+      expect(skipFix).toBeDefined();
+      expect(differenceInDays(parseISO('2026-01-30'), parseISO('2026-01-01'))).toBeGreaterThan(14);
+    });
+  });
+
+  describe('buildPaycheckEntries surplus tiers', () => {
+    const biweeklyIncome: Income = {
+      id: 'income-biweekly',
+      sourceName: 'Salary',
+      amount: 2500,
+      cadence: 'biweekly',
+      startDate: '2026-01-01',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('allocates all surplus to savings when below minSavingsPerPaycheck threshold', () => {
+      const tinyIncome: Income = {
+        ...biweeklyIncome,
+        amount: 140,
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [tinyIncome],
+        [],
+        '2026-01-01',
+        1,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        50
+      );
+
+      const paycheck = schedule.paychecks[0];
+      expect(paycheck.totalIncome).toBe(140);
+      expect(paycheck.savingsDeposit).toBe(40);
+      expect(paycheck.totalGoalDeposits).toBe(0);
+      expect(paycheck.budgetRemaining).toBe(100);
+    });
+
+    it('funds min savings then goals when surplus exceeds minSavingsPerPaycheck', () => {
+      const goal: SavingsGoal = {
+        id: 'goal-1',
+        budgetId: 'budget-1',
+        name: 'Vacation',
+        targetAmount: 5000,
+        targetDate: '2026-12-31',
+        alreadySaved: 0,
+        priority: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [biweeklyIncome],
+        [],
+        '2026-01-01',
+        3,
+        0,
+        new Set(),
+        new Map(),
+        500,
+        [goal],
+        100,
+        50
+      );
+
+      const paycheckWithSurplus = schedule.paychecks.find(
+        (p) => !p.isShortfall && p.totalIncome > 100
+      );
+      expect(paycheckWithSurplus).toBeDefined();
+      expect(paycheckWithSurplus!.savingsDeposit).toBeGreaterThanOrEqual(50);
+      expect(paycheckWithSurplus!.totalGoalDeposits).toBeGreaterThan(0);
+    });
+  });
+
+  describe('debtPayoffs integration', () => {
+    it('stops projecting debt bills after payoff date in full schedule', () => {
+      const monthlyIncome: Income = {
+        id: 'income-monthly',
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const debtBill: Bill = {
+        id: 'bill-debt',
+        creditorName: 'Auto Loan',
+        budgetedAmount: 400,
+        dueDay: 15,
+        isRecurring: true,
+        priority: 'high',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const debtPayoffs = new Map([
+        [
+          'bill-debt',
+          {
+            billId: 'bill-debt',
+            payoffDate: parseISO('2026-02-15'),
+            finalPaymentAmount: 125,
+          },
+        ],
+      ]);
+
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        [debtBill],
+        '2026-01-01',
+        6,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0,
+        debtPayoffs
+      );
+
+      const debtOccurrences = schedule.fullPaychecks
+        .flatMap((p) => p.bills)
+        .filter((b) => b.billId === 'bill-debt');
+
+      expect(debtOccurrences).toHaveLength(2);
+      expect(debtOccurrences.map((b) => b.billDate)).toEqual(['2026-01-15', '2026-02-15']);
+      expect(debtOccurrences[0].amount).toBe(400);
+      expect(debtOccurrences[1].amount).toBe(125);
+      expect(
+        debtOccurrences.some((b) => b.billDate === '2026-03-15')
+      ).toBe(false);
+    });
+  });
+
+  describe('preferredIncomeSourceId edge cases', () => {
+    it('returns null from findPreferredPaycheck when bill has no preferred income', () => {
+      const result = (
+        scheduler as unknown as {
+          findPreferredPaycheck: (
+            bill: { billId: string; preferredIncomeSourceId?: string; date: Date },
+            paycheckAssignments: Array<{ date: Date; incomes: Array<{ sourceId: string }>; bills: unknown[] }>,
+            skippedBills: Set<string>
+          ) => string | null;
+        }
+      ).findPreferredPaycheck(
+        { billId: 'bill-1', date: parseISO('2026-01-15') },
+        [{ date: parseISO('2026-01-01'), incomes: [{ sourceId: 'income-1' }], bills: [] }],
+        new Set()
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when preferred income is missing from all paychecks', () => {
+      const result = (
+        scheduler as unknown as {
+          findPreferredPaycheck: (
+            bill: { billId: string; preferredIncomeSourceId?: string; date: Date },
+            paycheckAssignments: Array<{ date: Date; incomes: Array<{ sourceId: string }>; bills: unknown[] }>,
+            skippedBills: Set<string>
+          ) => string | null;
+        }
+      ).findPreferredPaycheck(
+        { billId: 'bill-1', preferredIncomeSourceId: 'missing-income', date: parseISO('2026-01-15') },
+        [{ date: parseISO('2026-01-01'), incomes: [{ sourceId: 'income-1' }], bills: [] }],
+        new Set()
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when preferred paycheck would prepay more than 14 days early', () => {
+      const result = (
+        scheduler as unknown as {
+          findPreferredPaycheck: (
+            bill: { billId: string; preferredIncomeSourceId?: string; date: Date },
+            paycheckAssignments: Array<{ date: Date; incomes: Array<{ sourceId: string }>; bills: unknown[] }>,
+            skippedBills: Set<string>
+          ) => string | null;
+        }
+      ).findPreferredPaycheck(
+        { billId: 'bill-1', preferredIncomeSourceId: 'income-1', date: parseISO('2026-02-01') },
+        [{ date: parseISO('2026-01-01'), incomes: [{ sourceId: 'income-1' }], bills: [] }],
+        new Set()
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('excludes skipped bill occurrences from the schedule', () => {
+      const monthlyIncome: Income = {
+        id: 'income-monthly',
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const recurringBill: Bill = {
+        id: 'bill-dup',
+        creditorName: 'Utilities',
+        budgetedAmount: 100,
+        dueDay: 15,
+        isRecurring: true,
+        priority: 'normal',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        [recurringBill],
+        '2026-01-01',
+        3,
+        0,
+        new Set(['bill-dup-2026-02-15'])
+      );
+
+      const febOccurrences = schedule.fullPaychecks
+        .flatMap((p) => p.bills)
+        .filter((b) => b.billId === 'bill-dup' && b.billDate === '2026-02-15');
+      expect(febOccurrences).toHaveLength(0);
+    });
+  });
 });

@@ -213,6 +213,54 @@ describe('validation.service', () => {
       expect(result.errors.some((error) => error.includes('constructor'))).toBe(true);
     });
 
+    it('rejects bill amount over maximum and non-integer due day', () => {
+      expect(validateBill({
+        creditorName: 'Big Bill',
+        budgetedAmount: 1_000_001,
+        dueDay: 15,
+        isRecurring: true,
+        priority: 'normal',
+      }).valid).toBe(false);
+
+      expect(validateBill({
+        creditorName: 'Rent',
+        budgetedAmount: 100,
+        dueDay: 1.5 as never,
+        isRecurring: true,
+        priority: 'normal',
+      }).valid).toBe(false);
+    });
+
+    it('rejects income with oversized name and NaN amount', () => {
+      expect(validateIncome({
+        sourceName: 'x'.repeat(101),
+        amount: 100,
+        cadence: 'weekly',
+        startDate: '2026-01-01',
+        isActive: true,
+      }).valid).toBe(false);
+
+      expect(validateIncome({
+        sourceName: 'Salary',
+        amount: Number.NaN,
+        cadence: 'weekly',
+        startDate: '2026-01-01',
+        isActive: true,
+      }).valid).toBe(false);
+    });
+
+    it('rejects invalid reconciliation fix type and oversized budget name', () => {
+      expect(validateReconciliationFix({
+        id: 'fix-bad-type',
+        type: 'unknown' as never,
+        billId: 'draft-12345678-abcd',
+        billDueDate: '2026-01-01',
+        fromPaycheckDate: '2026-01-01',
+      }).valid).toBe(false);
+
+      expect(validateBudget({ name: 'x'.repeat(101) }).valid).toBe(false);
+    });
+
     it('rejects hostile income overflow and invalid date value', () => {
       const result = validateIncome({
         sourceName: 'Attack Income',
@@ -259,6 +307,21 @@ describe('validation.service', () => {
       }).valid).toBe(true);
 
       expect(validateBudget({ name: 'Personal' }).valid).toBe(true);
+    });
+
+    it('rejects assertValid failures for invalid bill payloads', () => {
+      expect(() =>
+        assertValid(
+          validateBill({
+            creditorName: 'Rent',
+            budgetedAmount: 2_000_000,
+            dueDay: 15,
+            isRecurring: true,
+            priority: 'normal',
+          }),
+          'Bill validation'
+        )
+      ).toThrow('Bill validation');
     });
 
     it('rejects invalid goal, debt, budget, settings, and draft overlay payloads', () => {

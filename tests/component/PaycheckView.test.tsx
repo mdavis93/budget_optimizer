@@ -145,6 +145,66 @@ describe('PaycheckView', () => {
       expect(props.onClearIncomeOverride).toHaveBeenCalledWith('inc-1', expandedDate);
     });
 
+    it('ignores invalid income override values', async () => {
+      const props = baseProps();
+      const expandedDate = '2026-01-15';
+      renderWithRouter(
+        <PaycheckView
+          {...props}
+          expandedPaychecks={new Set([expandedDate])}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Edit gross income for this paycheck'));
+      fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '-5' } });
+      fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+      expect(props.onSaveIncomeOverride).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByRole('spinbutton'), { target: { value: 'not-a-number' } });
+      fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+      expect(props.onSaveIncomeOverride).not.toHaveBeenCalled();
+    });
+
+    it('sorts expanded bills by month offset from paycheck date', () => {
+      const props = baseProps();
+      const expandedDate = '2026-03-15';
+      renderWithRouter(
+        <PaycheckView
+          {...props}
+          expandedPaychecks={new Set([expandedDate])}
+          paychecks={[
+            createMockPaycheck({
+              date: expandedDate,
+              incomeSources: [{ id: 'inc-1', name: 'Salary', amount: 2000 }],
+              bills: [
+                {
+                  billId: 'bill-far',
+                  creditorName: 'Far Bill',
+                  amount: 100,
+                  dueDay: 1,
+                  billDate: '2026-05-01',
+                  priority: 'normal',
+                  isIncomeAttached: false,
+                },
+                {
+                  billId: 'bill-near',
+                  creditorName: 'Near Bill',
+                  amount: 50,
+                  dueDay: 1,
+                  billDate: '2026-03-20',
+                  priority: 'normal',
+                  isIncomeAttached: false,
+                },
+              ],
+            }),
+          ]}
+        />
+      );
+
+      const billNames = screen.getAllByText(/Bill$/).map((el) => el.textContent);
+      expect(billNames.indexOf('Near Bill')).toBeLessThan(billNames.indexOf('Far Bill'));
+    });
+
     it('renders shortfall styling and unpayable bill indicators', () => {
       const props = baseProps();
       const expandedDate = '2026-01-15';

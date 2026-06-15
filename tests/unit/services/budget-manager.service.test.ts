@@ -369,6 +369,29 @@ describe('BudgetManager', () => {
       expect(manager.getAllBudgetsWithStats()).toEqual([]);
     });
 
+    it('returns null current budget id and quick allocation settings in quick mode', () => {
+      manager.setCurrentBudget('budget-1');
+      manager.startQuickBudget();
+
+      expect(manager.getCurrentBudgetId()).toBeNull();
+
+      manager.setStartingBalance(250);
+      manager.setTargetCashOnHand(400);
+      manager.setMinCashOnHand(150);
+      manager.setMinSavingsPerPaycheck(25);
+
+      const quick = (manager as unknown as { quickBudgetService: { setScheduleStartDate: (d: string) => void } })
+        .quickBudgetService;
+      quick.setScheduleStartDate('2026-05-01');
+
+      expect(manager.getStartingBalance()).toBe(250);
+      expect(manager.getTargetCashOnHand()).toBe(400);
+      expect(manager.getMinCashOnHand()).toBe(150);
+      expect(manager.getMinSavingsPerPaycheck()).toBe(25);
+      expect(manager.getScheduleStartDate()).toBe('2026-05-01');
+      expect(database.updateBudget).not.toHaveBeenCalled();
+    });
+
     it('routes skipped bills, assignments, and overrides to quick mode service', () => {
       const quick = (manager as unknown as { quickBudgetService: Record<string, ReturnType<typeof vi.fn>> }).quickBudgetService;
       quick.skipBill = vi.fn((billId: string, skipDate: string) => ({ billId, skipDate }));
@@ -489,6 +512,30 @@ describe('BudgetManager', () => {
           targetDate: '2026-12-01',
         })
       ).toThrow('No budget selected');
+    });
+
+    it('returns false schedule helpers without selected budget', () => {
+      expect(manager.unskipBill('bill-1', '2026-01-01')).toBe(false);
+      expect(manager.removeBillAssignment('bill-1', '2026-01-01')).toBe(false);
+      expect(manager.removeIncomeOverride('income-1', '2026-01-01')).toBe(false);
+      expect(manager.isSkipped('bill-1', '2026-01-01')).toBe(false);
+      expect(manager.getBillAssignment('bill-1', '2026-01-01')).toBeNull();
+    });
+
+    it('returns zero starting balance when budget record is missing', () => {
+      manager.setCurrentBudget('budget-1');
+      database.getBudgetById.mockReturnValue(null);
+
+      expect(manager.getStartingBalance()).toBe(0);
+    });
+
+    it('no-ops allocation setters when no budget is selected', () => {
+      manager.setStartingBalance(500);
+      manager.setTargetCashOnHand(300);
+      manager.setMinCashOnHand(200);
+      manager.setMinSavingsPerPaycheck(50);
+
+      expect(database.updateBudget).not.toHaveBeenCalled();
     });
 
     it('throws on schedule-domain write operations without budget', () => {

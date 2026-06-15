@@ -477,5 +477,229 @@ describe('DatabaseService', () => {
       );
       expect(db.getSettings().theme).toBe('dark-mode');
     });
+
+    it('rejects invalid bill payloads on create and update', () => {
+      const budget = db.createBudget({ name: 'Bill Validation' });
+      expect(() =>
+        db.createBillEntry(budget.id, {
+          creditorName: '',
+          budgetedAmount: 0,
+          dueDay: 32,
+          isRecurring: true,
+          priority: 'normal',
+        })
+      ).toThrow(/Invalid bill data/);
+
+      expect(() =>
+        db.updateBillEntry('missing-bill', budget.id, {
+          creditorName: '',
+          budgetedAmount: -5,
+          dueDay: 0,
+          isRecurring: true,
+          priority: 'normal',
+        })
+      ).toThrow(/Invalid bill data/);
+    });
+
+    it('rejects invalid income updates before checking record existence', () => {
+      const budget = db.createBudget({ name: 'Income Update Validation' });
+      expect(() =>
+        db.updateIncome('missing-income', budget.id, {
+          sourceName: '',
+          amount: -1,
+          cadence: 'weekly',
+          startDate: 'bad-date',
+          isActive: true,
+        })
+      ).toThrow(/Invalid income data/);
+    });
+
+    it('returns null for missing budgets and scoped income or bill lookups', () => {
+      const budget = db.createBudget({ name: 'Lookup Budget' });
+      const income = db.createIncome(budget.id, {
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      const bill = db.createBillEntry(budget.id, {
+        creditorName: 'Rent',
+        budgetedAmount: 1000,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical',
+      });
+
+      expect(db.getBudgetById('missing-budget')).toBeNull();
+      expect(db.updateBudget('missing-budget', { name: 'Nope' })).toBeNull();
+      expect(db.getIncomeById(income.id, 'wrong-budget')).toBeNull();
+      expect(db.getBillById(bill.id, 'wrong-budget')).toBeNull();
+    });
+
+    it('rejects invalid budget, goal, and debt updates', () => {
+      const budget = db.createBudget({ name: 'Update Validation' });
+      expect(() => db.createBudget({ name: '' })).toThrow(/Invalid budget data/);
+      expect(() => db.updateBudget(budget.id, { minCashOnHand: -1 })).toThrow(/Invalid budget data/);
+
+      const goal = db.createGoal(budget.id, {
+        name: 'Vacation',
+        targetAmount: 1000,
+        targetDate: '2026-12-31',
+      });
+      expect(() => db.updateGoal(goal.id, budget.id, { priority: 99 })).toThrow(/Invalid goal data/);
+
+      const bill = db.createBillEntry(budget.id, {
+        creditorName: 'Card',
+        budgetedAmount: 100,
+        dueDay: 10,
+        isRecurring: true,
+        priority: 'normal',
+      });
+      const debt = db.createDebt(budget.id, {
+        billId: bill.id,
+        principalBalance: 1000,
+        apr: 10,
+        monthlyPayment: 50,
+      });
+      expect(() => db.updateDebt(debt.id, budget.id, { apr: 150 })).toThrow(/Invalid debt data/);
+    });
+
+    it('rejects hostile settings updates and non-finite income overrides', () => {
+      const budget = db.createBudget({ name: 'Settings Guard' });
+      expect(() => db.updateSettings({ theme: 'neon' })).toThrow(/Invalid settings data/);
+      expect(() => db.updateSettings({ rogueKey: 1 } as never)).toThrow(/Invalid settings data/);
+      expect(() => db.setIncomeOverride(budget.id, 'income-1', '2026-02-01', Number.NaN)).toThrow(
+        'Income override amount must be a non-negative number'
+      );
+      expect(() => db.setIncomeOverride(budget.id, 'income-1', '2026-02-01', Number.POSITIVE_INFINITY)).toThrow(
+        'Income override amount must be a non-negative number'
+      );
+    });
+
+    it('returns zero when old skip and assignment cleanup finds nothing', () => {
+      const budget = db.createBudget({ name: 'Cleanup Budget' });
+      const bill = db.createBillEntry(budget.id, {
+        creditorName: 'Utilities',
+        budgetedAmount: 80,
+        dueDay: 5,
+        isRecurring: true,
+        priority: 'normal',
+      });
+      db.skipBill(budget.id, bill.id, '2026-06-01');
+      db.assignBillToPaycheck(budget.id, bill.id, '2026-06-05', '2026-06-01');
+
+      expect(db.clearOldSkippedBills(budget.id, '1900-01-01')).toBe(0);
+      expect(db.clearOldBillAssignments(budget.id, '1900-01-01')).toBe(0);
+    });
+
+    it('allows case-only budget renames', () => {
+      const budget = db.createBudget({ name: 'Household' });
+      const updated = db.updateBudget(budget.id, { name: 'household' });
+      expect(updated?.name).toBe('household');
+    });
+
+    it('creates userData directory when missing before initialize', () => {
+      const freshRoot = path.join(os.tmpdir(), `budget-optimizer-fresh-${process.pid}-${Date.now()}`);
+      if (fs.existsSync(freshRoot)) {
+        fs.rmSync(freshRoot, { recursive: true, force: true });
+      }
+      mockGetPath.mockReturnValue(freshRoot);
+
+      const freshDb = new DatabaseService(createCrypto());
+      freshDb.initialize();
+      expect(fs.existsSync(freshRoot)).toBe(true);
+      freshDb.close();
+      fs.rmSync(freshRoot, { recursive: true, force: true });
+    });
+
+    it('throws when public methods are called before initialize', () => {
+      const uninitialized = new DatabaseService(createCrypto());
+      const budgetId = 'budget-1';
+      const billInput = {
+        creditorName: 'Rent',
+        budgetedAmount: 1000,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'critical' as const,
+      };
+      const incomeInput = {
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'monthly' as const,
+        startDate: '2026-01-01',
+        isActive: true,
+      };
+      const goalInput = { name: 'Vacation', targetAmount: 1000, targetDate: '2026-12-31' };
+      const debtInput = { billId: 'bill-1', principalBalance: 1000, apr: 10, monthlyPayment: 50 };
+
+      const calls: Array<() => unknown> = [
+        () => uninitialized.getBudgetById('x'),
+        () => uninitialized.createBudget({ name: 'X' }),
+        () => uninitialized.updateBudget('x', { name: 'Y' }),
+        () => uninitialized.deleteBudget('x'),
+        () => uninitialized.getBudgetStats(budgetId),
+        () => uninitialized.getAllBudgetsWithStats(),
+        () => uninitialized.getAllIncomes(budgetId),
+        () => uninitialized.getIncomeById('x', budgetId),
+        () => uninitialized.createIncome(budgetId, incomeInput),
+        () => uninitialized.updateIncome('x', budgetId, incomeInput),
+        () => uninitialized.deleteIncome('x', budgetId),
+        () => uninitialized.getAllBills(budgetId),
+        () => uninitialized.getBillById('x', budgetId),
+        () => uninitialized.createBillEntry(budgetId, billInput),
+        () => uninitialized.updateBillEntry('x', budgetId, billInput),
+        () => uninitialized.deleteBillEntry('x', budgetId),
+        () => uninitialized.getSettings(),
+        () => uninitialized.updateSettings({ theme: 'dark' }),
+        () => uninitialized.getSkippedBills(budgetId),
+        () => uninitialized.skipBill(budgetId, 'bill-1', '2026-01-15'),
+        () => uninitialized.unskipBill(budgetId, 'bill-1', '2026-01-15'),
+        () => uninitialized.isSkipped(budgetId, 'bill-1', '2026-01-15'),
+        () => uninitialized.clearOldSkippedBills(budgetId, '2026-01-01'),
+        () => uninitialized.getBillAssignments(budgetId),
+        () => uninitialized.assignBillToPaycheck(budgetId, 'bill-1', '2026-01-15', '2026-01-01'),
+        () => uninitialized.removeBillAssignment(budgetId, 'bill-1', '2026-01-15'),
+        () => uninitialized.getBillAssignment(budgetId, 'bill-1', '2026-01-15'),
+        () => uninitialized.clearOldBillAssignments(budgetId, '2026-01-01'),
+        () => uninitialized.getIncomeOverrides(budgetId),
+        () => uninitialized.setIncomeOverride(budgetId, 'inc-1', '2026-01-01', 100),
+        () => uninitialized.removeIncomeOverride(budgetId, 'inc-1', '2026-01-01'),
+        () => uninitialized.getAllGoals(budgetId),
+        () => uninitialized.getGoalById('x', budgetId),
+        () => uninitialized.createGoal(budgetId, goalInput),
+        () => uninitialized.updateGoal('x', budgetId, goalInput),
+        () => uninitialized.deleteGoal('x', budgetId),
+        () => uninitialized.getDebts(budgetId),
+        () => uninitialized.getDebtById('x', budgetId),
+        () => uninitialized.getDebtByBillId('bill-1', budgetId),
+        () => uninitialized.createDebt(budgetId, debtInput),
+        () => uninitialized.updateDebt('x', budgetId, { apr: 5 }),
+        () => uninitialized.deleteDebt('x', budgetId),
+      ];
+
+      for (const call of calls) {
+        expect(call).toThrow('Database not initialized');
+      }
+    });
+
+    it('throws when database is used before initialize or after close', () => {
+      const uninitialized = new DatabaseService(createCrypto());
+      expect(() => uninitialized.getAllBudgets()).toThrow('Database not initialized');
+
+      const closed = new DatabaseService(createCrypto());
+      closed.initialize();
+      closed.close();
+      expect(() => closed.getAllBudgets()).toThrow('Database not initialized');
+    });
+
+    it('rejects corrupted ciphertext when reading encrypted rows', () => {
+      const internalDb = (db as unknown as { db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } } }).db;
+      internalDb
+        .prepare('INSERT INTO budgets (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)')
+        .run('bad-budget', 'not-valid-ciphertext', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+
+      expect(() => db.getBudgetById('bad-budget')).toThrow(/Invalid ciphertext format/);
+    });
   });
 });

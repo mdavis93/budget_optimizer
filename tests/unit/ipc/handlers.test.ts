@@ -624,6 +624,105 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('debts:get-all-with-amortization')).resolves.toEqual({ success: true, data: [] });
     });
 
+    it('returns database init error when biometric unlock succeeds but initialization fails', async () => {
+      const services = createServices();
+      const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => {
+        throw new Error('biometric db locked');
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('auth:unlock-with-biometric')).resolves.toEqual({
+        success: false,
+        error: expect.stringContaining('biometric db locked'),
+      });
+      initSpy.mockRestore();
+    });
+
+    it('reinitializes database after successful password reset with recovery', async () => {
+      const services = createServices();
+      const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => undefined);
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(
+        ipcMain.invoke('auth:reset-password-with-recovery', 'recovery-key', 'new-password-123')
+      ).resolves.toEqual({ success: true });
+      expect(initSpy).toHaveBeenCalled();
+      initSpy.mockRestore();
+    });
+
+    it('returns null current budget when no budget id is selected', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          getCurrentState: vi.fn(() => ({ budgetId: null, isQuickBudget: false })),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('budget:get-current')).resolves.toEqual({
+        success: true,
+        data: { budget: null, isQuickBudget: false },
+      });
+    });
+
+    it('uses overlay starting balance when schedule:build receives draft overlay', async () => {
+      const services = createServices();
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await ipcMain.invoke('schedule:build', '2026-02-01', 3, 750, { startingBalance: 750 });
+
+      expect(services.scheduler.generateSchedule).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        '2026-02-01',
+        3,
+        750,
+        expect.any(Set),
+        expect.any(Map),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.any(Map),
+        expect.any(Map)
+      );
+    });
+
+    it('builds debt payoffs for schedule generation when debts link to bills', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          getAllGoals: vi.fn(() => [{ id: 'goal-1', name: 'Fund', targetAmount: 1000, targetDate: '2026-12-01' }]),
+          getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 100, creditorName: 'Card' }]),
+        },
+        database: {
+          ...createServices().database,
+          getDebts: vi.fn(() => [
+            {
+              id: 'debt-1',
+              budgetId: 'budget-1',
+              billId: 'bill-1',
+              principalBalance: 500,
+              apr: 8,
+              monthlyPayment: 100,
+            },
+          ]),
+        },
+        debt: {
+          calculateAmortization: vi.fn(() => ({
+            monthsToPayoff: 5,
+            payments: [],
+            payoffDate: '2026-05-01',
+          })),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await ipcMain.invoke('goals:get-projections');
+      expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
+      expect(services.scheduler.generateSchedule).toHaveBeenCalled();
+    });
+
     it('returns empty goal projections when no goals are configured', async () => {
       const services = createServices({
         budgetManager: {
@@ -900,6 +999,41 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('budget:delete', 'budget-1')).resolves.toEqual({
         success: false,
         error: 'Cannot delete budget (may be current budget)',
+      });
+    });
+
+    it('returns false success when unskip or assignment remove yields no data', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          unskipBill: vi.fn(() => false),
+          removeBillAssignment: vi.fn(() => false),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('skipped-bills:unskip', 'bill-1', '2026-01-01')).resolves.toEqual({
+        success: false,
+      });
+      await expect(ipcMain.invoke('bill-assignments:remove', 'bill-1', '2026-01-01')).resolves.toEqual({
+        success: false,
+      });
+    });
+
+    it('returns create-master-password errors from unexpected failures', async () => {
+      const services = createServices({
+        auth: {
+          ...createServices().auth,
+          createMasterPassword: vi.fn(async () => {
+            throw new Error('unexpected setup failure');
+          }),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await expect(ipcMain.invoke('auth:create-master-password', 'pw')).resolves.toEqual({
+        success: false,
+        error: 'unexpected setup failure',
       });
     });
 
