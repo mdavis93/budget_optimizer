@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { TestMemoryRouter } from '../helpers/router';
 import { useUnsavedChangesGuard } from '../../src/hooks/useUnsavedChangesGuard';
 
 const mockUseDraftOptional = vi.fn();
@@ -25,12 +26,12 @@ function GuardHarness() {
 
 function renderGuard() {
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <TestMemoryRouter initialEntries={['/']}>
       <Routes>
         <Route path="/" element={<GuardHarness />} />
         <Route path="/next" element={<div>next-page</div>} />
       </Routes>
-    </MemoryRouter>
+    </TestMemoryRouter>
   );
 }
 

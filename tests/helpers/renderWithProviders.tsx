@@ -1,7 +1,8 @@
 import { ReactElement, ReactNode } from 'react';
 import { render, RenderOptions } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { TestMemoryRouter } from './router';
 
 export interface ProviderOptions {
   route?: string;
@@ -47,11 +48,11 @@ function TestProviders({
   });
 
   return (
-    <MemoryRouter initialEntries={[route]}>
+    <TestMemoryRouter initialEntries={[route]}>
       <Routes>
         <Route path="*" element={children} />
       </Routes>
-    </MemoryRouter>
+    </TestMemoryRouter>
   );
 }
 

@@ -8,6 +8,15 @@ import {
   ipcVoid,
 } from '../../../electron/ipc/guards';
 
+vi.mock('../../../electron/services/logger.service', () => ({
+  ipcLogger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 function createServices(overrides: {
   isUnlocked?: boolean;
   hasBudgetManager?: boolean;

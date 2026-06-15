@@ -14,6 +14,7 @@ describe('RecoveryKeyDisplay', () => {
     Object.assign(navigator, { clipboard: { writeText } });
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
     globalThis.URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
   });
 
   describe('happy', () => {

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DraftProvider, useDraft, useDraftOptional } from '../../src/context/DraftContext';
 import { ToastProvider } from '../../src/components/Toast';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 const mockUseAuth = vi.fn();
 const mockUseBudget = vi.fn();
@@ -664,9 +665,13 @@ describe('DraftContext', () => {
 
       fireEvent.click(screen.getByText('create-income'));
       fireEvent.click(screen.getByText('create-bill'));
-      fireEvent.click(screen.getByText('discard-all'));
-      fireEvent.click(screen.getByText('reload-snapshot'));
-      expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      await act(async () => {
+        fireEvent.click(screen.getByText('discard-all'));
+        fireEvent.click(screen.getByText('reload-snapshot'));
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
       expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
       expect(screen.getByTestId('dirty-income')).toHaveTextContent('false');
     });
@@ -778,7 +783,9 @@ describe('DraftContext', () => {
       });
 
       renderProvider();
-      fireEvent.click(screen.getByText('reload-snapshot'));
+      await act(async () => {
+        fireEvent.click(screen.getByText('reload-snapshot'));
+      });
 
       await waitFor(() => {
         expect(mockAPI.debts.getAll).toHaveBeenCalled();
@@ -976,7 +983,9 @@ describe('DraftContext', () => {
       useDraft();
       return null;
     }
-    expect(() => render(<BadConsumer />)).toThrow('useDraft must be used within a DraftProvider');
+    suppressExpectedConsoleErrors(() => {
+      expect(() => render(<BadConsumer />)).toThrow('useDraft must be used within a DraftProvider');
+    });
   });
 
   it('returns null from useDraftOptional outside provider', () => {

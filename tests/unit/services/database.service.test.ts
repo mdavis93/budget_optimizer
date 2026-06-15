@@ -5,6 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CryptoService } from '../../../electron/services/crypto.service';
 import { DatabaseService } from '../../../electron/services/database.service';
 
+vi.mock('../../../electron/services/logger.service', () => ({
+  databaseLogger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 let tempRoot = '';
 const mockGetPath = vi.fn((name: string) => {
   if (name === 'userData') {
