@@ -401,6 +401,63 @@ describe('AuthService lock and password paths', () => {
       await expect(auth.unlock('newpassword456')).resolves.toEqual({ success: true });
     });
 
+    it('enforces extended rate limit at 15 failed unlock attempts', async () => {
+      vi.useFakeTimers();
+      try {
+        const auth = new AuthService();
+        await auth.createMasterPassword('testpassword123');
+        auth.lock();
+
+        for (let i = 0; i < 14; i++) {
+          await auth.unlock('wrong-password');
+        }
+        const limited = await auth.unlock('wrong-password');
+        expect(limited.success).toBe(false);
+        expect(limited.error).toMatch(/Too many attempts/);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('recordActivity no-ops when auth config is missing', () => {
+      const auth = new AuthService();
+      expect(() => auth.recordActivity()).not.toThrow();
+    });
+
+    it('enforces rate limit on recovery key verification', async () => {
+      vi.useFakeTimers();
+      try {
+        const auth = new AuthService();
+        await auth.createMasterPassword('testpassword123');
+
+        for (let i = 0; i < 15; i++) {
+          await auth.verifyRecoveryKey('bad-key');
+        }
+        const limited = await auth.verifyRecoveryKey('bad-key');
+        expect(limited.success).toBe(false);
+        expect(limited.error).toMatch(/Too many attempts/);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('enforces rate limit on password reset with recovery key', async () => {
+      vi.useFakeTimers();
+      try {
+        const auth = new AuthService();
+        await auth.createMasterPassword('testpassword123');
+
+        for (let i = 0; i < 15; i++) {
+          await auth.resetPasswordWithRecoveryKey('bad-key', 'newpassword456');
+        }
+        const limited = await auth.resetPasswordWithRecoveryKey('bad-key', 'newpassword456');
+        expect(limited.success).toBe(false);
+        expect(limited.error).toMatch(/Too many attempts/);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('returns change-password failure when config persistence throws', async () => {
       const auth = new AuthService();
       await auth.createMasterPassword('testpassword123');

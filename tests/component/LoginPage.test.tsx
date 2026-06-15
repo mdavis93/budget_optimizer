@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginPage from '../../src/pages/LoginPage';
 import { renderWithRouter } from '../helpers/renderWithProviders';
@@ -112,6 +112,36 @@ describe('LoginPage', () => {
         expect(unlockWithBiometric).toHaveBeenCalled();
         expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
       });
+    });
+
+    it('does not call unlock when password is whitespace only', () => {
+      renderWithRouter(<LoginPage />, { mockAPI });
+      const form = screen.getByLabelText('Master Password').closest('form')!;
+      fireEvent.change(screen.getByLabelText('Master Password'), { target: { value: '   ' } });
+      fireEvent.submit(form);
+      expect(unlock).not.toHaveBeenCalled();
+    });
+
+    it('shows reset-password validation errors for short or mismatched passwords', async () => {
+      const user = userEvent.setup();
+      renderWithRouter(<LoginPage />, { mockAPI });
+
+      await user.click(screen.getByRole('button', { name: 'Forgot password?' }));
+      await user.type(screen.getByLabelText('Recovery Key'), 'word1 word2 word3 word4');
+      await user.click(screen.getByRole('button', { name: 'Verify Recovery Key' }));
+      expect(await screen.findByRole('heading', { name: 'Create New Password' })).toBeInTheDocument();
+
+      const form = screen.getByRole('button', { name: 'Reset Password' }).closest('form')!;
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'short' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'short' } });
+      fireEvent.submit(form);
+      expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'longenough1' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'different1' } });
+      fireEvent.submit(form);
+      expect(await screen.findByText('Passwords do not match')).toBeInTheDocument();
+      expect(mockAPI.auth.resetPasswordWithRecovery).not.toHaveBeenCalled();
     });
 
     it('shows auth error and toggles password visibility', async () => {

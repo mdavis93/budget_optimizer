@@ -1,12 +1,11 @@
-name: CI
+name: Shared Quality Checks
 
 on:
-  push:
-    branches: [main, master]
-  pull_request:
+  workflow_call:
 
 jobs:
-  test:
+  quality:
+    name: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,12 +38,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Test
-        run: pnpm test:run
+      - name: Test with coverage
+        run: pnpm test:coverage:check
 
       - name: Verify production CSP
         run: pnpm run build:vite && pnpm run verify:csp
 
       - name: Production audit
-        run: npm audit --production --audit-level=critical
-        continue-on-error: false
+        run: pnpm audit --prod --audit-level critical

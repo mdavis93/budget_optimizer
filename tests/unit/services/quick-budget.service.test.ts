@@ -188,6 +188,14 @@ describe('QuickBudgetService', () => {
         startDate: '2026-01-01',
         isActive: true,
       })).toBeNull();
+      expect(service.updateBill('missing', {
+        creditorName: 'Nope',
+        budgetedAmount: 100,
+        dueDay: 1,
+        category: 'utilities',
+        isRecurring: true,
+        priority: 'normal',
+      })).toBeNull();
       expect(service.deleteBill('missing')).toBe(false);
       expect(service.deleteIncome('missing')).toBe(false);
       expect(service.unskipBill('missing', '2026-01-01')).toBe(false);

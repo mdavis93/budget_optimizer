@@ -267,5 +267,135 @@ describe('GoalsPage', () => {
         expect(window.electronAPI.goals.delete).toHaveBeenCalled();
       });
     });
+
+    it('shows loading spinner while projections load', () => {
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        getGoalProjections: vi.fn(() => new Promise(() => undefined)),
+      });
+      render(<GoalsPage />);
+      expect(document.querySelector('.animate-spin')).toBeTruthy();
+    });
+
+    it('renders warning achievability color for mid-range projections', async () => {
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        getGoalProjections: vi.fn(async () => [
+          {
+            goalId: 'goal-1',
+            goalName: 'Emergency Fund',
+            targetAmount: 5000,
+            alreadySaved: 0,
+            remainingAmount: 5000,
+            targetDate: '2026-12-31',
+            paycheckCount: 20,
+            requiredPerPaycheck: 250,
+            adjustedRequiredPerPaycheck: 250,
+            availablePerPaycheck: 300,
+            actualAllocation: 2500,
+            achievableAmount: 2500,
+            achievabilityPercent: 75,
+            status: 'tight',
+            suggestions: [],
+            isProjected: false,
+            avgAllocationPerPaycheck: 125,
+            marginPerPaycheck: 50,
+            paychecksToFullyFund: null,
+            estimatedFundedDate: null,
+            beatsDeadlineByPaychecks: null,
+            missesDeadlineByPaychecks: 4,
+            scheduleHealth: { tightPaycheckCount: 1, shortfallCount: 0, savingsTotal: 500 },
+          },
+        ]),
+      });
+      render(<GoalsPage />);
+      expect(await screen.findByText('75%')).toBeInTheDocument();
+      expect(screen.getByText(/allocated/)).toBeInTheDocument();
+    });
+
+    it('renders danger achievability color for low projections', async () => {
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        getGoalProjections: vi.fn(async () => [
+          {
+            goalId: 'goal-1',
+            goalName: 'Emergency Fund',
+            targetAmount: 5000,
+            alreadySaved: 0,
+            remainingAmount: 5000,
+            targetDate: '2026-12-31',
+            paycheckCount: 20,
+            requiredPerPaycheck: 250,
+            adjustedRequiredPerPaycheck: 250,
+            availablePerPaycheck: 300,
+            actualAllocation: 500,
+            achievableAmount: 500,
+            achievabilityPercent: 25,
+            status: 'unlikely',
+            suggestions: [],
+            isProjected: false,
+            avgAllocationPerPaycheck: 25,
+            marginPerPaycheck: 50,
+            paychecksToFullyFund: null,
+            estimatedFundedDate: null,
+            beatsDeadlineByPaychecks: null,
+            missesDeadlineByPaychecks: 18,
+            scheduleHealth: { tightPaycheckCount: 2, shortfallCount: 1, savingsTotal: 100 },
+          },
+        ]),
+      });
+      render(<GoalsPage />);
+      expect(await screen.findByText('25%')).toBeInTheDocument();
+    });
+
+    it('shows loading achievability panel when projection is missing', async () => {
+      render(<GoalsPage />);
+      expect(await screen.findByText('Emergency Fund')).toBeInTheDocument();
+      expect(screen.getByText('Goal Achievability')).toBeInTheDocument();
+    });
+
+    it('keeps create modal open when createGoal returns false', async () => {
+      const createGoal = vi.fn(() => false);
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        createGoal,
+      });
+      const user = userEvent.setup();
+      render(<GoalsPage />);
+      await user.click(await screen.findByRole('button', { name: /Add Goal/i }));
+      fireEvent.change(screen.getByLabelText('Goal Name'), { target: { value: 'Car' } });
+      fireEvent.change(screen.getByLabelText('Target Amount'), { target: { value: '8000' } });
+      fireEvent.change(screen.getByLabelText('Target Date'), { target: { value: '2027-06-01' } });
+      await user.click(screen.getByRole('button', { name: /Create Goal/i }));
+
+      await waitFor(() => {
+        expect(createGoal).toHaveBeenCalled();
+      });
+      expect(screen.getByRole('dialog', { name: /Create Savings Goal/i })).toBeInTheDocument();
+    });
+
+    it('reloads snapshot on mount in quick-budget mode', async () => {
+      const reloadSnapshot = vi.fn(async () => {});
+      mockUseBudget.mockReturnValue({ isQuickBudget: true });
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        reloadSnapshot,
+      });
+      render(<GoalsPage />);
+      await waitFor(() => {
+        expect(reloadSnapshot).toHaveBeenCalled();
+      });
+    });
+
+    it('recovers when projection loading fails', async () => {
+      mockUseDraft.mockReturnValue({
+        ...baseDraft,
+        getGoalProjections: vi.fn(async () => {
+          throw new Error('projection failed');
+        }),
+      });
+      render(<GoalsPage />);
+      expect(await screen.findByText('Emergency Fund')).toBeInTheDocument();
+    });
   });
 });

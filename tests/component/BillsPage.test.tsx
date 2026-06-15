@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BillsPage from '../../src/pages/BillsPage';
 import { createMockBill, createMockIncome } from '../mocks/electron-api.mock';
@@ -18,6 +18,9 @@ describe('BillsPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createBill.mockResolvedValue(true);
+    updateBill.mockResolvedValue(true);
+    deleteBill.mockResolvedValue(true);
     mockUseData.mockReturnValue({
       bills: [
         createMockBill({
@@ -117,9 +120,9 @@ describe('BillsPage', () => {
       });
 
       await user.click(screen.getByRole('button', { name: /Edit Internet/i }));
-      const creditorInput = screen.getByLabelText('Creditor / Vendor Name');
-      await user.clear(creditorInput);
-      await user.type(creditorInput, 'Fiber Internet');
+      fireEvent.change(screen.getByLabelText('Creditor / Vendor Name'), {
+        target: { value: 'Fiber Internet' },
+      });
       await user.click(screen.getByRole('button', { name: 'Update Bill' }));
 
       await waitFor(() => {
@@ -152,5 +155,109 @@ describe('BillsPage', () => {
       await user.click(screen.getByRole('button', { name: /Edit Rent/i }));
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
     }, 15000);
+
+    it('keeps add modal open when createBill returns false', async () => {
+      createBill.mockResolvedValue(false);
+      const user = userEvent.setup();
+      render(<BillsPage />);
+
+      await user.click(screen.getByRole('button', { name: /Add Bill/i }));
+      fireEvent.change(screen.getByLabelText('Creditor / Vendor Name'), { target: { value: 'Phone' } });
+      fireEvent.change(screen.getByLabelText('Budgeted Amount'), { target: { value: '65' } });
+      await user.click(screen.getAllByRole('button', { name: 'Add Bill' }).at(-1)!);
+
+      await waitFor(() => {
+        expect(createBill).toHaveBeenCalled();
+      });
+      expect(screen.getByRole('dialog', { name: /Add Bill/i })).toBeInTheDocument();
+    });
+
+    it('opens add modal from empty-state action', async () => {
+      mockUseData.mockReturnValue({
+        bills: [],
+        incomes,
+        createBill,
+        updateBill,
+        deleteBill,
+      });
+      const user = userEvent.setup();
+      render(<BillsPage />);
+
+      const emptyState = screen.getByText('No bills added').parentElement as HTMLElement;
+      await user.click(within(emptyState).getByRole('button', { name: /Add Bill/i }));
+      expect(screen.getByRole('dialog', { name: /Add Bill/i })).toBeInTheDocument();
+    });
+
+    it('shows estimated total label and per-paycheck bill details', () => {
+      mockUseData.mockReturnValue({
+        bills: [
+          createMockBill({
+            id: 'bill-3',
+            creditorName: '401k',
+            budgetedAmount: 200,
+            priority: 'normal',
+            isIncomeAttached: true,
+            preferredIncomeSourceId: 'inc-1',
+            category: undefined,
+          }),
+          createMockBill({
+            id: 'bill-4',
+            creditorName: 'Gym',
+            budgetedAmount: 30,
+            priority: 'low',
+            isRecurring: false,
+            dueDay: 10,
+          }),
+        ],
+        incomes,
+        createBill,
+        updateBill,
+        deleteBill,
+      });
+
+      render(<BillsPage />);
+      expect(screen.getByText(/Total Monthly Bills \(estimated\)/)).toBeInTheDocument();
+      expect(screen.getByText(/Per Paycheck: Salary/)).toBeInTheDocument();
+      expect(screen.getByText('One-time')).toBeInTheDocument();
+      expect(screen.getByText('Low')).toBeInTheDocument();
+    });
+
+    it('shows unknown income source when preferred income id is missing', () => {
+      mockUseData.mockReturnValue({
+        bills: [
+          createMockBill({
+            id: 'bill-5',
+            creditorName: 'Savings',
+            budgetedAmount: 100,
+            isIncomeAttached: true,
+            preferredIncomeSourceId: 'missing-inc',
+          }),
+        ],
+        incomes,
+        createBill,
+        updateBill,
+        deleteBill,
+      });
+
+      render(<BillsPage />);
+      expect(screen.getByText(/Per Paycheck: Unknown/)).toBeInTheDocument();
+    });
+
+    it('filters by utilities category and keeps edit modal open on failed update', async () => {
+      updateBill.mockResolvedValue(false);
+      const user = userEvent.setup();
+      render(<BillsPage />);
+
+      await user.click(screen.getByRole('button', { name: 'utilities' }));
+      expect(screen.getByText('Internet')).toBeInTheDocument();
+      expect(screen.queryByText('Rent')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /Edit Internet/i }));
+      await user.click(screen.getByRole('button', { name: 'Update Bill' }));
+      await waitFor(() => {
+        expect(updateBill).toHaveBeenCalled();
+      });
+      expect(screen.getByRole('dialog', { name: /Edit Bill/i })).toBeInTheDocument();
+    });
   });
 });

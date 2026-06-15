@@ -169,6 +169,23 @@ describe('BudgetsPage', () => {
       });
     });
 
+    it('ignores create submit when budget name is blank', () => {
+      renderWithRouter(<BudgetsPage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: /New Budget/i }));
+      const form = screen.getByRole('button', { name: 'Create Budget' }).closest('form')!;
+      fireEvent.change(screen.getByLabelText('Budget Name'), { target: { value: '   ' } });
+      fireEvent.submit(form);
+      expect(createBudget).not.toHaveBeenCalled();
+    });
+
+    it('ignores save when edit name is blank', () => {
+      renderWithRouter(<BudgetsPage />, { mockAPI });
+      fireEvent.click(screen.getByLabelText('Edit Primary'));
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: '   ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(updateBudget).not.toHaveBeenCalled();
+    });
+
     it('edits current budget in draft mode and switches from quick budget', async () => {
       mockUseDraft.mockReturnValue({
         isDraftMode: true,

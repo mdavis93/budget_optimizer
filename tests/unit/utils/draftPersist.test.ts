@@ -61,6 +61,42 @@ describe('draftPersist', () => {
       expect(dirty.size).toBe(1);
     });
 
+    it('marks all dirty domains when draft changes span entities and schedule', () => {
+      const committed = makeDraftState({
+        debts: [],
+        goals: [createMockGoal({ name: 'Vacation' })],
+      });
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ amount: 3000 })],
+        bills: [createMockBill({ budgetedAmount: 200 })],
+        debts: [
+          {
+            id: 'debt-1',
+            budgetId: 'budget-1',
+            billId: 'bill-1',
+            principalBalance: 500,
+            apr: 5,
+            monthlyPayment: 50,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        goals: [createMockGoal({ name: 'Vacation Fund' })],
+        skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-10' }],
+        billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-05' }],
+        incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1500 }],
+        budget: {
+          ...committed.budget!,
+          name: 'Renamed Budget',
+        },
+      });
+
+      const dirty = computeDirtyDomains(committed, draft);
+      expect(dirty).toEqual(
+        new Set(['income', 'bills', 'debts', 'goals', 'schedule', 'budget'])
+      );
+    });
+
     it('persists domains in save order and includes scheduleStartDate', async () => {
       const committed = makeDraftState();
       const draft = makeDraftState({
@@ -354,6 +390,161 @@ describe('draftPersist', () => {
       );
       expect(billResult.success).toBe(true);
       expect(billResult.nextDraft.bills[0].id).toBe('bill-real-2');
+    });
+
+    it('stops persistDomains when goals domain fails', async () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        goals: [createMockGoal({ name: 'Updated Goal' })],
+      });
+
+      vi.mocked(window.electronAPI.goals.update).mockResolvedValueOnce({
+        success: false,
+        error: 'goals failed',
+      });
+
+      const result = await persistDomains(committed, draft, ['goals', 'budget'], 'budget-1');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('goals failed');
+      expect(window.electronAPI.budget.update).not.toHaveBeenCalled();
+    });
+
+    it('marks computeDirtyDomains for deletions and schedule removals only', () => {
+      const committed = makeDraftState({
+        incomes: [createMockIncome()],
+        bills: [createMockBill()],
+        goals: [createMockGoal()],
+        skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-01' }],
+        billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-01' }],
+        incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1000 }],
+      });
+      const draft = makeDraftState({
+        incomes: [],
+        bills: [],
+        goals: [],
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+      });
+
+      expect(computeDirtyDomains(committed, draft)).toEqual(
+        new Set(['income', 'bills', 'goals', 'schedule'])
+      );
+      expect(computeDirtyDomains(committed, committed).size).toBe(0);
+    });
+
+    it('persists goals domain successfully through persistDomains', async () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        goals: [createMockGoal({ name: 'Renamed Goal' })],
+      });
+
+      const result = await persistDomains(committed, draft, ['goals'], 'budget-1');
+
+      expect(result.success).toBe(true);
+      expect(window.electronAPI.goals.update).toHaveBeenCalled();
+      expect(result.nextCommitted.goals[0].name).toBe('Renamed Goal');
+    });
+
+    it('reports unskip, assignment remove, and override remove schedule failures', async () => {
+      const committed = makeDraftState({
+        skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-01' }],
+        billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-01' }],
+        incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1000 }],
+      });
+      const draft = makeDraftState({
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+      });
+
+      vi.mocked(window.electronAPI.skippedBills.unskip).mockResolvedValueOnce({
+        success: false,
+        error: 'unskip failed',
+      });
+      const unskipFail = await persistScheduleDomain(committed, draft, {
+        income: new Map(),
+        bill: new Map(),
+      });
+      expect(unskipFail.success).toBe(false);
+      expect(unskipFail.error).toBe('unskip failed');
+
+      vi.mocked(window.electronAPI.skippedBills.unskip).mockResolvedValueOnce({ success: true });
+      vi.mocked(window.electronAPI.billAssignments.remove).mockResolvedValueOnce({
+        success: false,
+      });
+      const removeAssignFail = await persistScheduleDomain(committed, draft, {
+        income: new Map(),
+        bill: new Map(),
+      });
+      expect(removeAssignFail.success).toBe(false);
+      expect(removeAssignFail.error).toBe('Failed to remove assignment');
+
+      vi.mocked(window.electronAPI.skippedBills.unskip).mockResolvedValueOnce({ success: true });
+      vi.mocked(window.electronAPI.billAssignments.remove).mockResolvedValueOnce({ success: true });
+      vi.mocked(window.electronAPI.incomeOverrides.remove).mockResolvedValueOnce({
+        success: false,
+        error: 'remove override failed',
+      });
+      const removeOverrideFail = await persistScheduleDomain(committed, draft, {
+        income: new Map(),
+        bill: new Map(),
+      });
+      expect(removeOverrideFail.success).toBe(false);
+      expect(removeOverrideFail.error).toBe('remove override failed');
+    });
+
+    it('reports budget update failure from persistBudgetDomain', async () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        budget: {
+          ...committed.budget!,
+          name: 'Updated Budget Name',
+        },
+      });
+
+      vi.mocked(window.electronAPI.budget.update).mockResolvedValueOnce({
+        success: false,
+        error: 'budget update failed',
+      });
+
+      const result = await persistBudgetDomain(committed, draft, 'budget-1');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('budget update failed');
+    });
+
+    it('reports schedule helper failures for skip, unskip, and override writes', async () => {
+      const committed = makeDraftState({
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+      });
+      const draft = makeDraftState({
+        skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-10' }],
+        incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1500 }],
+      });
+
+      vi.mocked(window.electronAPI.skippedBills.skip).mockResolvedValueOnce({
+        success: false,
+        error: 'skip failed',
+      });
+      const skipFail = await persistScheduleDomain(committed, draft, {
+        income: new Map(),
+        bill: new Map(),
+      });
+      expect(skipFail.success).toBe(false);
+      expect(skipFail.error).toBe('skip failed');
+
+      vi.mocked(window.electronAPI.incomeOverrides.set).mockResolvedValueOnce({
+        success: false,
+        error: 'override failed',
+      });
+      const overrideFail = await persistScheduleDomain(committed, draft, {
+        income: new Map(),
+        bill: new Map(),
+      });
+      expect(overrideFail.success).toBe(false);
+      expect(overrideFail.error).toBe('override failed');
     });
   });
 });

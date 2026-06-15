@@ -297,6 +297,50 @@ describe('DataContext', () => {
       });
     });
 
+    it('returns false for CRUD when not in draft or quick-budget mode', async () => {
+      const draft = createDraftMock();
+      draft.isDraftMode = false;
+      mockUseDraft.mockReturnValue(draft);
+
+      renderProvider();
+      fireEvent.click(screen.getByText('create-income'));
+      fireEvent.click(screen.getByText('update-bill'));
+      fireEvent.click(screen.getByText('delete-income'));
+
+      expect(draft.createIncome).not.toHaveBeenCalled();
+      expect(draft.updateBill).not.toHaveBeenCalled();
+      expect(draft.deleteIncome).not.toHaveBeenCalled();
+      expect(mockAPI.income.create).not.toHaveBeenCalled();
+      expect(mockAPI.bills.update).not.toHaveBeenCalled();
+      expect(mockAPI.income.delete).not.toHaveBeenCalled();
+    });
+
+    it('no-ops refreshAllData when no budget is selected', async () => {
+      const draft = createDraftMock();
+      mockUseBudget.mockReturnValue({
+        isQuickBudget: false,
+        hasBudgetSelected: false,
+        currentBudget: null,
+      });
+      mockUseDraft.mockReturnValue(draft);
+
+      renderProvider();
+      fireEvent.click(screen.getByText('refresh-all'));
+
+      expect(draft.reloadSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('uses fallback error when schedule build succeeds without data', async () => {
+      mockAPI.schedule.build.mockResolvedValue({ success: true, data: undefined });
+
+      renderProvider();
+      fireEvent.click(screen.getByText('generate'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Failed to generate schedule');
+      });
+    });
+
     it('no-ops refresh helpers when locked', async () => {
       const draft = createDraftMock();
       mockUseAuth.mockReturnValue({ isUnlocked: false });
@@ -384,6 +428,57 @@ describe('DataContext', () => {
       expect(draft.createIncome).toHaveBeenCalled();
       expect(draft.updateBill).toHaveBeenCalled();
       expect(draft.deleteIncome).toHaveBeenCalled();
+    });
+
+    it('surfaces quick-budget catch errors for delete income and update bill', async () => {
+      mockUseBudget.mockReturnValue({
+        isQuickBudget: true,
+        hasBudgetSelected: true,
+        currentBudget: { id: 'budget-1', name: 'QB', startingBalance: 0, scheduleStartDate: '2026-01-01' },
+      });
+      mockAPI.income.delete.mockRejectedValue(new Error('delete ipc down'));
+      mockAPI.bills.update.mockRejectedValue(new Error('update ipc down'));
+
+      renderProvider();
+      fireEvent.click(screen.getByText('delete-income'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Failed to delete income');
+      });
+
+      fireEvent.click(screen.getByText('update-bill'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Failed to update bill');
+      });
+    });
+
+    it('clears schedule when app locks and uses current budget starting balance', async () => {
+      const draft = createDraftMock();
+      draft.budgetFields = null;
+      mockUseDraft.mockReturnValue(draft);
+
+      const { rerender } = renderProvider();
+      expect(screen.getByTestId('schedule-start-date')).not.toHaveTextContent('2026-04-01');
+
+      fireEvent.click(screen.getByText('generate'));
+      await waitFor(() => {
+        expect(mockAPI.schedule.build).toHaveBeenCalledWith(
+          expect.any(String),
+          12,
+          300,
+          expect.objectContaining({ scheduleStartDate: '2026-04-01' })
+        );
+        expect(screen.getByTestId('schedule-length')).toHaveTextContent('1');
+      });
+
+      mockUseAuth.mockReturnValue({ isUnlocked: false });
+      rerender(
+        <DataProvider>
+          <DataHarness />
+        </DataProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-length')).toHaveTextContent('0');
+      });
     });
 
     it('uses quick budget local start date when budget has no scheduleStartDate', async () => {

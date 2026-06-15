@@ -179,6 +179,14 @@ describe('SettingsPage', () => {
       expect(mockAPI.auth.changePassword).not.toHaveBeenCalled();
     });
 
+    it('shows biometric success message when enable succeeds', async () => {
+      enableBiometric.mockResolvedValue(true);
+      const user = userEvent.setup();
+      renderWithRouter(<SettingsPage />, { mockAPI });
+      await user.click(screen.getByRole('button', { name: 'Enable' }));
+      expect(await screen.findByText('Fingerprint unlock enabled')).toBeInTheDocument();
+    });
+
     it('routes budget field updates through draft context in draft mode', async () => {
       const user = userEvent.setup();
       mockUseDraft.mockReturnValue({
@@ -198,6 +206,35 @@ describe('SettingsPage', () => {
 
       await waitFor(() => {
         expect(updateBudgetFields).toHaveBeenCalledWith({ targetCashOnHand: 700 });
+      });
+      expect(updateBudget).not.toHaveBeenCalled();
+    });
+
+    it('routes min cash and min savings through draft context in draft mode', async () => {
+      const user = userEvent.setup();
+      mockUseDraft.mockReturnValue({
+        isDraftMode: true,
+        budgetFields: {
+          targetCashOnHand: 500,
+          minCashOnHand: 100,
+          minSavingsPerPaycheck: 50,
+        },
+        updateBudgetFields,
+      });
+
+      renderWithRouter(<SettingsPage />, { mockAPI });
+
+      const minCash = screen.getByLabelText('Minimum Cash on Hand');
+      await user.clear(minCash);
+      await user.type(minCash, '150');
+
+      const minSavings = screen.getByLabelText('Minimum Savings per Paycheck');
+      await user.clear(minSavings);
+      await user.type(minSavings, '75');
+
+      await waitFor(() => {
+        expect(updateBudgetFields).toHaveBeenCalledWith({ minCashOnHand: 150 });
+        expect(updateBudgetFields).toHaveBeenCalledWith({ minSavingsPerPaycheck: 75 });
       });
       expect(updateBudget).not.toHaveBeenCalled();
     });
