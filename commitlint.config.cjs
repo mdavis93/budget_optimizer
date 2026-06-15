@@ -1,5 +1,10 @@
 module.exports = {
   extends: ['@commitlint/config-conventional'],
+  ignores: [
+    (message) =>
+      typeof message === 'string' &&
+      message.includes('Signed-off-by: dependabot[bot]'),
+  ],
   rules: {
     'type-enum': [
       2,
