@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestMemoryRouter } from '../helpers/router';
 import SetupPage from '../../src/pages/SetupPage';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
 
@@ -47,9 +47,9 @@ describe('SetupPage', () => {
 
   function renderSetupPage() {
     return render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <SetupPage />
-      </MemoryRouter>
+      </TestMemoryRouter>
     );
   }
 

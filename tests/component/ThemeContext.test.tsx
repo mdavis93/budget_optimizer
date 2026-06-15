@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider, useTheme } from '../../src/context/ThemeContext';
 import { renderWithRouter } from '../helpers/renderWithProviders';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 function ThemeHarness() {
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -132,9 +133,11 @@ describe('ThemeContext', () => {
         useTheme();
         return null;
       }
-      expect(() => renderWithRouter(<BadConsumer />, { mockAPI })).toThrow(
-        'useTheme must be used within a ThemeProvider'
-      );
+      suppressExpectedConsoleErrors(() => {
+        expect(() => renderWithRouter(<BadConsumer />, { mockAPI })).toThrow(
+          'useTheme must be used within a ThemeProvider'
+        );
+      });
     });
   });
 });

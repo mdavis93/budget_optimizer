@@ -100,7 +100,7 @@ describe('SummaryPage', () => {
   });
 
   describe('sad', () => {
-    it('shows empty state with no income or bills', () => {
+    it('shows empty state with no income or bills', async () => {
       mockUseData.mockReturnValue({
         incomes: [],
         bills: [],
@@ -110,7 +110,10 @@ describe('SummaryPage', () => {
       });
 
       renderWithRouter(<SummaryPage />, { mockAPI });
-      expect(screen.getByText('Add income and bills to see your budget trends')).toBeInTheDocument();
+      expect(
+        await screen.findByText('Add income and bills to see your budget trends')
+      ).toBeInTheDocument();
+      await waitFor(() => expect(mockAPI.settings.get).toHaveBeenCalled());
     });
   });
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { TestMemoryRouter } from '../helpers/router';
 import DashboardPage from '../../src/pages/DashboardPage';
 
 const mockUseData = vi.fn();
@@ -54,9 +54,9 @@ describe('DashboardPage', () => {
   describe('happy', () => {
     it('renders dashboard stats and recommendations', () => {
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
@@ -83,9 +83,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('No upcoming payments this week')).toBeInTheDocument();
@@ -102,9 +102,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       await waitFor(() => {
@@ -144,9 +144,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('Rent Payment')).toBeInTheDocument();
@@ -165,9 +165,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('Negative balance trend')).toBeInTheDocument();
@@ -186,9 +186,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('Neutral balance trend')).toBeInTheDocument();
@@ -206,9 +206,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('Add income and bills to see your balance projection')).toBeInTheDocument();
@@ -243,9 +243,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.getByText('Paycheck')).toBeInTheDocument();
@@ -268,9 +268,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       expect(screen.queryByText('Recommendations')).not.toBeInTheDocument();
@@ -290,9 +290,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       const startingBalance = screen.getByPlaceholderText('$0');
@@ -315,9 +315,9 @@ describe('DashboardPage', () => {
       });
 
       render(
-        <MemoryRouter>
+        <TestMemoryRouter>
           <DashboardPage />
-        </MemoryRouter>
+        </TestMemoryRouter>
       );
 
       const incomeCard = screen.getByText('Monthly Income').closest('.card') as HTMLElement;

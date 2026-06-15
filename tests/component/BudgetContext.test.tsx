@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { BudgetProvider, useBudget } from '../../src/context/BudgetContext';
 import { createMockBudget, createMockElectronAPI } from '../mocks/electron-api.mock';
+import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 function BudgetHarness() {
   const budget = useBudget();
@@ -214,7 +215,9 @@ describe('BudgetContext', () => {
         useBudget();
         return null;
       }
-      expect(() => render(<BadConsumer />)).toThrow('useBudget must be used within a BudgetProvider');
+      suppressExpectedConsoleErrors(() => {
+        expect(() => render(<BadConsumer />)).toThrow('useBudget must be used within a BudgetProvider');
+      });
     });
   });
 });

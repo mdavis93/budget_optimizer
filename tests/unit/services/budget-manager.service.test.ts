@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BudgetManager } from '../../../electron/services/budget-manager.service';
 
+vi.mock('../../../electron/services/logger.service', () => ({
+  budgetLogger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 describe('BudgetManager', () => {
   const baseBudget = {
     id: 'budget-1',

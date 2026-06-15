@@ -33,6 +33,7 @@ Thumbs.db
 
 # Test
 coverage/
+test-coverage-*.txt
 
 # Electron specific
 *.asar

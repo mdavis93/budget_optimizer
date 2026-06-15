@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../../src/context/AuthContext';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 function AuthHarness() {
   const auth = useAuth();
@@ -128,6 +129,7 @@ describe('AuthContext', () => {
   describe('hostile', () => {
     it('falls back to first-time setup when checkAuthStatus throws', async () => {
       mockAPI.auth.isFirstTimeSetup.mockRejectedValue(new Error('IPC unavailable'));
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       renderProvider();
       fireEvent.click(screen.getByText('check'));
@@ -137,6 +139,7 @@ describe('AuthContext', () => {
       });
       expect(screen.getByTestId('unlocked')).toHaveTextContent('false');
       expect(screen.getByTestId('error')).toHaveTextContent('Failed to initialize application');
+      consoleError.mockRestore();
     });
 
     it('handles unexpected unlock exception', async () => {
@@ -230,9 +233,9 @@ describe('AuthContext', () => {
     });
 
     it('throws when useAuth is used outside provider', () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      expect(() => render(<AuthHarness />)).toThrow('useAuth must be used within an AuthProvider');
-      consoleError.mockRestore();
+      suppressExpectedConsoleErrors(() => {
+        expect(() => render(<AuthHarness />)).toThrow('useAuth must be used within an AuthProvider');
+      });
     });
   });
 });

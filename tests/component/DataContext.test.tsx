@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DataProvider, useData } from '../../src/context/DataContext';
 import { createMockElectronAPI, createMockSchedule } from '../mocks/electron-api.mock';
+import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 const mockUseAuth = vi.fn();
 const mockUseBudget = vi.fn();
@@ -500,6 +501,8 @@ describe('DataContext', () => {
       useData();
       return null;
     }
-    expect(() => render(<BadConsumer />)).toThrow('useData must be used within a DataProvider');
+    suppressExpectedConsoleErrors(() => {
+      expect(() => render(<BadConsumer />)).toThrow('useData must be used within a DataProvider');
+    });
   });
 });
