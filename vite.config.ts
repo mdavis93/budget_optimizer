@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
 import path from 'path';
@@ -15,38 +15,6 @@ const mainExternals = [
   'date-fns',
   'uuid',
 ];
-
-/**
- * vite-plugin-electron injects Rolldown-only options that Vite 6 passes to Rollup.
- * Remove when upgrading to Vite 8.
- */
-function stripInvalidRollupOptions(): Plugin {
-  return {
-    name: 'strip-invalid-rollup-options',
-    configResolved(config) {
-      const rollupOptions = config.build?.rollupOptions;
-      if (!rollupOptions) {
-        return;
-      }
-
-      if ('platform' in rollupOptions) {
-        delete (rollupOptions as Record<string, unknown>).platform;
-      }
-
-      const outputs = rollupOptions.output;
-      if (!outputs) {
-        return;
-      }
-
-      const outputList = Array.isArray(outputs) ? outputs : [outputs];
-      for (const output of outputList) {
-        if (output && 'codeSplitting' in output) {
-          delete (output as Record<string, unknown>).codeSplitting;
-        }
-      }
-    },
-  };
-}
 
 /** Applied to dist/index.html when mode === 'production'. Dev keeps relaxed CSP in index.html for HMR. */
 export const PRODUCTION_CSP =
@@ -79,7 +47,6 @@ export default defineConfig(async ({ mode }) => ({
           options.startup();
         },
         vite: {
-          plugins: [stripInvalidRollupOptions()],
           build: {
             outDir: 'dist-electron',
             rolldownOptions: {
@@ -97,7 +64,6 @@ export default defineConfig(async ({ mode }) => ({
           options.reload();
         },
         vite: {
-          plugins: [stripInvalidRollupOptions()],
           build: {
             outDir: 'dist-electron',
             rolldownOptions: {
