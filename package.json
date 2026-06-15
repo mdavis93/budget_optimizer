@@ -27,6 +27,7 @@
     "test:coverage:check": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
+    "prepush": "bash scripts/pre-push-quality.sh",
     "prepare": "husky"
   },
   "dependencies": {
