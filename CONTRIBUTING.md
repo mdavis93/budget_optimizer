@@ -10,7 +10,7 @@ Thank you for contributing. This project uses a two-phase CI model:
 1. Create a feature branch from `main`.
 2. Write code and tests.
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message.
-4. Open a pull request against `main`.
+4. Open a pull request against `main`. Use the PR template: check **Test plan** boxes only for verification you completed locally before opening the PR (see [Pull request descriptions](#pull-request-descriptions)).
 5. When checks pass, **auto-merge** squash-merges the PR to `main` (no manual merge click needed).
 6. After merge, confirm **Main Stability** succeeds on `main`.
 
@@ -26,6 +26,24 @@ pnpm run build:vite && pnpm run verify:csp
 ```
 
 Commit messages are validated locally via Husky (`commit-msg` hook) when you run `pnpm install` (which triggers `prepare` → `husky`).
+
+## Pull request descriptions
+
+[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) pre-fills new PRs with **Summary** and **Test plan** sections.
+
+**Test plan checkboxes are for pre-PR verification only.** Check an item when you ran that validation locally before opening the PR. Leave items unchecked if they do not apply or were not run.
+
+| Checkbox | Typical local command / method |
+|----------|--------------------------------|
+| Commitlint | Husky on commit, or `pnpm exec commitlint --from origin/main` |
+| Unit tests | `pnpm test:run` or `pnpm test:coverage:check` |
+| Integration tests | Vitest suites that span multiple modules/services (when touched) |
+| Acceptance tests | Scenario-level checks against acceptance criteria |
+| E2E tests | `pnpm test:e2e` |
+| AI-assisted verification | Cursor or other agent review of the change |
+| Manual smoke test | Hands-on exercise of the affected UI or workflow |
+
+Do **not** use the Test plan for CI status (`pr-gate / quality`, `commitlint` on the PR). Those checks are enforced separately and auto-merge when green; they are not manually ticked in the description.
 
 ## Commit message format
 
