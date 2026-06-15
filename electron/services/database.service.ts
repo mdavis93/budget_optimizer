@@ -3,7 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { CryptoService } from './crypto.service';
-import { validateBill, validateIncome, validateGoal, validateDebt, validateBudget, validateSettings, assertValid } from './validation.service';
+import { validateBill, validateIncome, validateGoal, validateDebt, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
 
 function defaultScheduleStartDate(createdAt: string): string {
@@ -1386,6 +1386,11 @@ export class DatabaseService {
 
   skipBill(budgetId: string, billId: string, skipDate: string): SkippedBill {
     if (!this.db) throw new Error('Database not initialized');
+
+    assertValid(validateSkippedBill({ billId, skipDate }), 'Invalid skipped bill');
+    if (!this.getBillById(billId, budgetId)) {
+      throw new Error('Bill not found');
+    }
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
@@ -1463,6 +1468,14 @@ export class DatabaseService {
 
   assignBillToPaycheck(budgetId: string, billId: string, billDueDate: string, paycheckDate: string): BillAssignment {
     if (!this.db) throw new Error('Database not initialized');
+
+    assertValid(
+      validateBillAssignment({ billId, billDueDate, paycheckDate }),
+      'Invalid bill assignment'
+    );
+    if (!this.getBillById(billId, budgetId)) {
+      throw new Error('Bill not found');
+    }
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();

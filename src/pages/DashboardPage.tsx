@@ -13,6 +13,7 @@ import { useData } from '../context/DataContext';
 import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
 import { BalanceProjectionChart, ChartSuspense } from '../components/charts/lazyCharts';
 import clsx from 'clsx';
+import { formatCurrency } from '../utils/formatCurrency';
 import { getMonthlyBillEquivalent, getMonthlyIncomeEquivalent } from '../utils/cadence';
 
 interface StatCardProps {
@@ -119,14 +120,7 @@ export default function DashboardPage() {
     return dataPoints;
   }, [schedule]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatWholeCurrency = (amount: number) => formatCurrency(amount, { fractionDigits: 0 });
 
   const netMonthly = totalMonthlyIncome - totalMonthlyBills;
   const hasShortfalls = schedule?.summary?.shortfallCount ?? 0 > 0;
@@ -155,19 +149,19 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Monthly Income"
-          value={formatCurrency(totalMonthlyIncome)}
+          value={formatWholeCurrency(totalMonthlyIncome)}
           icon={Wallet}
           color="bg-success-100 dark:bg-success-900 text-success-700 dark:text-success-200"
         />
         <StatCard
           label="Monthly Bills"
-          value={formatCurrency(totalMonthlyBills)}
+          value={formatWholeCurrency(totalMonthlyBills)}
           icon={Receipt}
           color="bg-danger-100 dark:bg-danger-900 text-danger-700 dark:text-danger-200"
         />
         <StatCard
           label="Net Monthly"
-          value={formatCurrency(netMonthly)}
+          value={formatWholeCurrency(netMonthly)}
           trend={netMonthly > 0 ? 'up' : netMonthly < 0 ? 'down' : 'neutral'}
           icon={TrendingUp}
           color="bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-200"
@@ -195,7 +189,7 @@ export default function DashboardPage() {
           {chartData.length > 0 ? (
             <div className="h-64">
               <ChartSuspense>
-                <BalanceProjectionChart data={chartData} formatCurrency={formatCurrency} />
+                <BalanceProjectionChart data={chartData} formatCurrency={formatWholeCurrency} />
               </ChartSuspense>
             </div>
           ) : (
@@ -231,7 +225,7 @@ export default function DashboardPage() {
                     'font-mono font-medium',
                     entry.type === 'income' ? 'text-success-500' : 'text-danger-500'
                   )}>
-                    {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
+                    {entry.type === 'income' ? '+' : '-'}{formatWholeCurrency(entry.amount)}
                   </span>
                 </div>
               ))}

@@ -32,17 +32,14 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.10.1",
-    "bindings": "^1.5.0",
     "clsx": "^2.1.0",
     "date-fns": "^4.4.0",
-    "file-uri-to-path": "^2.0.0",
     "keytar": "^7.9.0",
     "lucide-react": "^1.18.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.17.0",
-    "recharts": "^3.8.1",
-    "uuid": "^14.0.0"
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",
@@ -56,7 +53,6 @@
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^18.2.19",
-    "@types/uuid": "^9.0.8",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
     "@vitejs/plugin-react": "^6.0.0",

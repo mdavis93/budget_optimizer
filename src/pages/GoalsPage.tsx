@@ -9,6 +9,7 @@ import GoalAchievabilityPanel from '../components/goals/GoalAchievabilityPanel';
 import { useDraftData, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { buildGoalAchievabilityMessaging } from '../utils/goalAchievabilityMessaging';
+import { formatCurrency } from '../utils/formatCurrency';
 
 export default function GoalsPage() {
   const { goals, dirtyDomains, budgetFields } = useDraftData();
@@ -197,10 +198,6 @@ export default function GoalsPage() {
   );
 
   const getProgressBarColor = () => 'bg-purple-500';
-
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-  };
 
   if (isLoading) {
     return (

@@ -18,6 +18,7 @@ import {
   GoalAchievabilityMessaging,
   GoalComfortTier,
 } from '../../utils/goalAchievabilityMessaging';
+import { formatCurrency } from '../../utils/formatCurrency';
 
 export interface GoalAchievabilityPanelProps {
   goal: Pick<SavingsGoal, 'id' | 'name' | 'targetAmount' | 'targetDate' | 'alreadySaved' | 'priority'>;
@@ -89,10 +90,6 @@ const TIER_STYLES: Record<
     icon: XCircle,
   },
 };
-
-function formatCurrency(amount: number): string {
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
 
 function formatSignedCurrency(amount: number): string {
   const formatted = formatCurrency(Math.abs(amount));

@@ -10,6 +10,8 @@ import {
   validateDraftOverlay,
   validateReconciliationFix,
   validateReconciliationFixes,
+  validateSkippedBill,
+  validateBillAssignment,
 } from '../../../electron/services/validation.service';
 
 describe('validation.service', () => {
@@ -370,6 +372,42 @@ describe('validation.service', () => {
         minSavingsPerPaycheck: -1,
       } as never);
       expect(badOverlay.valid).toBe(false);
+    });
+  });
+
+  describe('validateSkippedBill', () => {
+    it('accepts valid skip payload', () => {
+      const result = validateSkippedBill({
+        billId: 'bill-12345678',
+        skipDate: '2026-03-15',
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects invalid billId and skipDate', () => {
+      const result = validateSkippedBill({ billId: 'bad', skipDate: '2026/03/15' });
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('validateBillAssignment', () => {
+    it('accepts valid assignment payload', () => {
+      const result = validateBillAssignment({
+        billId: 'bill-12345678',
+        billDueDate: '2026-03-15',
+        paycheckDate: '2026-03-01',
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects invalid dates and billId', () => {
+      const result = validateBillAssignment({
+        billId: 'x',
+        billDueDate: 'bad',
+        paycheckDate: 'also-bad',
+      });
+      expect(result.valid).toBe(false);
     });
   });
 });

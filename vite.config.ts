@@ -12,7 +12,6 @@ const mainExternals = [
   'better-sqlite3',
   'keytar',
   'date-fns',
-  'uuid',
 ];
 
 /** Applied to dist/index.html when mode === 'production'. Dev keeps relaxed CSP in index.html for HMR. */

@@ -4,6 +4,7 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import { CategoryPieChart, ChartSuspense, IncomeExpensesChart, SavingsAreaChart } from '../components/charts/lazyCharts';
 import { CHART_COLORS } from '../components/charts/chartTheme';
 import clsx from 'clsx';
+import { formatCurrency } from '../utils/formatCurrency';
 
 type TimePeriod = 3 | 6 | 12;
 
@@ -98,14 +99,7 @@ export default function SummaryPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatWholeCurrency = (amount: number) => formatCurrency(amount, { fractionDigits: 0 });
 
   const savingsProjectionData = useMemo(() => {
     if (!scheduleData?.paychecks) return [];
@@ -241,7 +235,7 @@ export default function SummaryPage() {
               {incomeVsExpensesData.length > 0 ? (
                 <div className="h-64">
                   <ChartSuspense>
-                    <IncomeExpensesChart data={incomeVsExpensesData} formatCurrency={formatCurrency} />
+                    <IncomeExpensesChart data={incomeVsExpensesData} formatCurrency={formatWholeCurrency} />
                   </ChartSuspense>
                 </div>
               ) : (
@@ -258,7 +252,7 @@ export default function SummaryPage() {
                 <div className="h-64 flex">
                   <div className="flex-1">
                     <ChartSuspense>
-                      <CategoryPieChart data={categoryData} formatCurrency={formatCurrency} />
+                      <CategoryPieChart data={categoryData} formatCurrency={formatWholeCurrency} />
                     </ChartSuspense>
                   </div>
                   <div className="w-40 overflow-y-auto">
@@ -271,7 +265,7 @@ export default function SummaryPage() {
                           />
                           <span className="truncate flex-1">{cat.name}</span>
                           <span className="text-[var(--color-text-muted)] font-mono">
-                            {formatCurrency(cat.value)}
+                            {formatWholeCurrency(cat.value)}
                           </span>
                         </div>
                       ))}
@@ -313,7 +307,7 @@ export default function SummaryPage() {
             {savingsProjectionData.length > 0 ? (
               <div className="h-80">
                 <ChartSuspense heightClass="h-80">
-                  <SavingsAreaChart data={savingsProjectionData} formatCurrency={formatCurrency} />
+                  <SavingsAreaChart data={savingsProjectionData} formatCurrency={formatWholeCurrency} />
                 </ChartSuspense>
               </div>
             ) : (

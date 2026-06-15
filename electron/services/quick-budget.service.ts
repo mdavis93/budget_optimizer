@@ -1,6 +1,6 @@
 import { Income, Bill, SkippedBill, BillAssignment, IncomeOverride, SavingsGoal, SavingsGoalInput } from './database.service';
-import { validateBill, validateIncome, assertValid } from './validation.service';
-import { v4 as uuidv4 } from 'uuid';
+import { validateBill, validateIncome, assertValid, validateSkippedBill, validateBillAssignment } from './validation.service';
+import { randomUUID } from 'node:crypto';
 
 export class QuickBudgetService {
   private incomes: Income[] = [];
@@ -19,7 +19,7 @@ export class QuickBudgetService {
   })();
 
   private generateId(): string {
-    return uuidv4();
+    return randomUUID();
   }
 
   clear(): void {
@@ -187,6 +187,11 @@ export class QuickBudgetService {
   }
 
   skipBill(billId: string, skipDate: string): SkippedBill {
+    assertValid(validateSkippedBill({ billId, skipDate }), 'Invalid skipped bill');
+    if (!this.getBillById(billId)) {
+      throw new Error('Bill not found');
+    }
+
     // Remove existing if present
     this.skippedBills = this.skippedBills.filter(
       sb => !(sb.billId === billId && sb.skipDate === skipDate)
@@ -222,6 +227,14 @@ export class QuickBudgetService {
   }
 
   assignBillToPaycheck(billId: string, billDueDate: string, paycheckDate: string): BillAssignment {
+    assertValid(
+      validateBillAssignment({ billId, billDueDate, paycheckDate }),
+      'Invalid bill assignment'
+    );
+    if (!this.getBillById(billId)) {
+      throw new Error('Bill not found');
+    }
+
     // Remove existing assignment for this bill occurrence
     this.billAssignments = this.billAssignments.filter(
       ba => !(ba.billId === billId && ba.billDueDate === billDueDate)

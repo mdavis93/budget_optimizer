@@ -11,6 +11,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '../components/schedule';
 import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
 import { buildScheduleInputHash } from '../utils/scheduleInputHash';
+import { formatCurrency } from '../utils/formatCurrency';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -332,13 +333,6 @@ export default function SchedulePage() {
 
   const collapseAll = () => {
     setExpandedPaychecks(new Set());
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
   };
 
   if (!schedule && (incomes.length === 0 && bills.length === 0)) {

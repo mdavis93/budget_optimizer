@@ -5,13 +5,7 @@ import { BrowserWindow } from 'electron';
 import type { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
-
-const PRIORITY_LABELS: Record<'critical' | 'high' | 'normal' | 'low', string> = {
-  critical: 'Critical',
-  high: 'High',
-  normal: 'Normal',
-  low: 'Low',
-};
+import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
 
 export class PdfService {
   async generateHtmlFile(schedule: ScheduleData, outputPath: string): Promise<{ success: boolean; error?: string }> {
@@ -85,12 +79,7 @@ export class PdfService {
     const totalGoalDeposits = paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0);
     const hasGoalDeposits = totalGoalDeposits > 0;
 
-    const formatCurrency = (amount: number) => {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-      }).format(amount);
-    };
+    const formatCurrency = formatCurrencyDisplay;
 
     const formatDate = (dateStr: string) => {
       return format(parseISO(dateStr), 'MMM d, yyyy');
