@@ -72,3 +72,63 @@ jobs:
             core.info(
               `Dispatched Main Stability for stale main commit ${mainSha.slice(0, 7)}.`
             );
+
+      - name: Dispatch Dependabot Refresh when main advanced without a matching run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const mainRef = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: 'heads/main',
+            });
+            const mainSha = mainRef.data.object.sha;
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'dependabot-refresh.yml',
+              branch: 'main',
+              status: 'completed',
+              per_page: 20,
+            });
+
+            const covered = runs.data.workflow_runs.some(
+              (run) =>
+                run.head_sha === mainSha &&
+                (run.conclusion === 'success' || run.conclusion === 'failure')
+            );
+
+            if (covered) {
+              core.info(
+                `Dependabot Refresh already recorded for ${mainSha.slice(0, 7)}.`
+              );
+              return;
+            }
+
+            const inFlight = runs.data.workflow_runs.some(
+              (run) =>
+                run.head_sha === mainSha &&
+                (run.status === 'queued' || run.status === 'in_progress')
+            );
+
+            if (inFlight) {
+              core.info(
+                `Dependabot Refresh already running for ${mainSha.slice(0, 7)}.`
+              );
+              return;
+            }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: 'dependabot-refresh.yml',
+              ref: 'main',
+            });
+
+            core.info(
+              `Dispatched Dependabot Refresh for stale main commit ${mainSha.slice(0, 7)}.`
+            );
