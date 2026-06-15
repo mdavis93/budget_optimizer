@@ -23,7 +23,13 @@ fi
 
 gh api "repos/${REPO}/rulesets" \
   --method POST \
-  --input - <<'EOF'
+  --input - <<'EOF' || {
+  echo "Merge queue ruleset API call failed."
+  echo "Enable merge queue manually:"
+  echo "  GitHub → Settings → Branches → Branch protection rules → main"
+  echo "  → Require merge queue (squash, build concurrency 1, ALLGREEN)"
+  exit 1
+}
 {
   "name": "main-merge-queue",
   "target": "branch",
