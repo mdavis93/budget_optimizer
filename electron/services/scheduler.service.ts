@@ -19,13 +19,13 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
   SCHEDULE_CALCULATION_MONTHS,
-  DebtPayoffInfo,
-  ScheduleData,
   billOccurrenceKey,
 } from './scheduler/types';
+import type { DebtPayoffInfo, ScheduleData } from './scheduler/types';
 
-export {
-  SCHEDULE_CALCULATION_MONTHS,
+export { SCHEDULE_CALCULATION_MONTHS } from './scheduler/types';
+
+export type {
   DebtPayoffInfo,
   PaycheckBill,
   GoalDeposit,
@@ -39,9 +39,8 @@ export {
   GoalScheduleHealth,
   GoalProjection,
   ScheduleData,
+  UnfundableReason,
 } from './scheduler/types';
-
-export type { UnfundableReason } from './scheduler/types';
 
 export class SchedulerService {
   projectIncome = projectIncome;

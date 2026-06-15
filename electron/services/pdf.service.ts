@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { BrowserWindow } from 'electron';
-import { ScheduleData, PaycheckEntry } from './scheduler.service';
+import type { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
 
