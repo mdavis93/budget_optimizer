@@ -1,4 +1,5 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { formatTooltipCurrencyPair } from './chartTheme';
 
 interface BalanceProjectionChartProps {
   data: Array<{ date: string; balance: number }>;
@@ -22,7 +23,7 @@ export default function BalanceProjectionChart({ data, formatCurrency }: Balance
           tickFormatter={(value) => `$${value}`}
         />
         <Tooltip
-          formatter={(value: number) => [formatCurrency(value), 'Balance']}
+          formatter={(value) => formatTooltipCurrencyPair(value, formatCurrency, 'Balance')}
           contentStyle={{
             backgroundColor: 'var(--color-bg-secondary)',
             border: '1px solid var(--color-border)',
