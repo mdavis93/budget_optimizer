@@ -186,6 +186,14 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold">Saved immediately</h3>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+            These preferences are written to disk as soon as you change them.
+          </p>
+        </div>
+
       <div className="card">
         <h3 className="font-semibold mb-4">Appearance</h3>
         
@@ -353,8 +361,18 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      </section>
 
       {currentBudget && (
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Requires Save (Budget)</h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+              Changes here stay unsaved until you use Save Changes on the Budgets page or Save All
+              from the banner.
+            </p>
+          </div>
+
         <div className="card">
           <div className="flex items-center gap-3 mb-4">
             <Target className="w-5 h-5 text-primary-500" />
@@ -427,6 +445,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+        </section>
       )}
 
       <div className="card bg-[var(--color-bg-tertiary)]">

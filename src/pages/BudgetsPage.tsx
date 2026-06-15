@@ -5,6 +5,7 @@ import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { Budget } from '../types';
 import { Briefcase, Plus, Pencil, Trash2, Check, X, Zap, ArrowRight } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useToast } from '../components/Toast';
 import clsx from 'clsx';
 
 export default function BudgetsPage() {
@@ -22,6 +23,7 @@ export default function BudgetsPage() {
     endQuickBudget,
   } = useBudget();
   const draft = useDraft();
+  const { showToast } = useToast();
   const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -77,12 +79,14 @@ export default function BudgetsPage() {
         minCashOnHand: editMinCash,
       });
     } else {
+      const savedName = editName.trim();
       await updateBudget(editingBudget.id, {
-        name: editName.trim(),
+        name: savedName,
         startingBalance: editBalance,
         targetCashOnHand: editTargetCash,
         minCashOnHand: editMinCash,
       });
+      showToast('success', `${savedName} settings saved`);
     }
     setEditingBudget(null);
   };
@@ -113,6 +117,9 @@ export default function BudgetsPage() {
           <h2 className="text-2xl font-semibold">Budgets</h2>
           <p className="text-[var(--color-text-secondary)]">
             Manage your budgets and switch between them
+          </p>
+          <p className="text-sm text-[var(--color-text-muted)] mt-2 max-w-2xl">
+            Edit budget settings here. Switch to a budget to edit its incomes, bills, and schedule.
           </p>
         </div>
         

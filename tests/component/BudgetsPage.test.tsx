@@ -7,6 +7,7 @@ import { createMockElectronAPI } from '../mocks/electron-api.mock';
 const mockUseBudget = vi.fn();
 const mockUseDraft = vi.fn();
 const mockUseUnsavedChangesGuard = vi.fn();
+const mockShowToast = vi.fn();
 
 vi.mock('../../src/context/BudgetContext', () => ({
   useBudget: () => mockUseBudget(),
@@ -18,6 +19,9 @@ vi.mock('../../src/context/DraftContext', () => ({
 }));
 vi.mock('../../src/hooks/useUnsavedChangesGuard', () => ({
   useUnsavedChangesGuard: () => mockUseUnsavedChangesGuard(),
+}));
+vi.mock('../../src/components/Toast', () => ({
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
 describe('BudgetsPage', () => {
@@ -77,6 +81,9 @@ describe('BudgetsPage', () => {
       expect(screen.getByText('Primary')).toBeInTheDocument();
       expect(screen.getByText('2 incomes')).toBeInTheDocument();
       expect(screen.getByText('5 bills')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Edit budget settings here\. Switch to a budget to edit its incomes, bills, and schedule\./i)
+      ).toBeInTheDocument();
     });
   });
 
@@ -162,6 +169,7 @@ describe('BudgetsPage', () => {
           'budget-2',
           expect.objectContaining({ name: 'Secondary Updated' })
         );
+        expect(mockShowToast).toHaveBeenCalledWith('success', 'Secondary Updated settings saved');
       });
 
       fireEvent.click(screen.getByLabelText('Delete Secondary'));

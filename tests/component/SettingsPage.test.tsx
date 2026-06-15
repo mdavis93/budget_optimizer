@@ -67,6 +67,8 @@ describe('SettingsPage', () => {
       renderWithRouter(<SettingsPage />, { mockAPI });
 
       expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Saved immediately' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Requires Save (Budget)' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Appearance' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Security' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Savings' })).toBeInTheDocument();
