@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Eye, EyeOff, AlertCircle, Check, Fingerprint, Wand2 } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Check, Fingerprint, Wand2 } from 'lucide-react';
+import AppIcon from '../components/AppIcon';
 import { useAuth } from '../context/AuthContext';
 import PasswordStrength from '../components/PasswordStrength';
 import RecoveryKeyDisplay from '../components/RecoveryKeyDisplay';
@@ -146,7 +147,7 @@ export default function SetupPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-500/10 mb-4">
-            <Shield className="w-8 h-8 text-primary-500" />
+            <AppIcon className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-semibold mb-2">Create Master Password</h1>
           <p className="text-[var(--color-text-secondary)]">

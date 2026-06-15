@@ -1,14 +1,13 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  Wallet, 
-  Receipt, 
-  Calendar, 
-  Download, 
+import {
+  LayoutDashboard,
+  Wallet,
+  Receipt,
+  Calendar,
+  Download,
   Settings,
   Lock,
-  Shield,
   TrendingUp,
   Power,
   Briefcase,
@@ -16,6 +15,7 @@ import {
   Target,
   CreditCard
 } from 'lucide-react';
+import AppIcon from './AppIcon';
 import { useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
 import { useBudget } from '../context/BudgetContext';
@@ -83,7 +83,7 @@ export default function Layout() {
         <aside className="w-64 flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)]">
           <div className="titlebar h-14 flex items-center px-6 border-b border-[var(--color-border)]">
             <div className="flex items-center gap-2 pl-16">
-              <Shield className="w-6 h-6 text-primary-500" />
+              <AppIcon className="w-6 h-6" />
               <span className="font-semibold text-lg">Budget Optimizer</span>
             </div>
           </div>
