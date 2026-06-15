@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { format, parseISO } from 'date-fns';
 import {
   BarChart,
@@ -253,7 +253,7 @@ interface DebtCardProps {
   onDelete: () => void;
 }
 
-function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
+const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
   const { debt, bill, amortization } = debtData;
   
   if (!bill || !amortization) {
@@ -429,7 +429,7 @@ function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
       </div>
     </div>
   );
-}
+});
 
 interface UnsetupDebtCardProps {
   bill: Bill;

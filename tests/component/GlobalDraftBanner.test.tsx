@@ -8,6 +8,8 @@ const mockUseDraft = vi.fn();
 
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
+  useDraftData: () => mockUseDraft(),
+  useDraftActions: () => mockUseDraft(),
 }));
 
 vi.mock('../../src/components/ConfirmDialog', () => ({

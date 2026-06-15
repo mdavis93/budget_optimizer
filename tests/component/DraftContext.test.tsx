@@ -1006,7 +1006,7 @@ describe('DraftContext', () => {
       return null;
     }
     suppressExpectedConsoleErrors(() => {
-      expect(() => render(<BadConsumer />)).toThrow('useDraft must be used within a DraftProvider');
+      expect(() => render(<BadConsumer />)).toThrow('useDraftData must be used within a DraftProvider');
     });
   });
 

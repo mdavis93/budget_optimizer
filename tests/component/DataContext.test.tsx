@@ -18,6 +18,8 @@ vi.mock('../../src/context/BudgetContext', () => ({
 
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
+  useDraftData: () => mockUseDraft(),
+  useDraftActions: () => mockUseDraft(),
 }));
 
 function DataHarness() {

@@ -14,6 +14,8 @@ vi.mock('../../src/context/DataContext', () => ({
 
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
+  useDraftData: () => mockUseDraft(),
+  useDraftActions: () => mockUseDraft(),
 }));
 
 vi.mock('../../src/context/BudgetContext', () => ({
