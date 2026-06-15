@@ -5,6 +5,11 @@ import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
 import { useDraft } from './DraftContext';
 import { applyScheduleViewport } from '../utils/scheduleViewport';
+import {
+  buildScheduleCacheKey,
+  SCHEDULE_DEBOUNCE_MS,
+  type ScheduleCacheEntry,
+} from '../utils/scheduleCache';
 
 interface DataContextType {
   incomes: Income[];
@@ -27,7 +32,12 @@ interface DataContextType {
   createBill: (bill: BillInput) => Promise<boolean>;
   updateBill: (id: string, bill: BillInput) => Promise<boolean>;
   deleteBill: (id: string) => Promise<boolean>;
-  generateSchedule: (startDate: string, months: number, startingBalance: number) => Promise<ScheduleData | null>;
+  generateSchedule: (
+    startDate: string,
+    months: number,
+    startingBalance: number,
+    options?: { force?: boolean }
+  ) => Promise<ScheduleData | null>;
   clearError: () => void;
 }
 
@@ -50,6 +60,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [quickBudgetStartDate, setQuickBudgetStartDate] = useState(defaultScheduleStartDate);
 
   const fullScheduleRef = useRef<ScheduleData | null>(null);
+  const scheduleCacheRef = useRef<ScheduleCacheEntry | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const incomes = draft.incomes;
   const bills = draft.bills;
@@ -82,6 +94,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!isUnlocked || !hasBudgetSelected) {
       setSchedule(null);
       fullScheduleRef.current = null;
+      scheduleCacheRef.current = null;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     }
   }, [isUnlocked, hasBudgetSelected]);
 
@@ -251,7 +268,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [bills, scheduleStartingBalance]);
 
-  const generateSchedule = useCallback(async (
+  const applyScheduleResult = useCallback((data: ScheduleData) => {
+    fullScheduleRef.current = {
+      ...data,
+      paychecks: data.fullPaychecks,
+      viewportMonths: 12,
+    };
+    setSchedule(data);
+    setScheduleMonthsState(data.viewportMonths);
+    return data;
+  }, []);
+
+  const generateScheduleImmediate = useCallback(async (
     startDate: string,
     months: number,
     startingBalance: number
@@ -259,6 +287,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const overlay = draft.buildDraftOverlay();
+      const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
+      if (scheduleCacheRef.current?.hash === cacheKey) {
+        return applyScheduleResult(scheduleCacheRef.current.data);
+      }
+
       const result = await window.electronAPI.schedule.build(
         startDate,
         months,
@@ -266,14 +299,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         overlay
       );
       if (result.success && result.data) {
-        fullScheduleRef.current = {
-          ...result.data,
-          paychecks: result.data.fullPaychecks,
-          viewportMonths: 12,
-        };
-        setSchedule(result.data);
-        setScheduleMonthsState(result.data.viewportMonths);
-        return result.data;
+        scheduleCacheRef.current = { hash: cacheKey, data: result.data };
+        return applyScheduleResult(result.data);
       }
       setError(result.error || 'Failed to generate schedule');
       return null;
@@ -283,7 +310,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [draft]);
+  }, [draft, applyScheduleResult]);
+
+  const generateSchedule = useCallback(async (
+    startDate: string,
+    months: number,
+    startingBalance: number,
+    options?: { force?: boolean }
+  ): Promise<ScheduleData | null> => {
+    if (options?.force) {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      return generateScheduleImmediate(startDate, months, startingBalance);
+    }
+
+    return new Promise((resolve) => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        void generateScheduleImmediate(startDate, months, startingBalance).then(resolve);
+      }, SCHEDULE_DEBOUNCE_MS);
+    });
+  }, [generateScheduleImmediate]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const clearError = useCallback(() => {
     setError(null);

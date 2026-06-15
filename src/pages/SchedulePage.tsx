@@ -104,12 +104,12 @@ export default function SchedulePage() {
         if (result.success) {
           setShowReconciliation(false);
           setDismissedReconciliation(false);
-          generateSchedule(startDate, months, startingBalance);
+          generateSchedule(startDate, months, startingBalance, { force: true });
         }
       } else if (draft.applyReconciliationFixes(fixes)) {
         setShowReconciliation(false);
         setDismissedReconciliation(false);
-        generateSchedule(startDate, months, startingBalance);
+        generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } catch {
       // Error handling done through UI state
@@ -145,7 +145,7 @@ export default function SchedulePage() {
   }, [startDate, startingBalance, dataHash]);
 
   const handleRefresh = () => {
-    generateSchedule(startDate, months, startingBalance);
+    generateSchedule(startDate, months, startingBalance, { force: true });
   };
 
   const handleSkipBill = useCallback(async (billId: string, paycheckDate: string) => {
@@ -155,10 +155,10 @@ export default function SchedulePage() {
         const result = await window.electronAPI.skippedBills.skip(billId, paycheckDate);
         if (result.success) {
           await draft.reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance);
+          generateSchedule(startDate, months, startingBalance, { force: true });
         }
       } else if (draft.skipBill(billId, paycheckDate)) {
-        generateSchedule(startDate, months, startingBalance);
+        generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } catch {
       // Error handling done through UI state
@@ -220,10 +220,10 @@ export default function SchedulePage() {
         const result = await window.electronAPI.incomeOverrides.set(incomeId, paycheckDate, amount);
         if (result.success) {
           await draft.reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance);
+          await generateSchedule(startDate, months, startingBalance, { force: true });
         }
       } else if (draft.setIncomeOverride(incomeId, paycheckDate, amount)) {
-        await generateSchedule(startDate, months, startingBalance);
+        await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } finally {
       setSavingIncomeKey(null);
@@ -238,10 +238,10 @@ export default function SchedulePage() {
         const result = await window.electronAPI.incomeOverrides.remove(incomeId, paycheckDate);
         if (result.success) {
           await draft.reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance);
+          await generateSchedule(startDate, months, startingBalance, { force: true });
         }
       } else if (draft.removeIncomeOverride(incomeId, paycheckDate)) {
-        await generateSchedule(startDate, months, startingBalance);
+        await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } finally {
       setSavingIncomeKey(null);
@@ -263,7 +263,7 @@ export default function SchedulePage() {
         );
         if (result.success) {
           await draft.reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance);
+          generateSchedule(startDate, months, startingBalance, { force: true });
         }
       } else {
         draft.assignBill(billId, billDueDate, targetPaycheckDate);
