@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Configure branch protection on main (requires GitHub CLI + admin access).
+# Configure classic branch protection on main (requires GitHub CLI + admin access).
+# For merge queue, run ./scripts/configure-merge-queue-ruleset.sh after this script.
 # See CONTRIBUTING.md for manual setup via the GitHub UI.
 set -euo pipefail
 
@@ -18,7 +19,7 @@ gh api "repos/${REPO}/branches/main/protection" \
   "required_status_checks": {
     "strict": true,
     "checks": [
-      { "context": "pr-gate" },
+      { "context": "pr-gate / quality" },
       { "context": "commitlint" }
     ]
   },
@@ -31,4 +32,5 @@ gh api "repos/${REPO}/branches/main/protection" \
 EOF
 
 echo "Branch protection configured for ${REPO} main."
-echo "Enable merge queue separately: GitHub → Settings → Branches → Merge queue."
+echo "Next: ./scripts/configure-merge-queue-ruleset.sh"
+echo "Then enable Allow auto-merge: Settings → General → Pull Requests."
