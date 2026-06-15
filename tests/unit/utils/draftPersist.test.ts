@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DraftState } from '../../../src/types/draft';
 import {
   computeDirtyDomains,
+  getCrossDomainSaveWarning,
+  getRequiredSaveDomains,
   persistBillsDomain,
   persistBudgetDomain,
   persistDebtsDomain,
@@ -202,6 +204,90 @@ describe('draftPersist', () => {
       expect(result.nextDraft.skippedBills[0].billId).toBe('bill-real-1');
       expect(result.nextDraft.billAssignments[0].billId).toBe('bill-real-1');
       expect(result.nextDraft.incomeOverrides[0].incomeId).toBe('income-real-1');
+    });
+  });
+
+  describe('getRequiredSaveDomains', () => {
+    it('includes income when saving bills that reference a draft income id', () => {
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-1' })],
+        bills: [createMockBill({ id: 'draft-bill-1', preferredIncomeSourceId: 'draft-income-1' })],
+      });
+      const dirty = new Set(['income', 'bills'] as const);
+
+      expect(getRequiredSaveDomains('bills', draft, dirty)).toEqual(['income', 'bills']);
+    });
+
+    it('includes bills and income when saving debts that reference a draft bill id', () => {
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-1' })],
+        bills: [createMockBill({ id: 'draft-bill-1', preferredIncomeSourceId: 'draft-income-1' })],
+        debts: [
+          {
+            id: 'draft-debt-1',
+            budgetId: 'budget-1',
+            billId: 'draft-bill-1',
+            principalBalance: 1000,
+            apr: 10,
+            monthlyPayment: 100,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+      const dirty = new Set(['income', 'bills', 'debts'] as const);
+
+      expect(getRequiredSaveDomains('debts', draft, dirty)).toEqual(['income', 'bills', 'debts']);
+    });
+
+    it('includes income and bills when saving schedule with draft entity references', () => {
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-1' })],
+        bills: [createMockBill({ id: 'draft-bill-1' })],
+        skippedBills: [{ billId: 'draft-bill-1', skipDate: '2026-01-15' }],
+        incomeOverrides: [{ incomeId: 'draft-income-1', paycheckDate: '2026-01-01', amount: 1200 }],
+      });
+      const dirty = new Set(['income', 'bills', 'schedule'] as const);
+
+      expect(getRequiredSaveDomains('schedule', draft, dirty)).toEqual(['income', 'bills', 'schedule']);
+    });
+
+    it('returns only the requested domain when there are no cross-domain draft references', () => {
+      const draft = makeDraftState();
+      const dirty = new Set(['bills'] as const);
+
+      expect(getRequiredSaveDomains('bills', draft, dirty)).toEqual(['bills']);
+    });
+
+    it('omits clean domains even when draft references would require them', () => {
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-1' })],
+        bills: [createMockBill({ preferredIncomeSourceId: 'draft-income-1' })],
+      });
+      const dirty = new Set(['bills'] as const);
+
+      expect(getRequiredSaveDomains('bills', draft, dirty)).toEqual(['bills']);
+    });
+  });
+
+  describe('getCrossDomainSaveWarning', () => {
+    it('returns null when saving a domain has no dirty dependencies', () => {
+      const draft = makeDraftState();
+      const dirty = new Set(['bills'] as const);
+
+      expect(getCrossDomainSaveWarning('bills', draft, dirty)).toBeNull();
+    });
+
+    it('returns a confirmation message listing extra domains to save', () => {
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-1' })],
+        bills: [createMockBill({ preferredIncomeSourceId: 'draft-income-1' })],
+      });
+      const dirty = new Set(['income', 'bills'] as const);
+
+      const warning = getCrossDomainSaveWarning('bills', draft, dirty);
+      expect(warning?.domains).toEqual(['income', 'bills']);
+      expect(warning?.message).toContain('Saving Bills also requires saving Income');
     });
   });
 

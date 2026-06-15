@@ -40,6 +40,7 @@ import { useBudget } from './BudgetContext';
 import { useToast } from '../components/Toast';
 import {
   computeDirtyDomains,
+  getRequiredSaveDomains,
   persistDomains,
 } from '../utils/draftPersist';
 
@@ -64,6 +65,8 @@ interface DraftDataContextValue {
 interface DraftActionsContextValue {
   buildDraftOverlay: () => DraftOverlay | undefined;
   saveDomain: (domain: DraftDomain) => Promise<boolean>;
+  saveDomains: (domains: DraftDomain[]) => Promise<boolean>;
+  getRequiredSaveDomainsFor: (domain: DraftDomain) => DraftDomain[];
   saveAll: () => Promise<boolean>;
   discardDomain: (domain: DraftDomain) => void;
   discardAll: () => void;
@@ -218,27 +221,44 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const saveDomain = useCallback(async (domain: DraftDomain): Promise<boolean> => {
-    const { isDraftMode: draftMode, dirtyDomains: domains, committed: saved, draft: currentDraft, currentBudgetId } =
+  const saveDomains = useCallback(async (domains: DraftDomain[]): Promise<boolean> => {
+    const { isDraftMode: draftMode, dirtyDomains: domainsDirty, committed: saved, draft: currentDraft, currentBudgetId } =
       stateRef.current;
     if (!draftMode) return true;
-    if (!domains.has(domain)) return true;
+
+    const domainsToSave = domains.filter((d) => domainsDirty.has(d));
+    if (domainsToSave.length === 0) return true;
 
     setIsSaving(true);
     try {
-      const result = await persistDomains(saved, currentDraft, [domain], currentBudgetId);
+      const result = await persistDomains(saved, currentDraft, domainsToSave, currentBudgetId);
       if (!result.success) {
         showToast('error', result.error || 'Failed to save changes');
         return false;
       }
 
-      await finalizeSave(result, [domain]);
-      showToast('success', `${DRAFT_DOMAIN_LABELS[domain]} changes saved`);
+      await finalizeSave(result, domainsToSave);
+      const label =
+        domainsToSave.length === 1
+          ? DRAFT_DOMAIN_LABELS[domainsToSave[0]]
+          : `${domainsToSave.length} domains`;
+      showToast('success', `${label} changes saved`);
       return true;
     } finally {
       setIsSaving(false);
     }
   }, [showToast, finalizeSave]);
+
+  const saveDomain = useCallback(async (domain: DraftDomain): Promise<boolean> => {
+    const { dirtyDomains: domains } = stateRef.current;
+    const required = getRequiredSaveDomains(domain, stateRef.current.draft, domains);
+    return saveDomains(required);
+  }, [saveDomains]);
+
+  const getRequiredSaveDomainsFor = useCallback((domain: DraftDomain): DraftDomain[] => {
+    const { draft: currentDraft, dirtyDomains: domains } = stateRef.current;
+    return getRequiredSaveDomains(domain, currentDraft, domains);
+  }, []);
 
   const saveAll = useCallback(async (): Promise<boolean> => {
     const { isDraftMode: draftMode, dirtyDomains: domains, committed: saved, draft: currentDraft, currentBudgetId } =
@@ -699,6 +719,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     (): DraftActionsContextValue => ({
       buildDraftOverlay,
       saveDomain,
+      saveDomains,
+      getRequiredSaveDomainsFor,
       saveAll,
       discardDomain,
       discardAll,
@@ -729,6 +751,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     [
       buildDraftOverlay,
       saveDomain,
+      saveDomains,
+      getRequiredSaveDomainsFor,
       saveAll,
       discardDomain,
       discardAll,

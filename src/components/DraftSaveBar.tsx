@@ -1,6 +1,7 @@
 import { Save, RotateCcw } from 'lucide-react';
 import { DraftDomain, DRAFT_DOMAIN_LABELS } from '../types/draft';
 import { useDraftData, useDraftActions } from '../context/DraftContext';
+import { getCrossDomainSaveWarning } from '../utils/draftPersist';
 import ConfirmDialog from './ConfirmDialog';
 import { useState } from 'react';
 
@@ -9,13 +10,25 @@ interface DraftSaveBarProps {
 }
 
 export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
-  const { isDraftMode, isDomainDirty, isSaving } = useDraftData();
-  const { saveDomain, discardDomain } = useDraftActions();
+  const { draft, dirtyDomains, isDraftMode, isDomainDirty, isSaving } = useDraftData();
+  const { saveDomains, discardDomain } = useDraftActions();
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState<{ domains: DraftDomain[]; message: string } | null>(
+    null
+  );
 
   if (!isDraftMode || !isDomainDirty(domain)) {
     return null;
   }
+
+  const handleSaveClick = () => {
+    const warning = getCrossDomainSaveWarning(domain, draft, dirtyDomains);
+    if (warning) {
+      setSaveConfirm(warning);
+      return;
+    }
+    void saveDomains([domain]);
+  };
 
   return (
     <>
@@ -36,7 +49,7 @@ export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
             </button>
             <button
               type="button"
-              onClick={() => saveDomain(domain)}
+              onClick={handleSaveClick}
               disabled={isSaving}
               className="btn-primary inline-flex items-center gap-2"
             >
@@ -54,6 +67,21 @@ export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
         title="Discard changes?"
         message={`This will revert unsaved ${DRAFT_DOMAIN_LABELS[domain].toLowerCase()} changes.`}
         confirmText="Discard"
+        variant="warning"
+      />
+
+      <ConfirmDialog
+        isOpen={saveConfirm !== null}
+        onClose={() => setSaveConfirm(null)}
+        onConfirm={() => {
+          if (saveConfirm) {
+            void saveDomains(saveConfirm.domains);
+          }
+          setSaveConfirm(null);
+        }}
+        title="Save related changes?"
+        message={saveConfirm?.message ?? ''}
+        confirmText="Save"
         variant="warning"
       />
     </>

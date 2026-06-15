@@ -15,6 +15,7 @@ import {
   DraftBudgetFields,
   DraftDomain,
   DraftState,
+  DRAFT_DOMAIN_LABELS,
   isDraftId,
 } from '../types/draft';
 import {
@@ -403,6 +404,71 @@ export async function persistBudgetDomain(
 }
 
 const SAVE_ORDER: DraftDomain[] = ['income', 'bills', 'debts', 'goals', 'schedule', 'budget'];
+
+export function getRequiredSaveDomains(
+  domain: DraftDomain,
+  draft: DraftState,
+  dirtyDomains: Set<DraftDomain>
+): DraftDomain[] {
+  const required = new Set<DraftDomain>([domain]);
+
+  if (domain === 'bills' || domain === 'debts' || domain === 'schedule') {
+    for (const bill of draft.bills) {
+      if (bill.preferredIncomeSourceId && isDraftId(bill.preferredIncomeSourceId)) {
+        required.add('income');
+      }
+    }
+  }
+
+  if (domain === 'debts' || domain === 'schedule') {
+    for (const debt of draft.debts) {
+      if (isDraftId(debt.billId)) {
+        required.add('bills');
+        required.add('income');
+      }
+    }
+  }
+
+  if (domain === 'schedule') {
+    for (const assignment of draft.billAssignments) {
+      if (isDraftId(assignment.billId)) {
+        required.add('bills');
+        required.add('income');
+      }
+    }
+    for (const skipped of draft.skippedBills) {
+      if (isDraftId(skipped.billId)) {
+        required.add('bills');
+        required.add('income');
+      }
+    }
+    for (const override of draft.incomeOverrides) {
+      if (isDraftId(override.incomeId)) {
+        required.add('income');
+      }
+    }
+  }
+
+  return SAVE_ORDER.filter((item) => required.has(item) && dirtyDomains.has(item));
+}
+
+export function getCrossDomainSaveWarning(
+  domain: DraftDomain,
+  draft: DraftState,
+  dirtyDomains: Set<DraftDomain>
+): { domains: DraftDomain[]; message: string } | null {
+  const required = getRequiredSaveDomains(domain, draft, dirtyDomains);
+  const extra = required.filter((item) => item !== domain);
+  if (extra.length === 0) {
+    return null;
+  }
+
+  const extraLabels = extra.map((item) => DRAFT_DOMAIN_LABELS[item]).join(', ');
+  return {
+    domains: required,
+    message: `Saving ${DRAFT_DOMAIN_LABELS[domain]} also requires saving ${extraLabels}. Continue?`,
+  };
+}
 
 export async function persistDomains(
   committed: DraftState,
