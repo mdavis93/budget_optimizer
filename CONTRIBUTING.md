@@ -10,22 +10,50 @@ Thank you for contributing. This project uses a two-phase CI model:
 1. Create a feature branch from `main`.
 2. Write code and tests.
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message.
-4. Open a pull request against `main`.
+4. Open a pull request against `main`. Use the PR template: check **Test plan** boxes only for verification you completed locally before opening the PR (see [Pull request descriptions](#pull-request-descriptions)).
 5. When checks pass, **auto-merge** squash-merges the PR to `main` (no manual merge click needed).
 6. After merge, confirm **Main Stability** succeeds on `main`.
 
 To hold a PR despite green checks, add the `do-not-automerge` label before or after opening the PR. Draft PRs never receive auto-merge.
 
-### Local checks before pushing
+### Local quality gates (Husky)
+
+Husky hooks enforce quality before changes reach `origin`. Run `pnpm install` once to activate them (`prepare` → `husky`).
+
+| Hook | When | What runs |
+|------|------|-----------|
+| `commit-msg` | Every commit | Commitlint (Conventional Commits) |
+| `pre-push` | Every push | [`scripts/pre-push-quality.sh`](scripts/pre-push-quality.sh) — same checks as PR Gate quality |
+
+Pre-push runs:
 
 ```bash
+pnpm rebuild better-sqlite3
 pnpm typecheck
 pnpm lint
-pnpm test:coverage:check
+pnpm test:coverage:check   # with clean-output verification
 pnpm run build:vite && pnpm run verify:csp
+pnpm audit --prod --audit-level critical
 ```
 
-Commit messages are validated locally via Husky (`commit-msg` hook) when you run `pnpm install` (which triggers `prepare` → `husky`).
+Run manually anytime: `pnpm prepush`.
+
+**Paranoia layers:** (1) Husky before push → (2) PR Gate on the PR → (3) Main Stability after merge to `main`.
+
+## Pull request descriptions
+
+[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) pre-fills new PRs with **Summary** and **Test plan** sections.
+
+**Test plan checkboxes are for verification beyond Husky and CI.** Commitlint and the PR Gate quality suite run automatically via Husky on commit/push and again in CI before merge — do not checkbox those.
+
+Check an item when you ran that extra validation before opening the PR:
+
+| Checkbox | Typical local command / method |
+|----------|--------------------------------|
+| E2E tests | `pnpm test:e2e` |
+| Acceptance tests | Scenario-level checks against acceptance criteria |
+| AI-assisted verification | Cursor or other agent review of the change |
+| Manual smoke test | Hands-on exercise of the affected UI or workflow |
 
 ## Commit message format
 
@@ -167,3 +195,20 @@ Adjust `required_approving_review_count` if you want mandatory code review.
 ## Dependabot PRs
 
 Dependabot pull requests use the same **PR Gate** and auto-merge pipeline. Failed Dependabot PRs remain open without affecting user PRs or the merge-freeze machinery.
+
+Weekly dependency updates are grouped into up to **four pull requests**:
+
+| Group | Scope |
+|-------|--------|
+| `production-patch-minor` | Production deps, patch and minor bumps |
+| `production-major` | Production deps, major bumps |
+| `development-patch-minor` | Dev deps, patch and minor bumps |
+| `development-major` | Dev deps, major bumps |
+
+Configuration: [`.github/dependabot.yml`](.github/dependabot.yml).
+
+When `main` advances (including after a Dependabot PR merges), the **Dependabot Refresh** workflow ([`.github/workflows/dependabot-refresh.yml`](.github/workflows/dependabot-refresh.yml)) calls GitHub's update-branch API for each open Dependabot PR that is behind `main`. This keeps strict "branch up to date" protection satisfied without manual rebases. The workflow skips refresh while a `merge-freeze` issue is open.
+
+Major group PRs may legitimately fail `pr-gate / quality` (breaking migrations). Add the `do-not-automerge` label to hold them without blocking other PRs.
+
+Individual Dependabot PRs opened before grouping was enabled can be closed once grouped replacements appear on the next weekly run.
