@@ -1,0 +1,117 @@
+name: Merge Freeze
+
+on:
+  workflow_run:
+    workflows: [Main Stability]
+    types: [completed]
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  update-merge-freeze:
+    if: github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set MERGE_FREEZE on Main Stability failure
+        if: github.event.workflow_run.conclusion == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const freezeValue = 'true';
+
+            try {
+              await github.rest.actions.updateRepoVariable({
+                owner,
+                repo,
+                name: 'MERGE_FREEZE',
+                value: freezeValue,
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              await github.rest.actions.createRepoVariable({
+                owner,
+                repo,
+                name: 'MERGE_FREEZE',
+                value: freezeValue,
+              });
+            }
+
+            const title = 'Main Stability failed — merge freeze active';
+            const body = [
+              'Main Stability failed on `main`. Auto-merge is frozen until the next successful Main Stability run.',
+              '',
+              `Failed workflow run: ${context.payload.workflow_run.html_url}`,
+              '',
+              'Fix forward with a PR, then confirm Main Stability passes to lift the freeze automatically.',
+            ].join('\n');
+
+            const issues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'merge-freeze',
+              per_page: 1,
+            });
+
+            if (issues.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issues.data[0].number,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner,
+              repo,
+              title,
+              body,
+              labels: ['merge-freeze'],
+            });
+
+      - name: Clear MERGE_FREEZE on Main Stability success
+        if: github.event.workflow_run.conclusion == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            try {
+              await github.rest.actions.updateRepoVariable({
+                owner,
+                repo,
+                name: 'MERGE_FREEZE',
+                value: 'false',
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                core.info('MERGE_FREEZE variable not set — nothing to clear.');
+                return;
+              }
+              throw error;
+            }
+
+            const issues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'merge-freeze',
+            });
+
+            for (const issue of issues.data) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+            }

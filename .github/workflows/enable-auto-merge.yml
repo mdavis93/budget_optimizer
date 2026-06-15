@@ -1,0 +1,64 @@
+name: Enable Auto Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: enable-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable-auto-merge:
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(github.event.pull_request.labels.*.name, 'do-not-automerge')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable squash auto-merge when checks pass
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+
+            try {
+              const freeze = await github.rest.actions.getRepoVariable({
+                owner,
+                repo,
+                name: 'MERGE_FREEZE',
+              });
+              if (freeze.data.value === 'true') {
+                core.info('MERGE_FREEZE is active — skipping auto-merge enablement.');
+                return;
+              }
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            try {
+              await github.rest.pulls.enablePullRequestAutoMerge({
+                owner,
+                repo,
+                pull_number: pullNumber,
+                merge_method: 'squash',
+              });
+              core.info(`Auto-merge enabled for PR #${pullNumber}.`);
+            } catch (error) {
+              if (error.status === 422) {
+                core.info(
+                  `Auto-merge not enabled for PR #${pullNumber}: ${error.message}`
+                );
+                return;
+              }
+              throw error;
+            }
