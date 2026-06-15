@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { BudgetProvider, useBudget } from './context/BudgetContext';
@@ -7,19 +7,20 @@ import Layout from './components/Layout';
 import BudgetPicker from './components/BudgetPicker';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
-import LoginPage from './pages/LoginPage';
-import SetupPage from './pages/SetupPage';
-import DashboardPage from './pages/DashboardPage';
-import IncomePage from './pages/IncomePage';
-import BillsPage from './pages/BillsPage';
-import DebtsPage from './pages/DebtsPage';
-import SchedulePage from './pages/SchedulePage';
-import GoalsPage from './pages/GoalsPage';
-import SummaryPage from './pages/SummaryPage';
-import BudgetsPage from './pages/BudgetsPage';
-import ExportPage from './pages/ExportPage';
-import SettingsPage from './pages/SettingsPage';
 import LoadingScreen from './components/LoadingScreen';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SetupPage = lazy(() => import('./pages/SetupPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const IncomePage = lazy(() => import('./pages/IncomePage'));
+const BillsPage = lazy(() => import('./pages/BillsPage'));
+const DebtsPage = lazy(() => import('./pages/DebtsPage'));
+const SchedulePage = lazy(() => import('./pages/SchedulePage'));
+const GoalsPage = lazy(() => import('./pages/GoalsPage'));
+const SummaryPage = lazy(() => import('./pages/SummaryPage'));
+const BudgetsPage = lazy(() => import('./pages/BudgetsPage'));
+const ExportPage = lazy(() => import('./pages/ExportPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isUnlocked, isLoading } = useAuth();
@@ -74,6 +75,7 @@ function App() {
         <HashRouter>
           <BudgetProvider>
           <DraftProvider>
+          <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route 
               path="/login" 
@@ -107,6 +109,7 @@ function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+          </Suspense>
           </DraftProvider>
           </BudgetProvider>
         </HashRouter>

@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, '..');
 const electronDir = path.join(root, 'node_modules/electron');
 
 if (!fs.existsSync(electronDir)) {
-  console.log('Skipping native rebuild: electron is not installed.');
+  console.log('Skipping Electron native rebuild: electron is not installed.');
   process.exit(0);
 }
 
@@ -18,6 +18,5 @@ try {
   console.log('Native modules rebuilt for Electron.');
 } catch (error) {
   console.error('Failed to rebuild native modules for Electron.');
-  console.error('Try running: pnpm run rebuild:native');
   process.exit(1);
 }
