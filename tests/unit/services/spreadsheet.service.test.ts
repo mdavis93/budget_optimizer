@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import ExcelJS from 'exceljs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpreadsheetService } from '../../../electron/services/spreadsheet.service';
 import { createMockSchedule, createMockPaycheck } from '../../mocks/electron-api.mock';
 
@@ -153,6 +153,19 @@ describe('SpreadsheetService', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeTruthy();
+    });
+
+    it('returns failure object when file write fails after workbook is built', async () => {
+      const service = new SpreadsheetService();
+      const outputPath = path.join(os.tmpdir(), `budget-optimizer-spreadsheet-writefail-${Date.now()}.xlsx`);
+      const writeError = new Error('disk full');
+      const writeSpy = vi.spyOn(fs.promises, 'writeFile').mockRejectedValueOnce(writeError);
+
+      const result = await service.generateXlsx(createMockSchedule() as never, outputPath);
+
+      expect(result).toEqual({ success: false, error: 'disk full' });
+      expect(writeSpy).toHaveBeenCalledOnce();
+      writeSpy.mockRestore();
     });
   });
 });
