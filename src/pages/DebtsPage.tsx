@@ -4,7 +4,7 @@ import { CreditCard, Plus, Pencil, Trash2, TrendingDown, Calendar, DollarSign, P
 import { DebtAmortizationChart, ChartSuspense } from '../components/charts/lazyCharts';
 import { CHART_COLORS } from '../components/charts/chartTheme';
 import { useData } from '../context/DataContext';
-import { useDraft } from '../context/DraftContext';
+import { useDraftData, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
 import Modal from '../components/Modal';
@@ -414,7 +414,14 @@ function UnsetupDebtCard({ bill, onClick }: UnsetupDebtCardProps) {
 
 export default function DebtsPage() {
   const { bills } = useData();
-  const draft = useDraft();
+  const { debts } = useDraftData();
+  const {
+    getDebtsWithAmortization,
+    reloadSnapshot,
+    createDebt,
+    updateDebt,
+    deleteDebt: removeDebt,
+  } = useDraftActions();
   const { isQuickBudget } = useBudget();
   const [debtsWithAmortization, setDebtsWithAmortization] = useState<DebtWithAmortization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -429,18 +436,18 @@ export default function DebtsPage() {
   const loadDebts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await draft.getDebtsWithAmortization();
+      const data = await getDebtsWithAmortization();
       setDebtsWithAmortization(data);
     } catch {
       // Error loading debts
     } finally {
       setIsLoading(false);
     }
-  }, [draft]);
+  }, [getDebtsWithAmortization]);
 
   useEffect(() => {
     void loadDebts();
-  }, [loadDebts, draft.debts, bills]);
+  }, [loadDebts, debts, bills]);
 
   const existingDebtBillIds = useMemo(
     () => new Set(debtsWithAmortization.map((d) => d.debt.billId)),
@@ -488,12 +495,12 @@ export default function DebtsPage() {
       if (isQuickBudget) {
         const result = await window.electronAPI.debts.create(data);
         if (result.success) {
-          await draft.reloadSnapshot();
+          await reloadSnapshot();
           await loadDebts();
           setIsModalOpen(false);
           setPreselectedBill(null);
         }
-      } else if (draft.createDebt(data)) {
+      } else if (createDebt(data)) {
         await loadDebts();
         setIsModalOpen(false);
         setPreselectedBill(null);
@@ -520,11 +527,11 @@ export default function DebtsPage() {
       if (isQuickBudget) {
         const result = await window.electronAPI.debts.update(editingDebt.debt.id, data);
         if (result.success) {
-          await draft.reloadSnapshot();
+          await reloadSnapshot();
           await loadDebts();
           setEditingDebt(null);
         }
-      } else if (draft.updateDebt(editingDebt.debt.id, data)) {
+      } else if (updateDebt(editingDebt.debt.id, data)) {
         await loadDebts();
         setEditingDebt(null);
       }
@@ -540,11 +547,11 @@ export default function DebtsPage() {
       if (isQuickBudget) {
         const result = await window.electronAPI.debts.delete(deleteDebt.debt.id);
         if (result.success) {
-          await draft.reloadSnapshot();
+          await reloadSnapshot();
           await loadDebts();
           setDeleteDebt(null);
         }
-      } else if (draft.deleteDebt(deleteDebt.debt.id)) {
+      } else if (removeDebt(deleteDebt.debt.id)) {
         await loadDebts();
         setDeleteDebt(null);
       }

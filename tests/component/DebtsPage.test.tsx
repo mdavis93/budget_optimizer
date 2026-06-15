@@ -3,18 +3,20 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import DebtsPage from '../../src/pages/DebtsPage';
 import { renderWithRouter } from '../helpers/renderWithProviders';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { delayedResolve, unstableDraftMock } from '../helpers/unstableDraftMock';
 
 const mockUseData = vi.fn();
-const mockUseDraft = vi.fn();
+const mockUseDraftData = vi.fn();
+const mockUseDraftActions = vi.fn();
 const mockUseBudget = vi.fn();
 
 vi.mock('../../src/context/DataContext', () => ({
   useData: () => mockUseData(),
 }));
 vi.mock('../../src/context/DraftContext', () => ({
-  useDraft: () => mockUseDraft(),
-  useDraftData: () => mockUseDraft(),
-  useDraftActions: () => mockUseDraft(),
+  useDraft: () => ({ ...mockUseDraftData(), ...mockUseDraftActions() }),
+  useDraftData: () => mockUseDraftData(),
+  useDraftActions: () => mockUseDraftActions(),
 }));
 vi.mock('../../src/context/BudgetContext', () => ({
   useBudget: () => mockUseBudget(),
@@ -40,8 +42,49 @@ describe('DebtsPage', () => {
   const getDebtsWithAmortization = vi.fn();
   const createDebt = vi.fn(() => true);
   const updateDebt = vi.fn(() => true);
-  const deleteDebt = vi.fn(() => true);
+  const deleteDebtAction = vi.fn(() => true);
   const reloadSnapshot = vi.fn();
+
+  const debtFixture = {
+    debt: {
+      id: 'debt-1',
+      billId: 'bill-1',
+      principalBalance: 1200,
+      apr: 0.22,
+      monthlyPayment: 100,
+    },
+    bill: {
+      id: 'bill-1',
+      creditorName: 'CardOne: Platinum',
+      budgetedAmount: 120,
+      dueDay: 10,
+    },
+    amortization: {
+      monthsToPayoff: 12,
+      payoffDate: '2026-12-01',
+      totalInterest: 140,
+      totalPayments: 1340,
+      totalPrincipal: 1200,
+      payments: [],
+    },
+  };
+
+  const baseDraftData = { debts: [] as never[] };
+  const baseDraftActions = {
+    getDebtsWithAmortization,
+    createDebt,
+    updateDebt,
+    deleteDebt: deleteDebtAction,
+    reloadSnapshot,
+  };
+
+  function mockDraftContext(
+    dataOverrides: Partial<typeof baseDraftData> = {},
+    actionsOverrides: Partial<typeof baseDraftActions> = {},
+  ) {
+    mockUseDraftData.mockReturnValue({ ...baseDraftData, ...dataOverrides });
+    mockUseDraftActions.mockReturnValue({ ...baseDraftActions, ...actionsOverrides });
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,37 +111,25 @@ describe('DebtsPage', () => {
       ],
     });
     mockUseBudget.mockReturnValue({ isQuickBudget: false });
-    mockUseDraft.mockReturnValue({
-      debts: [],
-      getDebtsWithAmortization: getDebtsWithAmortization.mockResolvedValue([
-        {
-          debt: {
-            id: 'debt-1',
-            billId: 'bill-1',
-            principalBalance: 1200,
-            apr: 0.22,
-            monthlyPayment: 100,
-          },
-          bill: {
-            id: 'bill-1',
-            creditorName: 'CardOne: Platinum',
-            budgetedAmount: 120,
-            dueDay: 10,
-          },
-          amortization: {
-            monthsToPayoff: 12,
-            payoffDate: '2026-12-01',
-            totalInterest: 140,
-            totalPayments: 1340,
-            totalPrincipal: 1200,
-            payments: [],
-          },
-        },
-      ]),
-      createDebt,
-      updateDebt,
-      deleteDebt,
-      reloadSnapshot,
+    getDebtsWithAmortization.mockResolvedValue([debtFixture]);
+    mockDraftContext();
+  });
+
+  describe('loading regression', () => {
+    it('clears loading when draft data hook returns new object references each render', async () => {
+      mockUseDraftData.mockImplementation(unstableDraftMock(() => ({ ...baseDraftData })));
+      mockUseDraftActions.mockReturnValue({
+        ...baseDraftActions,
+        getDebtsWithAmortization: vi.fn(() => delayedResolve([debtFixture], 100)),
+      });
+
+      renderWithRouter(<DebtsPage />, { mockAPI });
+      expect(document.querySelector('.animate-spin')).toBeTruthy();
+
+      await waitFor(() => {
+        expect(document.querySelector('.animate-spin')).toBeNull();
+      });
+      expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
     });
   });
 
@@ -177,7 +208,7 @@ describe('DebtsPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /Delete debt/i }));
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       await waitFor(() => {
-        expect(deleteDebt).toHaveBeenCalled();
+        expect(deleteDebtAction).toHaveBeenCalled();
       });
 
       fireEvent.click(screen.getByRole('button', { name: 'A–Z' }));
@@ -200,13 +231,8 @@ describe('DebtsPage', () => {
 
     it('shows empty state when no debt bills exist', async () => {
       mockUseData.mockReturnValue({ bills: [] });
-      mockUseDraft.mockReturnValue({
-        debts: [],
+      mockDraftContext({}, {
         getDebtsWithAmortization: vi.fn().mockResolvedValue([]),
-        createDebt: vi.fn(() => true),
-        updateDebt: vi.fn(() => true),
-        deleteDebt: vi.fn(() => true),
-        reloadSnapshot: vi.fn(),
       });
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('No debts to track')).toBeInTheDocument();
@@ -435,13 +461,8 @@ describe('DebtsPage', () => {
           { id: 'bill-x', creditorName: 'Rent', budgetedAmount: 1000, category: 'housing', dueDay: 1, priority: 'critical', isRecurring: true },
         ],
       });
-      mockUseDraft.mockReturnValue({
-        debts: [],
+      mockDraftContext({}, {
         getDebtsWithAmortization: vi.fn().mockResolvedValue([]),
-        createDebt,
-        updateDebt,
-        deleteDebt,
-        reloadSnapshot,
       });
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('No debts to track')).toBeInTheDocument();

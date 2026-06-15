@@ -6,15 +6,21 @@ import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import Modal from '../components/Modal';
 import GoalAchievabilityPanel from '../components/goals/GoalAchievabilityPanel';
-import { useDraft } from '../context/DraftContext';
+import { useDraftData, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { buildGoalAchievabilityMessaging } from '../utils/goalAchievabilityMessaging';
 
 export default function GoalsPage() {
-  const draft = useDraft();
+  const { goals, dirtyDomains, budgetFields } = useDraftData();
+  const {
+    getGoalProjections,
+    reloadSnapshot,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+  } = useDraftActions();
   const navigate = useNavigate();
   const { isQuickBudget } = useBudget();
-  const goals = draft.goals;
   const [projections, setProjections] = useState<GoalProjection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -37,12 +43,12 @@ export default function GoalsPage() {
 
   const loadProjections = useCallback(async () => {
     try {
-      const data = await draft.getGoalProjections();
+      const data = await getGoalProjections();
       setProjections(data);
     } catch {
       // Projections will remain empty on error
     }
-  }, [draft]);
+  }, [getGoalProjections]);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,7 +57,7 @@ export default function GoalsPage() {
       setIsLoading(true);
       try {
         if (isQuickBudget) {
-          await draft.reloadSnapshot();
+          await reloadSnapshot();
         }
         if (isMounted) {
           await loadProjections();
@@ -65,7 +71,7 @@ export default function GoalsPage() {
 
     void doLoad();
     return () => { isMounted = false; };
-  }, [draft.goals, draft.dirtyDomains.size, isQuickBudget, draft, loadProjections]);
+  }, [goals, dirtyDomains.size, isQuickBudget, reloadSnapshot, loadProjections]);
 
   const refreshData = useCallback(async () => {
     await loadProjections();
@@ -112,12 +118,12 @@ export default function GoalsPage() {
       if (isQuickBudget) {
         const result = await window.electronAPI.goals.create(input);
         if (result.success) {
-          await draft.reloadSnapshot();
+          await reloadSnapshot();
           setShowCreateModal(false);
           resetForm();
           await refreshData();
         }
-      } else if (draft.createGoal(input)) {
+      } else if (createGoal(input)) {
         setShowCreateModal(false);
         resetForm();
         await refreshData();
@@ -143,12 +149,12 @@ export default function GoalsPage() {
       if (isQuickBudget) {
         const result = await window.electronAPI.goals.update(editingGoal.id, updates);
         if (result.success) {
-          await draft.reloadSnapshot();
+          await reloadSnapshot();
           setEditingGoal(null);
           resetForm();
           await refreshData();
         }
-      } else if (draft.updateGoal(editingGoal.id, updates)) {
+      } else if (updateGoal(editingGoal.id, updates)) {
         setEditingGoal(null);
         resetForm();
         await refreshData();
@@ -162,11 +168,11 @@ export default function GoalsPage() {
     if (isQuickBudget) {
       const result = await window.electronAPI.goals.delete(id);
       if (result.success) {
-        await draft.reloadSnapshot();
+        await reloadSnapshot();
         setDeleteConfirm(null);
         await refreshData();
       }
-    } else if (draft.deleteGoal(id)) {
+    } else if (deleteGoal(id)) {
       setDeleteConfirm(null);
       await refreshData();
     }
@@ -176,7 +182,7 @@ export default function GoalsPage() {
     return projections.find(p => p.goalId === goalId);
   };
 
-  const minCashOnHand = draft.budgetFields?.minCashOnHand ?? 100;
+  const minCashOnHand = budgetFields?.minCashOnHand ?? 100;
 
   const handleViewSchedule = useCallback(
     (link: { goalId: string; highlightPaycheckDate?: string }) => {

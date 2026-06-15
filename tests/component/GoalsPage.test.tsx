@@ -3,8 +3,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GoalsPage from '../../src/pages/GoalsPage';
 import { createMockGoal } from '../mocks/electron-api.mock';
+import { delayedResolve, unstableDraftMock } from '../helpers/unstableDraftMock';
 
-const mockUseDraft = vi.fn();
+const mockUseDraftData = vi.fn();
+const mockUseDraftActions = vi.fn();
 const mockUseBudget = vi.fn();
 const mockNavigate = vi.fn();
 
@@ -17,9 +19,9 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('../../src/context/DraftContext', () => ({
-  useDraft: () => mockUseDraft(),
-  useDraftData: () => mockUseDraft(),
-  useDraftActions: () => mockUseDraft(),
+  useDraft: () => ({ ...mockUseDraftData(), ...mockUseDraftActions() }),
+  useDraftData: () => mockUseDraftData(),
+  useDraftActions: () => mockUseDraftActions(),
 }));
 
 vi.mock('../../src/context/BudgetContext', () => ({
@@ -52,11 +54,40 @@ vi.mock('../../src/components/goals/GoalAchievabilityPanel', () => ({
   ),
 }));
 
+const projectionFixture = {
+  goalId: 'goal-1',
+  goalName: 'Emergency Fund',
+  targetAmount: 5000,
+  alreadySaved: 0,
+  remainingAmount: 5000,
+  targetDate: '2026-12-31',
+  paycheckCount: 20,
+  requiredPerPaycheck: 250,
+  adjustedRequiredPerPaycheck: 250,
+  availablePerPaycheck: 300,
+  actualAllocation: 5000,
+  achievableAmount: 5000,
+  achievabilityPercent: 100,
+  status: 'achievable',
+  suggestions: [],
+  isProjected: false,
+  avgAllocationPerPaycheck: 250,
+  marginPerPaycheck: 50,
+  paychecksToFullyFund: 18,
+  estimatedFundedDate: '2026-10-31',
+  beatsDeadlineByPaychecks: 2,
+  missesDeadlineByPaychecks: null,
+  scheduleHealth: { tightPaycheckCount: 0, shortfallCount: 0, savingsTotal: 1000 },
+};
+
 describe('GoalsPage', () => {
-  const baseDraft = {
+  const baseDraftData = {
     goals: [createMockGoal({ id: 'goal-1', name: 'Emergency Fund', targetAmount: 5000, targetDate: '2026-12-31' })],
     dirtyDomains: new Set<string>(),
     budgetFields: { minCashOnHand: 100 },
+  };
+
+  const baseDraftActions = {
     reloadSnapshot: vi.fn(async () => {}),
     getGoalProjections: vi.fn(async () => []),
     createGoal: vi.fn(() => true),
@@ -64,43 +95,42 @@ describe('GoalsPage', () => {
     deleteGoal: vi.fn(() => true),
   };
 
+  function mockDraftContext(
+    dataOverrides: Partial<typeof baseDraftData> = {},
+    actionsOverrides: Partial<typeof baseDraftActions> = {},
+  ) {
+    mockUseDraftData.mockReturnValue({ ...baseDraftData, ...dataOverrides });
+    mockUseDraftActions.mockReturnValue({ ...baseDraftActions, ...actionsOverrides });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseBudget.mockReturnValue({ isQuickBudget: false });
-    mockUseDraft.mockReturnValue(baseDraft);
+    mockDraftContext();
+  });
+
+  describe('loading regression', () => {
+    it('clears loading when draft data hook returns new object references each render', async () => {
+      mockUseDraftData.mockImplementation(unstableDraftMock(() => ({ ...baseDraftData })));
+      mockUseDraftActions.mockReturnValue({
+        ...baseDraftActions,
+        getGoalProjections: vi.fn(() => delayedResolve([], 100)),
+      });
+
+      render(<GoalsPage />);
+      expect(document.querySelector('.animate-spin')).toBeTruthy();
+
+      await waitFor(() => {
+        expect(document.querySelector('.animate-spin')).toBeNull();
+      });
+      expect(await screen.findByText('Emergency Fund')).toBeInTheDocument();
+    });
   });
 
   describe('happy', () => {
     it('renders goal list after projections load', async () => {
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
-        getGoalProjections: vi.fn(async () => [
-          {
-            goalId: 'goal-1',
-            goalName: 'Emergency Fund',
-            targetAmount: 5000,
-            alreadySaved: 0,
-            remainingAmount: 5000,
-            targetDate: '2026-12-31',
-            paycheckCount: 20,
-            requiredPerPaycheck: 250,
-            adjustedRequiredPerPaycheck: 250,
-            availablePerPaycheck: 300,
-            actualAllocation: 5000,
-            achievableAmount: 5000,
-            achievabilityPercent: 100,
-            status: 'achievable',
-            suggestions: [],
-            isProjected: false,
-            avgAllocationPerPaycheck: 250,
-            marginPerPaycheck: 50,
-            paychecksToFullyFund: 18,
-            estimatedFundedDate: '2026-10-31',
-            beatsDeadlineByPaychecks: 2,
-            missesDeadlineByPaychecks: null,
-            scheduleHealth: { tightPaycheckCount: 0, shortfallCount: 0, savingsTotal: 1000 },
-          },
-        ]),
+      mockDraftContext({}, {
+        getGoalProjections: vi.fn(async () => [projectionFixture]),
       });
       render(<GoalsPage />);
       expect(await screen.findByText('Emergency Fund')).toBeInTheDocument();
@@ -112,10 +142,7 @@ describe('GoalsPage', () => {
   describe('sad', () => {
     it('shows empty-state panel with no goals', async () => {
       const user = userEvent.setup();
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
-        goals: [],
-      });
+      mockDraftContext({ goals: [] });
 
       render(<GoalsPage />);
       expect(await screen.findByText('No savings goals yet')).toBeInTheDocument();
@@ -137,7 +164,7 @@ describe('GoalsPage', () => {
       await user.click(screen.getByRole('button', { name: /Create Goal/i }));
 
       await waitFor(() => {
-        expect(baseDraft.createGoal).toHaveBeenCalledWith(
+        expect(baseDraftActions.createGoal).toHaveBeenCalledWith(
           expect.objectContaining({
             name: 'Vacation',
             targetAmount: 3000,
@@ -150,7 +177,7 @@ describe('GoalsPage', () => {
       fireEvent.change(screen.getByLabelText('Goal Name'), { target: { value: 'Emergency Fund Plus' } });
       await user.click(screen.getByRole('button', { name: /Save Changes/i }));
       await waitFor(() => {
-        expect(baseDraft.updateGoal).toHaveBeenCalledWith(
+        expect(baseDraftActions.updateGoal).toHaveBeenCalledWith(
           'goal-1',
           expect.objectContaining({ name: 'Emergency Fund Plus' })
         );
@@ -161,7 +188,7 @@ describe('GoalsPage', () => {
       await user.click(screen.getByRole('button', { name: /Delete Emergency Fund/i }));
       await user.click(screen.getByRole('button', { name: /^Delete$/i }));
       await waitFor(() => {
-        expect(baseDraft.deleteGoal).toHaveBeenCalledWith('goal-1');
+        expect(baseDraftActions.deleteGoal).toHaveBeenCalledWith('goal-1');
       });
 
       await user.click(screen.getByRole('button', { name: /Add Goal/i }));
@@ -180,7 +207,7 @@ describe('GoalsPage', () => {
       await user.click(screen.getByRole('button', { name: /Save Changes/i }));
 
       await waitFor(() => {
-        expect(baseDraft.updateGoal).toHaveBeenCalledWith(
+        expect(baseDraftActions.updateGoal).toHaveBeenCalledWith(
           'goal-1',
           expect.objectContaining({ alreadySaved: 500, priority: 2 })
         );
@@ -189,35 +216,8 @@ describe('GoalsPage', () => {
 
     it('navigates to schedule from achievability panel link', async () => {
       const user = userEvent.setup();
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
-        getGoalProjections: vi.fn(async () => [
-          {
-            goalId: 'goal-1',
-            goalName: 'Emergency Fund',
-            targetAmount: 5000,
-            alreadySaved: 0,
-            remainingAmount: 5000,
-            targetDate: '2026-12-31',
-            paycheckCount: 20,
-            requiredPerPaycheck: 250,
-            adjustedRequiredPerPaycheck: 250,
-            availablePerPaycheck: 300,
-            actualAllocation: 5000,
-            achievableAmount: 5000,
-            achievabilityPercent: 100,
-            status: 'achievable',
-            suggestions: [],
-            isProjected: false,
-            avgAllocationPerPaycheck: 250,
-            marginPerPaycheck: 50,
-            paychecksToFullyFund: 18,
-            estimatedFundedDate: '2026-10-31',
-            beatsDeadlineByPaychecks: 2,
-            missesDeadlineByPaychecks: null,
-            scheduleHealth: { tightPaycheckCount: 0, shortfallCount: 0, savingsTotal: 1000 },
-          },
-        ]),
+      mockDraftContext({}, {
+        getGoalProjections: vi.fn(async () => [projectionFixture]),
       });
 
       render(<GoalsPage />);
@@ -232,7 +232,7 @@ describe('GoalsPage', () => {
       render(<GoalsPage />);
       await user.click(await screen.findByRole('button', { name: /Delete Emergency Fund/i }));
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
-      expect(baseDraft.deleteGoal).not.toHaveBeenCalled();
+      expect(baseDraftActions.deleteGoal).not.toHaveBeenCalled();
     });
 
     it('uses quick-budget IPC create/update/delete handlers', async () => {
@@ -271,8 +271,7 @@ describe('GoalsPage', () => {
     });
 
     it('shows loading spinner while projections load', () => {
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
+      mockDraftContext({}, {
         getGoalProjections: vi.fn(() => new Promise(() => undefined)),
       });
       render(<GoalsPage />);
@@ -280,34 +279,9 @@ describe('GoalsPage', () => {
     });
 
     it('renders warning achievability color for mid-range projections', async () => {
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
+      mockDraftContext({}, {
         getGoalProjections: vi.fn(async () => [
-          {
-            goalId: 'goal-1',
-            goalName: 'Emergency Fund',
-            targetAmount: 5000,
-            alreadySaved: 0,
-            remainingAmount: 5000,
-            targetDate: '2026-12-31',
-            paycheckCount: 20,
-            requiredPerPaycheck: 250,
-            adjustedRequiredPerPaycheck: 250,
-            availablePerPaycheck: 300,
-            actualAllocation: 2500,
-            achievableAmount: 2500,
-            achievabilityPercent: 75,
-            status: 'tight',
-            suggestions: [],
-            isProjected: false,
-            avgAllocationPerPaycheck: 125,
-            marginPerPaycheck: 50,
-            paychecksToFullyFund: null,
-            estimatedFundedDate: null,
-            beatsDeadlineByPaychecks: null,
-            missesDeadlineByPaychecks: 4,
-            scheduleHealth: { tightPaycheckCount: 1, shortfallCount: 0, savingsTotal: 500 },
-          },
+          { ...projectionFixture, actualAllocation: 2500, achievableAmount: 2500, achievabilityPercent: 75, status: 'tight' },
         ]),
       });
       render(<GoalsPage />);
@@ -316,34 +290,9 @@ describe('GoalsPage', () => {
     });
 
     it('renders danger achievability color for low projections', async () => {
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
+      mockDraftContext({}, {
         getGoalProjections: vi.fn(async () => [
-          {
-            goalId: 'goal-1',
-            goalName: 'Emergency Fund',
-            targetAmount: 5000,
-            alreadySaved: 0,
-            remainingAmount: 5000,
-            targetDate: '2026-12-31',
-            paycheckCount: 20,
-            requiredPerPaycheck: 250,
-            adjustedRequiredPerPaycheck: 250,
-            availablePerPaycheck: 300,
-            actualAllocation: 500,
-            achievableAmount: 500,
-            achievabilityPercent: 25,
-            status: 'unlikely',
-            suggestions: [],
-            isProjected: false,
-            avgAllocationPerPaycheck: 25,
-            marginPerPaycheck: 50,
-            paychecksToFullyFund: null,
-            estimatedFundedDate: null,
-            beatsDeadlineByPaychecks: null,
-            missesDeadlineByPaychecks: 18,
-            scheduleHealth: { tightPaycheckCount: 2, shortfallCount: 1, savingsTotal: 100 },
-          },
+          { ...projectionFixture, actualAllocation: 500, achievableAmount: 500, achievabilityPercent: 25, status: 'unlikely' },
         ]),
       });
       render(<GoalsPage />);
@@ -358,10 +307,7 @@ describe('GoalsPage', () => {
 
     it('keeps create modal open when createGoal returns false', async () => {
       const createGoal = vi.fn(() => false);
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
-        createGoal,
-      });
+      mockDraftContext({}, { createGoal });
       const user = userEvent.setup();
       render(<GoalsPage />);
       await user.click(await screen.findByRole('button', { name: /Add Goal/i }));
@@ -379,10 +325,7 @@ describe('GoalsPage', () => {
     it('reloads snapshot on mount in quick-budget mode', async () => {
       const reloadSnapshot = vi.fn(async () => {});
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
-        reloadSnapshot,
-      });
+      mockDraftContext({}, { reloadSnapshot });
       render(<GoalsPage />);
       await waitFor(() => {
         expect(reloadSnapshot).toHaveBeenCalled();
@@ -390,8 +333,7 @@ describe('GoalsPage', () => {
     });
 
     it('recovers when projection loading fails', async () => {
-      mockUseDraft.mockReturnValue({
-        ...baseDraft,
+      mockDraftContext({}, {
         getGoalProjections: vi.fn(async () => {
           throw new Error('projection failed');
         }),
