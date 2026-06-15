@@ -15,6 +15,7 @@
     "postinstall": "electron-builder install-app-deps && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs",
     "reset-local-data": "bash scripts/reset-local-data.sh",
     "electron:build": "pnpm run build:vite && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs && electron-builder && node scripts/verify-packaged-app.cjs",
+    "electron:build:ci": "pnpm run build:vite && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs && electron-builder --publish never && node scripts/verify-packaged-app.cjs",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest",

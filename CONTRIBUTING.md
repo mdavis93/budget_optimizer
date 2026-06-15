@@ -66,7 +66,7 @@ Runs on every push to `main` / `master`:
 | Job name         | What it validates |
 |------------------|-------------------|
 | `quality`        | Same checks as PR Gate |
-| `electron-build` | Full `electron:build` packaging and `verify-packaged-app` (runs on `macos-latest` because the verifier targets the macOS `.app` bundle) |
+| `electron-build` | `electron:build:ci` packaging and `verify-packaged-app` with `--publish never` (runs on `macos-latest` because the verifier targets the macOS `.app` bundle) |
 
 A failing **Main Stability** run means `main` is broken. Fix forward with a follow-up PR; do not treat this check as optional for long.
 
