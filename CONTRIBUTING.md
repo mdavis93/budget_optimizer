@@ -209,6 +209,8 @@ Configuration: [`.github/dependabot.yml`](.github/dependabot.yml).
 
 When `main` advances (including after a Dependabot PR merges), the **Dependabot Refresh** workflow ([`.github/workflows/dependabot-refresh.yml`](.github/workflows/dependabot-refresh.yml)) calls GitHub's update-branch API for each open Dependabot PR that is behind `main`. This keeps strict "branch up to date" protection satisfied without manual rebases. The workflow skips refresh while a `merge-freeze` issue is open.
 
+Auto-merge squash commits do not trigger `push` workflows. **Main Stability Drift Check** dispatches both Main Stability and Dependabot Refresh when `main` advances without a matching workflow run (every 15 minutes). Use `workflow_dispatch` on either workflow for immediate recovery.
+
 Major group PRs may legitimately fail `pr-gate / quality` (breaking migrations). Add the `do-not-automerge` label to hold them without blocking other PRs.
 
 Individual Dependabot PRs opened before grouping was enabled can be closed once grouped replacements appear on the next weekly run.
