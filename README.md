@@ -10,7 +10,7 @@ A secure desktop application for managing income, tracking bills, and optimizing
 - **Auto-Lock**: Automatically locks after configurable inactivity; resets on user activity
 - **Income Management**: Track multiple income sources with various payment cadences (weekly, bi-weekly, semi-monthly, monthly)
 - **Bill Tracking**: Manage recurring bills with priority levels and categories
-- **Payment Scheduling**: Generates payment schedules with rebalance recommendations to reduce shortfalls
+- **Payment Scheduling**: Generates payment schedules with rebalance recommendations to reduce shortfalls — heuristic, not guaranteed zero shortfalls
 - **Visual Dashboard**: Overview of your financial health with balance projections
 - **Export Options**: Export schedules to PDF, HTML, or spreadsheet formats
 
