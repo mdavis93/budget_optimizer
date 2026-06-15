@@ -8,8 +8,6 @@ import BudgetPicker from './components/BudgetPicker';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import LoadingScreen from './components/LoadingScreen';
-import { ROUTER_FUTURE_FLAGS } from './constants/routerFutureFlags';
-
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SetupPage = lazy(() => import('./pages/SetupPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -73,7 +71,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <HashRouter future={ROUTER_FUTURE_FLAGS}>
+        <HashRouter>
           <BudgetProvider>
           <DraftProvider>
           <Suspense fallback={<LoadingScreen />}>

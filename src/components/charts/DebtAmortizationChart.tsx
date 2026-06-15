@@ -7,7 +7,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { CHART_COLORS } from './chartTheme';
+import { CHART_COLORS, formatTooltipDollarPair } from './chartTheme';
 
 interface DebtAmortizationChartProps {
   data: Array<{ name: string; principal: number; interest: number; payment: number }>;
@@ -36,10 +36,7 @@ export default function DebtAmortizationChart({ data }: DebtAmortizationChartPro
             borderRadius: '8px',
           }}
           labelStyle={{ color: 'var(--color-text-primary)' }}
-          formatter={(value: number, name: string) => [
-            `$${value.toFixed(2)}`,
-            name.charAt(0).toUpperCase() + name.slice(1),
-          ]}
+          formatter={(value, name) => formatTooltipDollarPair(value, String(name))}
         />
         <Legend
           wrapperStyle={{ paddingTop: '10px' }}

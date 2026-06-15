@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { CHART_COLORS } from './chartTheme';
+import { CHART_COLORS, formatTooltipCurrencyPair, formatTooltipCurrencyValue } from './chartTheme';
 
 interface IncomeExpensesChartProps {
   data: Array<{ month: string; income: number; expenses: number }>;
@@ -36,10 +36,13 @@ export function IncomeExpensesChart({ data, formatCurrency }: IncomeExpensesChar
           tickFormatter={(value) => `$${value}`}
         />
         <Tooltip
-          formatter={(value: number, name: string) => [
-            formatCurrency(value),
-            name === 'income' ? 'Income' : 'Expenses',
-          ]}
+          formatter={(value, name) =>
+            formatTooltipCurrencyPair(
+              value,
+              formatCurrency,
+              name === 'income' ? 'Income' : 'Expenses'
+            )
+          }
           contentStyle={{
             backgroundColor: 'var(--color-bg-secondary)',
             border: '1px solid var(--color-border)',
@@ -78,7 +81,7 @@ export function CategoryPieChart({ data, formatCurrency }: CategoryPieChartProps
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number) => formatCurrency(value)}
+          formatter={(value) => formatTooltipCurrencyValue(value, formatCurrency)}
           contentStyle={{
             backgroundColor: 'var(--color-bg-secondary)',
             border: '1px solid var(--color-border)',
