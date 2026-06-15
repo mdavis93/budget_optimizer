@@ -6,41 +6,45 @@ on:
     types: [completed]
 
 permissions:
-  actions: write
+  contents: read
   issues: write
 
 jobs:
   update-merge-freeze:
-    if: github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
-      - name: Set MERGE_FREEZE on Main Stability failure
-        if: github.event.workflow_run.conclusion == 'failure'
+      - name: Determine whether this Main Stability run targets main
+        id: scope
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+
+            if (run.head_branch === 'main' || run.event === 'workflow_dispatch') {
+              core.setOutput('apply', 'true');
+              return;
+            }
+
+            if (run.event === 'pull_request') {
+              const branches = await github.rest.repos.listBranchesForHeadCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: run.head_sha,
+              });
+              const onMain = branches.data.some((branch) => branch.name === 'main');
+              core.setOutput('apply', onMain ? 'true' : 'false');
+              return;
+            }
+
+            core.setOutput('apply', 'false');
+
+      - name: Open merge-freeze issue on Main Stability failure
+        if: steps.scope.outputs.apply == 'true' && github.event.workflow_run.conclusion == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const freezeValue = 'true';
-
-            try {
-              await github.rest.actions.updateRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-                value: freezeValue,
-              });
-            } catch (error) {
-              if (error.status !== 404) {
-                throw error;
-              }
-              await github.rest.actions.createRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-                value: freezeValue,
-              });
-            }
 
             const title = 'Main Stability failed — merge freeze active';
             const body = [
@@ -77,28 +81,13 @@ jobs:
               labels: ['merge-freeze'],
             });
 
-      - name: Clear MERGE_FREEZE on Main Stability success
-        if: github.event.workflow_run.conclusion == 'success'
+      - name: Close merge-freeze issues on Main Stability success
+        if: steps.scope.outputs.apply == 'true' && github.event.workflow_run.conclusion == 'success'
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-
-            try {
-              await github.rest.actions.updateRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-                value: 'false',
-              });
-            } catch (error) {
-              if (error.status === 404) {
-                core.info('MERGE_FREEZE variable not set — nothing to clear.');
-                return;
-              }
-              throw error;
-            }
 
             const issues = await github.rest.issues.listForRepo({
               owner,
