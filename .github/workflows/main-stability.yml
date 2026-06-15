@@ -4,18 +4,13 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
-  pull_request:
-    types: [closed]
-    branches: [main]
 
 jobs:
   quality:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     name: quality
     uses: ./.github/workflows/_shared-quality.yml
 
   electron-build:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     name: electron-build
     runs-on: macos-latest
     needs: quality
