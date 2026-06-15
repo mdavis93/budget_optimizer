@@ -50,18 +50,42 @@ jobs:
               }
             }
 
+            const { repository } = await github.graphql(
+              `query ($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    id
+                  }
+                }
+              }`,
+              { owner, repo, number: pullNumber }
+            );
+
+            const pullRequestId = repository.pullRequest.id;
+
             try {
-              await github.rest.pulls.enablePullRequestAutoMerge({
-                owner,
-                repo,
-                pull_number: pullNumber,
-                merge_method: 'squash',
-              });
+              await github.graphql(
+                `mutation ($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(
+                    input: { pullRequestId: $pullRequestId, mergeMethod: SQUASH }
+                  ) {
+                    pullRequest {
+                      number
+                    }
+                  }
+                }`,
+                { pullRequestId }
+              );
               core.info(`Auto-merge enabled for PR #${pullNumber}.`);
             } catch (error) {
-              if (error.status === 422) {
+              const message = error.message ?? String(error);
+              if (
+                message.includes('not allowed') ||
+                message.includes('Pull request auto-merge is not allowed') ||
+                message.includes('Cannot enable auto-merge')
+              ) {
                 core.info(
-                  `Auto-merge not enabled for PR #${pullNumber}: ${error.message}`
+                  `Auto-merge not enabled for PR #${pullNumber}: ${message}`
                 );
                 return;
               }
