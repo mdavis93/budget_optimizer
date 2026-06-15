@@ -112,6 +112,7 @@ describe('PaycheckView', () => {
     });
 
     it('edits paycheck income and clears override', async () => {
+      const user = userEvent.setup();
       const props = baseProps();
       const expandedDate = '2026-01-15';
       renderWithRouter(
@@ -130,19 +131,24 @@ describe('PaycheckView', () => {
         />
       );
 
-      fireEvent.click(screen.getByTitle('Edit gross income for this paycheck'));
-      fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '2300' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      fireEvent.click(screen.getByTitle('Edit gross income for this paycheck'));
-      fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '2300' } });
-      fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+      await user.click(screen.getByTitle('Edit gross income for this paycheck'));
+      await user.clear(screen.getByRole('spinbutton'));
+      await user.type(screen.getByRole('spinbutton'), '2300');
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await user.click(screen.getByTitle('Edit gross income for this paycheck'));
+      await user.clear(screen.getByRole('spinbutton'));
+      await user.type(screen.getByRole('spinbutton'), '2300');
+      await user.click(screen.getByRole('button', { name: /^Save$/i }));
 
       await waitFor(() => {
         expect(props.onSaveIncomeOverride).toHaveBeenCalledWith('inc-1', expandedDate, 2300);
       });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-      expect(props.onClearIncomeOverride).toHaveBeenCalledWith('inc-1', expandedDate);
+      await user.click(await screen.findByRole('button', { name: 'Clear' }));
+
+      await waitFor(() => {
+        expect(props.onClearIncomeOverride).toHaveBeenCalledWith('inc-1', expandedDate);
+      });
     });
 
     it('ignores invalid income override values', async () => {
