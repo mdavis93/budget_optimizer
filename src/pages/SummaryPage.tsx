@@ -1,37 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import { format, parseISO, differenceInDays } from 'date-fns';
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
+import { CategoryPieChart, ChartSuspense, IncomeExpensesChart, SavingsAreaChart } from '../components/charts/lazyCharts';
+import { CHART_COLORS } from '../components/charts/chartTheme';
 import clsx from 'clsx';
-
-type TimePeriod = 3 | 6 | 12;
-
-const CHART_COLORS = {
-  primary: '#3b82f6',
-  success: '#22c55e',
-  danger: '#ef4444',
-  warning: '#f59e0b',
-  purple: '#8b5cf6',
-  pink: '#ec4899',
-  cyan: '#06b6d4',
-  orange: '#f97316',
-  lime: '#84cc16',
-  indigo: '#6366f1',
-  teal: '#14b8a6',
-};
 
 const CATEGORY_COLORS: Record<string, string> = {
   Housing: CHART_COLORS.primary,
@@ -170,22 +142,6 @@ export default function SummaryPage() {
     }));
   }, [scheduleData, savingsAPY]);
 
-  const SavingsTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: { total: number; principal: number; interest: number } }>; label?: string }) => {
-    if (!active || !payload?.length) return null;
-    const data = payload[0].payload;
-    return (
-      <div className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg p-3 shadow-lg">
-        <p className="text-sm font-medium mb-1">{label}</p>
-        <p className="text-lg font-semibold">{formatCurrency(data.total)}</p>
-        <hr className="my-2 border-[var(--color-border)]" />
-        <div className="text-xs text-[var(--color-text-muted)] space-y-1">
-          <p>Principal: {formatCurrency(data.principal)}</p>
-          <p>Interest: {formatCurrency(data.interest)}</p>
-        </div>
-      </div>
-    );
-  };
-
   const incomeVsExpensesData = useMemo(() => {
     if (!scheduleData?.paychecks) return [];
     
@@ -282,36 +238,9 @@ export default function SummaryPage() {
               <h3 className="font-semibold mb-4">Income vs Expenses</h3>
               {incomeVsExpensesData.length > 0 ? (
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={incomeVsExpensesData}>
-                      <XAxis
-                        dataKey="month"
-                        tick={{ fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={{ stroke: 'var(--color-border)' }}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) => `$${value}`}
-                      />
-                      <Tooltip
-                        formatter={(value: number, name: string) => [
-                          formatCurrency(value),
-                          name === 'income' ? 'Income' : 'Expenses',
-                        ]}
-                        contentStyle={{
-                          backgroundColor: 'var(--color-bg-secondary)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="income" name="Income" fill={CHART_COLORS.success} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expenses" name="Expenses" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ChartSuspense>
+                    <IncomeExpensesChart data={incomeVsExpensesData} formatCurrency={formatCurrency} />
+                  </ChartSuspense>
                 </div>
               ) : (
                 <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)]">
@@ -326,34 +255,9 @@ export default function SummaryPage() {
               {categoryData.length > 0 ? (
                 <div className="h-64 flex">
                   <div className="flex-1">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
-                          paddingAngle={2}
-                        >
-                          {categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number) => formatCurrency(value)}
-                          contentStyle={{
-                            backgroundColor: 'var(--color-bg-secondary)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: '8px',
-                          }}
-                          labelStyle={{ color: 'var(--color-text-primary)' }}
-                          itemStyle={{ color: 'var(--color-text-primary)' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <ChartSuspense>
+                      <CategoryPieChart data={categoryData} formatCurrency={formatCurrency} />
+                    </ChartSuspense>
                   </div>
                   <div className="w-40 overflow-y-auto">
                     <div className="space-y-2">
@@ -406,31 +310,9 @@ export default function SummaryPage() {
             </div>
             {savingsProjectionData.length > 0 ? (
               <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={savingsProjectionData}>
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={{ stroke: 'var(--color-border)' }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `$${value.toLocaleString()}`}
-                    />
-                    <Tooltip content={<SavingsTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="total"
-                      name="Total Savings"
-                      stroke={CHART_COLORS.primary}
-                      fill={CHART_COLORS.primary}
-                      fillOpacity={0.3}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <ChartSuspense heightClass="h-80">
+                  <SavingsAreaChart data={savingsProjectionData} formatCurrency={formatCurrency} />
+                </ChartSuspense>
               </div>
             ) : (
               <div className="h-80 flex items-center justify-center text-[var(--color-text-muted)]">

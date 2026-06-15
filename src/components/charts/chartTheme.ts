@@ -1,0 +1,15 @@
+export const CHART_COLORS = {
+  primary: '#3b82f6',
+  success: '#22c55e',
+  danger: '#ef4444',
+  warning: '#f59e0b',
+  purple: '#a855f7',
+  cyan: '#06b6d4',
+  pink: '#ec4899',
+  teal: '#14b8a6',
+  orange: '#f97316',
+  lime: '#84cc16',
+  indigo: '#6366f1',
+  principal: '#3b82f6',
+  interest: '#f59e0b',
+};
