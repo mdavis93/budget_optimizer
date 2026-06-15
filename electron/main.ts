@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, systemPreferences, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, systemPreferences, dialog, nativeImage } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import { AuthService } from './services/auth.service';
 import { CryptoService } from './services/crypto.service';
@@ -27,7 +28,30 @@ let mainWindow: BrowserWindow | null = null;
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 
+function resolveWindowIcon() {
+  const iconCandidates = [
+    path.join(process.cwd(), 'build', 'icon.png'),
+    path.join(__dirname, '..', 'build', 'icon.png'),
+    path.join(__dirname, '..', 'dist', 'icon.png'),
+  ];
+
+  for (const iconPath of iconCandidates) {
+    if (!fs.existsSync(iconPath)) {
+      continue;
+    }
+
+    const image = nativeImage.createFromPath(iconPath);
+    if (!image.isEmpty()) {
+      return image;
+    }
+  }
+
+  return undefined;
+}
+
 function createWindow() {
+  const windowIcon = resolveWindowIcon();
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -36,6 +60,7 @@ function createWindow() {
     center: true,
     titleBarStyle: 'default',
     backgroundColor: '#0f172a',
+    ...(windowIcon ? { icon: windowIcon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,

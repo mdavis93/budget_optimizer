@@ -9,13 +9,14 @@
     "build:vite": "vite build",
     "verify:csp": "node scripts/verify-production-csp.cjs",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "node scripts/sync-app-icon.cjs && concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:reinstall": "node scripts/fix-electron-install.cjs",
     "rebuild:native": "node scripts/rebuild-native.cjs",
     "postinstall": "electron-builder install-app-deps && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs",
     "reset-local-data": "bash scripts/reset-local-data.sh",
-    "electron:build": "pnpm run build:vite && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs && electron-builder && node scripts/verify-packaged-app.cjs",
-    "electron:build:ci": "pnpm run build:vite && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs && electron-builder --publish never && node scripts/verify-packaged-app.cjs",
+    "electron:build": "node scripts/sync-app-icon.cjs && pnpm run build:vite && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs && electron-builder && node scripts/verify-packaged-app.cjs",
+    "electron:build:ci": "node scripts/sync-app-icon.cjs && pnpm run build:vite && pnpm run rebuild:native && node scripts/sync-better-sqlite3-native.cjs && electron-builder --publish never && node scripts/verify-packaged-app.cjs",
+    "sync:icon": "node scripts/sync-app-icon.cjs",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
@@ -47,6 +48,7 @@
     "@commitlint/config-conventional": "^21.0.2",
     "@electron/rebuild": "^4.0.4",
     "@playwright/test": "^1.60.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -82,6 +84,7 @@
   "build": {
     "appId": "com.budgetoptimizer.app",
     "productName": "Budget Optimizer",
+    "icon": "build/icon.png",
     "directories": {
       "output": "release"
     },
