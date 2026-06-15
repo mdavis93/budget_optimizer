@@ -70,7 +70,7 @@ When a PR enters the **merge queue**, only `pr-gate / quality` runs again on the
 **Workflows:**
 
 - [`.github/workflows/enable-auto-merge.yml`](.github/workflows/enable-auto-merge.yml) — enables squash auto-merge when a PR is ready.
-- [`.github/workflows/merge-freeze.yml`](.github/workflows/merge-freeze.yml) — sets `MERGE_FREEZE` when Main Stability fails on `main`.
+- [`.github/workflows/merge-freeze.yml`](.github/workflows/merge-freeze.yml) — opens a `merge-freeze` issue when Main Stability fails on `main`.
 
 **Auto-merge is enabled when all of the following are true:**
 
@@ -80,7 +80,7 @@ When a PR enters the **merge queue**, only `pr-gate / quality` runs again on the
 | Not a draft | PR is marked ready for review |
 | Same repository | Fork PRs are excluded |
 | No manual brake | PR does not have the `do-not-automerge` label |
-| No active freeze | Repository variable `MERGE_FREEZE` is not `true` |
+| No active freeze | No open issue with the `merge-freeze` label |
 | Required checks green | `pr-gate / quality` and `commitlint` pass on the PR |
 
 After auto-merge is enabled and checks pass, GitHub adds the PR to the **merge queue**. The queue runs `pr-gate` on a synthetic merge branch, then squash-merges to `main`.
@@ -100,7 +100,7 @@ Runs on every push to `main` / `master`, when a pull request is **merged** into 
 | `quality`        | Same checks as PR Gate |
 | `electron-build` | `electron:build:ci` packaging and `verify-packaged-app` with `--publish never` (runs on `macos-latest` because the verifier targets the macOS `.app` bundle) |
 
-A failing **Main Stability** run means `main` is broken. The **merge-freeze** workflow sets `MERGE_FREEZE=true`, blocks new auto-merges, and opens a `merge-freeze` issue. The freeze clears automatically when the next Main Stability run on `main` succeeds.
+A failing **Main Stability** run means `main` is broken. The **merge-freeze** workflow opens a `merge-freeze` issue, which blocks new auto-merges. The freeze clears automatically when the next Main Stability run on `main` succeeds and the issue is closed.
 
 Fix forward with a follow-up PR; do not treat Main Stability as optional for long.
 

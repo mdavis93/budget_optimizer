@@ -6,7 +6,7 @@ on:
     types: [completed]
 
 permissions:
-  actions: write
+  contents: read
   issues: write
 
 jobs:
@@ -38,33 +38,13 @@ jobs:
 
             core.setOutput('apply', 'false');
 
-      - name: Set MERGE_FREEZE on Main Stability failure
+      - name: Open merge-freeze issue on Main Stability failure
         if: steps.scope.outputs.apply == 'true' && github.event.workflow_run.conclusion == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const freezeValue = 'true';
-
-            try {
-              await github.rest.actions.updateRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-                value: freezeValue,
-              });
-            } catch (error) {
-              if (error.status !== 404) {
-                throw error;
-              }
-              await github.rest.actions.createRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-                value: freezeValue,
-              });
-            }
 
             const title = 'Main Stability failed — merge freeze active';
             const body = [
@@ -101,28 +81,13 @@ jobs:
               labels: ['merge-freeze'],
             });
 
-      - name: Clear MERGE_FREEZE on Main Stability success
+      - name: Close merge-freeze issues on Main Stability success
         if: steps.scope.outputs.apply == 'true' && github.event.workflow_run.conclusion == 'success'
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-
-            try {
-              await github.rest.actions.updateRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-                value: 'false',
-              });
-            } catch (error) {
-              if (error.status === 404) {
-                core.info('MERGE_FREEZE variable not set — nothing to clear.');
-                return;
-              }
-              throw error;
-            }
 
             const issues = await github.rest.issues.listForRepo({
               owner,

@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: read
+  issues: read
 
 concurrency:
   group: enable-auto-merge-${{ github.event.pull_request.number }}
@@ -30,24 +30,16 @@ jobs:
             const repo = context.repo.repo;
             const pullNumber = context.payload.pull_request.number;
 
-            try {
-              const freeze = await github.rest.actions.getRepoVariable({
-                owner,
-                repo,
-                name: 'MERGE_FREEZE',
-              });
-              if (freeze.data.value === 'true') {
-                core.info('MERGE_FREEZE is active — skipping auto-merge enablement.');
-                return;
-              }
-            } catch (error) {
-              if (error.status === 403 || error.status === 404) {
-                core.info(
-                  'MERGE_FREEZE variable unavailable — proceeding without freeze check.'
-                );
-              } else {
-                throw error;
-              }
+            const freezeIssues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'merge-freeze',
+              per_page: 1,
+            });
+            if (freezeIssues.data.length > 0) {
+              core.info('Merge freeze is active — skipping auto-merge enablement.');
+              return;
             }
 
             const { repository } = await github.graphql(
