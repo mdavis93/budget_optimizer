@@ -54,9 +54,9 @@ Substantial remediation since the June 10 audit. Revised approximate posture:
 |--------|---------------|-----------------|
 | Security | C+ | **B** — Phase 0/4 items largely closed (12/14 S-* findings) |
 | Efficiency | C | **B-** — PR #26 + #53 closed most E-* hot paths |
-| Limited Bloat | B- | **B-** — scheduler modularized; duplication (B-02–B-09) remains |
-| Algorithmic Intelligence | B- | **B** — prepay cap and dedup fixed; A-03, A-08 open |
-| Volatile / Draft State | B+ | **A-** — Phase 2 complete (#52–#55); V-01 partial, V-07 accepted |
+| Limited Bloat | B- | **B** — scheduler modularized; B-02/B-03/B-06 closed; B-04/B-07–B-09 deferred |
+| Algorithmic Intelligence | B- | **B** — prepay cap and dedup fixed; A-03, A-08 accepted |
+| Volatile / Draft State | B+ | **A-** — Phase 2 complete (#52–#55); V-07 accepted |
 | Additional Quality | C+ | **B-** — tests, CI, docs greatly improved; bloat/E2E gaps remain |
 
 **Closure summary:** All release-blockers and draft-hardening items closed. Post-audit backlog: architecture polish (B-04, B-07–B-09, E-04), Electron upgrade, E2E draft flows. See [Audit Closure Summary](#audit-closure-summary).
