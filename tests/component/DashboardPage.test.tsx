@@ -47,6 +47,7 @@ describe('DashboardPage', () => {
       },
       scheduleStartDate: '2026-01-01',
       scheduleStartingBalance: 700,
+      scheduleInputHash: 'hash-v1',
       setScheduleStartingBalance,
     });
   });
@@ -93,6 +94,46 @@ describe('DashboardPage', () => {
   });
 
   describe('hostile', () => {
+    it('regenerates schedule when scheduleInputHash changes without entity edits', async () => {
+      const baseData = {
+        incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
+        bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
+        generateSchedule,
+        schedule: {
+          entries: [{ date: '2026-01-12', description: 'Salary', type: 'income', amount: 2000, runningBalance: 2200, isShortfall: false }],
+          summary: { shortfallCount: 0 },
+          recommendations: [],
+        },
+        scheduleStartDate: '2026-01-01',
+        scheduleStartingBalance: 700,
+        scheduleInputHash: 'hash-v1',
+        setScheduleStartingBalance: vi.fn(),
+      };
+      mockUseData.mockReturnValue(baseData);
+
+      const { rerender } = render(
+        <TestMemoryRouter>
+          <DashboardPage />
+        </TestMemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(generateSchedule).toHaveBeenCalledTimes(1);
+      });
+
+      mockUseData.mockReturnValue({ ...baseData, scheduleInputHash: 'hash-v2' });
+
+      rerender(
+        <TestMemoryRouter>
+          <DashboardPage />
+        </TestMemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(generateSchedule).toHaveBeenCalledTimes(2);
+      });
+    });
+
     it('generates schedule on mount and reflects starting-balance edits', async () => {
       const user = userEvent.setup();
       const setScheduleStartingBalance = vi.fn();

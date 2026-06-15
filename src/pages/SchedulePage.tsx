@@ -10,6 +10,7 @@ import ReconciliationPage from '../components/ReconciliationPage';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '../components/schedule';
 import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
+import { buildScheduleInputHash } from '../utils/scheduleInputHash';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -123,19 +124,25 @@ export default function SchedulePage() {
     setShowReconciliation(false);
   }, []);
 
-  const scheduleDataHash = useMemo(() => {
-    const skipped = draft.skippedBills.map(sb => `${sb.billId}-${sb.skipDate}`).sort().join('|');
-    const assignments = draft.billAssignments.map(a => `${a.billId}-${a.billDueDate}-${a.paycheckDate}`).sort().join('|');
-    const overrides = draft.incomeOverrides.map(o => `${o.incomeId}-${o.paycheckDate}-${o.amount}`).sort().join('|');
-    return `${skipped}::${assignments}::${overrides}`;
-  }, [draft.skippedBills, draft.billAssignments, draft.incomeOverrides]);
-
-  // Create a stable hash of incomes and bills to detect actual data changes
-  const dataHash = useMemo(() => {
-    const incomeData = incomes.map(i => `${i.id}-${i.amount}-${i.sourceName}-${i.cadence}-${i.startDate}-${i.isActive}`).sort().join('|');
-    const billData = bills.map(b => `${b.id}-${b.budgetedAmount}-${b.creditorName}-${b.dueDay}-${b.priority}`).sort().join('|');
-    return `${incomeData}::${billData}::${scheduleDataHash}`;
-  }, [incomes, bills, scheduleDataHash]);
+  const dataHash = useMemo(
+    () =>
+      buildScheduleInputHash({
+        incomes,
+        bills,
+        skippedBills: draft.skippedBills,
+        billAssignments: draft.billAssignments,
+        incomeOverrides: draft.incomeOverrides,
+        budgetFields: draft.budgetFields,
+      }),
+    [
+      incomes,
+      bills,
+      draft.skippedBills,
+      draft.billAssignments,
+      draft.incomeOverrides,
+      draft.budgetFields,
+    ]
+  );
 
   useEffect(() => {
     if (incomes.length > 0 || bills.length > 0) {

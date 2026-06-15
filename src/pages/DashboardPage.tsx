@@ -60,6 +60,7 @@ export default function DashboardPage() {
     schedule,
     scheduleStartDate,
     scheduleStartingBalance,
+    scheduleInputHash,
     setScheduleStartingBalance,
   } = useData();
 
@@ -77,7 +78,7 @@ export default function DashboardPage() {
     }
     
     return () => { isMounted = false; };
-  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance]);
+  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
 
   const totalMonthlyIncome = useMemo(() => {
     return incomes

@@ -23,6 +23,7 @@ export default function ExportPage() {
     scheduleStartDate: startDate,
     scheduleMonths: months,
     scheduleStartingBalance: startingBalance,
+    scheduleInputHash,
     setScheduleStartDate: setStartDate,
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
@@ -38,7 +39,7 @@ export default function ExportPage() {
       generateSchedule(startDate, months, startingBalance);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
-  }, [incomes, bills, startDate, startingBalance]);
+  }, [incomes, bills, startDate, startingBalance, scheduleInputHash]);
 
   const runExport = async (kind: ExportKind) => {
     if (!schedule) {

@@ -10,6 +10,7 @@ import {
   SCHEDULE_DEBOUNCE_MS,
   type ScheduleCacheEntry,
 } from '../utils/scheduleCache';
+import { buildScheduleInputHash } from '../utils/scheduleInputHash';
 
 interface DataContextType {
   incomes: Income[];
@@ -20,6 +21,7 @@ interface DataContextType {
   scheduleStartDate: string;
   scheduleMonths: number;
   scheduleStartingBalance: number;
+  scheduleInputHash: string;
   setScheduleStartDate: (date: string) => void;
   setScheduleMonths: (months: number) => void;
   setScheduleStartingBalance: (balance: number) => void;
@@ -69,6 +71,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const scheduleStartDate = isQuickBudget
     ? (currentBudget?.scheduleStartDate ?? quickBudgetStartDate)
     : (draft.budgetFields?.scheduleStartDate ?? defaultScheduleStartDate());
+
+  const scheduleInputHash = useMemo(
+    () =>
+      buildScheduleInputHash({
+        incomes,
+        bills,
+        skippedBills: draft.skippedBills ?? [],
+        billAssignments: draft.billAssignments ?? [],
+        incomeOverrides: draft.incomeOverrides ?? [],
+        budgetFields: draft.budgetFields,
+      }),
+    [
+      incomes,
+      bills,
+      draft.skippedBills,
+      draft.billAssignments,
+      draft.incomeOverrides,
+      draft.budgetFields,
+    ]
+  );
 
   const refreshIncomes = useCallback(async () => {
     if (!isUnlocked) return;
@@ -358,6 +380,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     scheduleStartDate,
     scheduleMonths,
     scheduleStartingBalance,
+    scheduleInputHash,
     setScheduleStartDate,
     setScheduleMonths,
     setScheduleStartingBalance,
@@ -382,6 +405,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     scheduleStartDate,
     scheduleMonths,
     scheduleStartingBalance,
+    scheduleInputHash,
     setScheduleStartDate,
     setScheduleMonths,
     refreshIncomes,
