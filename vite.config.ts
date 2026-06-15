@@ -17,7 +17,7 @@ const mainExternals = [
 ];
 
 /** Applied to dist/index.html when mode === 'production'. Dev keeps relaxed CSP in index.html for HMR. */
-export const PRODUCTION_CSP =
+const PRODUCTION_CSP =
   "default-src 'self'; " +
   "script-src 'self'; " +
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
