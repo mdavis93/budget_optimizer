@@ -86,6 +86,22 @@ function DraftHarness() {
       >
         create-bill
       </button>
+      <button
+        onClick={() => {
+          const draftIncome = draft.incomes.find((income) => income.id.startsWith('draft-'));
+          if (!draftIncome) return;
+          draft.createBill({
+            creditorName: 'Linked Bill',
+            budgetedAmount: 100,
+            dueDay: 1,
+            isRecurring: true,
+            priority: 'normal',
+            preferredIncomeSourceId: draftIncome.id,
+          });
+        }}
+      >
+        create-bill-with-draft-income
+      </button>
       <button onClick={() => draft.deleteBill('bill-1')}>delete-bill</button>
       <button onClick={() => void draft.saveDomain('bills')}>save-bills</button>
       <button onClick={() => void draft.saveAll()}>save-all</button>
@@ -487,6 +503,27 @@ describe('DraftContext', () => {
       fireEvent.click(screen.getByText('save-bills'));
       await waitFor(() => {
         expect(mockPersistDomains).toHaveBeenCalled();
+      });
+    });
+
+    it('expands saveDomain to include income when bills reference draft income ids', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-income'));
+      fireEvent.click(screen.getByText('create-bill-with-draft-income'));
+      fireEvent.click(screen.getByText('save-bills'));
+
+      await waitFor(() => {
+        expect(mockPersistDomains).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          expect.arrayContaining(['income', 'bills']),
+          expect.anything()
+        );
       });
     });
 

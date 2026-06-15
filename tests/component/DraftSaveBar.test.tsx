@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import DraftSaveBar from '../../src/components/DraftSaveBar';
 import { renderWithRouter } from '../helpers/renderWithProviders';
-import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { createMockBill, createMockElectronAPI, createMockIncome } from '../mocks/electron-api.mock';
 
 const mockUseDraft = vi.fn();
 
@@ -13,13 +13,25 @@ vi.mock('../../src/context/DraftContext', () => ({
 }));
 
 vi.mock('../../src/components/ConfirmDialog', () => ({
-  default: ({ isOpen, onConfirm }: { isOpen: boolean; onConfirm: () => void }) =>
-    isOpen ? <button onClick={onConfirm}>confirm-discard</button> : null,
+  default: ({
+    isOpen,
+    onConfirm,
+    confirmText,
+  }: {
+    isOpen: boolean;
+    onConfirm: () => void;
+    confirmText?: string;
+  }) =>
+    isOpen ? (
+      <button onClick={onConfirm} data-testid={`confirm-${confirmText?.toLowerCase().replace(/\s+/g, '-')}`}>
+        {confirmText}
+      </button>
+    ) : null,
 }));
 
 describe('DraftSaveBar', () => {
   const mockAPI = createMockElectronAPI();
-  const saveDomain = vi.fn();
+  const saveDomains = vi.fn();
   const discardDomain = vi.fn();
 
   beforeEach(() => {
@@ -28,7 +40,18 @@ describe('DraftSaveBar', () => {
       isDraftMode: true,
       isDomainDirty: vi.fn((domain: string) => domain === 'bills'),
       isSaving: false,
-      saveDomain,
+      draft: {
+        incomes: [createMockIncome()],
+        bills: [createMockBill()],
+        debts: [],
+        goals: [],
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+        budget: null,
+      },
+      dirtyDomains: new Set(['bills']),
+      saveDomains,
       discardDomain,
     });
   });
@@ -37,7 +60,7 @@ describe('DraftSaveBar', () => {
     it('shows save/discard controls when domain is dirty', () => {
       renderWithRouter(<DraftSaveBar domain="bills" />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
-      expect(saveDomain).toHaveBeenCalledWith('bills');
+      expect(saveDomains).toHaveBeenCalledWith(['bills']);
     });
   });
 
@@ -47,7 +70,18 @@ describe('DraftSaveBar', () => {
         isDraftMode: false,
         isDomainDirty: vi.fn(() => false),
         isSaving: false,
-        saveDomain,
+        draft: {
+          incomes: [],
+          bills: [],
+          debts: [],
+          goals: [],
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          budget: null,
+        },
+        dirtyDomains: new Set(),
+        saveDomains,
         discardDomain,
       });
       renderWithRouter(<DraftSaveBar domain="bills" />, { mockAPI });
@@ -59,8 +93,36 @@ describe('DraftSaveBar', () => {
     it('opens discard confirmation and calls discard', () => {
       renderWithRouter(<DraftSaveBar domain="bills" />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
-      fireEvent.click(screen.getByRole('button', { name: 'confirm-discard' }));
+      fireEvent.click(screen.getByTestId('confirm-discard'));
       expect(discardDomain).toHaveBeenCalledWith('bills');
+    });
+
+    it('prompts before saving bills that depend on draft income', () => {
+      mockUseDraft.mockReturnValue({
+        isDraftMode: true,
+        isDomainDirty: vi.fn((domain: string) => domain === 'bills' || domain === 'income'),
+        isSaving: false,
+        draft: {
+          incomes: [createMockIncome({ id: 'draft-income-1' })],
+          bills: [createMockBill({ id: 'draft-bill-1', preferredIncomeSourceId: 'draft-income-1' })],
+          debts: [],
+          goals: [],
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          budget: null,
+        },
+        dirtyDomains: new Set(['income', 'bills']),
+        saveDomains,
+        discardDomain,
+      });
+
+      renderWithRouter(<DraftSaveBar domain="bills" />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+      expect(saveDomains).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId('confirm-save'));
+      expect(saveDomains).toHaveBeenCalledWith(['income', 'bills']);
     });
   });
 });
