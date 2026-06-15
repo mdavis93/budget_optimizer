@@ -144,6 +144,8 @@ Branch protection and merge queue together enforce the automated pipeline on `ma
 
 Enable **Allow auto-merge** under **Settings → General → Pull Requests** if not already on.
 
+If `./scripts/configure-merge-queue-ruleset.sh` fails, enable merge queue manually under **Settings → Branches → Branch protection rules → main → Require merge queue** (squash, serial, ALLGREEN).
+
 Classic branch protection only:
 
 ```bash

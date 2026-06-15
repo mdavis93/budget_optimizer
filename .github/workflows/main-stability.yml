@@ -3,6 +3,7 @@ name: Main Stability
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   quality:
