@@ -56,6 +56,35 @@ Budget Optimizer uses a **draft overlay** for the active budget's working data (
 
 Budget **details** (name, balances, cash targets) are registry metadata on the Budgets page. Budget **contents** (incomes, bills, schedule) require switching to that budget first — data never mixes across budgets.
 
+## Schedule semantics (accepted behaviors)
+
+These behaviors are intentional — not bugs. They are covered by unit tests where noted.
+
+### Income-attached bills (A-03)
+
+Bills linked to a preferred income source (`preferredIncomeId`) are assigned to **every paycheck** from that income in step 2A of the scheduler. Due-day alignment and the 14-day prepay cap do **not** apply on this path. See `electron/services/scheduler/assignment.ts`.
+
+### Manual assignment (A-02)
+
+Drag-and-drop on the Schedule page may place a bill late or more than 14 days early. The UI shows a **confirmation dialog** before accepting the placement; the user can proceed after confirming. Hard rejection is not enforced — manual placements lock from auto-rebalance.
+
+### Rebalance recommendations (A-08)
+
+Schedule generation uses a **heuristic** four-phase rebalancer (with backtrack and micro-solver for hard cases). It is not a global optimizer — shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
+
+## Post-Audit Backlog
+
+Optional polish deferred after audit closure (not blocking releases):
+
+- **B-04** — Shared types package for renderer + electron
+- **B-07** — Split large page components (DebtsPage, SettingsPage, PaycheckView)
+- **B-08** — BudgetManager refactor (cache current budget, collapse passthroughs)
+- **B-09** — Merge or simplify DataContext over DraftContext
+- **E-04** — Context selector memoization to reduce re-renders
+- **6.5** — Electron 29+ upgrade path
+- **5.3 / 6.2** — E2E tests for draft save/discard/navigation
+- **5.4** — LP/constraint solver for hard rebalance cases (A-08 enhancement)
+
 ## Pull request descriptions
 
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) pre-fills new PRs with **Summary** and **Test plan** sections.
