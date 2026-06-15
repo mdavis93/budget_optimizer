@@ -40,6 +40,22 @@ Run manually anytime: `pnpm prepush`.
 
 **Paranoia layers:** (1) Husky before push → (2) PR Gate on the PR → (3) Main Stability after merge to `main`.
 
+## Draft mode
+
+Budget Optimizer uses a **draft overlay** for the active budget's working data (income, bills, debts, goals, schedule, and budget cash fields). User-facing copy uses **"Unsaved changes"** — not "volatile."
+
+| Surface | Persist behavior |
+|---------|------------------|
+| Income, Bills, Debts, Goals, Schedule | Edits stay in draft until **Save Changes** on that page |
+| Settings → budget allocation fields | Draft until Save on Budgets or **Save All** |
+| Settings → theme, currency, security | Saved immediately |
+| Budgets page → non-current budget details | Saved immediately when you confirm edit |
+| Budgets page → current budget details | Draft until Save on Budgets |
+
+**Save All** and the global banner appear when two or more domains are dirty. **Quick Budget** bypasses draft mode for exploratory what-if sessions.
+
+Budget **details** (name, balances, cash targets) are registry metadata on the Budgets page. Budget **contents** (incomes, bills, schedule) require switching to that budget first — data never mixes across budgets.
+
 ## Pull request descriptions
 
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) pre-fills new PRs with **Summary** and **Test plan** sections.
