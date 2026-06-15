@@ -1,10 +1,9 @@
 # Contributing to Budget Optimizer
 
-Thank you for contributing. This project uses a three-phase CI model:
+Thank you for contributing. This project uses a two-phase CI model:
 
 1. **PR Gate** — blocks merging until quality and commit-message checks pass.
-2. **Merge queue** — re-runs quality checks on the combined merge result before landing on `main`.
-3. **Main Stability** — post-merge packaging validation; failures activate a merge freeze.
+2. **Main Stability** — post-merge packaging validation; failures activate a merge freeze.
 
 ## Development workflow
 
@@ -12,7 +11,7 @@ Thank you for contributing. This project uses a three-phase CI model:
 2. Write code and tests.
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message.
 4. Open a pull request against `main`.
-5. When checks pass, **auto-merge** queues the PR for squash merge (no manual merge click needed).
+5. When checks pass, **auto-merge** squash-merges the PR to `main` (no manual merge click needed).
 6. After merge, confirm **Main Stability** succeeds on `main`.
 
 To hold a PR despite green checks, add the `do-not-automerge` label before or after opening the PR. Draft PRs never receive auto-merge.
@@ -63,9 +62,7 @@ If a PR contains multiple commits, **all** of them are validated in CI. Fix bad 
 | `pr-gate / quality` | Typecheck, lint, coverage, production CSP build, telemetry guard, production dependency audit |
 | `commitlint` | Conventional Commits on every commit in the PR |
 
-When a PR enters the **merge queue**, only `pr-gate / quality` runs again on the `merge_group` event. Commitlint does not re-run on merge groups.
-
-### Automated merge and merge queue
+### Automated merge
 
 **Workflows:**
 
@@ -82,8 +79,6 @@ When a PR enters the **merge queue**, only `pr-gate / quality` runs again on the
 | No manual brake | PR does not have the `do-not-automerge` label |
 | No active freeze | No open issue with the `merge-freeze` label |
 | Required checks green | `pr-gate / quality` and `commitlint` pass on the PR |
-
-After auto-merge is enabled and checks pass, GitHub adds the PR to the **merge queue**. The queue runs `pr-gate` on a synthetic merge branch, then squash-merges to `main`.
 
 **Dependabot PRs** use the same pipeline. A failed Dependabot PR only blocks itself; user PRs and automation continue unaffected.
 
@@ -121,9 +116,9 @@ CI runs `pnpm test:coverage:check`, which enforces Vitest thresholds in [`vitest
 | Statements | 90%       |
 | Branches   | 85%       |
 
-## Branch protection and merge queue (repository admins)
+## Branch protection (repository admins)
 
-Branch protection and merge queue together enforce the automated pipeline on `main`.
+Branch protection enforces the automated pipeline on `main`.
 
 | Setting | Value |
 |---------|-------|
@@ -132,7 +127,6 @@ Branch protection and merge queue together enforce the automated pipeline on `ma
 | Require branches to be up to date before merging | On |
 | Required status checks | `pr-gate / quality`, `commitlint` |
 | Enforce for administrators | On |
-| Require merge queue | On (squash, serial, ALLGREEN) |
 | Allow auto-merge | On (Settings → General → Pull Requests) |
 
 **Do not** require `main-stability` or `electron-build` as pre-merge checks — those run after merge.
@@ -141,12 +135,9 @@ Branch protection and merge queue together enforce the automated pipeline on `ma
 
 ```bash
 ./scripts/configure-branch-protection.sh
-./scripts/configure-merge-queue-ruleset.sh
 ```
 
 Enable **Allow auto-merge** under **Settings → General → Pull Requests** if not already on.
-
-If `./scripts/configure-merge-queue-ruleset.sh` fails, enable merge queue manually under **Settings → Branches → Branch protection rules → main → Require merge queue** (squash, serial, ALLGREEN).
 
 Classic branch protection only:
 

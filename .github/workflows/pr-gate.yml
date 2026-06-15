@@ -2,7 +2,6 @@ name: PR Gate
 
 on:
   pull_request:
-  merge_group:
 
 permissions:
   contents: read
@@ -14,7 +13,6 @@ jobs:
     uses: ./.github/workflows/_shared-quality.yml
 
   commitlint:
-    if: github.event_name == 'pull_request'
     name: commitlint
     runs-on: ubuntu-latest
     steps:
