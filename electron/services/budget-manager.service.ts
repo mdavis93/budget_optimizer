@@ -1,4 +1,4 @@
-import { DatabaseService, Budget, BudgetInput, Income, Bill, SkippedBill, BillAssignment, IncomeOverride, SavingsGoal, SavingsGoalInput } from './database.service';
+import { DatabaseService, Budget, BudgetInput, BudgetSnapshot, Income, Bill, SkippedBill, BillAssignment, IncomeOverride, SavingsGoal, SavingsGoalInput } from './database.service';
 import { QuickBudgetService } from './quick-budget.service';
 import { budgetLogger as logger } from './logger.service';
 
@@ -397,5 +397,35 @@ export class BudgetManager {
     }
     if (!this.currentBudgetId) return false;
     return this.database.deleteGoal(id, this.currentBudgetId);
+  }
+
+  getBudgetSnapshot(): BudgetSnapshot {
+    if (this.isQuickBudgetMode) {
+      return {
+        incomes: this.quickBudgetService.getAllIncomes(),
+        bills: this.quickBudgetService.getAllBills(),
+        goals: this.quickBudgetService.getAllGoals(),
+        skippedBills: this.quickBudgetService.getSkippedBills(),
+        billAssignments: this.quickBudgetService.getBillAssignments(),
+        incomeOverrides: this.quickBudgetService.getIncomeOverrides(),
+        debts: [],
+        budget: null,
+      };
+    }
+
+    if (!this.currentBudgetId) {
+      return {
+        incomes: [],
+        bills: [],
+        goals: [],
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+        debts: [],
+        budget: null,
+      };
+    }
+
+    return this.database.getBudgetSnapshot(this.currentBudgetId);
   }
 }

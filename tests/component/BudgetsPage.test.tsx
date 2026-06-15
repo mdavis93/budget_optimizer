@@ -13,6 +13,8 @@ vi.mock('../../src/context/BudgetContext', () => ({
 }));
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
+  useDraftData: () => mockUseDraft(),
+  useDraftActions: () => mockUseDraft(),
 }));
 vi.mock('../../src/hooks/useUnsavedChangesGuard', () => ({
   useUnsavedChangesGuard: () => mockUseUnsavedChangesGuard(),

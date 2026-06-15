@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { Save, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { useDraft } from '../context/DraftContext';
+import { useDraftData, useDraftActions } from '../context/DraftContext';
 import { DOMAIN_ROUTES, DRAFT_DOMAIN_LABELS, DraftDomain } from '../types/draft';
 import ConfirmDialog from './ConfirmDialog';
 
 export default function GlobalDraftBanner() {
-  const { isDraftMode, dirtyDomains, isSaving, saveAll, discardAll } = useDraft();
+  const { isDraftMode, dirtyDomains, isSaving } = useDraftData();
+  const { saveAll, discardAll } = useDraftActions();
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   if (!isDraftMode || dirtyDomains.size < 2) {

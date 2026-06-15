@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   ReactNode,
 } from 'react';
 import {
@@ -32,6 +33,7 @@ import {
   budgetToDraftFields,
   createDraftId,
   createEmptyDraftState,
+  copyDraftState,
 } from '../types/draft';
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
@@ -41,14 +43,13 @@ import {
   persistDomains,
 } from '../utils/draftPersist';
 
-interface DraftContextValue {
+interface DraftDataContextValue {
   draft: DraftState;
   dirtyDomains: Set<DraftDomain>;
   hasUnsavedChanges: boolean;
   isDraftMode: boolean;
   isLoading: boolean;
   isSaving: boolean;
-
   incomes: Income[];
   bills: Bill[];
   debts: Debt[];
@@ -57,16 +58,16 @@ interface DraftContextValue {
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
   budgetFields: DraftBudgetFields | null;
-
   isDomainDirty: (domain: DraftDomain) => boolean;
-  buildDraftOverlay: () => DraftOverlay | undefined;
+}
 
+interface DraftActionsContextValue {
+  buildDraftOverlay: () => DraftOverlay | undefined;
   saveDomain: (domain: DraftDomain) => Promise<boolean>;
   saveAll: () => Promise<boolean>;
   discardDomain: (domain: DraftDomain) => void;
   discardAll: () => void;
   reloadSnapshot: () => Promise<void>;
-
   createIncome: (input: IncomeInput) => boolean;
   updateIncome: (id: string, input: IncomeInput) => boolean;
   deleteIncome: (id: string) => boolean;
@@ -87,12 +88,14 @@ interface DraftContextValue {
   removeIncomeOverride: (incomeId: string, paycheckDate: string) => boolean;
   applyReconciliationFixes: (fixes: ProposedFix[]) => boolean;
   updateBudgetFields: (updates: Partial<DraftBudgetFields>) => boolean;
-
   getDebtsWithAmortization: () => Promise<DebtWithAmortization[]>;
   getGoalProjections: () => Promise<GoalProjection[]>;
 }
 
-const DraftContext = createContext<DraftContextValue | null>(null);
+export type DraftContextValue = DraftDataContextValue & DraftActionsContextValue;
+
+const DraftDataContext = createContext<DraftDataContextValue | null>(null);
+const DraftActionsContext = createContext<DraftActionsContextValue | null>(null);
 
 const nowIso = () => new Date().toISOString();
 
@@ -108,6 +111,23 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const isDraftMode = !isQuickBudget && hasBudgetSelected;
+
+  const stateRef = useRef({
+    draft,
+    committed,
+    dirtyDomains,
+    isDraftMode,
+    isQuickBudget,
+    currentBudgetId: currentBudget?.id ?? null,
+  });
+  stateRef.current = {
+    draft,
+    committed,
+    dirtyDomains,
+    isDraftMode,
+    isQuickBudget,
+    currentBudgetId: currentBudget?.id ?? null,
+  };
 
   const finalizeSave = useCallback(async (
     result: { nextDraft: DraftState; nextCommitted: DraftState },
@@ -131,70 +151,34 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isQuickBudget) {
-      const [incomesResult, billsResult, goalsResult, skippedResult, assignmentsResult, overridesResult] =
-        await Promise.all([
-          window.electronAPI.income.getAll(),
-          window.electronAPI.bills.getAll(),
-          window.electronAPI.goals.getAll(),
-          window.electronAPI.skippedBills.getAll(),
-          window.electronAPI.billAssignments.getAll(),
-          window.electronAPI.incomeOverrides.getAll(),
-        ]);
-
-      const snapshot: DraftState = {
-        incomes: incomesResult.data ?? [],
-        bills: billsResult.data ?? [],
-        debts: [],
-        goals: goalsResult.data ?? [],
-        skippedBills: skippedResult.data ?? [],
-        billAssignments: assignmentsResult.data ?? [],
-        incomeOverrides: overridesResult.data ?? [],
-        budget: null,
-      };
-
-      if (currentBudget) {
-        const debtsResult = await window.electronAPI.debts.getAll();
-        snapshot.debts = debtsResult.data ?? [];
-      }
-
-      setCommitted(snapshot);
-      setDraft(structuredClone(snapshot));
-      setDirtyDomains(new Set());
-      return;
-    }
-
     setIsLoading(true);
     try {
-      const [incomesResult, billsResult, goalsResult, skippedResult, assignmentsResult, overridesResult, debtsResult] =
-        await Promise.all([
-          window.electronAPI.income.getAll(),
-          window.electronAPI.bills.getAll(),
-          window.electronAPI.goals.getAll(),
-          window.electronAPI.skippedBills.getAll(),
-          window.electronAPI.billAssignments.getAll(),
-          window.electronAPI.incomeOverrides.getAll(),
-          currentBudget ? window.electronAPI.debts.getAll() : Promise.resolve({ success: true, data: [] as Debt[] }),
-        ]);
+      const result = await window.electronAPI.budget.getSnapshot();
+      if (!result.success || !result.data) {
+        return;
+      }
+
+      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, budget } =
+        result.data;
 
       const snapshot: DraftState = {
-        incomes: incomesResult.data ?? [],
-        bills: billsResult.data ?? [],
-        debts: debtsResult.data ?? [],
-        goals: goalsResult.data ?? [],
-        skippedBills: skippedResult.data ?? [],
-        billAssignments: assignmentsResult.data ?? [],
-        incomeOverrides: overridesResult.data ?? [],
-        budget: currentBudget ? budgetToDraftFields(currentBudget) : null,
+        incomes: incomes ?? [],
+        bills: bills ?? [],
+        debts: isQuickBudget ? [] : (debts ?? []),
+        goals: goals ?? [],
+        skippedBills: skippedBills ?? [],
+        billAssignments: billAssignments ?? [],
+        incomeOverrides: incomeOverrides ?? [],
+        budget: isQuickBudget ? null : (budget ? budgetToDraftFields(budget) : null),
       };
 
       setCommitted(snapshot);
-      setDraft(structuredClone(snapshot));
+      setDraft(copyDraftState(snapshot));
       setDirtyDomains(new Set());
     } finally {
       setIsLoading(false);
     }
-  }, [isUnlocked, hasBudgetSelected, isQuickBudget, currentBudget]);
+  }, [isUnlocked, hasBudgetSelected, isQuickBudget]);
 
   useEffect(() => {
     reloadSnapshot();
@@ -215,31 +199,34 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const buildDraftOverlay = useCallback((): DraftOverlay | undefined => {
-    if (!isDraftMode || dirtyDomains.size === 0) return undefined;
+    const { draft: currentDraft, dirtyDomains: domains, isDraftMode: draftMode } = stateRef.current;
+    if (!draftMode || domains.size === 0) return undefined;
 
     return {
-      incomes: draft.incomes,
-      bills: draft.bills,
-      goals: draft.goals,
-      debts: draft.debts,
-      skippedBills: draft.skippedBills,
-      billAssignments: draft.billAssignments,
-      incomeOverrides: draft.incomeOverrides,
-      startingBalance: draft.budget?.startingBalance,
-      targetCashOnHand: draft.budget?.targetCashOnHand,
-      minCashOnHand: draft.budget?.minCashOnHand,
-      minSavingsPerPaycheck: draft.budget?.minSavingsPerPaycheck,
-      scheduleStartDate: draft.budget?.scheduleStartDate,
+      incomes: currentDraft.incomes,
+      bills: currentDraft.bills,
+      goals: currentDraft.goals,
+      debts: currentDraft.debts,
+      skippedBills: currentDraft.skippedBills,
+      billAssignments: currentDraft.billAssignments,
+      incomeOverrides: currentDraft.incomeOverrides,
+      startingBalance: currentDraft.budget?.startingBalance,
+      targetCashOnHand: currentDraft.budget?.targetCashOnHand,
+      minCashOnHand: currentDraft.budget?.minCashOnHand,
+      minSavingsPerPaycheck: currentDraft.budget?.minSavingsPerPaycheck,
+      scheduleStartDate: currentDraft.budget?.scheduleStartDate,
     };
-  }, [isDraftMode, dirtyDomains.size, draft]);
+  }, []);
 
   const saveDomain = useCallback(async (domain: DraftDomain): Promise<boolean> => {
-    if (!isDraftMode) return true;
-    if (!dirtyDomains.has(domain)) return true;
+    const { isDraftMode: draftMode, dirtyDomains: domains, committed: saved, draft: currentDraft, currentBudgetId } =
+      stateRef.current;
+    if (!draftMode) return true;
+    if (!domains.has(domain)) return true;
 
     setIsSaving(true);
     try {
-      const result = await persistDomains(committed, draft, [domain], currentBudget?.id ?? null);
+      const result = await persistDomains(saved, currentDraft, [domain], currentBudgetId);
       if (!result.success) {
         showToast('error', result.error || 'Failed to save changes');
         return false;
@@ -251,58 +238,62 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSaving(false);
     }
-  }, [isDraftMode, dirtyDomains, committed, draft, currentBudget?.id, showToast, finalizeSave]);
+  }, [showToast, finalizeSave]);
 
   const saveAll = useCallback(async (): Promise<boolean> => {
-    if (!isDraftMode || dirtyDomains.size === 0) return true;
+    const { isDraftMode: draftMode, dirtyDomains: domains, committed: saved, draft: currentDraft, currentBudgetId } =
+      stateRef.current;
+    if (!draftMode || domains.size === 0) return true;
 
     setIsSaving(true);
     try {
       const result = await persistDomains(
-        committed,
-        draft,
-        Array.from(dirtyDomains),
-        currentBudget?.id ?? null
+        saved,
+        currentDraft,
+        Array.from(domains),
+        currentBudgetId
       );
       if (!result.success) {
         showToast('error', result.error || 'Failed to save changes');
         return false;
       }
 
-      await finalizeSave(result, Array.from(dirtyDomains));
+      await finalizeSave(result, Array.from(domains));
       showToast('success', 'All changes saved');
       return true;
     } finally {
       setIsSaving(false);
     }
-  }, [isDraftMode, dirtyDomains, committed, draft, currentBudget?.id, showToast, finalizeSave]);
+  }, [showToast, finalizeSave]);
 
   const discardDomain = useCallback((domain: DraftDomain) => {
-    if (!isDraftMode) return;
+    const { isDraftMode: draftMode, committed: saved } = stateRef.current;
+    if (!draftMode) return;
 
     setDraft((prev) => {
       const next = { ...prev };
-      if (domain === 'income') next.incomes = structuredClone(committed.incomes);
-      if (domain === 'bills') next.bills = structuredClone(committed.bills);
-      if (domain === 'debts') next.debts = structuredClone(committed.debts);
-      if (domain === 'goals') next.goals = structuredClone(committed.goals);
+      if (domain === 'income') next.incomes = structuredClone(saved.incomes);
+      if (domain === 'bills') next.bills = structuredClone(saved.bills);
+      if (domain === 'debts') next.debts = structuredClone(saved.debts);
+      if (domain === 'goals') next.goals = structuredClone(saved.goals);
       if (domain === 'schedule') {
-        next.skippedBills = structuredClone(committed.skippedBills);
-        next.billAssignments = structuredClone(committed.billAssignments);
-        next.incomeOverrides = structuredClone(committed.incomeOverrides);
+        next.skippedBills = structuredClone(saved.skippedBills);
+        next.billAssignments = structuredClone(saved.billAssignments);
+        next.incomeOverrides = structuredClone(saved.incomeOverrides);
       }
-      if (domain === 'budget' && committed.budget) {
-        next.budget = structuredClone(committed.budget);
+      if (domain === 'budget' && saved.budget) {
+        next.budget = structuredClone(saved.budget);
       }
       return next;
     });
-  }, [isDraftMode, committed]);
+  }, []);
 
   const discardAll = useCallback(() => {
-    if (!isDraftMode) return;
-    setDraft(structuredClone(committed));
+    const { isDraftMode: draftMode, committed: saved } = stateRef.current;
+    if (!draftMode) return;
+    setDraft(structuredClone(saved));
     setDirtyDomains(new Set());
-  }, [isDraftMode, committed]);
+  }, []);
 
   const createIncome = useCallback((input: IncomeInput): boolean => {
     if (isQuickBudget) return false;
@@ -678,102 +669,129 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return [];
   }, [buildDraftOverlay]);
 
-  const isDomainDirty = useCallback((domain: DraftDomain) => dirtyDomains.has(domain), [dirtyDomains]);
+  const isDomainDirty = useCallback(
+    (domain: DraftDomain) => stateRef.current.dirtyDomains.has(domain),
+    []
+  );
 
-  const value = useMemo(() => ({
-    draft,
-    dirtyDomains,
-    hasUnsavedChanges: dirtyDomains.size > 0 && isDraftMode,
-    isDraftMode,
-    isLoading,
-    isSaving,
-    incomes: draft.incomes,
-    bills: draft.bills,
-    debts: draft.debts,
-    goals: draft.goals,
-    skippedBills: draft.skippedBills,
-    billAssignments: draft.billAssignments,
-    incomeOverrides: draft.incomeOverrides,
-    budgetFields: draft.budget,
-    isDomainDirty,
-    buildDraftOverlay,
-    saveDomain,
-    saveAll,
-    discardDomain,
-    discardAll,
-    reloadSnapshot,
-    createIncome,
-    updateIncome,
-    deleteIncome,
-    createBill,
-    updateBill,
-    deleteBill,
-    createDebt,
-    updateDebt,
-    deleteDebt,
-    createGoal,
-    updateGoal,
-    deleteGoal,
-    skipBill,
-    unskipBill,
-    assignBill,
-    removeBillAssignment,
-    setIncomeOverride,
-    removeIncomeOverride,
-    applyReconciliationFixes,
-    updateBudgetFields,
-    getDebtsWithAmortization,
-    getGoalProjections,
-  }), [
-    draft,
-    dirtyDomains,
-    isDraftMode,
-    isLoading,
-    isSaving,
-    isDomainDirty,
-    buildDraftOverlay,
-    saveDomain,
-    saveAll,
-    discardDomain,
-    discardAll,
-    reloadSnapshot,
-    createIncome,
-    updateIncome,
-    deleteIncome,
-    createBill,
-    updateBill,
-    deleteBill,
-    createDebt,
-    updateDebt,
-    deleteDebt,
-    createGoal,
-    updateGoal,
-    deleteGoal,
-    skipBill,
-    unskipBill,
-    assignBill,
-    removeBillAssignment,
-    setIncomeOverride,
-    removeIncomeOverride,
-    applyReconciliationFixes,
-    updateBudgetFields,
-    getDebtsWithAmortization,
-    getGoalProjections,
-  ]);
+  const dataValue = useMemo(
+    (): DraftDataContextValue => ({
+      draft,
+      dirtyDomains,
+      hasUnsavedChanges: dirtyDomains.size > 0 && isDraftMode,
+      isDraftMode,
+      isLoading,
+      isSaving,
+      incomes: draft.incomes,
+      bills: draft.bills,
+      debts: draft.debts,
+      goals: draft.goals,
+      skippedBills: draft.skippedBills,
+      billAssignments: draft.billAssignments,
+      incomeOverrides: draft.incomeOverrides,
+      budgetFields: draft.budget,
+      isDomainDirty,
+    }),
+    [draft, dirtyDomains, isDraftMode, isLoading, isSaving, isDomainDirty]
+  );
 
-  return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;
+  const actionsValue = useMemo(
+    (): DraftActionsContextValue => ({
+      buildDraftOverlay,
+      saveDomain,
+      saveAll,
+      discardDomain,
+      discardAll,
+      reloadSnapshot,
+      createIncome,
+      updateIncome,
+      deleteIncome,
+      createBill,
+      updateBill,
+      deleteBill,
+      createDebt,
+      updateDebt,
+      deleteDebt,
+      createGoal,
+      updateGoal,
+      deleteGoal,
+      skipBill,
+      unskipBill,
+      assignBill,
+      removeBillAssignment,
+      setIncomeOverride,
+      removeIncomeOverride,
+      applyReconciliationFixes,
+      updateBudgetFields,
+      getDebtsWithAmortization,
+      getGoalProjections,
+    }),
+    [
+      buildDraftOverlay,
+      saveDomain,
+      saveAll,
+      discardDomain,
+      discardAll,
+      reloadSnapshot,
+      createIncome,
+      updateIncome,
+      deleteIncome,
+      createBill,
+      updateBill,
+      deleteBill,
+      createDebt,
+      updateDebt,
+      deleteDebt,
+      createGoal,
+      updateGoal,
+      deleteGoal,
+      skipBill,
+      unskipBill,
+      assignBill,
+      removeBillAssignment,
+      setIncomeOverride,
+      removeIncomeOverride,
+      applyReconciliationFixes,
+      updateBudgetFields,
+      getDebtsWithAmortization,
+      getGoalProjections,
+    ]
+  );
+
+  return (
+    <DraftActionsContext.Provider value={actionsValue}>
+      <DraftDataContext.Provider value={dataValue}>{children}</DraftDataContext.Provider>
+    </DraftActionsContext.Provider>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function useDraft() {
-  const context = useContext(DraftContext);
+export function useDraftData() {
+  const context = useContext(DraftDataContext);
   if (!context) {
-    throw new Error('useDraft must be used within a DraftProvider');
+    throw new Error('useDraftData must be used within a DraftProvider');
   }
   return context;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function useDraftOptional() {
-  return useContext(DraftContext);
+export function useDraftActions() {
+  const context = useContext(DraftActionsContext);
+  if (!context) {
+    throw new Error('useDraftActions must be used within a DraftProvider');
+  }
+  return context;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDraft(): DraftContextValue {
+  return { ...useDraftData(), ...useDraftActions() };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDraftOptional(): DraftContextValue | null {
+  const data = useContext(DraftDataContext);
+  const actions = useContext(DraftActionsContext);
+  if (!data || !actions) return null;
+  return { ...data, ...actions };
 }

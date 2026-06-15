@@ -18,6 +18,8 @@ vi.mock('../../src/context/BudgetContext', () => ({
 
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
+  useDraftData: () => mockUseDraft(),
+  useDraftActions: () => mockUseDraft(),
 }));
 
 function DataHarness() {
@@ -40,6 +42,18 @@ function DataHarness() {
         }
       >
         generate
+      </button>
+      <button
+        onClick={() =>
+          void data.generateSchedule(
+            data.scheduleStartDate,
+            12,
+            data.scheduleStartingBalance,
+            { force: true }
+          )
+        }
+      >
+        generate-force
       </button>
       <button onClick={() => data.setScheduleMonths(2)}>viewport-2</button>
       <button onClick={() => data.setScheduleStartDate('2026-07-01')}>set-start-date</button>
@@ -166,7 +180,7 @@ describe('DataContext', () => {
       renderProvider();
 
       expect(screen.getByTestId('schedule-start-date')).toHaveTextContent('2026-04-01');
-      fireEvent.click(screen.getByText('generate'));
+      fireEvent.click(screen.getByText('generate-force'));
 
       await waitFor(() => {
         expect(mockAPI.schedule.build).toHaveBeenCalledWith(
@@ -177,6 +191,52 @@ describe('DataContext', () => {
         );
       });
       expect(screen.getByTestId('schedule-length')).toHaveTextContent('1');
+    });
+
+    it('reuses cached schedule when force-generating with unchanged inputs', async () => {
+      renderProvider();
+      fireEvent.click(screen.getByText('generate-force'));
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-length')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('generate-force'));
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-length')).toHaveTextContent('1');
+      });
+      expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+    });
+
+    it('debounces repeated schedule generation requests', async () => {
+      vi.useFakeTimers();
+      try {
+        renderProvider();
+
+        fireEvent.click(screen.getByText('generate'));
+        fireEvent.click(screen.getByText('generate'));
+        expect(mockAPI.schedule.build).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(400);
+        expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels pending debounced generation when force is requested', async () => {
+      vi.useFakeTimers();
+      try {
+        renderProvider();
+
+        fireEvent.click(screen.getByText('generate'));
+        fireEvent.click(screen.getByText('generate-force'));
+
+        expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(400);
+        expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('updates viewport without a second IPC schedule call', async () => {
@@ -200,7 +260,7 @@ describe('DataContext', () => {
       });
 
       renderProvider();
-      fireEvent.click(screen.getByText('generate'));
+      fireEvent.click(screen.getByText('generate-force'));
       await waitFor(() => {
         expect(screen.getByTestId('schedule-length')).toHaveTextContent('3');
       });
@@ -246,7 +306,7 @@ describe('DataContext', () => {
       mockAPI.schedule.build.mockResolvedValue({ success: false, error: 'bad schedule' });
 
       renderProvider();
-      fireEvent.click(screen.getByText('generate'));
+      fireEvent.click(screen.getByText('generate-force'));
 
       await waitFor(() => {
         expect(screen.getByTestId('error')).toHaveTextContent('bad schedule');
@@ -335,7 +395,7 @@ describe('DataContext', () => {
       mockAPI.schedule.build.mockResolvedValue({ success: true, data: undefined });
 
       renderProvider();
-      fireEvent.click(screen.getByText('generate'));
+      fireEvent.click(screen.getByText('generate-force'));
 
       await waitFor(() => {
         expect(screen.getByTestId('error')).toHaveTextContent('Failed to generate schedule');
@@ -361,7 +421,7 @@ describe('DataContext', () => {
       mockAPI.schedule.build.mockRejectedValue(new Error('IPC down'));
 
       renderProvider();
-      fireEvent.click(screen.getByText('generate'));
+      fireEvent.click(screen.getByText('generate-force'));
 
       await waitFor(() => {
         expect(screen.getByTestId('error')).toHaveTextContent('Failed to generate schedule');
@@ -460,7 +520,7 @@ describe('DataContext', () => {
       const { rerender } = renderProvider();
       expect(screen.getByTestId('schedule-start-date')).not.toHaveTextContent('2026-04-01');
 
-      fireEvent.click(screen.getByText('generate'));
+      fireEvent.click(screen.getByText('generate-force'));
       await waitFor(() => {
         expect(mockAPI.schedule.build).toHaveBeenCalledWith(
           expect.any(String),

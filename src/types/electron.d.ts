@@ -286,6 +286,17 @@ interface DraftOverlay {
   minSavingsPerPaycheck?: number;
 }
 
+interface BudgetSnapshotData {
+  incomes: import('./index').Income[];
+  bills: import('./index').Bill[];
+  goals: SavingsGoalData[];
+  skippedBills: import('./index').SkippedBill[];
+  billAssignments: import('./index').BillAssignment[];
+  incomeOverrides: import('./index').IncomeOverride[];
+  debts: DebtData[];
+  budget: BudgetData | null;
+}
+
 interface ElectronAPI {
   platform: () => Promise<string>;
   checkBiometricAvailable: () => Promise<boolean>;
@@ -304,6 +315,7 @@ interface ElectronAPI {
     getAll: () => Promise<ApiResult<BudgetData[]>>;
     getAllWithStats: () => Promise<ApiResult<BudgetDataWithStats[]>>;
     getCurrent: () => Promise<ApiResult<CurrentBudgetState>>;
+    getSnapshot: () => Promise<ApiResult<BudgetSnapshotData>>;
     getStats: (budgetId: string) => Promise<ApiResult<BudgetStats>>;
     create: (input: BudgetInput) => Promise<ApiResult<BudgetData>>;
     update: (id: string, input: Partial<BudgetInput>) => Promise<ApiResult<BudgetData>>;

@@ -1,4 +1,4 @@
-import { DragEvent, useState } from 'react';
+import { DragEvent, useState, memo } from 'react';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { 
   Wallet, 
@@ -55,7 +55,7 @@ interface PaycheckViewProps {
   savingIncomeKey: string | null;
 }
 
-export default function PaycheckView({ 
+function PaycheckView({ 
   paychecks, 
   expandedPaychecks, 
   togglePaycheck, 
@@ -591,5 +591,7 @@ function PaycheckDetails({
     </div>
   );
 }
+
+export default memo(PaycheckView);
 
 export type { DraggedBill };

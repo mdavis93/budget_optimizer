@@ -1,15 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { format, parseISO } from 'date-fns';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
 import { CreditCard, Plus, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent, ChevronDown } from 'lucide-react';
+import { DebtAmortizationChart, ChartSuspense } from '../components/charts/lazyCharts';
+import { CHART_COLORS } from '../components/charts/chartTheme';
 import { useData } from '../context/DataContext';
 import { useDraft } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
@@ -79,11 +72,6 @@ function sortGroupKeys(keys: string[]): string[] {
     return a.localeCompare(b, undefined, { sensitivity: 'base' });
   });
 }
-
-const CHART_COLORS = {
-  principal: '#3b82f6',
-  interest: '#ef4444',
-};
 
 interface DebtFormProps {
   debt?: DebtWithAmortization;
@@ -253,7 +241,7 @@ interface DebtCardProps {
   onDelete: () => void;
 }
 
-function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
+const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
   const { debt, bill, amortization } = debtData;
   
   if (!bill || !amortization) {
@@ -366,52 +354,9 @@ function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
         </div>
         
         <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: 'var(--color-border)' }}
-              />
-              <YAxis 
-                tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `$${value}`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                }}
-                labelStyle={{ color: 'var(--color-text-primary)' }}
-                formatter={(value: number, name: string) => [
-                  `$${value.toFixed(2)}`,
-                  name.charAt(0).toUpperCase() + name.slice(1)
-                ]}
-              />
-              <Legend 
-                wrapperStyle={{ paddingTop: '10px' }}
-                formatter={(value) => <span className="text-[var(--color-text-secondary)]">{value}</span>}
-              />
-              <Bar 
-                dataKey="principal" 
-                stackId="a" 
-                fill={CHART_COLORS.principal} 
-                name="Principal"
-                radius={[0, 0, 0, 0]}
-              />
-              <Bar 
-                dataKey="interest" 
-                stackId="a" 
-                fill={CHART_COLORS.interest} 
-                name="Interest"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartSuspense heightClass="h-48">
+            <DebtAmortizationChart data={chartData} />
+          </ChartSuspense>
         </div>
 
         <div className="mt-4 p-3 rounded-lg bg-[var(--color-bg-tertiary)] text-sm">
@@ -429,7 +374,7 @@ function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
       </div>
     </div>
   );
-}
+});
 
 interface UnsetupDebtCardProps {
   bill: Bill;

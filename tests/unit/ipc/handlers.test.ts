@@ -110,6 +110,16 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       createGoal: vi.fn(),
       updateGoal: vi.fn(() => null),
       deleteGoal: vi.fn(() => false),
+      getBudgetSnapshot: vi.fn(() => ({
+        incomes: [{ id: 'income-1' }],
+        bills: [{ id: 'bill-1' }],
+        goals: [{ id: 'goal-1' }],
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+        debts: [],
+        budget: { id: 'budget-1', name: 'Test' },
+      })),
     },
     scheduler: {
       generateSchedule: vi.fn(() => ({
@@ -129,6 +139,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
         recommendations: [],
         maxBudgetRemaining: 0,
       })),
+      generateGoalProjections: vi.fn(() => []),
       analyzeAndProposeFixes: vi.fn(() => ({ hasShortfalls: false, proposedFixes: [] })),
     },
     pdf: {
@@ -482,6 +493,7 @@ describe('ipc handlers', () => {
             maxBudgetRemaining: 0,
             goalProjections: [{ id: 'gp-1' }],
           })),
+          generateGoalProjections: vi.fn(() => [{ id: 'gp-1' }]),
           analyzeAndProposeFixes: vi.fn(() => ({ hasShortfalls: true, proposedFixes: [] })),
         },
       });
@@ -521,6 +533,19 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('budget:get-current')).resolves.toEqual({
         success: true,
         data: { budget: { id: 'budget-1' }, isQuickBudget: false },
+      });
+      await expect(ipcMain.invoke('budget:get-snapshot')).resolves.toEqual({
+        success: true,
+        data: {
+          incomes: [{ id: 'income-1' }],
+          bills: [{ id: 'bill-1' }],
+          goals: [{ id: 'goal-1' }],
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          debts: [],
+          budget: { id: 'budget-1', name: 'Test' },
+        },
       });
       await expect(ipcMain.invoke('budget:get-stats', 'budget-1')).resolves.toEqual({
         success: true,
@@ -720,7 +745,7 @@ describe('ipc handlers', () => {
 
       await ipcMain.invoke('goals:get-projections');
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
-      expect(services.scheduler.generateSchedule).toHaveBeenCalled();
+      expect(services.scheduler.generateGoalProjections).toHaveBeenCalled();
     });
 
     it('returns empty goal projections when no goals are configured', async () => {

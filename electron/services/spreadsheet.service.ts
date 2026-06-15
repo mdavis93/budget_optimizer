@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import ExcelJS from 'exceljs';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
-import { ScheduleData } from './scheduler.service';
+import type { ScheduleData } from './scheduler.service';
 
 const PRIORITY_LABELS: Record<'critical' | 'high' | 'normal' | 'low', string> = {
   critical: 'Critical',

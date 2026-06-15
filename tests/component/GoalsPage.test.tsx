@@ -18,6 +18,8 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
+  useDraftData: () => mockUseDraft(),
+  useDraftActions: () => mockUseDraft(),
 }));
 
 vi.mock('../../src/context/BudgetContext', () => ({

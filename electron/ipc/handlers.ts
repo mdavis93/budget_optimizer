@@ -2,7 +2,8 @@ import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
 import { DatabaseService, DebtInput } from '../services/database.service';
-import { SchedulerService, DebtPayoffInfo, SCHEDULE_CALCULATION_MONTHS } from '../services/scheduler.service';
+import { SchedulerService } from '../services/scheduler.service';
+import type { DebtPayoffInfo } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
 import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
@@ -30,6 +31,31 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+interface ScheduleMaps {
+  skippedSet: Set<string>;
+  manualAssignments: Map<string, string>;
+  incomeOverridesMap: Map<string, number>;
+  debtPayoffs: Map<string, DebtPayoffInfo>;
+}
+
+function buildScheduleMaps(
+  resolved: ReturnType<typeof resolveScheduleInputs>,
+  debtService: DebtService
+): ScheduleMaps {
+  return {
+    skippedSet: new Set(
+      resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
+    ),
+    manualAssignments: new Map(
+      resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
+    ),
+    incomeOverridesMap: new Map(
+      resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+    ),
+    debtPayoffs: buildDebtPayoffs(resolved.debts, resolved.bills, debtService),
+  };
 }
 
 function buildDebtPayoffs(
@@ -271,6 +297,10 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     })
   ));
 
+  ipcMain.handle('budget:get-snapshot', withBudgetGuard(services, () =>
+    ipcData('budget:get-snapshot', () => ready().budgetManager.getBudgetSnapshot())
+  ));
+
   ipcMain.handle('budget:get-stats', withBudgetGuard(services, (_, budgetId: string) =>
     ipcData('budget:get-stats', () => ready().budgetManager.getBudgetStats(budgetId))
   ));
@@ -472,22 +502,15 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         return [];
       }
 
-      const skippedSet = new Set(
-        resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
+      const { skippedSet, manualAssignments, incomeOverridesMap, debtPayoffs } = buildScheduleMaps(
+        resolved,
+        services.debt
       );
-      const manualAssignments = new Map(
-        resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
-      );
-      const incomeOverridesMap = new Map(
-        resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
-      );
-      const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
 
-      const scheduleData = services.scheduler.generateSchedule(
+      return services.scheduler.generateGoalProjections(
         resolved.incomes,
         resolved.bills,
         resolved.scheduleStartDate,
-        SCHEDULE_CALCULATION_MONTHS,
         resolved.startingBalance,
         skippedSet,
         manualAssignments,
@@ -498,8 +521,6 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         debtPayoffs,
         incomeOverridesMap
       );
-
-      return scheduleData.goalProjections || [];
     })
   ));
 
@@ -509,16 +530,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       const resolved = resolveScheduleInputs(budgetManager, database, overlay);
       const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
 
-      const skippedSet = new Set(
-        resolved.skippedBills.map((sb) => `${sb.billId}-${sb.skipDate}`)
-      );
-      const manualAssignments = new Map(
-        resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
-      );
-      const incomeOverridesMapOpt = new Map(
-        resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
-      );
-      const debtPayoffs = buildDebtPayoffs(resolved.debts, resolved.bills, services.debt);
+      const { skippedSet, manualAssignments, incomeOverridesMap: incomeOverridesMapOpt, debtPayoffs } =
+        buildScheduleMaps(resolved, services.debt);
 
       const data = services.scheduler.generateSchedule(
         resolved.incomes,
