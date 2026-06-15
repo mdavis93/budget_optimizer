@@ -129,19 +129,43 @@ function getElectronModulesAbi() {
   return getElectronModulesAbiFromRegistry(electronVersion);
 }
 
-// Prefer electron-rebuild output; do not overwrite with a stale prebuild.
+function loadsUnderCurrentNode() {
+  try {
+    execSync(
+      'node -e "const Database = require(\'better-sqlite3\'); const db = new Database(\':memory:\'); db.close();"',
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 30000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Prefer an Electron-targeted binary. A Node test rebuild loads under system Node.
 if (fs.existsSync(rebuiltBinary)) {
-  const electronVersion = getElectronVersion() || 'unknown';
-  console.log(
-    `Using electron-rebuilt better-sqlite3 at ${rebuiltBinary} (Electron ${electronVersion})`
+  if (!loadsUnderCurrentNode()) {
+    const electronVersion = getElectronVersion() || 'unknown';
+    console.log(
+      `Using electron-rebuilt better-sqlite3 at ${rebuiltBinary} (Electron ${electronVersion})`
+    );
+    process.exit(0);
+  }
+
+  console.warn(
+    'Existing better-sqlite3 binary loads under Node but not Electron; re-syncing from prebuild.'
   );
-  process.exit(0);
+  fs.rmSync(rebuiltBinary, { force: true });
 }
 
 const electronAbi = getElectronModulesAbi();
 if (!electronAbi) {
   console.error('Electron is not installed or its NODE_MODULE_VERSION could not be determined.');
-  console.error('Run: pnpm install && pnpm run rebuild:native');
+  console.error('Run: pnpm install');
   process.exit(1);
 }
 
@@ -155,7 +179,7 @@ if (!prebuild) {
   console.error(
     `Could not find a better-sqlite3 native binary for Electron ABI ${electronAbi} (${prebuildPlatform}).`
   );
-  console.error('Run: pnpm run rebuild:native');
+  console.error('Run: pnpm install');
   process.exit(1);
 }
 

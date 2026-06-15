@@ -70,6 +70,12 @@ Runs on every push to `main` / `master`:
 
 A failing **Main Stability** run means `main` is broken. Fix forward with a follow-up PR; do not treat this check as optional for long.
 
+### macOS packaging without code signing
+
+Local and CI `electron:build` / `electron:build:ci` set `CSC_IDENTITY_AUTO_DISCOVERY=false` so electron-builder does not search for a Developer ID certificate. Unsigned builds are expected until you configure Apple code signing for distribution.
+
+Native modules (`better-sqlite3`, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. The `electron:build` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it.
+
 ## Code coverage
 
 CI runs `pnpm test:coverage:check`, which enforces Vitest thresholds in [`vitest.config.ts`](vitest.config.ts):

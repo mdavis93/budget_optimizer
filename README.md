@@ -64,13 +64,12 @@ Native modules must be compiled for the bundled Electron version. If unlock fail
 
 ```bash
 pnpm install
-pnpm run rebuild:native
 pnpm run electron:build
 ```
 
 Launch the app from the **new** build in `release/` (not an older copy). The build should end with `Packaged SQLite verification passed.` The post-build SQLite check runs headlessly — it should not open the app window.
 
-Use `pnpm run electron:build` for production packages — not `pnpm run build`, which skips native rebuild steps.
+Use `pnpm run electron:build` for production packages — not `pnpm run build`, which skips native dependency sync steps.
 
 #### Repeated macOS Keychain prompts after rebuilding
 
