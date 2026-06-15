@@ -25,7 +25,17 @@ export const PRODUCTION_CSP =
   "font-src 'self' https://fonts.gstatic.com; " +
   "connect-src 'self';";
 
-export default defineConfig(async ({ mode }) => ({
+export default defineConfig(async ({ mode }) => {
+  const analyze = process.env.ANALYZE === '1';
+  const visualizerPlugin = analyze
+    ? (await import('rollup-plugin-visualizer')).visualizer({
+        filename: 'dist/stats.html',
+        gzipSize: true,
+        open: false,
+      })
+    : null;
+
+  return {
   plugins: [
     react(),
     {
@@ -40,6 +50,7 @@ export default defineConfig(async ({ mode }) => ({
         return html;
       },
     },
+    ...(visualizerPlugin ? [visualizerPlugin] : []),
     ...(await electron({
       main: {
         entry: 'electron/main.ts',
@@ -98,9 +109,18 @@ export default defineConfig(async ({ mode }) => ({
               test: /node_modules\/(react\/|react-dom\/|react-router-dom\/)/,
               name: 'react-vendor',
             },
+            {
+              test: /node_modules\/date-fns\//,
+              name: 'date-fns',
+            },
+            {
+              test: /node_modules\/lucide-react\//,
+              name: 'lucide',
+            },
           ],
         },
       },
     },
   },
-}));
+};
+});
