@@ -2,7 +2,7 @@ import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
 import { DatabaseService, DebtInput } from '../services/database.service';
-import { SchedulerService, DebtPayoffInfo, SCHEDULE_CALCULATION_MONTHS } from '../services/scheduler.service';
+import { SchedulerService, DebtPayoffInfo } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
 import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
@@ -502,11 +502,10 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         services.debt
       );
 
-      const scheduleData = services.scheduler.generateSchedule(
+      return services.scheduler.generateGoalProjections(
         resolved.incomes,
         resolved.bills,
         resolved.scheduleStartDate,
-        SCHEDULE_CALCULATION_MONTHS,
         resolved.startingBalance,
         skippedSet,
         manualAssignments,
@@ -517,8 +516,6 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         debtPayoffs,
         incomeOverridesMap
       );
-
-      return scheduleData.goalProjections || [];
     })
   ));
 

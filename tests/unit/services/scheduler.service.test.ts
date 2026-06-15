@@ -917,6 +917,99 @@ describe('SchedulerService', () => {
     });
   });
 
+  describe('generateGoalProjections', () => {
+    const income: Income = {
+      id: 'income-1',
+      sourceName: 'Salary',
+      amount: 2000,
+      cadence: 'biweekly',
+      startDate: '2026-01-01',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const bill: Bill = {
+      id: 'bill-1',
+      creditorName: 'Rent',
+      budgetedAmount: 800,
+      dueDay: 1,
+      isRecurring: true,
+      priority: 'critical',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const goals: SavingsGoal[] = [
+      {
+        id: 'goal-1',
+        budgetId: 'budget-1',
+        name: 'Emergency',
+        targetAmount: 3000,
+        targetDate: '2026-12-31',
+        alreadySaved: 500,
+        priority: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'goal-2',
+        budgetId: 'budget-1',
+        name: 'Vacation',
+        targetAmount: 6000,
+        targetDate: '2027-06-01',
+        alreadySaved: 0,
+        priority: 2,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    it('returns empty array when no goals', () => {
+      expect(
+        scheduler.generateGoalProjections([income], [bill], '2026-01-01', 1000)
+      ).toEqual([]);
+    });
+
+    it('matches full schedule goal projections for typical biweekly scenario', () => {
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [bill],
+        '2026-01-01',
+        12,
+        1000,
+        new Set(),
+        new Map(),
+        500,
+        goals,
+        100,
+        50
+      );
+
+      const lightweight = scheduler.generateGoalProjections(
+        [income],
+        [bill],
+        '2026-01-01',
+        1000,
+        new Set(),
+        new Map(),
+        500,
+        goals,
+        100,
+        50
+      );
+
+      expect(lightweight).toHaveLength(schedule.goalProjections!.length);
+      for (let i = 0; i < lightweight.length; i++) {
+        const full = schedule.goalProjections![i];
+        const lite = lightweight[i];
+        expect(lite.goalId).toBe(full.goalId);
+        expect(lite.status).toBe(full.status);
+        expect(lite.achievabilityPercent).toBe(full.achievabilityPercent);
+        expect(lite.paycheckCount).toBe(full.paycheckCount);
+        expect(lite.requiredPerPaycheck).toBeCloseTo(full.requiredPerPaycheck, 1);
+      }
+    });
+  });
+
   describe('calculateGoalProjections', () => {
     const income: Income = {
       id: 'income-1',

@@ -129,6 +129,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
         recommendations: [],
         maxBudgetRemaining: 0,
       })),
+      generateGoalProjections: vi.fn(() => []),
       analyzeAndProposeFixes: vi.fn(() => ({ hasShortfalls: false, proposedFixes: [] })),
     },
     pdf: {
@@ -482,6 +483,7 @@ describe('ipc handlers', () => {
             maxBudgetRemaining: 0,
             goalProjections: [{ id: 'gp-1' }],
           })),
+          generateGoalProjections: vi.fn(() => [{ id: 'gp-1' }]),
           analyzeAndProposeFixes: vi.fn(() => ({ hasShortfalls: true, proposedFixes: [] })),
         },
       });
@@ -720,7 +722,7 @@ describe('ipc handlers', () => {
 
       await ipcMain.invoke('goals:get-projections');
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
-      expect(services.scheduler.generateSchedule).toHaveBeenCalled();
+      expect(services.scheduler.generateGoalProjections).toHaveBeenCalled();
     });
 
     it('returns empty goal projections when no goals are configured', async () => {

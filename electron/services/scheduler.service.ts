@@ -400,6 +400,111 @@ export class SchedulerService {
   }
 
   /**
+   * Lightweight goal projection path: initial bill assignment + funding priority only.
+   * Skips ensemble rebalance (backtrack / micro-solver) used by generateSchedule.
+   */
+  generateGoalProjections(
+    incomes: Income[],
+    bills: Bill[],
+    startDateStr: string,
+    startingBalance: number,
+    skippedBills: Set<string> = new Set(),
+    manualAssignments: Map<string, string> = new Map(),
+    maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
+    goals: SavingsGoal[] = [],
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0,
+    debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
+    incomeOverrides: Map<string, number> = new Map()
+  ): GoalProjection[] {
+    if (goals.length === 0) {
+      return [];
+    }
+
+    const startDate = startOfDay(parseISO(startDateStr));
+    const endDate = addMonths(startDate, SCHEDULE_CALCULATION_MONTHS);
+
+    const allIncomes: ProjectedIncome[] = [];
+    for (const income of incomes) {
+      allIncomes.push(...this.projectIncome(income, startDate, endDate));
+    }
+
+    for (const projected of allIncomes) {
+      const key = `${projected.sourceId}-${format(projected.date, 'yyyy-MM-dd')}`;
+      if (incomeOverrides.has(key)) {
+        projected.amount = incomeOverrides.get(key)!;
+      }
+    }
+
+    const incomeAttachedBillsRaw = bills.filter(b => b.isIncomeAttached && b.preferredIncomeSourceId);
+    const regularBills = bills.filter(b => !b.isIncomeAttached);
+
+    const allBills: ProjectedBill[] = [];
+    for (const bill of regularBills) {
+      const debtInfo = debtPayoffs.get(bill.id);
+      allBills.push(...this.projectBills(bill, startDate, endDate, debtInfo));
+    }
+
+    allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
+    allBills.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    const seenBillKeys = new Set<string>();
+    const uniqueBills = allBills.filter(bill => {
+      const dateStr = format(bill.date, 'yyyy-MM-dd');
+      const skipKey = `${bill.billId}-${dateStr}`;
+      if (skippedBills.has(skipKey)) {
+        return false;
+      }
+      const dedupKey = this.billOccurrenceKey(bill.billId, bill.date);
+      if (seenBillKeys.has(dedupKey)) {
+        return false;
+      }
+      seenBillKeys.add(dedupKey);
+      return true;
+    });
+
+    const paycheckDates = this.getUniquePaycheckDates(allIncomes);
+    const { paycheckAssignments, manuallyAssignedBills } = this.buildInitialPaycheckAssignments(
+      paycheckDates,
+      allIncomes,
+      uniqueBills,
+      skippedBills,
+      manualAssignments,
+      incomeAttachedBillsRaw,
+      goals,
+      minCashOnHand,
+      minSavingsPerPaycheck
+    );
+
+    const trial = this.clonePaycheckAssignments(paycheckAssignments);
+    this.applyFundingPriority(
+      trial,
+      manuallyAssignedBills,
+      goals,
+      minCashOnHand,
+      minSavingsPerPaycheck,
+      'deficit_killer'
+    );
+    this.dedupeAssignmentBills(trial);
+    const paychecks = this.buildPaycheckEntries(
+      trial,
+      startingBalance,
+      maxBudgetRemaining,
+      goals,
+      minCashOnHand,
+      minSavingsPerPaycheck
+    );
+
+    return this.calculateGoalProjections(
+      goals,
+      paychecks,
+      format(endDate, 'yyyy-MM-dd'),
+      minCashOnHand,
+      minSavingsPerPaycheck
+    );
+  }
+
+  /**
    * Slice a full 12-month schedule to the requested viewport without recalculating assignments.
    */
   applyViewportFilter(
@@ -655,34 +760,31 @@ export class SchedulerService {
     );
   }
 
-  private assignBillsToPaychecks(
+  private buildInitialPaycheckAssignments(
     paycheckDates: Date[],
     allIncomes: ProjectedIncome[],
     allBills: ProjectedBill[],
-    startingBalance: number,
-    endDate: Date,
-    skippedBills: Set<string> = new Set(),
-    manualAssignments: Map<string, string> = new Map(),
-    incomeAttachedBillsRaw: Bill[] = [],
-    maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
-    goals: SavingsGoal[] = [],
-    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-    minSavingsPerPaycheck: number = 0
-  ): PaycheckEntry[] {
-    // Step 1: Initial assignment of bills to paychecks based on due dates
+    skippedBills: Set<string>,
+    manualAssignments: Map<string, string>,
+    incomeAttachedBillsRaw: Bill[],
+    goals: SavingsGoal[],
+    minCashOnHand: number,
+    minSavingsPerPaycheck: number
+  ): {
+    paycheckAssignments: { date: Date; incomes: ProjectedIncome[]; bills: ProjectedBill[] }[];
+    manuallyAssignedBills: Set<string>;
+  } {
     const paycheckAssignments: {
       date: Date;
       incomes: ProjectedIncome[];
       bills: ProjectedBill[];
     }[] = [];
 
-    // Track bills that have manual assignments
     const manuallyAssignedBills = new Set<string>();
 
-    // Initialize paycheck assignments
     for (let i = 0; i < paycheckDates.length; i++) {
       const paycheckDate = paycheckDates[i];
-      const incomesOnDate = allIncomes.filter(inc => 
+      const incomesOnDate = allIncomes.filter(inc =>
         isEqual(inc.date, paycheckDate)
       );
       paycheckAssignments.push({
@@ -692,14 +794,12 @@ export class SchedulerService {
       });
     }
 
-    // STEP 1: Apply manual assignments first (highest priority) - only for date-based bills
     for (const bill of allBills) {
       const billDateStr = format(bill.date, 'yyyy-MM-dd');
       const assignmentKey = `${bill.billId}-${billDateStr}`;
       const targetPaycheckDate = manualAssignments.get(assignmentKey);
-      
+
       if (targetPaycheckDate) {
-        // Skip if this bill is skipped
         const skipKey = `${bill.billId}-${targetPaycheckDate}`;
         if (skippedBills.has(skipKey)) continue;
 
@@ -713,31 +813,25 @@ export class SchedulerService {
       }
     }
 
-    // Separate remaining date-based bills (not manually assigned)
-    const remainingBills = allBills.filter(b => 
+    const remainingBills = allBills.filter(b =>
       !manuallyAssignedBills.has(this.billOccurrenceKey(b.billId, b.date))
     );
-    
-    // Separate bills with preferred income sources from regular bills (all are date-based now)
+
     const billsWithPreference = remainingBills.filter(b => b.preferredIncomeSourceId);
     const regularBills = remainingBills.filter(b => !b.preferredIncomeSourceId);
     const assignedPreferenceBills = new Set<string>();
 
-    // STEP 2A: Income-attached bills (e.g. groceries, gas) are per-paycheck recurring expenses
-    // without a due date. They attach to every paycheck from the linked income source and are
-    // intentionally exempt from due-date alignment and MAX_PREPAY_DAYS.
     for (const bill of incomeAttachedBillsRaw) {
       for (const paycheck of paycheckAssignments) {
         const hasMatchingIncome = paycheck.incomes.some(
           inc => inc.sourceId === bill.preferredIncomeSourceId
         );
-        
+
         if (hasMatchingIncome) {
           const paycheckDateStr = format(paycheck.date, 'yyyy-MM-dd');
           const skipKey = `${bill.id}-${paycheckDateStr}`;
-          
+
           if (!skippedBills.has(skipKey)) {
-            // Create a projected bill entry for this paycheck
             paycheck.bills.push({
               date: paycheck.date,
               billId: bill.id,
@@ -754,14 +848,13 @@ export class SchedulerService {
       }
     }
 
-    // STEP 2B: Assign bills with preferred income sources to the nearest matching paycheck
     for (const bill of billsWithPreference) {
       const paycheckDateStr = this.findPreferredPaycheck(
         bill,
         paycheckAssignments,
         skippedBills
       );
-      
+
       if (paycheckDateStr) {
         const paycheckIdx = paycheckAssignments.findIndex(
           p => format(p.date, 'yyyy-MM-dd') === paycheckDateStr
@@ -773,7 +866,6 @@ export class SchedulerService {
       }
     }
 
-    // STEP 2C: Assign regular bills to the latest eligible paycheck within MAX_PREPAY_DAYS
     for (const bill of regularBills) {
       const billKey = this.billOccurrenceKey(bill.billId, bill.date);
       if (assignedPreferenceBills.has(billKey)) continue;
@@ -797,14 +889,41 @@ export class SchedulerService {
       }
     }
 
-    // Sort all paycheck bills by priority
     for (const assignment of paycheckAssignments) {
       assignment.bills.sort((a, b) => {
         return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       });
     }
 
-    // Step 2–3: Ensemble rebalance (three strategies) and pick best schedule
+    return { paycheckAssignments, manuallyAssignedBills };
+  }
+
+  private assignBillsToPaychecks(
+    paycheckDates: Date[],
+    allIncomes: ProjectedIncome[],
+    allBills: ProjectedBill[],
+    startingBalance: number,
+    endDate: Date,
+    skippedBills: Set<string> = new Set(),
+    manualAssignments: Map<string, string> = new Map(),
+    incomeAttachedBillsRaw: Bill[] = [],
+    maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
+    goals: SavingsGoal[] = [],
+    minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
+    minSavingsPerPaycheck: number = 0
+  ): PaycheckEntry[] {
+    const { paycheckAssignments, manuallyAssignedBills } = this.buildInitialPaycheckAssignments(
+      paycheckDates,
+      allIncomes,
+      allBills,
+      skippedBills,
+      manualAssignments,
+      incomeAttachedBillsRaw,
+      goals,
+      minCashOnHand,
+      minSavingsPerPaycheck
+    );
+
     const assignmentSnapshot = this.clonePaycheckAssignments(paycheckAssignments);
     let bestPaychecks: PaycheckEntry[] = [];
     let bestScore = -Infinity;
