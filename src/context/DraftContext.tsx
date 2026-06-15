@@ -32,6 +32,7 @@ import {
   budgetToDraftFields,
   createDraftId,
   createEmptyDraftState,
+  copyDraftState,
 } from '../types/draft';
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
@@ -153,7 +154,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       };
 
       setCommitted(snapshot);
-      setDraft(structuredClone(snapshot));
+      setDraft(copyDraftState(snapshot));
       setDirtyDomains(new Set());
     } finally {
       setIsLoading(false);

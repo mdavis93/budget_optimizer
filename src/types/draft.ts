@@ -105,3 +105,17 @@ export function createEmptyDraftState(): DraftState {
     budget: null,
   };
 }
+
+/** Shallow copy for draft reload — avoids O(dataset) structuredClone when draft matches committed. */
+export function copyDraftState(state: DraftState): DraftState {
+  return {
+    incomes: [...state.incomes],
+    bills: [...state.bills],
+    debts: [...state.debts],
+    goals: [...state.goals],
+    skippedBills: [...state.skippedBills],
+    billAssignments: [...state.billAssignments],
+    incomeOverrides: [...state.incomeOverrides],
+    budget: state.budget ? { ...state.budget } : null,
+  };
+}
