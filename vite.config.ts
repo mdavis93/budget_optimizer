@@ -11,7 +11,6 @@ const mainExternals = [
   'electron',
   'better-sqlite3',
   'keytar',
-  'exceljs',
   'date-fns',
   'uuid',
 ];
