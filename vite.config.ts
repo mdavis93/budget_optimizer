@@ -120,19 +120,19 @@ export default defineConfig(async ({ mode }) => ({
   },
   build: {
     outDir: 'dist',
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) {
-            return 'recharts';
-          }
-          if (
-            id.includes('node_modules/react/') ||
-            id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/react-router-dom/')
-          ) {
-            return 'react-vendor';
-          }
+        codeSplitting: {
+          groups: [
+            {
+              test: /node_modules\/(recharts|d3-)/,
+              name: 'recharts',
+            },
+            {
+              test: /node_modules\/(react\/|react-dom\/|react-router-dom\/)/,
+              name: 'react-vendor',
+            },
+          ],
         },
       },
     },
