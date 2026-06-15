@@ -82,7 +82,7 @@ export default defineConfig(async ({ mode }) => ({
           plugins: [stripInvalidRollupOptions()],
           build: {
             outDir: 'dist-electron',
-            rollupOptions: {
+            rolldownOptions: {
               external: mainExternals,
               output: {
                 format: 'cjs',
@@ -100,7 +100,7 @@ export default defineConfig(async ({ mode }) => ({
           plugins: [stripInvalidRollupOptions()],
           build: {
             outDir: 'dist-electron',
-            rollupOptions: {
+            rolldownOptions: {
               external: ['electron'],
               output: {
                 format: 'cjs',
