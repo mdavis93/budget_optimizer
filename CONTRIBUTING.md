@@ -91,7 +91,9 @@ After auto-merge is enabled and checks pass, GitHub adds the PR to the **merge q
 
 **Workflow:** [`.github/workflows/main-stability.yml`](.github/workflows/main-stability.yml)
 
-Runs on every push to `main` / `master`:
+Runs on every push to `main` / `master`, when a pull request is **merged** into `main`, and via `workflow_dispatch` for recovery:
+
+> Auto-merge squash commits are attributed to `github-actions[bot]` and do not trigger `push` workflows. The `pull_request` `closed` trigger covers post-auto-merge stability checks.
 
 | Job name         | What it validates |
 |------------------|-------------------|

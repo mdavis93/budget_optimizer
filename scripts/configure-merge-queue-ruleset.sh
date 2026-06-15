@@ -5,8 +5,6 @@
 set -euo pipefail
 
 REPO="${1:-mdavis93/budget_optimizer}"
-OWNER="${REPO%%/*}"
-NAME="${REPO##*/}"
 RULESET_NAME="main-merge-queue"
 
 if ! command -v gh >/dev/null 2>&1; then
@@ -21,15 +19,9 @@ if [[ -n "${EXISTING_ID}" ]]; then
   echo "Removed existing ruleset ${RULESET_NAME} (id ${EXISTING_ID})."
 fi
 
-gh api "repos/${REPO}/rulesets" \
-  --method POST \
-  --input - <<'EOF' || {
-  echo "Merge queue ruleset API call failed."
-  echo "Enable merge queue manually:"
-  echo "  GitHub → Settings → Branches → Branch protection rules → main"
-  echo "  → Require merge queue (squash, build concurrency 1, ALLGREEN)"
-  exit 1
-}
+PAYLOAD="$(mktemp)"
+trap 'rm -f "${PAYLOAD}"' EXIT
+cat >"${PAYLOAD}" <<'EOF'
 {
   "name": "main-merge-queue",
   "target": "branch",
@@ -56,6 +48,14 @@ gh api "repos/${REPO}/rulesets" \
   ]
 }
 EOF
+
+if ! gh api "repos/${REPO}/rulesets" --method POST --input "${PAYLOAD}"; then
+  echo "Merge queue ruleset API call failed."
+  echo "Enable merge queue manually:"
+  echo "  GitHub → Settings → Branches → Branch protection rules → main"
+  echo "  → Require merge queue (squash, build concurrency 1, ALLGREEN)"
+  exit 1
+fi
 
 echo "Merge queue ruleset configured for ${REPO} main."
 echo "Ensure Allow auto-merge is enabled: Settings → General → Pull Requests."
