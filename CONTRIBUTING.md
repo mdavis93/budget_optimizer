@@ -195,3 +195,20 @@ Adjust `required_approving_review_count` if you want mandatory code review.
 ## Dependabot PRs
 
 Dependabot pull requests use the same **PR Gate** and auto-merge pipeline. Failed Dependabot PRs remain open without affecting user PRs or the merge-freeze machinery.
+
+Weekly dependency updates are grouped into up to **four pull requests**:
+
+| Group | Scope |
+|-------|--------|
+| `production-patch-minor` | Production deps, patch and minor bumps |
+| `production-major` | Production deps, major bumps |
+| `development-patch-minor` | Dev deps, patch and minor bumps |
+| `development-major` | Dev deps, major bumps |
+
+Configuration: [`.github/dependabot.yml`](.github/dependabot.yml).
+
+When `main` advances (including after a Dependabot PR merges), the **Dependabot Refresh** workflow ([`.github/workflows/dependabot-refresh.yml`](.github/workflows/dependabot-refresh.yml)) calls GitHub's update-branch API for each open Dependabot PR that is behind `main`. This keeps strict "branch up to date" protection satisfied without manual rebases. The workflow skips refresh while a `merge-freeze` issue is open.
+
+Major group PRs may legitimately fail `pr-gate / quality` (breaking migrations). Add the `do-not-automerge` label to hold them without blocking other PRs.
+
+Individual Dependabot PRs opened before grouping was enabled can be closed once grouped replacements appear on the next weekly run.
