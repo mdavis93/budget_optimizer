@@ -37,7 +37,9 @@ jobs:
         run: pnpm lint
 
       - name: Test with coverage
-        run: pnpm test:coverage:check 2>&1 | tee /tmp/test-output.txt
+        run: |
+          set -o pipefail
+          pnpm test:coverage:check 2>&1 | tee /tmp/test-output.txt
 
       - name: Verify test output is clean
         run: bash scripts/verify-test-output-clean.sh /tmp/test-output.txt
