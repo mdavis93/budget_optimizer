@@ -13,6 +13,7 @@ const api = {
     getAll: () => ipcRenderer.invoke('budget:get-all'),
     getAllWithStats: () => ipcRenderer.invoke('budget:get-all-with-stats'),
     getCurrent: () => ipcRenderer.invoke('budget:get-current'),
+    getSnapshot: () => ipcRenderer.invoke('budget:get-snapshot'),
     getStats: (budgetId: string) => ipcRenderer.invoke('budget:get-stats', budgetId),
     create: (input: BudgetInput) => ipcRenderer.invoke('budget:create', input),
     update: (id: string, input: Partial<BudgetInput>) => 

@@ -41,6 +41,17 @@ export interface BudgetInput {
   scheduleStartDate?: string;
 }
 
+export interface BudgetSnapshot {
+  incomes: Income[];
+  bills: Bill[];
+  goals: SavingsGoal[];
+  skippedBills: SkippedBill[];
+  billAssignments: BillAssignment[];
+  incomeOverrides: IncomeOverride[];
+  debts: Debt[];
+  budget: Budget | null;
+}
+
 interface GoalRow {
   id: string;
   budget_id: string;
@@ -1691,6 +1702,23 @@ export class DatabaseService {
     ).all(budgetId) as DebtRow[];
     
     return rows.map(row => this.mapDebtRow(row));
+  }
+
+  getBudgetSnapshot(budgetId: string): BudgetSnapshot {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const loadSnapshot = this.db.transaction(() => ({
+      incomes: this.getAllIncomes(budgetId),
+      bills: this.getAllBills(budgetId),
+      goals: this.getAllGoals(budgetId),
+      skippedBills: this.getSkippedBills(budgetId),
+      billAssignments: this.getBillAssignments(budgetId),
+      incomeOverrides: this.getIncomeOverrides(budgetId),
+      debts: this.getDebts(budgetId),
+      budget: this.getBudgetById(budgetId),
+    }));
+
+    return loadSnapshot();
   }
 
   getDebtById(id: string, budgetId: string): Debt | null {

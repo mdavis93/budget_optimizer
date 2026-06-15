@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DraftProvider, useDraft, useDraftOptional } from '../../src/context/DraftContext';
 import { ToastProvider } from '../../src/components/Toast';
-import { createMockElectronAPI } from '../mocks/electron-api.mock';
+import { createMockElectronAPI, createMockIncome, createMockBill } from '../mocks/electron-api.mock';
 import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 const mockUseAuth = vi.fn();
@@ -510,7 +510,7 @@ describe('DraftContext', () => {
 
       fireEvent.click(screen.getByText('reload-snapshot'));
       await waitFor(() => {
-        expect(mockAPI.income.getAll).toHaveBeenCalled();
+        expect(mockAPI.budget.getSnapshot).toHaveBeenCalled();
       });
 
       fireEvent.click(screen.getByText('get-amortization'));
@@ -764,7 +764,7 @@ describe('DraftContext', () => {
       });
     });
 
-    it('reloads quick-budget snapshot with debts when current budget exists', async () => {
+    it('reloads quick-budget snapshot via single IPC call', async () => {
       mockUseBudget.mockReturnValue({
         currentBudget: {
           id: 'budget-1',
@@ -777,9 +777,18 @@ describe('DraftContext', () => {
         refreshCurrentBudget: vi.fn().mockResolvedValue(undefined),
         loadBudgets: vi.fn().mockResolvedValue(undefined),
       });
-      (mockAPI as unknown as { debts: { getAll: ReturnType<typeof vi.fn> } }).debts.getAll.mockResolvedValue({
+      mockAPI.budget.getSnapshot.mockResolvedValue({
         success: true,
-        data: [{ id: 'debt-1', billId: 'bill-1', budgetId: 'budget-1', principalBalance: 500, apr: 0.1, monthlyPayment: 50, createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
+        data: {
+          incomes: [createMockIncome()],
+          bills: [createMockBill()],
+          goals: [],
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          debts: [],
+          budget: null,
+        },
       });
 
       renderProvider();
@@ -788,7 +797,7 @@ describe('DraftContext', () => {
       });
 
       await waitFor(() => {
-        expect(mockAPI.debts.getAll).toHaveBeenCalled();
+        expect(mockAPI.budget.getSnapshot).toHaveBeenCalled();
       });
     });
 
@@ -944,6 +953,19 @@ describe('DraftContext', () => {
       });
       mockAPI.skippedBills.getAll.mockResolvedValue({ success: true, data: [] });
       mockAPI.goals.getAll.mockResolvedValue({ success: true, data: [] });
+      mockAPI.budget.getSnapshot.mockResolvedValue({
+        success: true,
+        data: {
+          incomes: [createMockIncome()],
+          bills: [createMockBill()],
+          goals: [],
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          debts: [],
+          budget: null,
+        },
+      });
 
       renderProvider();
       await waitFor(() => {

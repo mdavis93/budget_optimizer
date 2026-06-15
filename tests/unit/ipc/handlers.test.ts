@@ -110,6 +110,16 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       createGoal: vi.fn(),
       updateGoal: vi.fn(() => null),
       deleteGoal: vi.fn(() => false),
+      getBudgetSnapshot: vi.fn(() => ({
+        incomes: [{ id: 'income-1' }],
+        bills: [{ id: 'bill-1' }],
+        goals: [{ id: 'goal-1' }],
+        skippedBills: [],
+        billAssignments: [],
+        incomeOverrides: [],
+        debts: [],
+        budget: { id: 'budget-1', name: 'Test' },
+      })),
     },
     scheduler: {
       generateSchedule: vi.fn(() => ({
@@ -523,6 +533,19 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('budget:get-current')).resolves.toEqual({
         success: true,
         data: { budget: { id: 'budget-1' }, isQuickBudget: false },
+      });
+      await expect(ipcMain.invoke('budget:get-snapshot')).resolves.toEqual({
+        success: true,
+        data: {
+          incomes: [{ id: 'income-1' }],
+          bills: [{ id: 'bill-1' }],
+          goals: [{ id: 'goal-1' }],
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          debts: [],
+          budget: { id: 'budget-1', name: 'Test' },
+        },
       });
       await expect(ipcMain.invoke('budget:get-stats', 'budget-1')).resolves.toEqual({
         success: true,

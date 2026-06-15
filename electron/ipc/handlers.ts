@@ -296,6 +296,10 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     })
   ));
 
+  ipcMain.handle('budget:get-snapshot', withBudgetGuard(services, () =>
+    ipcData('budget:get-snapshot', () => ready().budgetManager.getBudgetSnapshot())
+  ));
+
   ipcMain.handle('budget:get-stats', withBudgetGuard(services, (_, budgetId: string) =>
     ipcData('budget:get-stats', () => ready().budgetManager.getBudgetStats(budgetId))
   ));

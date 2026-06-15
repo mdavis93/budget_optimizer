@@ -131,61 +131,25 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isQuickBudget) {
-      const [incomesResult, billsResult, goalsResult, skippedResult, assignmentsResult, overridesResult] =
-        await Promise.all([
-          window.electronAPI.income.getAll(),
-          window.electronAPI.bills.getAll(),
-          window.electronAPI.goals.getAll(),
-          window.electronAPI.skippedBills.getAll(),
-          window.electronAPI.billAssignments.getAll(),
-          window.electronAPI.incomeOverrides.getAll(),
-        ]);
-
-      const snapshot: DraftState = {
-        incomes: incomesResult.data ?? [],
-        bills: billsResult.data ?? [],
-        debts: [],
-        goals: goalsResult.data ?? [],
-        skippedBills: skippedResult.data ?? [],
-        billAssignments: assignmentsResult.data ?? [],
-        incomeOverrides: overridesResult.data ?? [],
-        budget: null,
-      };
-
-      if (currentBudget) {
-        const debtsResult = await window.electronAPI.debts.getAll();
-        snapshot.debts = debtsResult.data ?? [];
-      }
-
-      setCommitted(snapshot);
-      setDraft(structuredClone(snapshot));
-      setDirtyDomains(new Set());
-      return;
-    }
-
     setIsLoading(true);
     try {
-      const [incomesResult, billsResult, goalsResult, skippedResult, assignmentsResult, overridesResult, debtsResult] =
-        await Promise.all([
-          window.electronAPI.income.getAll(),
-          window.electronAPI.bills.getAll(),
-          window.electronAPI.goals.getAll(),
-          window.electronAPI.skippedBills.getAll(),
-          window.electronAPI.billAssignments.getAll(),
-          window.electronAPI.incomeOverrides.getAll(),
-          currentBudget ? window.electronAPI.debts.getAll() : Promise.resolve({ success: true, data: [] as Debt[] }),
-        ]);
+      const result = await window.electronAPI.budget.getSnapshot();
+      if (!result.success || !result.data) {
+        return;
+      }
+
+      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, budget } =
+        result.data;
 
       const snapshot: DraftState = {
-        incomes: incomesResult.data ?? [],
-        bills: billsResult.data ?? [],
-        debts: debtsResult.data ?? [],
-        goals: goalsResult.data ?? [],
-        skippedBills: skippedResult.data ?? [],
-        billAssignments: assignmentsResult.data ?? [],
-        incomeOverrides: overridesResult.data ?? [],
-        budget: currentBudget ? budgetToDraftFields(currentBudget) : null,
+        incomes: incomes ?? [],
+        bills: bills ?? [],
+        debts: isQuickBudget ? [] : (debts ?? []),
+        goals: goals ?? [],
+        skippedBills: skippedBills ?? [],
+        billAssignments: billAssignments ?? [],
+        incomeOverrides: incomeOverrides ?? [],
+        budget: isQuickBudget ? null : (budget ? budgetToDraftFields(budget) : null),
       };
 
       setCommitted(snapshot);
@@ -194,7 +158,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [isUnlocked, hasBudgetSelected, isQuickBudget, currentBudget]);
+  }, [isUnlocked, hasBudgetSelected, isQuickBudget]);
 
   useEffect(() => {
     reloadSnapshot();
