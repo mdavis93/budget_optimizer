@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import ExcelJS from 'exceljs';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { ScheduleData } from './scheduler.service';
@@ -26,7 +27,8 @@ export class SpreadsheetService {
       this.buildScheduleSheet(workbook, schedule);
 
       const finalPath = outputPath.endsWith('.xlsx') ? outputPath : `${outputPath}.xlsx`;
-      await workbook.xlsx.writeFile(finalPath);
+      const buffer = await workbook.xlsx.writeBuffer();
+      await fs.writeFile(finalPath, buffer);
       return { success: true };
     } catch (error) {
       return {
