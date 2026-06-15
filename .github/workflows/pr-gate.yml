@@ -3,6 +3,10 @@ name: PR Gate
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   pr-gate:
     name: pr-gate
