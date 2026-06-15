@@ -5,6 +5,8 @@ import { CategoryPieChart, ChartSuspense, IncomeExpensesChart, SavingsAreaChart 
 import { CHART_COLORS } from '../components/charts/chartTheme';
 import clsx from 'clsx';
 
+type TimePeriod = 3 | 6 | 12;
+
 const CATEGORY_COLORS: Record<string, string> = {
   Housing: CHART_COLORS.primary,
   Utilities: CHART_COLORS.warning,
