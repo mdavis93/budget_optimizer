@@ -19,7 +19,7 @@ gh api "repos/${REPO}/branches/main/protection" \
   "required_status_checks": {
     "strict": true,
     "checks": [
-      { "context": "pr-gate" },
+      { "context": "pr-gate / quality" },
       { "context": "commitlint" }
     ]
   },

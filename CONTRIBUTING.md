@@ -60,10 +60,10 @@ If a PR contains multiple commits, **all** of them are validated in CI. Fix bad 
 
 | Check name   | What it validates |
 |--------------|-------------------|
-| `pr-gate`    | Typecheck, lint, coverage, production CSP build, telemetry guard, production dependency audit |
+| `pr-gate / quality` | Typecheck, lint, coverage, production CSP build, telemetry guard, production dependency audit |
 | `commitlint` | Conventional Commits on every commit in the PR |
 
-When a PR enters the **merge queue**, only `pr-gate` runs again on the `merge_group` event. Commitlint does not re-run on merge groups.
+When a PR enters the **merge queue**, only `pr-gate / quality` runs again on the `merge_group` event. Commitlint does not re-run on merge groups.
 
 ### Automated merge and merge queue
 
@@ -81,7 +81,7 @@ When a PR enters the **merge queue**, only `pr-gate` runs again on the `merge_gr
 | Same repository | Fork PRs are excluded |
 | No manual brake | PR does not have the `do-not-automerge` label |
 | No active freeze | Repository variable `MERGE_FREEZE` is not `true` |
-| Required checks green | `pr-gate` and `commitlint` pass on the PR |
+| Required checks green | `pr-gate / quality` and `commitlint` pass on the PR |
 
 After auto-merge is enabled and checks pass, GitHub adds the PR to the **merge queue**. The queue runs `pr-gate` on a synthetic merge branch, then squash-merges to `main`.
 
@@ -128,7 +128,7 @@ Branch protection and merge queue together enforce the automated pipeline on `ma
 | Require a pull request before merging | On |
 | Require status checks to pass before merging | On |
 | Require branches to be up to date before merging | On |
-| Required status checks | `pr-gate`, `commitlint` |
+| Required status checks | `pr-gate / quality`, `commitlint` |
 | Enforce for administrators | On |
 | Require merge queue | On (squash, serial, ALLGREEN) |
 | Allow auto-merge | On (Settings → General → Pull Requests) |
@@ -154,7 +154,7 @@ gh api repos/mdavis93/budget_optimizer/branches/main/protection \
   "required_status_checks": {
     "strict": true,
     "checks": [
-      { "context": "pr-gate" },
+      { "context": "pr-gate / quality" },
       { "context": "commitlint" }
     ]
   },
