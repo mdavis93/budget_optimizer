@@ -22,7 +22,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function SummaryPage() {
-  const { incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance } = useData();
+  const { incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash } = useData();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(3);
   const [scheduleData, setScheduleData] = useState<{
     paychecks: Array<{
@@ -87,7 +87,7 @@ export default function SummaryPage() {
     loadScheduleData();
     
     return () => { isMounted = false; };
-  }, [incomes, bills, timePeriod, generateSchedule, scheduleStartDate, scheduleStartingBalance]);
+  }, [incomes, bills, timePeriod, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
 
   const handleAPYChange = async (newAPY: number) => {
     setSavingsAPY(newAPY);
