@@ -11,7 +11,7 @@ vi.mock('../../src/context/DraftContext', () => ({
 }));
 
 function GuardHarness() {
-  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
+  const { guardAction, guardNavigate, unsavedDialog } = useUnsavedChangesGuard();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,6 +19,9 @@ function GuardHarness() {
     <div>
       <div data-testid="pathname">{location.pathname}</div>
       <button onClick={() => guardAction(() => navigate('/next'), 'navigate')}>go-next</button>
+      <a href="/next" onClick={(event) => guardNavigate(event, () => navigate('/next'), 'navigate')}>
+        link-next
+      </a>
       {unsavedDialog}
     </div>
   );
@@ -59,6 +62,20 @@ describe('useUnsavedChangesGuard', () => {
       await waitFor(() => {
         expect(screen.getByText('next-page')).toBeInTheDocument();
       });
+    });
+    it('blocks link navigation when draft is dirty', () => {
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: true,
+        isSaving: false,
+        saveAll: vi.fn().mockResolvedValue(true),
+        discardAll: vi.fn(),
+      });
+
+      renderGuard();
+      fireEvent.click(screen.getByText('link-next'));
+
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/');
+      expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     });
   });
 

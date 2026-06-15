@@ -51,6 +51,7 @@ describe('Layout', () => {
     });
     mockUseUnsavedChangesGuard.mockReturnValue({
       guardAction: (action: () => void) => action(),
+      guardNavigate: () => undefined,
       unsavedDialog: null,
     });
   });
@@ -97,6 +98,36 @@ describe('Layout', () => {
       renderWithRouter(<Layout />, { route: '/income', mockAPI });
       expect(screen.getByText('Quick Budget')).toBeInTheDocument();
       expect(screen.getAllByLabelText('Unsaved changes').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('guards quit app through unsaved changes hook', async () => {
+      const user = userEvent.setup();
+      const guardAction = vi.fn();
+      mockUseUnsavedChangesGuard.mockReturnValue({
+        guardAction,
+        guardNavigate: vi.fn(),
+        unsavedDialog: null,
+      });
+
+      renderWithRouter(<Layout />, { route: '/dashboard', mockAPI });
+      await user.click(screen.getByRole('button', { name: /Quit App/i }));
+
+      expect(guardAction).toHaveBeenCalledWith(expect.any(Function), 'quit the app');
+    });
+
+    it('routes sidebar navigation through guardNavigate', async () => {
+      const user = userEvent.setup();
+      const guardNavigate = vi.fn();
+      mockUseUnsavedChangesGuard.mockReturnValue({
+        guardAction: vi.fn(),
+        guardNavigate,
+        unsavedDialog: null,
+      });
+
+      renderWithRouter(<Layout />, { route: '/dashboard', mockAPI });
+      await user.click(screen.getByRole('link', { name: /Bills/i }));
+
+      expect(guardNavigate).toHaveBeenCalled();
     });
 
     it('pings activity on user input after throttle window', async () => {

@@ -1,5 +1,5 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, type MouseEvent } from 'react';
 import {
   LayoutDashboard,
   Wallet,
@@ -42,9 +42,21 @@ export default function Layout() {
   const { lock } = useAuth();
   const { currentBudget, isQuickBudget } = useBudget();
   const { isDraftMode, isDomainDirty } = useDraftData();
-  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
+  const { guardAction, guardNavigate, unsavedDialog } = useUnsavedChangesGuard();
   const location = useLocation();
+  const navigate = useNavigate();
   const currentDomain = ROUTE_DRAFT_DOMAIN[location.pathname];
+
+  const handleNavClick = (to: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (location.pathname === to) {
+      return;
+    }
+    guardNavigate(event, () => navigate(to), 'leave this page');
+  };
+
+  const handleQuit = () => {
+    guardAction(() => window.electronAPI.quitApp(), 'quit the app');
+  };
 
   useEffect(() => {
     let lastPing = Date.now();
@@ -118,6 +130,7 @@ export default function Layout() {
               <NavLink
                 key={to}
                 to={to}
+                onClick={handleNavClick(to)}
                 className={({ isActive }) =>
                   clsx(
                     'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
@@ -139,6 +152,7 @@ export default function Layout() {
           <div className="p-4 space-y-1 border-t border-[var(--color-border)]">
             <NavLink
               to="/settings"
+              onClick={handleNavClick('/settings')}
               className={({ isActive }) =>
                 clsx(
                   'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
@@ -162,7 +176,7 @@ export default function Layout() {
               Lock App
             </button>
             <button
-              onClick={() => window.electronAPI.quitApp()}
+              onClick={handleQuit}
               className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-[var(--color-text-secondary)] hover:bg-danger-50 dark:hover:bg-danger-500/10 hover:text-danger-600 dark:hover:text-danger-500"
             >
               <Power className="w-5 h-5" />
