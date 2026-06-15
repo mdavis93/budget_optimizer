@@ -3,13 +3,13 @@ import path from 'path';
 
 /**
  * E2E Test Suite for Goals Feature
- * 
- * These tests run against the actual Electron app
+ *
+ * STATUS: All tests are skipped placeholders — not run in CI.
+ * See tests/e2e/README.md for coverage gaps and enablement steps.
+ *
  * Prerequisites:
- * 1. Build the app: npm run build
- * 2. Run tests: npm run test:e2e
- * 
- * Note: These tests require the app to be built first
+ * 1. Build the app: pnpm run build:vite
+ * 2. Run tests: pnpm run test:e2e
  */
 
 test.describe('Goals Feature', () => {
