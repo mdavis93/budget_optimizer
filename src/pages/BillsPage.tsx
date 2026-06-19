@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import clsx from 'clsx';
 import { getMonthlyBillEquivalent } from '../utils/cadence';
+import { formatCurrency } from '../utils/formatCurrency';
 
 interface BillFormProps {
   bill?: Bill;
@@ -267,14 +268,7 @@ export default function BillsPage() {
     setDeletingId(null);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
-
-  const filteredBills = useMemo(() => 
+  const filteredBills = useMemo(() =>
     filterCategory === 'all' 
       ? bills 
       : bills.filter(b => b.category === filterCategory),

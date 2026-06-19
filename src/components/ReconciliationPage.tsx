@@ -9,6 +9,7 @@ import {
   formatShortfallCopy,
   formatUnfundableReasonCopy,
 } from '../utils/reconciliationCopy';
+import { formatCurrency } from '../utils/formatCurrency';
 
 interface ReconciliationPageProps {
   report: ReconciliationReport;
@@ -60,9 +61,6 @@ export default function ReconciliationPage({
   const handleApply = async () => {
     await onApplyFixes(selectedFixesArray);
   };
-
-  const formatCurrency = (amount: number) => 
-    `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const summaryCopy = useMemo(() => formatReconciliationSummary(report), [report]);
 
@@ -195,9 +193,6 @@ export default function ReconciliationPage({
 }
 
 function ShortfallCard({ shortfall }: { shortfall: ShortfallDetail }) {
-  const formatCurrency = (amount: number) => 
-    `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   const shortfallCopy = useMemo(() => formatShortfallCopy(shortfall), [shortfall]);
 
   return (
@@ -233,9 +228,6 @@ function ShortfallCard({ shortfall }: { shortfall: ShortfallDetail }) {
 }
 
 function BillItem({ bill }: { bill: PaycheckBill }) {
-  const formatCurrency = (amount: number) => 
-    `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   const reasonCopy = useMemo(() => {
     if (!bill.isUnpayable || !bill.unfundableReason) return null;
     return formatUnfundableReasonCopy(bill.unfundableReason, {
@@ -293,9 +285,6 @@ function FixCard({
   onToggle: () => void;
   deficitAmount?: number;
 }) {
-  const formatCurrency = (amount: number) => 
-    `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   const fixCopy = useMemo(
     () => formatProposedFixCopy(fix, { deficitAmount }),
     [fix, deficitAmount]

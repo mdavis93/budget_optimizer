@@ -337,6 +337,47 @@ export function validateSettings(settings: Record<string, unknown>): ValidationR
   return { valid: errors.length === 0, errors };
 }
 
+export function validateSkippedBill(input: { billId: string; skipDate: string }): ValidationResult {
+  const errors: string[] = [];
+
+  if (!ID_REGEX.test(input.billId)) {
+    errors.push('Invalid billId');
+  }
+
+  if (!DATE_REGEX.test(input.skipDate)) {
+    errors.push('Invalid skipDate');
+  } else {
+    const date = new Date(input.skipDate);
+    if (isNaN(date.getTime())) {
+      errors.push('skipDate is not a valid date');
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateBillAssignment(input: {
+  billId: string;
+  billDueDate: string;
+  paycheckDate: string;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  if (!ID_REGEX.test(input.billId)) {
+    errors.push('Invalid billId');
+  }
+
+  if (!DATE_REGEX.test(input.billDueDate)) {
+    errors.push('Invalid billDueDate');
+  }
+
+  if (!DATE_REGEX.test(input.paycheckDate)) {
+    errors.push('Invalid paycheckDate');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 export function validateDraftOverlay(overlay: {
   incomes?: Array<Parameters<typeof validateIncome>[0] & { id?: string }>;
   bills?: Array<Parameters<typeof validateBill>[0] & { id?: string }>;

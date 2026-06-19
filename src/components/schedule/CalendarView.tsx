@@ -3,6 +3,7 @@ import { format, startOfMonth, isSameDay } from 'date-fns';
 import { PiggyBank } from 'lucide-react';
 import { PaycheckEntry } from '../../types';
 import clsx from 'clsx';
+import { formatCurrency } from '../../utils/formatCurrency';
 
 interface CalendarViewProps {
   paychecks: PaycheckEntry[];
@@ -37,14 +38,7 @@ export default function CalendarView({ paychecks }: CalendarViewProps) {
     return days;
   }, [currentMonth]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatWholeCurrency = (amount: number) => formatCurrency(amount, { fractionDigits: 0 });
 
   return (
     <div className="card">
@@ -102,7 +96,7 @@ export default function CalendarView({ paychecks }: CalendarViewProps) {
               {paycheck && (
                 <div className="space-y-1">
                   <div className="text-xs px-1 py-0.5 rounded bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400 truncate">
-                    +{formatCurrency(paycheck.totalIncome)}
+                    +{formatWholeCurrency(paycheck.totalIncome)}
                   </div>
                   {paycheck.bills.length > 0 && (
                     <div className="text-xs px-1 py-0.5 rounded bg-danger-100 text-danger-700 dark:bg-danger-500/20 dark:text-danger-400 truncate">
@@ -112,7 +106,7 @@ export default function CalendarView({ paychecks }: CalendarViewProps) {
                   {paycheck.savingsDeposit > 0 && (
                     <div className="text-xs px-1 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400 truncate flex items-center gap-0.5">
                       <PiggyBank className="w-3 h-3" />
-                      {formatCurrency(paycheck.savingsDeposit)}
+                      {formatWholeCurrency(paycheck.savingsDeposit)}
                     </div>
                   )}
                 </div>

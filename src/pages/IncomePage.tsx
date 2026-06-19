@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
+import { formatCurrency } from '../utils/formatCurrency';
 
 interface IncomeFormProps {
   income?: Income;
@@ -148,13 +149,6 @@ export default function IncomePage() {
     if (!deletingId) return;
     await deleteIncome(deletingId);
     setDeletingId(null);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
   };
 
   const totalMonthlyIncome = incomes
