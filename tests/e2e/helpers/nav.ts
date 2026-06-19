@@ -19,7 +19,9 @@ export type NavTarget =
  * capitalization, so match the DOM text case-insensitively.
  */
 export async function navigateTo(window: Page, target: NavTarget): Promise<void> {
-  await window.getByRole('link', { name: target }).click();
+  // Exact match: sidebar labels are exact, and avoids colliding with in-page
+  // links like the dashboard's "View full schedule".
+  await window.getByRole('link', { name: target, exact: true }).click();
   await expect(window.getByRole('heading', { name: new RegExp(target, 'i') }).first()).toBeVisible();
   await expectNoSpinner(window);
 }
