@@ -12,6 +12,10 @@ jobs:
     name: pr-gate
     uses: ./.github/workflows/_shared-quality.yml
 
+  e2e:
+    name: e2e
+    uses: ./.github/workflows/_e2e.yml
+
   commitlint:
     name: commitlint
     runs-on: ubuntu-latest

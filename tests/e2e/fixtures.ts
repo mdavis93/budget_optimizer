@@ -61,8 +61,12 @@ export const test = base.extend<HarnessFixtures>({
   },
 
   electronApp: async ({ userDataDir }, use) => {
+    const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`];
+    // CI containers can't use Chromium's setuid sandbox; disable it there only.
+    if (process.env.CI) args.push('--no-sandbox');
+
     const app = await electron.launch({
-      args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`],
+      args,
       env: buildLaunchEnv(),
     });
 
