@@ -1,28 +1,59 @@
 # End-to-end tests
 
-Playwright E2E tests live here and run against the packaged Electron app (`dist-electron/main.js`).
+Playwright user-journey tests that run against the **built** Electron app
+(`dist-electron/main.js`). They drive the real renderer UI and the real
+`electronAPI` IPC — there is no auth bypass and no test-only backdoor.
 
-## Current coverage gap
+## Running
 
-All specs in this directory are currently **`test.skip` placeholders**. They are not executed in CI (`_shared-quality.yml` runs Vitest only). This is why recent production bugs were not caught here:
+```bash
+pnpm build:vite        # produce dist/ + dist-electron/
+pnpm test:e2e          # run the whole suite
+pnpm test:e2e smoke    # run a single spec
+```
 
-| Bug | Why E2E missed it |
-|-----|-------------------|
-| Goals page perpetual spinner | No active navigation test; spec is skipped |
-| Debts page perpetual spinner | No debts E2E spec exists |
+> If Electron fails to launch as plain Node (the binary prints a Node version,
+> or Playwright reports "Process failed to launch"), the parent process is
+> exporting `ELECTRON_RUN_AS_NODE=1` (common when launched from an Electron-based
+> editor). The harness strips it automatically in `fixtures.ts`.
 
-## Component tests (acceptance layer)
+## How the harness works
 
-Page-level acceptance tests are Vitest + Testing Library suites under `tests/component/`. Those **did run in CI** but used stable `mockReturnValue` draft mocks, which hide the real-world behavior of `useDraftData()` / `useDraftActions()` returning new object references each render.
+`fixtures.ts` launches Electron against a **throwaway temp `userData` dir** and
+stubs native dialogs (Keychain save prompt, file save/open) so headless runs
+never block. Each test therefore boots into first-run setup and creates — then
+destroys — its own encrypted vault. No credentials or data outlive a test.
 
-Regression tests in `GoalsPage.test.tsx` and `DebtsPage.test.tsx` (describe block: **loading regression**) now simulate unstable draft hook references via `tests/helpers/unstableDraftMock.ts`.
+Helpers (`helpers/`):
 
-## Enabling real E2E coverage
+- `auth.ts` — `completeSetup` (create master password + recovery key + skip
+  biometric) and `unlock`.
+- `budget.ts` / `app.ts` — create a named budget and reach the app shell.
+  A named budget enables **draft mode** (edits stage in an overlay until
+  "Save Changes"); Quick Budget persists instantly.
+- `nav.ts` — `navigateTo` + `expectNoSpinner` (the load-regression guard).
+- `seed.ts` — pre-seed via real `electronAPI.*.create`, then `reloadShell`
+  (which reselects the budget from the picker, mirroring a real relaunch) so
+  the renderer re-reads the snapshot.
 
-Before un-skipping specs, add:
+### Arrange / act / assert
 
-1. **Auth bypass** — fixture or test-only IPC to unlock without manual password entry
-2. **Database seeding** — deterministic budget with bills, debts, and goals
-3. **Navigation assertions** — wait for page heading/content, assert `.animate-spin` is absent after load
+Setup-style prerequisites are seeded via IPC for speed; the **act and assert
+phases always run through the UI**. Setup itself (the golden path) is driven
+fully through the UI.
 
-Suggested first spec: navigate to `/goals` and `/debts` after seeding data and assert primary content renders within a timeout.
+## Coverage
+
+Specs are feature/domain-scoped and overlap at seams rather than running one
+monolithic end-to-end path:
+
+- `smoke.spec.ts` — setup → app shell, plus a crawl of every sidebar route
+  asserting no stuck spinner (regression guard for the past Goals/Debts hangs).
+- `income`, `bills`, `goals`, `debts` — happy / sad / malicious lanes per domain.
+- `schedule.spec.ts` — income + bills → rendered schedule, plus the empty state.
+- `nav-guard.spec.ts` — the unsaved-changes navigation guard (Cancel / Discard
+  All / Save All Changes).
+- `auth.spec.ts` — lock → unlock, and a rejected password.
+
+Touchpoint coverage is tracked in `tests/e2e/touchpoint-inventory.json` and
+enforced by `scripts/e2e-touchpoints.cjs` (see that file for the tiers/targets).

@@ -1,5 +1,4 @@
 import { defineConfig } from '@playwright/test';
-import path from 'path';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -28,6 +27,3 @@ export default defineConfig({
   ],
   outputDir: 'test-results/',
 });
-
-// Helper for launching Electron app in tests
-export const electronAppPath = path.join(__dirname, 'dist-electron', 'main.js');
