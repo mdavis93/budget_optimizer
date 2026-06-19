@@ -1,50 +1,6 @@
-import {
-  Bill,
-  BillAssignment,
-  Budget,
-  Debt,
-  Income,
-  IncomeOverride,
-  SavingsGoal,
-  SkippedBill,
-} from './index';
+import type { Budget, DraftBudgetFields, DraftDomain, DraftState } from '@shared/types';
 
-export type DraftDomain = 'income' | 'bills' | 'debts' | 'goals' | 'schedule' | 'budget';
-
-export interface DraftBudgetFields {
-  name: string;
-  startingBalance: number;
-  targetCashOnHand: number;
-  minCashOnHand: number;
-  minSavingsPerPaycheck: number;
-  scheduleStartDate: string;
-}
-
-export interface DraftState {
-  incomes: Income[];
-  bills: Bill[];
-  debts: Debt[];
-  goals: SavingsGoal[];
-  skippedBills: SkippedBill[];
-  billAssignments: BillAssignment[];
-  incomeOverrides: IncomeOverride[];
-  budget: DraftBudgetFields | null;
-}
-
-export interface DraftOverlay {
-  incomes?: Income[];
-  bills?: Bill[];
-  goals?: SavingsGoal[];
-  debts?: Debt[];
-  skippedBills?: SkippedBill[];
-  billAssignments?: BillAssignment[];
-  incomeOverrides?: IncomeOverride[];
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-  minSavingsPerPaycheck?: number;
-  scheduleStartDate?: string;
-}
+export type { DraftBudgetFields, DraftDomain, DraftOverlay, DraftState } from '@shared/types';
 
 export const DRAFT_DOMAIN_LABELS: Record<DraftDomain, string> = {
   income: 'Income',
