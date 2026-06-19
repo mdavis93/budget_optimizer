@@ -4,6 +4,7 @@ import { budgetLogger as logger } from './logger.service';
 
 export class BudgetManager {
   private currentBudgetId: string | null = null;
+  private currentBudget: Budget | null = null;
   private isQuickBudgetMode: boolean = false;
   private quickBudgetService: QuickBudgetService;
   private database: DatabaseService;
@@ -37,6 +38,7 @@ export class BudgetManager {
     }
 
     this.currentBudgetId = id;
+    this.currentBudget = budget;
     this.isQuickBudgetMode = false;
     this.quickBudgetService.clear();
     
@@ -46,14 +48,31 @@ export class BudgetManager {
 
   startQuickBudget(): void {
     this.isQuickBudgetMode = true;
+    this.currentBudget = null;
     this.quickBudgetService.clear();
     logger.info('Started Quick Budget mode');
   }
 
   endQuickBudget(): void {
     this.isQuickBudgetMode = false;
+    this.currentBudget = null;
     this.quickBudgetService.clear();
     logger.info('Ended Quick Budget mode');
+  }
+
+  /**
+   * Returns the current budget record, reusing the cached copy when it matches
+   * the active budget id. Collapses the repeated getBudgetById reads the
+   * settings getters would otherwise each perform per schedule build.
+   */
+  private getCurrentBudgetRecord(): Budget | null {
+    if (!this.currentBudgetId) {
+      return null;
+    }
+    if (!this.currentBudget || this.currentBudget.id !== this.currentBudgetId) {
+      this.currentBudget = this.database.getBudgetById(this.currentBudgetId);
+    }
+    return this.currentBudget;
   }
 
   // Budget CRUD (always goes to database)
@@ -70,7 +89,11 @@ export class BudgetManager {
   }
 
   updateBudget(id: string, input: Partial<BudgetInput>): Budget | null {
-    return this.database.updateBudget(id, input);
+    const updated = this.database.updateBudget(id, input);
+    if (id === this.currentBudgetId) {
+      this.currentBudget = updated;
+    }
+    return updated;
   }
 
   deleteBudget(id: string): boolean {
@@ -95,16 +118,14 @@ export class BudgetManager {
     if (this.isQuickBudgetMode) {
       return this.quickBudgetService.getStartingBalance();
     }
-    if (!this.currentBudgetId) return 0;
-    const budget = this.database.getBudgetById(this.currentBudgetId);
-    return budget?.startingBalance ?? 0;
+    return this.getCurrentBudgetRecord()?.startingBalance ?? 0;
   }
 
   setStartingBalance(balance: number): void {
     if (this.isQuickBudgetMode) {
       this.quickBudgetService.setStartingBalance(balance);
     } else if (this.currentBudgetId) {
-      this.database.updateBudget(this.currentBudgetId, { startingBalance: balance });
+      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { startingBalance: balance });
     }
   }
 
@@ -113,16 +134,14 @@ export class BudgetManager {
     if (this.isQuickBudgetMode) {
       return this.quickBudgetService.getTargetCashOnHand();
     }
-    if (!this.currentBudgetId) return 250;
-    const budget = this.database.getBudgetById(this.currentBudgetId);
-    return budget?.targetCashOnHand ?? 250;
+    return this.getCurrentBudgetRecord()?.targetCashOnHand ?? 250;
   }
 
   setTargetCashOnHand(amount: number): void {
     if (this.isQuickBudgetMode) {
       this.quickBudgetService.setTargetCashOnHand(amount);
     } else if (this.currentBudgetId) {
-      this.database.updateBudget(this.currentBudgetId, { targetCashOnHand: amount });
+      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { targetCashOnHand: amount });
     }
   }
 
@@ -131,16 +150,14 @@ export class BudgetManager {
     if (this.isQuickBudgetMode) {
       return this.quickBudgetService.getMinCashOnHand();
     }
-    if (!this.currentBudgetId) return 100;
-    const budget = this.database.getBudgetById(this.currentBudgetId);
-    return budget?.minCashOnHand ?? 100;
+    return this.getCurrentBudgetRecord()?.minCashOnHand ?? 100;
   }
 
   setMinCashOnHand(amount: number): void {
     if (this.isQuickBudgetMode) {
       this.quickBudgetService.setMinCashOnHand(amount);
     } else if (this.currentBudgetId) {
-      this.database.updateBudget(this.currentBudgetId, { minCashOnHand: amount });
+      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { minCashOnHand: amount });
     }
   }
 
@@ -149,16 +166,14 @@ export class BudgetManager {
     if (this.isQuickBudgetMode) {
       return this.quickBudgetService.getMinSavingsPerPaycheck();
     }
-    if (!this.currentBudgetId) return 0;
-    const budget = this.database.getBudgetById(this.currentBudgetId);
-    return budget?.minSavingsPerPaycheck ?? 0;
+    return this.getCurrentBudgetRecord()?.minSavingsPerPaycheck ?? 0;
   }
 
   setMinSavingsPerPaycheck(amount: number): void {
     if (this.isQuickBudgetMode) {
       this.quickBudgetService.setMinSavingsPerPaycheck(amount);
     } else if (this.currentBudgetId) {
-      this.database.updateBudget(this.currentBudgetId, { minSavingsPerPaycheck: amount });
+      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { minSavingsPerPaycheck: amount });
     }
   }
 
@@ -166,12 +181,12 @@ export class BudgetManager {
     if (this.isQuickBudgetMode) {
       return this.quickBudgetService.getScheduleStartDate();
     }
-    if (!this.currentBudgetId) {
+    const budget = this.getCurrentBudgetRecord();
+    if (!budget) {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     }
-    const budget = this.database.getBudgetById(this.currentBudgetId);
-    return budget?.scheduleStartDate ?? `${budget?.createdAt.slice(0, 7)}-01`;
+    return budget.scheduleStartDate ?? `${budget.createdAt.slice(0, 7)}-01`;
   }
 
   // Income Operations (routed based on mode)
