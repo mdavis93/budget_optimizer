@@ -38,7 +38,7 @@ export default defineConfig(async ({ mode }) => {
     react(),
     {
       name: 'production-csp',
-      transformIndexHtml(html) {
+      transformIndexHtml(html: string) {
         if (mode === 'production') {
           return html.replace(
             /<meta http-equiv="Content-Security-Policy" content="[^"]*">/,

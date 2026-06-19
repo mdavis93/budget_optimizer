@@ -22,7 +22,7 @@ export class SpreadsheetService {
 
       const finalPath = outputPath.endsWith('.xlsx') ? outputPath : `${outputPath}.xlsx`;
       const buffer = await workbook.xlsx.writeBuffer();
-      await fs.writeFile(finalPath, buffer);
+      await fs.writeFile(finalPath, new Uint8Array(buffer));
       return { success: true };
     } catch (error) {
       return {
