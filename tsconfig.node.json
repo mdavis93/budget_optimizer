@@ -8,7 +8,10 @@
     "strict": true,
     "outDir": "dist-electron",
     "rootDir": ".",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    }
   },
-  "include": ["vite.config.ts", "electron/**/*"]
+  "include": ["vite.config.ts", "electron/**/*", "shared"]
 }

@@ -5,6 +5,39 @@ import fs from 'fs';
 import { CryptoService } from './crypto.service';
 import { validateBill, validateIncome, validateGoal, validateDebt, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
+import type {
+  AppSettings,
+  Bill,
+  BillAssignment,
+  Budget,
+  BudgetInput,
+  BudgetSnapshot,
+  Debt,
+  DebtInput,
+  Income,
+  IncomeOverride,
+  SavingsGoal,
+  SavingsGoalInput,
+  SkippedBill,
+} from '@shared/types';
+
+// Re-export canonical domain types so existing `from './database.service'`
+// consumers continue to resolve unchanged.
+export type {
+  AppSettings,
+  Bill,
+  BillAssignment,
+  Budget,
+  BudgetInput,
+  BudgetSnapshot,
+  Debt,
+  DebtInput,
+  Income,
+  IncomeOverride,
+  SavingsGoal,
+  SavingsGoalInput,
+  SkippedBill,
+};
 
 function defaultScheduleStartDate(createdAt: string): string {
   const created = new Date(createdAt);
@@ -20,62 +53,11 @@ interface BudgetRow {
   updated_at: string;
 }
 
-export interface Budget {
-  id: string;
-  name: string;
-  startingBalance: number;
-  targetCashOnHand: number;
-  minCashOnHand: number;
-  minSavingsPerPaycheck: number;
-  scheduleStartDate: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BudgetInput {
-  name: string;
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-  minSavingsPerPaycheck?: number;
-  scheduleStartDate?: string;
-}
-
-export interface BudgetSnapshot {
-  incomes: Income[];
-  bills: Bill[];
-  goals: SavingsGoal[];
-  skippedBills: SkippedBill[];
-  billAssignments: BillAssignment[];
-  incomeOverrides: IncomeOverride[];
-  debts: Debt[];
-  budget: Budget | null;
-}
-
 interface GoalRow {
   id: string;
   budget_id: string;
   data: string;
   created_at: string;
-}
-
-export interface SavingsGoal {
-  id: string;
-  budgetId: string;
-  name: string;
-  targetAmount: number;
-  targetDate: string;
-  alreadySaved: number;
-  priority: number;
-  createdAt: string;
-}
-
-export interface SavingsGoalInput {
-  name: string;
-  targetAmount: number;
-  targetDate: string;
-  alreadySaved?: number;
-  priority?: number;
 }
 
 interface IncomeRow {
@@ -111,13 +93,6 @@ interface SkippedBillPayload {
   skipDate: string;
 }
 
-export interface SkippedBill {
-  id: string;
-  billId: string;
-  skipDate: string;
-  createdAt: string;
-}
-
 interface BillAssignmentRow {
   id: string;
   budget_id: string;
@@ -129,14 +104,6 @@ interface BillAssignmentPayload {
   billId: string;
   billDueDate: string;
   paycheckDate: string;
-}
-
-export interface BillAssignment {
-  id: string;
-  billId: string;
-  billDueDate: string;
-  paycheckDate: string;
-  createdAt: string;
 }
 
 interface IncomeOverrideRow {
@@ -152,14 +119,6 @@ interface IncomeOverridePayload {
   amount: number;
 }
 
-export interface IncomeOverride {
-  id: string;
-  incomeId: string;
-  paycheckDate: string;
-  amount: number;
-  createdAt: string;
-}
-
 interface DebtRow {
   id: string;
   budget_id: string;
@@ -167,58 +126,6 @@ interface DebtRow {
   data: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface Debt {
-  id: string;
-  budgetId: string;
-  billId: string;
-  principalBalance: number;
-  apr: number;
-  monthlyPayment: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface DebtInput {
-  billId: string;
-  principalBalance: number;
-  apr: number;
-  monthlyPayment: number;
-}
-
-export interface Income {
-  id: string;
-  sourceName: string;
-  amount: number;
-  cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
-  startDate: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Bill {
-  id: string;
-  creditorName: string;
-  budgetedAmount: number;
-  dueDay: number;
-  category?: string;
-  isRecurring: boolean;
-  priority: 'critical' | 'high' | 'normal' | 'low';
-  preferredIncomeSourceId?: string;
-  isIncomeAttached?: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
-  autoLockMinutes: number;
-  currency: string;
-  defaultScheduleMonths: number;
-  savingsAPY: number;
-  lastBudgetId?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
