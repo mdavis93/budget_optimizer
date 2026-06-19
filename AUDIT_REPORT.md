@@ -59,7 +59,7 @@ Substantial remediation since the June 10 audit. Revised approximate posture:
 | Volatile / Draft State | B+ | **A-** — Phase 2 complete (#52–#55); V-07 accepted |
 | Additional Quality | C+ | **B-** — tests, CI, docs greatly improved; bloat/E2E gaps remain |
 
-**Closure summary:** All release-blockers and draft-hardening items closed. Post-audit backlog: architecture polish (B-04, B-07–B-09, E-04), Electron upgrade, E2E draft flows. See [Audit Closure Summary](#audit-closure-summary).
+**Closure summary:** All release-blockers and draft-hardening items closed. Post-audit backlog: architecture polish (B-07, B-09, E-04) and the Electron 33 → 42 upgrade (dedicated migration plan); B-04, B-08, and E2E draft flows since landed. See [Audit Closure Summary](#audit-closure-summary).
 
 Original grades in the table above are unchanged; this block supersedes them for planning purposes only.
 
@@ -1115,9 +1115,9 @@ Notable packages:
 | CI / automation | **Closed** | `.github/workflows/` — PR Gate, Main Stability, Dependabot refresh, auto-merge, merge-freeze |
 | Husky prepush | **Closed** | Full CI parity via `scripts/pre-push-quality.sh` |
 | Production audit in pipeline | **Closed** | `npm audit --prod --audit-level critical` in shared quality workflow |
-| Electron version | **Deferred** | Post-audit dependency upgrade track |
-| Dev/build transitive audit | **Deferred** | Dev deps; production surface reduced via CI prod audit |
-| SBOM / update cadence | **Deferred** | Post-audit |
+| Electron version | **Deferred** | On `^33.4.11`; 33 → 42 bump tracked in a dedicated migration plan |
+| Dev/build transitive audit | **Closed** | `pnpm audit:dev` full-tree gate (high+) in shared quality workflow; deferred GHSAs allowlisted in `scripts/audit-dev.cjs` |
+| SBOM / update cadence | **Closed** | CycloneDX SBOM artifact per CI run (`pnpm sbom`); cadence documented in CONTRIBUTING |
 
 The original claim of "no `.github/workflows`" is **obsolete**.
 
@@ -1321,8 +1321,9 @@ Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (int
 | 6.4 reconciliation UX | Accepted | Power-user feature |
 | 6.4 export XSS warning | Accepted | Backend fixed (S-03) |
 | 6.5 CI / Dependabot | Closed | Workflows + Husky prepush |
-| 6.5 Electron upgrade | Deferred | Post-audit |
-| 6.5 SBOM | Deferred | Post-audit |
+| 6.5 Dev/build audit | Closed | Full-tree `pnpm audit:dev` gate (high+) |
+| 6.5 Electron upgrade | Deferred | On `^33.4.11`; 33 → 42 tracked in a dedicated migration plan |
+| 6.5 SBOM | Closed | CycloneDX SBOM CI artifact + documented cadence |
 
 *This audit is closed as of June 15, 2026. Post-audit backlog tracked in [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog).*
 
