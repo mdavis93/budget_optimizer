@@ -25,7 +25,7 @@ test.describe('Unsaved-changes navigation guard', () => {
     await startInNamedBudget(window);
   });
 
-  test('Cancel keeps you on the page with the draft intact', async ({ window }) => {
+  test('Cancel keeps you on the page with the draft intact @draft.guard-cancel', async ({ window }) => {
     await startDraftIncome(window);
 
     await window.getByRole('link', { name: 'Bills' }).click();
@@ -39,7 +39,7 @@ test.describe('Unsaved-changes navigation guard', () => {
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
   });
 
-  test('Discard All proceeds and drops the draft', async ({ window }) => {
+  test('Discard All proceeds and drops the draft @draft.guard-discard', async ({ window }) => {
     await startDraftIncome(window);
 
     await window.getByRole('link', { name: 'Bills' }).click();
@@ -52,7 +52,7 @@ test.describe('Unsaved-changes navigation guard', () => {
     await expect(window.getByRole('heading', { name: 'No income sources' })).toBeVisible();
   });
 
-  test('Save All Changes proceeds and persists the draft', async ({ window }) => {
+  test('Save All Changes proceeds and persists the draft @draft.guard-save', async ({ window }) => {
     await startDraftIncome(window);
 
     await window.getByRole('link', { name: 'Bills' }).click();

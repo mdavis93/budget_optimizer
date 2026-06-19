@@ -12,7 +12,7 @@ test.describe('Lock and unlock', () => {
     await startInNamedBudget(window);
   });
 
-  test('happy: lock the app and unlock with the master password', async ({ window }) => {
+  test('happy: lock the app and unlock with the master password @auth.lock @auth.unlock', async ({ window }) => {
     await window.getByRole('button', { name: 'Lock App' }).click();
     await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
 
@@ -27,7 +27,7 @@ test.describe('Lock and unlock', () => {
     await expect(window.getByRole('link', { name: 'Dashboard' })).toBeVisible();
   });
 
-  test('sad: an incorrect master password keeps the app locked', async ({ window }) => {
+  test('sad: an incorrect master password keeps the app locked @auth.unlock-rejected', async ({ window }) => {
     await window.getByRole('button', { name: 'Lock App' }).click();
     await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
 

@@ -15,7 +15,7 @@ test.describe('Income', () => {
     await navigateTo(window, 'Income');
   });
 
-  test('happy: add income, save the draft, and it survives a reload', async ({ window }) => {
+  test('happy: add income, save the draft, and it survives a reload @income.create', async ({ window }) => {
     await expect(window.getByRole('heading', { name: 'No income sources' })).toBeVisible();
 
     await window.getByRole('button', { name: 'Add Income' }).first().click();
@@ -40,7 +40,7 @@ test.describe('Income', () => {
     await expect(window.getByRole('heading', { name: 'Acme Payroll' })).toBeVisible();
   });
 
-  test('sad: an unsaved draft income is discarded on reload', async ({ window }) => {
+  test('sad: an unsaved draft income is discarded on reload @income.discard-unsaved', async ({ window }) => {
     await window.getByRole('button', { name: 'Add Income' }).first().click();
     const dialog = window.getByRole('dialog', { name: 'Add Income Source' });
     await dialog.locator('#income-source-name').fill('Temp Gig');
@@ -57,7 +57,7 @@ test.describe('Income', () => {
     await expect(window.getByRole('heading', { name: 'No income sources' })).toBeVisible();
   });
 
-  test('sad: submitting with required fields empty keeps the form open', async ({ window }) => {
+  test('sad: submitting with required fields empty keeps the form open @income.validate', async ({ window }) => {
     await window.getByRole('button', { name: 'Add Income' }).first().click();
     const dialog = window.getByRole('dialog', { name: 'Add Income Source' });
     await expect(dialog).toBeVisible();
@@ -69,7 +69,7 @@ test.describe('Income', () => {
     await expect(window.getByText('Unsaved changes on Income')).toBeHidden();
   });
 
-  test('malicious: script-like source name is rendered as inert text', async ({ window }) => {
+  test('malicious: script-like source name is rendered as inert text @income.untrusted-input', async ({ window }) => {
     const payload = '<img src=x onerror="window.__xss=1">';
 
     await window.getByRole('button', { name: 'Add Income' }).first().click();

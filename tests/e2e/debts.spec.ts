@@ -15,14 +15,14 @@ test.describe('Debts', () => {
     await startInNamedBudget(window);
   });
 
-  test('sad: Add Debt is disabled until a Debt-category bill exists', async ({ window }) => {
+  test('sad: Add Debt is disabled until a Debt-category bill exists @debts.gate', async ({ window }) => {
     await navigateTo(window, 'Debts');
 
     await expect(window.getByRole('button', { name: 'Add Debt' })).toBeDisabled();
     await expect(window.getByRole('heading', { name: 'No debts to track' })).toBeVisible();
   });
 
-  test('happy: track a seeded debt bill, save, and it survives a reload', async ({ window }) => {
+  test('happy: track a seeded debt bill, save, and it survives a reload @debts.track', async ({ window }) => {
     await seedBill(window, {
       creditorName: 'Visa Card',
       budgetedAmount: 200,

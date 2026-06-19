@@ -15,7 +15,7 @@ test.describe('Bills', () => {
     await navigateTo(window, 'Bills');
   });
 
-  test('happy: add a due-date bill, save, and it survives a reload', async ({ window }) => {
+  test('happy: add a due-date bill, save, and it survives a reload @bills.create', async ({ window }) => {
     await expect(window.getByRole('heading', { name: 'No bills added' })).toBeVisible();
 
     await window.getByRole('button', { name: 'Add Bill' }).first().click();
@@ -37,7 +37,7 @@ test.describe('Bills', () => {
     await expect(window.getByText('Electric Company')).toBeVisible();
   });
 
-  test('sad: a per-paycheck bill needs an income source before it can be saved', async ({ window }) => {
+  test('sad: a per-paycheck bill needs an income source before it can be saved @bills.per-paycheck-requires-income', async ({ window }) => {
     await window.getByRole('button', { name: 'Add Bill' }).first().click();
     const dialog = window.getByRole('dialog', { name: 'Add Bill' });
 
@@ -53,7 +53,7 @@ test.describe('Bills', () => {
     await expect(window.getByText('Unsaved changes on Bills')).toBeHidden();
   });
 
-  test('malicious: script-like creditor name is rendered as inert text', async ({ window }) => {
+  test('malicious: script-like creditor name is rendered as inert text @bills.untrusted-input', async ({ window }) => {
     const payload = '<script>window.__billxss=1</script>';
 
     await window.getByRole('button', { name: 'Add Bill' }).first().click();

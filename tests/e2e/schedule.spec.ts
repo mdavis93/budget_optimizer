@@ -8,7 +8,7 @@ import { reloadShell, seedBill, seedIncome } from './helpers/seed';
  * plan. Seeds the upstream data via IPC, then asserts the schedule renders.
  */
 test.describe('Schedule', () => {
-  test('happy: a schedule renders once income and bills exist', async ({ window }) => {
+  test('happy: a schedule renders once income and bills exist @schedule.render', async ({ window }) => {
     await startInNamedBudget(window);
 
     await seedIncome(window, {
@@ -34,7 +34,7 @@ test.describe('Schedule', () => {
     await expectNoSpinner(window);
   });
 
-  test('empty: no income or bills shows the empty schedule state', async ({ window }) => {
+  test('empty: no income or bills shows the empty schedule state @schedule.empty', async ({ window }) => {
     await startInNamedBudget(window);
     await navigateTo(window, 'Schedule');
 

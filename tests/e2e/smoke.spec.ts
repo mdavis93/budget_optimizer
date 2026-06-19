@@ -13,7 +13,7 @@ import { navigateTo, expectNoSpinner, type NavTarget } from './helpers/nav';
  * that previously shipped on Goals and Debts undetected.
  */
 test.describe('Harness smoke', () => {
-  test('first-run setup reaches the app shell', async ({ window }) => {
+  test('first-run setup reaches the app shell @auth.setup @budget.create', async ({ window }) => {
     await completeSetup(window);
     await createBudgetViaPicker(window);
 
@@ -21,7 +21,7 @@ test.describe('Harness smoke', () => {
     await expectNoSpinner(window);
   });
 
-  test('every sidebar route renders without a stuck spinner', async ({ window }) => {
+  test('every sidebar route renders without a stuck spinner @routes.crawl @dashboard.view @summary.view @budgets.view @export.view @settings.view', async ({ window }) => {
     await completeSetup(window);
     await createBudgetViaPicker(window);
 

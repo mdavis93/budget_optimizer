@@ -16,7 +16,7 @@ test.describe('Goals', () => {
     await navigateTo(window, 'Goals');
   });
 
-  test('happy: create a goal, save, and it survives a reload', async ({ window }) => {
+  test('happy: create a goal, save, and it survives a reload @goals.create', async ({ window }) => {
     await expect(window.getByRole('heading', { name: 'No savings goals yet' })).toBeVisible();
 
     await window.getByRole('button', { name: 'Add Goal' }).click();
@@ -40,7 +40,7 @@ test.describe('Goals', () => {
     await expectNoSpinner(window);
   });
 
-  test('sad: the create button stays disabled until name, amount, and date are valid', async ({ window }) => {
+  test('sad: the create button stays disabled until name, amount, and date are valid @goals.validate', async ({ window }) => {
     await window.getByRole('button', { name: 'Add Goal' }).click();
     const dialog = window.getByRole('dialog', { name: 'Create Savings Goal' });
     const submit = dialog.getByRole('button', { name: 'Create Goal' });
@@ -59,7 +59,7 @@ test.describe('Goals', () => {
     await expect(submit).toBeDisabled();
   });
 
-  test('malicious: script-like goal name is rendered as inert text', async ({ window }) => {
+  test('malicious: script-like goal name is rendered as inert text @goals.untrusted-input', async ({ window }) => {
     const payload = '<img src=x onerror="window.__goalxss=1">';
 
     await window.getByRole('button', { name: 'Add Goal' }).click();

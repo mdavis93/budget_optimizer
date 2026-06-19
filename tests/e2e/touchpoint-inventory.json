@@ -1,0 +1,276 @@
+{
+  "description": "Registry of user-facing touchpoints for the E2E safety net. A touchpoint is 'covered' when its id appears as an @id tag in a spec title under tests/e2e. Reconciled and gated by scripts/e2e-touchpoints.cjs.",
+  "tiers": {
+    "critical": {
+      "label": "Money movement, data integrity, and authentication",
+      "floorPct": 100,
+      "targetPct": 100
+    },
+    "standard": {
+      "label": "Other user-facing surfaces",
+      "floorPct": 80,
+      "targetPct": 90
+    }
+  },
+  "touchpoints": [
+    {
+      "id": "auth.setup",
+      "tier": "critical",
+      "domain": "auth",
+      "description": "First-run: create master password, acknowledge recovery key, reach app shell",
+      "routes": ["/setup"],
+      "channels": ["auth:is-first-time-setup", "auth:create-master-password", "auth:clear-pending-recovery-key", "credentials:offer-save"]
+    },
+    {
+      "id": "auth.unlock",
+      "tier": "critical",
+      "domain": "auth",
+      "description": "Returning user unlocks the vault with the master password",
+      "routes": ["/login"],
+      "channels": ["auth:unlock", "auth:is-unlocked"]
+    },
+    {
+      "id": "auth.unlock-rejected",
+      "tier": "critical",
+      "domain": "auth",
+      "description": "An incorrect master password keeps the app locked",
+      "channels": ["auth:unlock"]
+    },
+    {
+      "id": "auth.lock",
+      "tier": "critical",
+      "domain": "auth",
+      "description": "Locking the app returns to the login screen",
+      "channels": ["auth:lock"]
+    },
+    {
+      "id": "budget.create",
+      "tier": "critical",
+      "domain": "budget",
+      "description": "Create and open a named budget from the picker",
+      "routes": ["/budgets"],
+      "channels": ["budget:create", "budget:switch", "budget:get-all-with-stats", "budget:get-current"]
+    },
+    {
+      "id": "income.create",
+      "tier": "critical",
+      "domain": "income",
+      "description": "Add an income source, save the draft, and confirm it persists across reload",
+      "routes": ["/income"],
+      "channels": ["income:create", "income:get-all"]
+    },
+    {
+      "id": "income.discard-unsaved",
+      "tier": "critical",
+      "domain": "income",
+      "description": "An unsaved draft income is dropped on reload"
+    },
+    {
+      "id": "income.validate",
+      "tier": "critical",
+      "domain": "income",
+      "description": "Submitting with required fields empty keeps the form open"
+    },
+    {
+      "id": "income.untrusted-input",
+      "tier": "critical",
+      "domain": "income",
+      "description": "Script-like source name renders as inert text (no script execution)"
+    },
+    {
+      "id": "bills.create",
+      "tier": "critical",
+      "domain": "bills",
+      "description": "Add a due-date bill, save, and confirm it persists across reload",
+      "routes": ["/bills"],
+      "channels": ["bills:create", "bills:get-all"]
+    },
+    {
+      "id": "bills.per-paycheck-requires-income",
+      "tier": "critical",
+      "domain": "bills",
+      "description": "A per-paycheck bill cannot be saved without an income source"
+    },
+    {
+      "id": "schedule.render",
+      "tier": "critical",
+      "domain": "schedule",
+      "description": "Income + bills produce a rendered paycheck schedule",
+      "routes": ["/schedule"],
+      "channels": ["schedule:build"]
+    },
+    {
+      "id": "draft.guard-cancel",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Unsaved-changes guard: Cancel keeps you on the page with the draft intact"
+    },
+    {
+      "id": "draft.guard-discard",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Unsaved-changes guard: Discard All proceeds and drops the draft"
+    },
+    {
+      "id": "draft.guard-save",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Unsaved-changes guard: Save All Changes proceeds and persists the draft"
+    },
+
+    {
+      "id": "bills.untrusted-input",
+      "tier": "standard",
+      "domain": "bills",
+      "description": "Script-like creditor name renders as inert text"
+    },
+    {
+      "id": "goals.create",
+      "tier": "standard",
+      "domain": "goals",
+      "description": "Create a savings goal, save, and confirm it persists across reload",
+      "routes": ["/goals"],
+      "channels": ["goals:create", "goals:get-all", "goals:get-projections"]
+    },
+    {
+      "id": "goals.validate",
+      "tier": "standard",
+      "domain": "goals",
+      "description": "Create button stays disabled until name, amount, and date are valid"
+    },
+    {
+      "id": "goals.untrusted-input",
+      "tier": "standard",
+      "domain": "goals",
+      "description": "Script-like goal name renders as inert text"
+    },
+    {
+      "id": "debts.gate",
+      "tier": "standard",
+      "domain": "debts",
+      "description": "Add Debt is disabled until a Debt-category bill exists",
+      "routes": ["/debts"],
+      "channels": ["debts:get-all", "debts:get-all-with-amortization"]
+    },
+    {
+      "id": "debts.track",
+      "tier": "standard",
+      "domain": "debts",
+      "description": "Track a debt bill, save, and confirm it persists with amortization",
+      "channels": ["debts:create", "debts:get-amortization"]
+    },
+    {
+      "id": "schedule.empty",
+      "tier": "standard",
+      "domain": "schedule",
+      "description": "No income/bills shows the empty schedule state"
+    },
+    {
+      "id": "routes.crawl",
+      "tier": "standard",
+      "domain": "navigation",
+      "description": "Every sidebar route renders without a stuck loading spinner"
+    },
+    {
+      "id": "dashboard.view",
+      "tier": "standard",
+      "domain": "dashboard",
+      "description": "Dashboard overview renders",
+      "routes": ["/dashboard"],
+      "channels": ["budget:get-snapshot"]
+    },
+    {
+      "id": "summary.view",
+      "tier": "standard",
+      "domain": "summary",
+      "description": "Summary page renders",
+      "routes": ["/summary"]
+    },
+    {
+      "id": "budgets.view",
+      "tier": "standard",
+      "domain": "budget",
+      "description": "Budgets management page renders"
+    },
+    {
+      "id": "export.view",
+      "tier": "standard",
+      "domain": "export",
+      "description": "Export page renders",
+      "routes": ["/export"]
+    },
+    {
+      "id": "settings.view",
+      "tier": "standard",
+      "domain": "settings",
+      "description": "Settings page renders",
+      "routes": ["/settings"],
+      "channels": ["settings:get"]
+    },
+
+    {
+      "id": "bills.edit",
+      "tier": "standard",
+      "domain": "bills",
+      "status": "planned",
+      "description": "Edit and delete an existing bill (not yet covered by a journey)"
+    },
+    {
+      "id": "goals.edit",
+      "tier": "standard",
+      "domain": "goals",
+      "status": "planned",
+      "description": "Edit and delete an existing goal (not yet covered by a journey)"
+    }
+  ],
+  "untestedChannels": [
+    "app:get-platform",
+    "app:check-biometric-available",
+    "app:show-save-dialog",
+    "app:show-open-dialog",
+    "app:quit",
+    "budget:get-all",
+    "budget:get-stats",
+    "budget:update",
+    "budget:delete",
+    "budget:start-quick",
+    "budget:end-quick",
+    "auth:unlock-with-biometric",
+    "auth:enable-biometric",
+    "auth:is-biometric-enabled",
+    "auth:change-password",
+    "auth:get-pending-recovery-key",
+    "auth:verify-recovery-key",
+    "auth:reset-password-with-recovery",
+    "auth:set-auto-lock",
+    "auth:activity-ping",
+    "income:update",
+    "income:delete",
+    "bills:update",
+    "bills:delete",
+    "skipped-bills:get-all",
+    "skipped-bills:skip",
+    "skipped-bills:unskip",
+    "skipped-bills:is-skipped",
+    "bill-assignments:get-all",
+    "bill-assignments:assign",
+    "bill-assignments:remove",
+    "income-overrides:get-all",
+    "income-overrides:set",
+    "income-overrides:remove",
+    "goals:update",
+    "goals:delete",
+    "debts:get-by-bill",
+    "debts:update",
+    "debts:delete",
+    "reconciliation:apply-fixes",
+    "export:to-pdf",
+    "export:to-html",
+    "export:to-spreadsheet",
+    "settings:update",
+    "credentials:save",
+    "credentials:get",
+    "credentials:delete",
+    "credentials:has"
+  ]
+}

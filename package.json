@@ -27,6 +27,7 @@
     "test:coverage:check": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
+    "test:e2e:touchpoints": "node scripts/e2e-touchpoints.cjs",
     "prepush": "bash scripts/pre-push-quality.sh",
     "prepare": "husky"
   },
