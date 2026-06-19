@@ -14,6 +14,7 @@ if rg -q "7289/ingest|#region agent log|debug-f84ef2" src electron; then
 fi
 
 pnpm typecheck
+pnpm typecheck:electron
 pnpm lint
 
 pnpm test:coverage:check 2>&1 | tee "$OUTPUT_FILE"
@@ -21,5 +22,6 @@ bash scripts/verify-test-output-clean.sh "$OUTPUT_FILE"
 
 pnpm run build:vite && pnpm run verify:csp
 pnpm audit --prod --audit-level critical
+pnpm audit:dev
 
 echo "Pre-push quality checks passed."

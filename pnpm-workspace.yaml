@@ -7,3 +7,11 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   keytar: true
+
+# Patch known-vulnerable dev/build transitives to their fixed versions so the
+# full-tree audit gate stays green. Scoped by range to keep each consumer on a
+# compatible major (node-gyp -> undici 6.x, vitest/jsdom -> undici 7.x).
+overrides:
+  'undici@<6.27.0': ^6.27.0
+  'undici@>=7.0.0 <7.28.0': ^7.28.0
+  'form-data@>=4.0.0 <4.0.6': ^4.0.6

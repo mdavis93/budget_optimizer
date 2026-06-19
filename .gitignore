@@ -8,6 +8,9 @@ release/
 build/icon.png
 public/icon.png
 
+# Generated SBOM (published as a CI artifact, not committed)
+sbom.json
+
 # Development
 *.log
 npm-debug.log*

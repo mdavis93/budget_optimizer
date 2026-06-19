@@ -533,6 +533,9 @@ describe('BudgetManager', () => {
 
     it('returns zero starting balance when budget record is missing', () => {
       manager.setCurrentBudget('budget-1');
+      // Empty the cache (update returns no record), then the DB no longer has it.
+      database.updateBudget.mockReturnValueOnce(null);
+      manager.setStartingBalance(500);
       database.getBudgetById.mockReturnValue(null);
 
       expect(manager.getStartingBalance()).toBe(0);
@@ -563,6 +566,77 @@ describe('BudgetManager', () => {
       expect(manager.updateBudget('budget-2', { name: 'Updated' })?.name).toBe('Updated');
       expect(manager.deleteBudget('budget-2')).toBe(true);
       expect(database.deleteBudget).toHaveBeenCalledWith('budget-2');
+    });
+  });
+
+  describe('current-budget cache', () => {
+    it('reads the budget once across repeated settings getters', () => {
+      manager.setCurrentBudget('budget-1');
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+
+      manager.getStartingBalance();
+      manager.getTargetCashOnHand();
+      manager.getMinCashOnHand();
+      manager.getMinSavingsPerPaycheck();
+      manager.getScheduleStartDate();
+      manager.getStartingBalance();
+
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+      expect(manager.getStartingBalance()).toBe(1000);
+    });
+
+    it('serves the fresh value after a settings write without an extra read', () => {
+      manager.setCurrentBudget('budget-1');
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+
+      database.updateBudget.mockReturnValueOnce({ ...baseBudget, startingBalance: 2000 });
+      manager.setStartingBalance(2000);
+
+      expect(manager.getStartingBalance()).toBe(2000);
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+    });
+
+    it('updates the cache after updateBudget on the current budget', () => {
+      manager.setCurrentBudget('budget-1');
+      database.updateBudget.mockReturnValueOnce({ ...baseBudget, targetCashOnHand: 999 });
+
+      manager.updateBudget('budget-1', { targetCashOnHand: 999 });
+
+      expect(manager.getTargetCashOnHand()).toBe(999);
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the cache intact when a non-current budget is updated', () => {
+      manager.setCurrentBudget('budget-1');
+      database.updateBudget.mockReturnValueOnce({ ...baseBudget, id: 'budget-2', targetCashOnHand: 5 });
+
+      manager.updateBudget('budget-2', { targetCashOnHand: 5 });
+
+      expect(manager.getTargetCashOnHand()).toBe(250);
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+    });
+
+    it('refetches from the database when the cache is emptied', () => {
+      manager.setCurrentBudget('budget-1');
+      database.updateBudget.mockReturnValueOnce(null);
+      manager.setMinCashOnHand(50);
+      database.getBudgetById.mockReturnValue({ ...baseBudget, minCashOnHand: 77 });
+
+      expect(manager.getMinCashOnHand()).toBe(77);
+      expect(database.getBudgetById).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears the cache on quick-budget transitions and re-reads on reselect', () => {
+      manager.setCurrentBudget('budget-1');
+      expect(database.getBudgetById).toHaveBeenCalledTimes(1);
+
+      manager.startQuickBudget();
+      manager.endQuickBudget();
+      manager.setCurrentBudget('budget-1');
+
+      expect(database.getBudgetById).toHaveBeenCalledTimes(2);
+      expect(manager.getTargetCashOnHand()).toBe(250);
+      expect(database.getBudgetById).toHaveBeenCalledTimes(2);
     });
   });
 });
