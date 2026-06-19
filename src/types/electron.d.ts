@@ -1,300 +1,36 @@
-export interface Budget {
-  id: string;
-  name: string;
-  startingBalance: number;
-  targetCashOnHand: number;
-  minCashOnHand: number;
-  minSavingsPerPaycheck: number;
-  scheduleStartDate: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface BudgetInput {
-  name: string;
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-  minSavingsPerPaycheck?: number;
-  scheduleStartDate?: string;
-}
-
-interface SavingsGoalInput {
-  name: string;
-  targetAmount: number;
-  targetDate: string;
-  alreadySaved?: number;
-  priority?: number;
-}
-
-interface SavingsGoalData {
-  id: string;
-  budgetId: string;
-  name: string;
-  targetAmount: number;
-  targetDate: string;
-  alreadySaved: number;
-  priority: number;
-  createdAt: string;
-}
+import type {
+  AmortizationSchedule,
+  ApiResult,
+  AppSettings,
+  Bill,
+  BillAssignment,
+  BillInput,
+  Budget,
+  BudgetInput,
+  BudgetSnapshot,
+  BudgetWithStats,
+  Debt,
+  DebtInput,
+  DebtWithAmortization,
+  DraftOverlay,
+  GoalProjection,
+  Income,
+  IncomeInput,
+  IncomeOverride,
+  SavingsGoal,
+  SavingsGoalInput,
+  ScheduleData,
+  SkippedBill,
+} from '@shared/types';
 
 interface BudgetStats {
   incomeCount: number;
   billCount: number;
 }
 
-type BudgetData = Budget;
-
-interface BudgetDataWithStats extends BudgetData, BudgetStats {}
-
 interface CurrentBudgetState {
-  budget: BudgetData | null;
+  budget: Budget | null;
   isQuickBudget: boolean;
-}
-
-interface IncomeInput {
-  sourceName: string;
-  amount: number;
-  cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
-  startDate: string;
-  isActive: boolean;
-}
-
-interface BillInput {
-  creditorName: string;
-  budgetedAmount: number;
-  dueDay: number;
-  category?: string;
-  isRecurring: boolean;
-  priority: 'critical' | 'high' | 'normal' | 'low';
-  preferredIncomeSourceId?: string;
-  isIncomeAttached?: boolean;
-}
-
-type UnfundableReason =
-  | 'no_eligible_earlier_paycheck'
-  | 'all_movable_bills_locked'
-  | 'insufficient_income_this_paycheck'
-  | 'goal_reserve_conflict';
-
-interface PaycheckBillData {
-  billId: string;
-  creditorName: string;
-  amount: number;
-  dueDay: number;
-  priority: 'critical' | 'high' | 'normal' | 'low';
-  category?: string;
-  billDate: string;
-  isIncomeAttached?: boolean;
-  isUnpayable?: boolean;
-  unfundableReason?: UnfundableReason;
-}
-
-interface GoalDepositData {
-  goalId: string;
-  goalName: string;
-  amount: number;
-}
-
-interface PaycheckEntryData {
-  date: string;
-  incomeSources: {
-    id: string;
-    name: string;
-    amount: number;
-  }[];
-  totalIncome: number;
-  bills: PaycheckBillData[];
-  totalBills: number;
-  goalDeposits: GoalDepositData[];
-  totalGoalDeposits: number;
-  budgetRemaining: number;
-  savingsDeposit: number;
-  totalSavings: number;
-  isShortfall: boolean;
-}
-
-interface ProposedFix {
-  id: string;
-  type: 'move_bill' | 'skip_bill';
-  billId: string;
-  billName: string;
-  billAmount: number;
-  fromPaycheckDate: string;
-  toPaycheckDate?: string;
-  billDueDate: string;
-  reason: string;
-  impact: number;
-  reasonCode?: UnfundableReason;
-}
-
-interface ShortfallDetail {
-  paycheckDate: string;
-  deficit: number;
-  bills: PaycheckBillData[];
-}
-
-interface ReconciliationReport {
-  needsReconciliation: boolean;
-  shortfalls: ShortfallDetail[];
-  proposedFixes: ProposedFix[];
-  canBeFullyResolved: boolean;
-  totalDeficit: number;
-  estimatedResolution: number;
-}
-
-interface GoalSuggestionData {
-  type: 'extend_deadline' | 'reduce_target' | 'increase_priority';
-  description: string;
-  newValue: string | number;
-  resultPercent: number;
-}
-
-interface GoalScheduleHealthData {
-  tightPaycheckCount: number;
-  shortfallCount: number;
-  savingsTotal: number;
-}
-
-interface GoalProjectionData {
-  goalId: string;
-  goalName: string;
-  targetAmount: number;
-  alreadySaved: number;
-  remainingAmount: number;
-  targetDate: string;
-  paycheckCount: number;
-  requiredPerPaycheck: number;
-  adjustedRequiredPerPaycheck: number;
-  availablePerPaycheck: number;
-  actualAllocation: number;
-  achievableAmount: number;
-  achievabilityPercent: number;
-  status: 'achievable' | 'partial' | 'impossible';
-  suggestions: GoalSuggestionData[];
-  isProjected: boolean;
-  projectionNote?: string;
-  avgAllocationPerPaycheck: number;
-  marginPerPaycheck: number;
-  paychecksToFullyFund: number | null;
-  estimatedFundedDate: string | null;
-  beatsDeadlineByPaychecks: number | null;
-  missesDeadlineByPaychecks: number | null;
-  scheduleHealth: GoalScheduleHealthData;
-}
-
-interface ScheduleData {
-  startDate: string;
-  endDate: string;
-  paychecks: PaycheckEntryData[];
-  fullPaychecks: PaycheckEntryData[];
-  viewportMonths: number;
-  entries: Array<{
-    date: string;
-    type: 'income' | 'expense' | 'savings';
-    description: string;
-    amount: number;
-    runningBalance: number;
-    isShortfall: boolean;
-    recommendation?: string;
-  }>;
-  summary: {
-    totalIncome: number;
-    totalExpenses: number;
-    totalSavingsDeposits: number;
-    finalSavingsBalance: number;
-    netBalance: number;
-    shortfallCount: number;
-    averageBalance: number;
-    lowestBalance: number;
-    highestBalance: number;
-  };
-  recommendations: string[];
-  maxBudgetRemaining: number;
-  reconciliation?: ReconciliationReport;
-  goalProjections?: GoalProjectionData[];
-}
-
-interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
-  autoLockMinutes: number;
-  currency: string;
-  defaultScheduleMonths: number;
-  savingsAPY: number;
-  lastBudgetId?: string;
-}
-
-interface DebtInput {
-  billId: string;
-  principalBalance: number;
-  apr: number;
-  monthlyPayment: number;
-}
-
-interface DebtData {
-  id: string;
-  budgetId: string;
-  billId: string;
-  principalBalance: number;
-  apr: number;
-  monthlyPayment: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AmortizationPaymentData {
-  paymentNumber: number;
-  date: string;
-  payment: number;
-  principal: number;
-  interest: number;
-  remainingBalance: number;
-}
-
-interface AmortizationScheduleData {
-  payments: AmortizationPaymentData[];
-  totalPayments: number;
-  totalInterest: number;
-  totalPrincipal: number;
-  payoffDate: string;
-  monthsToPayoff: number;
-}
-
-interface DebtWithAmortizationData {
-  debt: DebtData;
-  bill: import('./index').Bill | null;
-  amortization: AmortizationScheduleData | null;
-}
-
-interface ApiResult<T = void> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-interface DraftOverlay {
-  incomes?: import('./index').Income[];
-  bills?: import('./index').Bill[];
-  goals?: SavingsGoalData[];
-  debts?: DebtData[];
-  skippedBills?: import('./index').SkippedBill[];
-  billAssignments?: import('./index').BillAssignment[];
-  incomeOverrides?: import('./index').IncomeOverride[];
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-  minSavingsPerPaycheck?: number;
-}
-
-interface BudgetSnapshotData {
-  incomes: import('./index').Income[];
-  bills: import('./index').Bill[];
-  goals: SavingsGoalData[];
-  skippedBills: import('./index').SkippedBill[];
-  billAssignments: import('./index').BillAssignment[];
-  incomeOverrides: import('./index').IncomeOverride[];
-  debts: DebtData[];
-  budget: BudgetData | null;
 }
 
 interface ElectronAPI {
@@ -312,15 +48,15 @@ interface ElectronAPI {
   quitApp: () => Promise<void>;
 
   budget: {
-    getAll: () => Promise<ApiResult<BudgetData[]>>;
-    getAllWithStats: () => Promise<ApiResult<BudgetDataWithStats[]>>;
+    getAll: () => Promise<ApiResult<Budget[]>>;
+    getAllWithStats: () => Promise<ApiResult<BudgetWithStats[]>>;
     getCurrent: () => Promise<ApiResult<CurrentBudgetState>>;
-    getSnapshot: () => Promise<ApiResult<BudgetSnapshotData>>;
+    getSnapshot: () => Promise<ApiResult<BudgetSnapshot>>;
     getStats: (budgetId: string) => Promise<ApiResult<BudgetStats>>;
-    create: (input: BudgetInput) => Promise<ApiResult<BudgetData>>;
-    update: (id: string, input: Partial<BudgetInput>) => Promise<ApiResult<BudgetData>>;
+    create: (input: BudgetInput) => Promise<ApiResult<Budget>>;
+    update: (id: string, input: Partial<BudgetInput>) => Promise<ApiResult<Budget>>;
     delete: (id: string) => Promise<ApiResult>;
-    switch: (id: string) => Promise<ApiResult<BudgetData>>;
+    switch: (id: string) => Promise<ApiResult<Budget>>;
     startQuick: () => Promise<ApiResult>;
     endQuick: () => Promise<ApiResult>;
   };
@@ -344,54 +80,54 @@ interface ElectronAPI {
   };
 
   income: {
-    getAll: () => Promise<ApiResult<import('./index').Income[]>>;
-    create: (income: IncomeInput) => Promise<ApiResult<import('./index').Income>>;
-    update: (id: string, income: IncomeInput) => Promise<ApiResult<import('./index').Income>>;
+    getAll: () => Promise<ApiResult<Income[]>>;
+    create: (income: IncomeInput) => Promise<ApiResult<Income>>;
+    update: (id: string, income: IncomeInput) => Promise<ApiResult<Income>>;
     delete: (id: string) => Promise<ApiResult>;
   };
 
   bills: {
-    getAll: () => Promise<ApiResult<import('./index').Bill[]>>;
-    create: (bill: BillInput) => Promise<ApiResult<import('./index').Bill>>;
-    update: (id: string, bill: BillInput) => Promise<ApiResult<import('./index').Bill>>;
+    getAll: () => Promise<ApiResult<Bill[]>>;
+    create: (bill: BillInput) => Promise<ApiResult<Bill>>;
+    update: (id: string, bill: BillInput) => Promise<ApiResult<Bill>>;
     delete: (id: string) => Promise<ApiResult>;
   };
 
   skippedBills: {
-    getAll: () => Promise<ApiResult<import('./index').SkippedBill[]>>;
-    skip: (billId: string, skipDate: string) => Promise<ApiResult<import('./index').SkippedBill>>;
+    getAll: () => Promise<ApiResult<SkippedBill[]>>;
+    skip: (billId: string, skipDate: string) => Promise<ApiResult<SkippedBill>>;
     unskip: (billId: string, skipDate: string) => Promise<ApiResult>;
     isSkipped: (billId: string, skipDate: string) => Promise<ApiResult<boolean>>;
   };
 
   billAssignments: {
-    getAll: () => Promise<ApiResult<import('./index').BillAssignment[]>>;
-    assign: (billId: string, billDueDate: string, paycheckDate: string) => Promise<ApiResult<import('./index').BillAssignment>>;
+    getAll: () => Promise<ApiResult<BillAssignment[]>>;
+    assign: (billId: string, billDueDate: string, paycheckDate: string) => Promise<ApiResult<BillAssignment>>;
     remove: (billId: string, billDueDate: string) => Promise<ApiResult>;
   };
 
   incomeOverrides: {
-    getAll: () => Promise<ApiResult<import('./index').IncomeOverride[]>>;
-    set: (incomeId: string, paycheckDate: string, amount: number) => Promise<ApiResult<import('./index').IncomeOverride>>;
+    getAll: () => Promise<ApiResult<IncomeOverride[]>>;
+    set: (incomeId: string, paycheckDate: string, amount: number) => Promise<ApiResult<IncomeOverride>>;
     remove: (incomeId: string, paycheckDate: string) => Promise<ApiResult<boolean>>;
   };
 
   goals: {
-    getAll: () => Promise<ApiResult<SavingsGoalData[]>>;
-    create: (input: SavingsGoalInput) => Promise<ApiResult<SavingsGoalData>>;
-    update: (id: string, input: Partial<SavingsGoalInput>) => Promise<ApiResult<SavingsGoalData>>;
+    getAll: () => Promise<ApiResult<SavingsGoal[]>>;
+    create: (input: SavingsGoalInput) => Promise<ApiResult<SavingsGoal>>;
+    update: (id: string, input: Partial<SavingsGoalInput>) => Promise<ApiResult<SavingsGoal>>;
     delete: (id: string) => Promise<ApiResult>;
-    getProjections: (overlay?: DraftOverlay) => Promise<ApiResult<GoalProjectionData[]>>;
+    getProjections: (overlay?: DraftOverlay) => Promise<ApiResult<GoalProjection[]>>;
   };
 
   debts: {
-    getAll: () => Promise<ApiResult<DebtData[]>>;
-    getByBill: (billId: string) => Promise<ApiResult<DebtData | null>>;
-    create: (input: DebtInput) => Promise<ApiResult<DebtData>>;
-    update: (id: string, input: Partial<DebtInput>) => Promise<ApiResult<DebtData>>;
+    getAll: () => Promise<ApiResult<Debt[]>>;
+    getByBill: (billId: string) => Promise<ApiResult<Debt | null>>;
+    create: (input: DebtInput) => Promise<ApiResult<Debt>>;
+    update: (id: string, input: Partial<DebtInput>) => Promise<ApiResult<Debt>>;
     delete: (id: string) => Promise<ApiResult>;
-    getAmortization: (debtId: string) => Promise<ApiResult<AmortizationScheduleData>>;
-    getAllWithAmortization: (overlay?: DraftOverlay) => Promise<ApiResult<DebtWithAmortizationData[]>>;
+    getAmortization: (debtId: string) => Promise<ApiResult<AmortizationSchedule>>;
+    getAllWithAmortization: (overlay?: DraftOverlay) => Promise<ApiResult<DebtWithAmortization[]>>;
   };
 
   schedule: {
