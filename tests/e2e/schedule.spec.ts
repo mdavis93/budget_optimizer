@@ -86,4 +86,33 @@ test.describe('Schedule', () => {
     await expect(view).toHaveValue(goalValue as string);
     await expectNoSpinner(window);
   });
+
+  test('goal at risk: an underfunded goal flags the Goals Total summary @schedule.goal-at-risk', async ({ window }) => {
+    await startInNamedBudget(window);
+
+    await seedIncome(window, {
+      sourceName: 'Acme Payroll',
+      amount: 2400,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+    });
+    // A large goal with a near deadline cannot be funded -> at risk.
+    const target = new Date();
+    target.setMonth(target.getMonth() + 6);
+    const targetDate = target.toISOString().slice(0, 10);
+    await seedGoal(window, {
+      name: 'Impossible Dream',
+      targetAmount: 999999,
+      targetDate,
+      alreadySaved: 0,
+      priority: 1,
+    });
+    await reloadShell(window);
+    await navigateTo(window, 'Schedule');
+
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    await expect(window.getByRole('img', { name: 'Goals at risk' })).toBeVisible();
+    await expectNoSpinner(window);
+  });
 });

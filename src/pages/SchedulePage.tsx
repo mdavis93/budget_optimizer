@@ -70,6 +70,13 @@ export default function SchedulePage() {
     [schedule?.goalProjections]
   );
 
+  // At-risk status comes from the full-horizon goal projections (not the viewport
+  // slice), so the warning is accurate regardless of the visible window.
+  const hasAtRiskGoals = useMemo(
+    () => (schedule?.goalProjections ?? []).some((p) => p.status !== 'achievable'),
+    [schedule?.goalProjections]
+  );
+
   // Determine if there are actionable recommendations (not just informational)
   const hasActionableRecommendations = useMemo(() => {
     if (!schedule?.recommendations) return false;
@@ -475,12 +482,37 @@ export default function SchedulePage() {
               {formatCurrency(schedule.summary.finalSavingsBalance)}
             </p>
           </div>
-          <div className="card bg-success-50 dark:bg-success-500/10 border-success-200 dark:border-success-800">
+          <div className={clsx(
+            'card',
+            hasAtRiskGoals
+              ? 'bg-warning-50 dark:bg-warning-500/10 border-warning-200 dark:border-warning-800'
+              : 'bg-success-50 dark:bg-success-500/10 border-success-200 dark:border-success-800'
+          )}>
             <div className="flex items-center gap-2 mb-1">
-              <Target className="w-4 h-4 text-success-500" />
-              <p className="text-sm text-success-700 dark:text-success-400">Goals Total</p>
+              <Target className={clsx('w-4 h-4', hasAtRiskGoals ? 'text-warning-500' : 'text-success-500')} />
+              <p className={clsx(
+                'text-sm',
+                hasAtRiskGoals
+                  ? 'text-warning-700 dark:text-warning-400'
+                  : 'text-success-700 dark:text-success-400'
+              )}>Goals Total</p>
+              {hasAtRiskGoals && (
+                <span
+                  role="img"
+                  aria-label="Goals at risk"
+                  title="One or more goals may not be funded by their deadline. Open the Goals page for details and suggestions."
+                  className="inline-flex"
+                >
+                  <AlertTriangle className="w-4 h-4 text-warning-500" />
+                </span>
+              )}
             </div>
-            <p className="text-xl font-semibold text-success-600 dark:text-success-400">
+            <p className={clsx(
+              'text-xl font-semibold',
+              hasAtRiskGoals
+                ? 'text-warning-600 dark:text-warning-400'
+                : 'text-success-600 dark:text-success-400'
+            )}>
               {formatCurrency(totalGoalDeposits)}
             </p>
           </div>
