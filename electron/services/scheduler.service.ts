@@ -175,7 +175,8 @@ export class SchedulerService {
     bills: Bill[],
     startingBalance: number
   ): ScheduleData {
-    if (viewportMonths >= SCHEDULE_CALCULATION_MONTHS) {
+    const horizonMonths = fullSchedule.calculationMonths ?? SCHEDULE_CALCULATION_MONTHS;
+    if (viewportMonths >= horizonMonths) {
       return {
         ...fullSchedule,
         paychecks: fullSchedule.fullPaychecks,

@@ -165,9 +165,10 @@ function generateRecommendations(
 function filterPaychecksByViewport(
   fullPaychecks: PaycheckEntry[],
   startDate: string,
-  viewportMonths: number
+  viewportMonths: number,
+  horizonMonths: number = SCHEDULE_CALCULATION_MONTHS
 ): PaycheckEntry[] {
-  if (viewportMonths >= SCHEDULE_CALCULATION_MONTHS) {
+  if (viewportMonths >= horizonMonths) {
     return fullPaychecks;
   }
 
@@ -187,13 +188,15 @@ export function applyScheduleViewport(
   bills: Bill[],
   startingBalance: number
 ): ScheduleData {
+  const horizonMonths = fullSchedule.calculationMonths ?? SCHEDULE_CALCULATION_MONTHS;
   const viewportPaychecks = filterPaychecksByViewport(
     fullSchedule.fullPaychecks,
     fullSchedule.startDate,
-    viewportMonths
+    viewportMonths,
+    horizonMonths
   );
 
-  const viewportEndDate = viewportMonths >= SCHEDULE_CALCULATION_MONTHS
+  const viewportEndDate = viewportMonths >= horizonMonths
     ? fullSchedule.endDate
     : format(startOfDay(addMonths(parseISO(fullSchedule.startDate), viewportMonths)), 'yyyy-MM-dd');
 

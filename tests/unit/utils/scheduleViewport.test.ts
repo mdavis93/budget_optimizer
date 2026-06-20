@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { addMonths, format, parseISO } from 'date-fns';
 import { applyScheduleViewport } from '../../../src/utils/scheduleViewport';
 import { Bill, PaycheckEntry, ScheduleData } from '../../../src/types';
 import { createMockBill, createMockPaycheck, createMockSchedule } from '../../mocks/electron-api.mock';
@@ -241,6 +242,43 @@ describe('applyScheduleViewport', () => {
 
       const viewport = applyScheduleViewport(fullSchedule, 3, [], 1000);
       expect(viewport.reconciliation?.proposedFixes).toHaveLength(1);
+    });
+
+    it('handles a viewport at the extended horizon', () => {
+      // 18-month horizon (e.g. an 18-month goal). The "full" check must key off
+      // calculationMonths, not the constant 12.
+      const fullPaychecks: PaycheckEntry[] = Array.from({ length: 18 }, (_, idx) =>
+        createMockPaycheck({
+          date: format(addMonths(parseISO('2026-01-01'), idx), 'yyyy-MM-dd'),
+          totalIncome: 1000,
+          totalBills: 600,
+          savingsDeposit: 50,
+          totalSavings: (idx + 1) * 50,
+          budgetRemaining: 300,
+          isShortfall: false,
+          bills: [],
+          goalDeposits: [],
+          totalGoalDeposits: 0,
+        })
+      );
+      const fullSchedule = buildSchedule({
+        endDate: '2027-07-01',
+        calculationMonths: 18,
+        paychecks: fullPaychecks,
+        fullPaychecks,
+        reconciliation: undefined,
+      });
+
+      // View=12 must slice (not return the full 18-month set).
+      const twelve = applyScheduleViewport(fullSchedule, 12, [], 1000);
+      expect(twelve.paychecks.length).toBeLessThan(18);
+      expect(twelve.paychecks.at(-1)?.date).toBe('2027-01-01');
+      expect(twelve.endDate).toBe('2027-01-01');
+
+      // View at the full horizon returns everything.
+      const full = applyScheduleViewport(fullSchedule, 18, [], 1000);
+      expect(full.paychecks).toHaveLength(18);
+      expect(full.endDate).toBe('2027-07-01');
     });
 
     it('adds rebalanced and heavy-paycheck recommendations', () => {
