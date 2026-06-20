@@ -19,11 +19,16 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
   SCHEDULE_CALCULATION_MONTHS,
+  resolveCalculationMonths,
   billOccurrenceKey,
 } from './scheduler/types';
 import type { DebtPayoffInfo, ScheduleData } from './scheduler/types';
 
-export { SCHEDULE_CALCULATION_MONTHS } from './scheduler/types';
+export {
+  SCHEDULE_CALCULATION_MONTHS,
+  SCHEDULE_MAX_CALCULATION_MONTHS,
+  resolveCalculationMonths,
+} from './scheduler/types';
 
 export type {
   DebtPayoffInfo,
@@ -67,7 +72,10 @@ export class SchedulerService {
     incomeOverrides: Map<string, number> = new Map()
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
-    const endDate = addMonths(startDate, SCHEDULE_CALCULATION_MONTHS);
+    // Horizon spans the latest goal deadline (clamped to [12, 60] months) so
+    // goals of any length are paced over their real timeline.
+    const calcMonths = resolveCalculationMonths(startDateStr, goals);
+    const endDate = addMonths(startDate, calcMonths);
 
     const allIncomes: ReturnType<typeof projectIncome> = [];
     for (const income of incomes) {
@@ -146,7 +154,8 @@ export class SchedulerService {
       endDate: format(endDate, 'yyyy-MM-dd'),
       paychecks,
       fullPaychecks: paychecks,
-      viewportMonths: SCHEDULE_CALCULATION_MONTHS,
+      calculationMonths: calcMonths,
+      viewportMonths: calcMonths,
       entries: convertToLegacyEntries(paychecks, startingBalance),
       summary: calculateSummary(paychecks, startingBalance, maxBudgetRemaining),
       recommendations: generateRecommendations(paychecks, bills, startingBalance),

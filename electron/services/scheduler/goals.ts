@@ -5,6 +5,7 @@ import {
   format,
   parseISO,
   differenceInDays,
+  differenceInCalendarMonths,
   addMonths,
   startOfDay,
 } from 'date-fns';
@@ -13,7 +14,7 @@ import { formatCurrency, roundCurrency } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
-  SCHEDULE_CALCULATION_MONTHS,
+  resolveCalculationMonths,
   DebtPayoffInfo,
   PaycheckEntry,
   GoalProjection,
@@ -239,7 +240,11 @@ export function calculateGoalProjections(
 ): GoalProjection[] {
   const projections: GoalProjection[] = [];
   const scheduleEnd = parseISO(scheduleEndDate);
-  const SCHEDULE_MONTHS = 12;
+  // Derive the schedule horizon from the actual paycheck span so the monthly
+  // goal-allocation rate isn't overstated when the horizon exceeds 12 months
+  // (used only for goals that fall beyond the calculation cap).
+  const firstPaycheckDate = paychecks.length > 0 ? parseISO(paychecks[0].date) : scheduleEnd;
+  const horizonMonths = Math.max(1, differenceInCalendarMonths(scheduleEnd, firstPaycheckDate));
 
   // Sort goals by priority (ascending - 1 is highest priority)
   const sortedGoals = [...goals].sort((a, b) => a.priority - b.priority);
@@ -260,7 +265,7 @@ export function calculateGoalProjections(
     .filter(p => !p.isShortfall)
     .reduce((sum, p) => sum + p.totalGoalDeposits, 0);
 
-  const monthlyGoalRate = totalGoalDeposits / SCHEDULE_MONTHS;
+  const monthlyGoalRate = totalGoalDeposits / horizonMonths;
 
   const scheduleHealth = buildScheduleHealth(paychecks);
 
@@ -353,7 +358,7 @@ export function calculateGoalProjections(
       achievableAmount = goal.alreadySaved + canAchieve;
       achievabilityPercent = Math.min(100, Math.round((achievableAmount / goal.targetAmount) * 100));
       isProjected = true;
-      projectionNote = `Projected based on ${SCHEDULE_MONTHS}-month allocation rate`;
+      projectionNote = `Projected based on your ${horizonMonths}-month allocation rate`;
     }
 
     let status: 'achievable' | 'partial' | 'impossible';
@@ -428,7 +433,10 @@ export function generateGoalProjections(
   }
 
   const startDate = startOfDay(parseISO(startDateStr));
-  const endDate = addMonths(startDate, SCHEDULE_CALCULATION_MONTHS);
+  // Match generateSchedule: span the latest goal deadline so projections cover
+  // every goal rather than truncating at a fixed 12 months.
+  const calcMonths = resolveCalculationMonths(startDateStr, goals);
+  const endDate = addMonths(startDate, calcMonths);
 
   const allIncomes: ReturnType<typeof projectIncome> = [];
   for (const income of incomes) {

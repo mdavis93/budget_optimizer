@@ -2547,7 +2547,7 @@ describe('SchedulerService', () => {
   });
 
   describe('goal suggestions and beyond-schedule projections', () => {
-    it('marks long-horizon goals as projected with guidance suggestions', () => {
+    it('marks goals beyond the calculation cap as projected with guidance suggestions', () => {
       const income: Income = {
         id: 'income-1',
         sourceName: 'Salary',
@@ -2558,12 +2558,15 @@ describe('SchedulerService', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
+      // Beyond the 60-month calculation cap (start 2026-01 -> ~84 months out) and
+      // too large to fully fund within the capped horizon, so the goal falls
+      // outside the dynamic horizon and uses the projected path.
       const goal: SavingsGoal = {
         id: 'goal-far',
         budgetId: 'budget-1',
         name: 'Car Down Payment',
-        targetAmount: 100000,
-        targetDate: '2028-06-30',
+        targetAmount: 500000,
+        targetDate: '2033-01-01',
         alreadySaved: 1000,
         priority: 3,
         createdAt: '2026-01-01T00:00:00.000Z',
@@ -2585,7 +2588,7 @@ describe('SchedulerService', () => {
 
       const projection = schedule.goalProjections.find((entry) => entry.goalId === 'goal-far');
       expect(projection?.isProjected).toBe(true);
-      expect(projection?.projectionNote).toContain('12-month allocation rate');
+      expect(projection?.projectionNote).toContain('allocation rate');
       expect(projection?.suggestions?.length).toBeGreaterThan(0);
       expect(projection?.suggestions?.some((s) => s.type === 'extend_deadline' || s.type === 'reduce_target')).toBe(true);
     });
