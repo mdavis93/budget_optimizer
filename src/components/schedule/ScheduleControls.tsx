@@ -1,8 +1,18 @@
+import { useEffect, useMemo } from 'react';
+import {
+  buildViewportOptions,
+  type GoalViewportSource,
+} from '../../utils/scheduleViewportOptions';
+
+const DEFAULT_VIEWPORT_MONTHS = 12;
+
 interface ScheduleControlsProps {
   startDate: string;
   months: number;
   startingBalance: number;
   isLoading: boolean;
+  calculationMonths?: number;
+  goals?: ReadonlyArray<GoalViewportSource>;
   onStartDateChange: (date: string) => void;
   onMonthsChange: (months: number) => void;
   onStartingBalanceChange: (balance: number) => void;
@@ -14,11 +24,27 @@ export default function ScheduleControls({
   months,
   startingBalance,
   isLoading,
+  calculationMonths = DEFAULT_VIEWPORT_MONTHS,
+  goals = [],
   onStartDateChange,
   onMonthsChange,
   onStartingBalanceChange,
   onGenerate,
 }: ScheduleControlsProps) {
+  const viewportOptions = useMemo(
+    () => buildViewportOptions(calculationMonths, startDate, goals),
+    [calculationMonths, startDate, goals]
+  );
+
+  // If the current selection no longer maps to an option (e.g. a goal was
+  // deleted or renamed away), fall back to the 12-month default.
+  const selectionIsValid = viewportOptions.some((option) => option.value === months);
+  useEffect(() => {
+    if (!selectionIsValid && months !== DEFAULT_VIEWPORT_MONTHS) {
+      onMonthsChange(DEFAULT_VIEWPORT_MONTHS);
+    }
+  }, [selectionIsValid, months, onMonthsChange]);
+
   return (
     <div className="card">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -37,14 +63,15 @@ export default function ScheduleControls({
           <label htmlFor="schedule-view" className="label">View</label>
           <select
             id="schedule-view"
-            value={months}
+            value={selectionIsValid ? months : DEFAULT_VIEWPORT_MONTHS}
             onChange={(e) => onMonthsChange(parseInt(e.target.value))}
             className="input"
           >
-            <option value={1}>1 Month</option>
-            <option value={3}>3 Months</option>
-            <option value={6}>6 Months</option>
-            <option value={12}>12 Months</option>
+            {viewportOptions.map((option) => (
+              <option key={`${option.value}-${option.label}`} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
         

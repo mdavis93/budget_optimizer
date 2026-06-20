@@ -59,6 +59,17 @@ export default function SchedulePage() {
     return schedule.paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0);
   }, [schedule?.paychecks]);
 
+  // Goal-anchored viewport shortcuts derive from the computed projections so the
+  // dropdown can offer a "Through <goal>" option per goal.
+  const goalViewportSources = useMemo(
+    () =>
+      (schedule?.goalProjections ?? []).map((p) => ({
+        goalName: p.goalName,
+        targetDate: p.targetDate,
+      })),
+    [schedule?.goalProjections]
+  );
+
   // Determine if there are actionable recommendations (not just informational)
   const hasActionableRecommendations = useMemo(() => {
     if (!schedule?.recommendations) return false;
@@ -428,6 +439,8 @@ export default function SchedulePage() {
         months={months}
         startingBalance={startingBalance}
         isLoading={isLoading}
+        calculationMonths={schedule?.calculationMonths}
+        goals={goalViewportSources}
         onStartDateChange={setStartDate}
         onMonthsChange={setMonths}
         onStartingBalanceChange={setStartingBalance}
