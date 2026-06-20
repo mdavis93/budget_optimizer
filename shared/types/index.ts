@@ -245,6 +245,8 @@ export interface PaycheckEntry {
   savingsDeposit: number;
   totalSavings: number;
   isShortfall: boolean;
+  /** True when goals consumed surplus that pushed this paycheck's savings below the fallback target. */
+  savingsSqueezed?: boolean;
 }
 
 export interface GoalSuggestion {

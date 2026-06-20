@@ -66,7 +66,8 @@ export default function SchedulePage() {
       rec.toLowerCase().includes('shortfall') || 
       rec.toLowerCase().includes('deficit') ||
       rec.includes("couldn't be resolved") ||
-      rec.includes('consuming over 90%')
+      rec.includes('consuming over 90%') ||
+      rec.includes('consuming the available surplus')
     );
   }, [schedule?.recommendations]);
 
