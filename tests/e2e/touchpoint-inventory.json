@@ -166,6 +166,14 @@
       "description": "No income/bills shows the empty schedule state"
     },
     {
+      "id": "schedule.viewport-goal-options",
+      "tier": "standard",
+      "domain": "schedule",
+      "description": "The schedule View selector offers a per-goal 'Through <goal>' term option that re-slices the schedule",
+      "routes": ["/schedule"],
+      "channels": ["schedule:build"]
+    },
+    {
       "id": "routes.crawl",
       "tier": "standard",
       "domain": "navigation",
