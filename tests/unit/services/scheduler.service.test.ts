@@ -1172,6 +1172,44 @@ describe('SchedulerService', () => {
       expect(firstDeposit).toBeLessThan(totalDeposited);
     });
 
+    it('funds a reachable goal while still depositing savings (balanced allocator)', () => {
+      // A goal well within capacity should be funded without starving savings:
+      // the allocator draws goal funding from surplus above the savings target.
+      const reachableGoal: SavingsGoal = {
+        ...goal,
+        targetAmount: 3000,
+        targetDate: '2026-12-31',
+      };
+
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [],
+        '2026-01-01',
+        12,
+        0,
+        new Set(),
+        new Map(),
+        500,
+        [reachableGoal],
+        100,
+        0
+      );
+
+      const projection = schedule.goalProjections![0];
+      // Goal is fully achievable...
+      expect(projection.achievabilityPercent).toBe(100);
+      expect(projection.status).toBe('achievable');
+
+      // ...and savings still happens on multiple paychecks (not starved by goals).
+      const savingPaychecks = schedule.fullPaychecks.filter((p) => p.savingsDeposit > 0);
+      expect(savingPaychecks.length).toBeGreaterThan(1);
+
+      // All goal deposits are whole dollars.
+      schedule.fullPaychecks.forEach((p) =>
+        p.goalDeposits.forEach((d) => expect(Number.isInteger(d.amount)).toBe(true))
+      );
+    });
+
     it('handles multiple goals with priorities', () => {
       const goal2: SavingsGoal = {
         ...goal,
