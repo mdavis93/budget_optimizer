@@ -107,7 +107,8 @@ function convertToLegacyEntries(paychecks: PaycheckEntry[], startingBalance: num
 function generateRecommendations(
   paychecks: PaycheckEntry[],
   bills: Bill[],
-  _startingBalance: number
+  _startingBalance: number,
+  savingsSqueezedCount?: number
 ): string[] {
   const recommendations: string[] = [];
   const shortfallPaychecks = paychecks.filter((p) => p.isShortfall);
@@ -128,6 +129,17 @@ function generateRecommendations(
         'Budget optimized! Some bills were scheduled to be paid early to avoid deficits in later paychecks.'
       );
     }
+  }
+
+  // Savings-squeeze warning derives from the full-horizon count (carried on
+  // ScheduleData), so it persists no matter which viewport is being rendered.
+  const squeezedCount =
+    savingsSqueezedCount ?? paychecks.filter((p) => p.savingsSqueezed && !p.isShortfall).length;
+  if (squeezedCount > 0) {
+    recommendations.push(
+      `Low or no savings on ${squeezedCount} paycheck(s) because your goals are consuming the available surplus after bills and cash-on-hand. ` +
+      'Extend a goal deadline or reduce a goal target to free up room for savings.'
+    );
   }
 
   const criticalBills = bills.filter((b) => b.priority === 'critical');
@@ -226,7 +238,12 @@ export function applyScheduleViewport(
     viewportMonths,
     entries: convertToLegacyEntries(viewportPaychecks, startingBalance),
     summary: calculateSummary(viewportPaychecks, startingBalance, fullSchedule.maxBudgetRemaining),
-    recommendations: generateRecommendations(viewportPaychecks, bills, startingBalance),
+    recommendations: generateRecommendations(
+      viewportPaychecks,
+      bills,
+      startingBalance,
+      fullSchedule.savingsSqueezedCount
+    ),
     reconciliation,
   };
 }

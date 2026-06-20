@@ -309,7 +309,8 @@ export function calculateSummary(
 export function generateRecommendations(
   paychecks: PaycheckEntry[],
   bills: Bill[],
-  startingBalance: number
+  startingBalance: number,
+  savingsSqueezedCount?: number
 ): string[] {
   const recommendations: string[] = [];
 
@@ -335,10 +336,13 @@ export function generateRecommendations(
     }
   }
 
-  const squeezedPaychecks = paychecks.filter(p => p.savingsSqueezed && !p.isShortfall);
-  if (squeezedPaychecks.length > 0) {
+  // Squeeze count defaults to the full horizon when supplied so the warning
+  // persists regardless of the viewport currently being rendered.
+  const squeezedCount =
+    savingsSqueezedCount ?? paychecks.filter(p => p.savingsSqueezed && !p.isShortfall).length;
+  if (squeezedCount > 0) {
     recommendations.push(
-      `Low or no savings on ${squeezedPaychecks.length} paycheck(s) because your goals are consuming the available surplus after bills and cash-on-hand. ` +
+      `Low or no savings on ${squeezedCount} paycheck(s) because your goals are consuming the available surplus after bills and cash-on-hand. ` +
       `Extend a goal deadline or reduce a goal target to free up room for savings.`
     );
   }

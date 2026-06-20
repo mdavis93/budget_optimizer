@@ -146,6 +146,25 @@ describe('applyScheduleViewport', () => {
       expect(viewport.reconciliation?.totalDeficit).toBe(0);
     });
 
+    it('keeps the savings-squeeze warning from full-horizon data across viewports', () => {
+      // Squeezed paychecks sit in months 9-12, outside a 3-month viewport, but
+      // the carried full-horizon count keeps the warning visible.
+      const fullPaychecks = buildMonthlyPaychecks().map((p, idx) =>
+        idx >= 8 ? { ...p, savingsSqueezed: true } : p
+      );
+      const fullSchedule = buildSchedule({
+        savingsSqueezedCount: 4,
+        paychecks: fullPaychecks,
+        fullPaychecks,
+        reconciliation: undefined,
+      });
+
+      const threeMonth = applyScheduleViewport(fullSchedule, 3, bills, 1000);
+      expect(
+        threeMonth.recommendations.some((rec) => rec.includes('consuming the available surplus'))
+      ).toBe(true);
+    });
+
     it('returns a stable schedule with empty paychecks', () => {
       const fullSchedule = buildSchedule({
         paychecks: [],

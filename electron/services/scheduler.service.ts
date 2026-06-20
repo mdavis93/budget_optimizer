@@ -149,16 +149,23 @@ export class SchedulerService {
       minSavingsPerPaycheck
     );
 
+    // Full-horizon squeeze indicator, carried so viewport slicing can keep the
+    // warning even when the squeezed paycheck falls outside the visible window.
+    const savingsSqueezedCount = paychecks.filter(
+      (p) => p.savingsSqueezed && !p.isShortfall
+    ).length;
+
     const fullSchedule: ScheduleData = {
       startDate: format(startDate, 'yyyy-MM-dd'),
       endDate: format(endDate, 'yyyy-MM-dd'),
       paychecks,
       fullPaychecks: paychecks,
       calculationMonths: calcMonths,
+      savingsSqueezedCount,
       viewportMonths: calcMonths,
       entries: convertToLegacyEntries(paychecks, startingBalance),
       summary: calculateSummary(paychecks, startingBalance, maxBudgetRemaining),
-      recommendations: generateRecommendations(paychecks, bills, startingBalance),
+      recommendations: generateRecommendations(paychecks, bills, startingBalance, savingsSqueezedCount),
       maxBudgetRemaining,
       goalProjections,
     };
@@ -190,7 +197,8 @@ export class SchedulerService {
         recommendations: generateRecommendations(
           fullSchedule.fullPaychecks,
           bills,
-          startingBalance
+          startingBalance,
+          fullSchedule.savingsSqueezedCount
         ),
       };
     }
@@ -216,7 +224,12 @@ export class SchedulerService {
         startingBalance,
         fullSchedule.maxBudgetRemaining
       ),
-      recommendations: generateRecommendations(viewportPaychecks, bills, startingBalance),
+      recommendations: generateRecommendations(
+        viewportPaychecks,
+        bills,
+        startingBalance,
+        fullSchedule.savingsSqueezedCount
+      ),
     };
   }
 }

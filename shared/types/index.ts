@@ -340,6 +340,11 @@ export interface ScheduleData {
    * goal deadline so funding is paced correctly. Defaults to 12 when absent.
    */
   calculationMonths?: number;
+  /**
+   * Count of full-horizon paychecks where goals pushed savings below the
+   * fallback target. Carried so the warning persists regardless of viewport.
+   */
+  savingsSqueezedCount?: number;
   viewportMonths: number; // The currently displayed viewport (1, 3, 6, 12, or a goal term)
   entries: ScheduleEntry[];
   summary: ScheduleSummary;
