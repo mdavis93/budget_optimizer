@@ -35,14 +35,14 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.1",
+    "better-sqlite3": "^12.11.1",
     "clsx": "^2.1.0",
     "date-fns": "^4.4.0",
     "keytar": "^7.9.0",
-    "lucide-react": "^1.18.0",
+    "lucide-react": "^1.21.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.17.0",
+    "react-router-dom": "^7.18.0",
     "recharts": "^3.8.1"
   },
   "devDependencies": {
