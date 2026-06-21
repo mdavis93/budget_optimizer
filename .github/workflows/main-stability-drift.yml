@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch Main Stability when main advanced without a matching run
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
@@ -74,7 +74,7 @@ jobs:
             );
 
       - name: Dispatch Dependabot Refresh when main advanced without a matching run
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
