@@ -1,6 +1,4 @@
 import {
-  isBefore,
-  isEqual,
   format,
   parseISO,
 } from 'date-fns';
@@ -9,7 +7,6 @@ import { formatCurrency } from '../../utils/constants';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
-  SAVINGS_TARGET_FALLBACK,
   RebalanceStrategy,
   PaycheckEntry,
   PaycheckAssignment,
@@ -21,6 +18,7 @@ import {
 } from './types';
 import { buildGoalReservePerPaycheck } from './goalReserves';
 import { createRebalanceHelpers, diagnoseUnfundableReason } from './rebalance';
+import { allocateGoalsAndSavings } from './goalSavingsAllocator';
 
 export function applyFundingPriority(
   assignments: PaycheckAssignment[],
@@ -98,146 +96,72 @@ export function buildPaycheckEntries(
   const paychecks: PaycheckEntry[] = [];
   let totalSavings = 0;
 
-  // Track cumulative progress for each goal. Goals are funded on-pace (just enough
-  // each paycheck to meet the deadline), leaving the remainder for savings.
-  const goalProgress = new Map<string, number>();
-  for (const goal of goals) {
-    goalProgress.set(goal.id, goal.alreadySaved);
-  }
-
-  // Per-paycheck surplus above cash-on-hand, independent of goal allocation. Used
-  // to pace goal funding across only the paychecks that can actually contribute.
-  const surplusByIndex: number[] = assignments.map((a, i) => {
-    const inc = a.incomes.reduce((s, x) => s + x.amount, 0);
-    const billsAmt = a.bills
-      .filter(b => !b.isUnpayable)
-      .reduce((s, b) => s + b.amount, 0);
-    const boost = i === 0 ? startingBalance : 0;
-    return Math.max(0, inc - billsAmt + boost - minCashOnHand);
-  });
-
-  // Per goal: count of still-to-come contributing paychecks (surplus > 0, on/before
-  // the deadline), inclusive of the current index. Drives the on-pace divisor.
-  const goalContribRemaining = new Map<string, number[]>();
-  for (const goal of goals) {
-    const goalDate = parseISO(goal.targetDate);
-    const counts = new Array<number>(assignments.length).fill(0);
-    let fromHere = 0;
-    for (let i = assignments.length - 1; i >= 0; i--) {
-      const onOrBefore =
-        isBefore(assignments[i].date, goalDate) || isEqual(assignments[i].date, goalDate);
-      if (onOrBefore && surplusByIndex[i] > 0) {
-        fromHere++;
-      }
-      counts[i] = fromHere;
-    }
-    goalContribRemaining.set(goal.id, counts);
-  }
-
-  for (let assignmentIndex = 0; assignmentIndex < assignments.length; assignmentIndex++) {
-    const assignment = assignments[assignmentIndex];
-    // Deduplicate bills by billId+date (keep first occurrence)
+  // Pre-pass: dedupe bills and compute each paycheck's surplus above minimum
+  // cash-on-hand (the pool the allocator splits between goals and savings).
+  // Each paycheck is standalone: income - funded bills. The starting checking
+  // balance only boosts the first paycheck (cash on hand at schedule start).
+  const meta = assignments.map((assignment, i) => {
     const seenBills = new Set<string>();
     const uniqueBills = assignment.bills.filter(bill => {
       const key = billOccurrenceKey(bill.billId, bill.date);
-      if (seenBills.has(key)) {
-        return false;
-      }
+      if (seenBills.has(key)) return false;
       seenBills.add(key);
       return true;
     });
 
     const totalIncome = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
-    const fundedBills = uniqueBills.filter(bill => !bill.isUnpayable);
-    const totalBillsAmount = fundedBills.reduce((sum, bill) => sum + bill.amount, 0);
+    const totalBillsAmount = uniqueBills
+      .filter(bill => !bill.isUnpayable)
+      .reduce((sum, bill) => sum + bill.amount, 0);
+    const ledgerBoost = i === 0 ? startingBalance : 0;
+    const grossRemaining = totalIncome - totalBillsAmount + ledgerBoost;
 
-    // Each paycheck is standalone: income - bills. Starting checking balance applies only
-    // to the first paycheck (cash on hand at schedule start; no cross-paycheck carry).
-    const ledgerBoost = assignmentIndex === 0 ? startingBalance : 0;
-    let budgetRemaining = totalIncome - totalBillsAmount + ledgerBoost;
-    const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
-
-    // ALLOCATION ALGORITHM (balanced goals vs savings):
-    // Bills must be fully funded before any savings or goal deposits.
-    // 1. Calculate available surplus above minimum cash on hand.
-    // 2. Honor any configured hard minimum savings first.
-    // 3. Fund goals ON-PACE (only what's needed this paycheck to hit the
-    //    deadline using the contributing paychecks that remain), priority order.
-    // 4. The remainder goes to savings (lands at >= $150 when there's room,
-    //    falling back toward $100, then ~$0 with a warning when goals consume it).
-
-    const goalDeposits: GoalDeposit[] = [];
-    let totalGoalDeposits = 0;
-    let savingsDeposit = 0;
-    let savingsSqueezed = false;
-
-    // Surplus is swept to goals/savings whenever it exists, even if some bills
-    // were dropped as unpayable to protect a goal reserve. A genuinely
-    // under-funded paycheck keeps budgetRemaining below minCashOnHand, so
-    // availableSurplus stays 0 and nothing is allocated.
-    const canFundExtras = budgetRemaining >= minCashOnHand;
-    const availableSurplus = canFundExtras
-      ? Math.max(0, budgetRemaining - minCashOnHand)
+    // Surplus is swept whenever it exists, even if some bills were dropped as
+    // unpayable. A genuinely under-funded paycheck keeps grossRemaining below
+    // minCashOnHand, so surplus stays 0 and nothing is allocated.
+    const surplus = grossRemaining >= minCashOnHand
+      ? Math.max(0, grossRemaining - minCashOnHand)
       : 0;
 
-    if (availableSurplus <= 0) {
-      // No surplus - nothing to allocate to savings or goals
-      savingsDeposit = 0;
-    } else {
-      // Step 1: honor any configured hard minimum savings floor (default 0).
-      const hardSavingsFloor = Math.min(minSavingsPerPaycheck, availableSurplus);
-      savingsDeposit = hardSavingsFloor;
-      let pool = availableSurplus - hardSavingsFloor;
+    return { assignment, uniqueBills, totalIncome, totalBillsAmount, grossRemaining, surplus };
+  });
 
-      // Step 2: fund goals on-pace in priority order (highest priority first).
-      const sortedGoals = [...goals].sort((a, b) => a.priority - b.priority);
+  // ALLOCATION ALGORITHM: a single capacity-proportional, deadline-windowed,
+  // tiered-floor pass over the whole horizon (see goalSavingsAllocator). Goals
+  // are funded across the paychecks that can contribute, biased toward richer
+  // paychecks, while protecting tiered savings targets; the remainder is savings.
+  const allocation = allocateGoalsAndSavings(
+    meta.map(m => ({ date: format(m.assignment.date, 'yyyy-MM-dd'), surplus: m.surplus })),
+    goals.map(goal => ({
+      id: goal.id,
+      name: goal.name,
+      targetAmount: goal.targetAmount,
+      alreadySaved: goal.alreadySaved,
+      priority: goal.priority,
+      targetDate: goal.targetDate,
+    })),
+    { minSavingsPerPaycheck }
+  );
 
-      for (const goal of sortedGoals) {
-        if (pool <= 0) break;
+  for (let assignmentIndex = 0; assignmentIndex < meta.length; assignmentIndex++) {
+    const { assignment, uniqueBills, totalIncome, totalBillsAmount, grossRemaining, surplus } =
+      meta[assignmentIndex];
+    const alloc = allocation.paychecks[assignmentIndex];
+    const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
 
-        const paycheckDate = parseISO(paycheckDateStr);
-        const goalDate = parseISO(goal.targetDate);
+    const goalDeposits: GoalDeposit[] = alloc.goalDeposits.map(deposit => ({
+      goalId: deposit.goalId,
+      goalName: deposit.goalName,
+      amount: Math.round(deposit.amount),
+    }));
+    const totalGoalDeposits = alloc.totalGoalDeposits;
+    const savingsDeposit = alloc.savingsDeposit;
+    const savingsSqueezed = alloc.savingsSqueezed;
 
-        if (!isBefore(paycheckDate, goalDate) && !isEqual(paycheckDate, goalDate)) {
-          continue;
-        }
-
-        const currentProgress = goalProgress.get(goal.id) || goal.alreadySaved;
-        const remaining = goal.targetAmount - currentProgress;
-        if (remaining <= 0) continue;
-
-        const contribRemaining = goalContribRemaining.get(goal.id)?.[assignmentIndex] ?? 0;
-        if (contribRemaining <= 0) continue;
-
-        // On-pace need: spread the remaining balance over the contributing
-        // paychecks left until the deadline. Whole dollars; ceil ensures the
-        // deadline is actually met rather than landing a dollar short.
-        const onPaceNeed = Math.ceil(remaining / contribRemaining);
-        const allocation = Math.min(onPaceNeed, remaining, pool);
-
-        if (allocation > 0) {
-          goalDeposits.push({
-            goalId: goal.id,
-            goalName: goal.name,
-            amount: Math.round(allocation * 100) / 100,
-          });
-          totalGoalDeposits += allocation;
-          pool -= allocation;
-          goalProgress.set(goal.id, currentProgress + allocation);
-        }
-      }
-
-      // Step 3: the remainder is savings. It naturally lands at the highest
-      // feasible amount (>= $150 when there's room), so the goal deadline keeps
-      // priority while savings still happens every paycheck it can.
-      savingsDeposit += pool;
-
-      // Flag paychecks where goals pushed savings below the fallback target.
-      if (totalGoalDeposits > 0 && savingsDeposit < SAVINGS_TARGET_FALLBACK) {
-        savingsSqueezed = true;
-      }
-
-      // Update budget remaining (keep minCashOnHand)
+    // When surplus was allocated, the paycheck lands at minCashOnHand and savings
+    // accrues; otherwise the (possibly negative) gross remainder stands.
+    let budgetRemaining = grossRemaining;
+    if (surplus > 0) {
       budgetRemaining = minCashOnHand;
       totalSavings += savingsDeposit;
     }
@@ -385,7 +309,8 @@ export function calculateSummary(
 export function generateRecommendations(
   paychecks: PaycheckEntry[],
   bills: Bill[],
-  startingBalance: number
+  startingBalance: number,
+  savingsSqueezedCount?: number
 ): string[] {
   const recommendations: string[] = [];
 
@@ -411,10 +336,13 @@ export function generateRecommendations(
     }
   }
 
-  const squeezedPaychecks = paychecks.filter(p => p.savingsSqueezed && !p.isShortfall);
-  if (squeezedPaychecks.length > 0) {
+  // Squeeze count defaults to the full horizon when supplied so the warning
+  // persists regardless of the viewport currently being rendered.
+  const squeezedCount =
+    savingsSqueezedCount ?? paychecks.filter(p => p.savingsSqueezed && !p.isShortfall).length;
+  if (squeezedCount > 0) {
     recommendations.push(
-      `Low or no savings on ${squeezedPaychecks.length} paycheck(s) because your goals are consuming the available surplus after bills and cash-on-hand. ` +
+      `Low or no savings on ${squeezedCount} paycheck(s) because your goals are consuming the available surplus after bills and cash-on-hand. ` +
       `Extend a goal deadline or reduce a goal target to free up room for savings.`
     );
   }

@@ -1,8 +1,50 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ScheduleControls from '../../src/components/schedule/ScheduleControls';
 
 describe('ScheduleControls', () => {
+  describe('goal-anchored viewport options', () => {
+    it('renders a per-goal "Through ..." option when a goal extends the horizon', () => {
+      render(
+        <ScheduleControls
+          startDate="2026-01-01"
+          months={12}
+          startingBalance={0}
+          isLoading={false}
+          calculationMonths={18}
+          goals={[{ goalName: 'Car', targetDate: '2027-07-01' }]}
+          onStartDateChange={vi.fn()}
+          onMonthsChange={vi.fn()}
+          onStartingBalanceChange={vi.fn()}
+          onGenerate={vi.fn()}
+        />
+      );
+
+      const option = screen.getByRole('option', { name: 'Through "Car" (Jul 2027)' }) as HTMLOptionElement;
+      expect(option.value).toBe('18');
+    });
+
+    it('falls back to 12 when the current selection is no longer a valid option', async () => {
+      const onMonthsChange = vi.fn();
+      render(
+        <ScheduleControls
+          startDate="2026-01-01"
+          months={18} // stale: no goal/horizon supports 18 here
+          startingBalance={0}
+          isLoading={false}
+          calculationMonths={12}
+          goals={[]}
+          onStartDateChange={vi.fn()}
+          onMonthsChange={onMonthsChange}
+          onStartingBalanceChange={vi.fn()}
+          onGenerate={vi.fn()}
+        />
+      );
+
+      await waitFor(() => expect(onMonthsChange).toHaveBeenCalledWith(12));
+    });
+  });
+
   describe('happy', () => {
     it('updates date, view, balance, and generates schedule', () => {
       const onStartDateChange = vi.fn();

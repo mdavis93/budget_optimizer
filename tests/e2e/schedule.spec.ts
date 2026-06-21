@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import { navigateTo, expectNoSpinner } from './helpers/nav';
-import { reloadShell, seedBill, seedIncome } from './helpers/seed';
+import { reloadShell, seedBill, seedGoal, seedIncome } from './helpers/seed';
 
 /**
  * Schedule domain journeys — the seam where income + bills become a paycheck
@@ -39,6 +39,80 @@ test.describe('Schedule', () => {
     await navigateTo(window, 'Schedule');
 
     await expect(window.getByRole('heading', { name: 'No Schedule Available' })).toBeVisible();
+    await expectNoSpinner(window);
+  });
+
+  test('viewport: the View selector offers a per-goal term option @schedule.viewport-goal-options', async ({ window }) => {
+    await startInNamedBudget(window);
+
+    await seedIncome(window, {
+      sourceName: 'Acme Payroll',
+      amount: 2400,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+    });
+    await seedBill(window, {
+      creditorName: 'Rent',
+      budgetedAmount: 1500,
+      dueDay: 1,
+      isRecurring: true,
+      priority: 'critical',
+    });
+    // A goal ~2 years out forces the horizon past 12 months, so the dropdown
+    // should expose a distinct "Through <goal>" shortcut.
+    const target = new Date();
+    target.setFullYear(target.getFullYear() + 2);
+    const targetDate = target.toISOString().slice(0, 10);
+    await seedGoal(window, {
+      name: 'New Car',
+      targetAmount: 12000,
+      targetDate,
+      alreadySaved: 0,
+      priority: 1,
+    });
+    await reloadShell(window);
+    await navigateTo(window, 'Schedule');
+
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+
+    const view = window.getByLabel('View');
+    const goalOption = window.locator('#schedule-view option', { hasText: 'Through "New Car"' });
+    await expect(goalOption).toHaveCount(1);
+
+    const goalValue = await goalOption.getAttribute('value');
+    expect(goalValue).toBeTruthy();
+    await view.selectOption(goalValue as string);
+    await expect(view).toHaveValue(goalValue as string);
+    await expectNoSpinner(window);
+  });
+
+  test('goal at risk: an underfunded goal flags the Goals Total summary @schedule.goal-at-risk', async ({ window }) => {
+    await startInNamedBudget(window);
+
+    await seedIncome(window, {
+      sourceName: 'Acme Payroll',
+      amount: 2400,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+    });
+    // A large goal with a near deadline cannot be funded -> at risk.
+    const target = new Date();
+    target.setMonth(target.getMonth() + 6);
+    const targetDate = target.toISOString().slice(0, 10);
+    await seedGoal(window, {
+      name: 'Impossible Dream',
+      targetAmount: 999999,
+      targetDate,
+      alreadySaved: 0,
+      priority: 1,
+    });
+    await reloadShell(window);
+    await navigateTo(window, 'Schedule');
+
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    await expect(window.getByRole('img', { name: 'Goals at risk' })).toBeVisible();
     await expectNoSpinner(window);
   });
 });

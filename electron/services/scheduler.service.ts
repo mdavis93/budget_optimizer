@@ -19,11 +19,16 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
   SCHEDULE_CALCULATION_MONTHS,
+  resolveCalculationMonths,
   billOccurrenceKey,
 } from './scheduler/types';
 import type { DebtPayoffInfo, ScheduleData } from './scheduler/types';
 
-export { SCHEDULE_CALCULATION_MONTHS } from './scheduler/types';
+export {
+  SCHEDULE_CALCULATION_MONTHS,
+  SCHEDULE_MAX_CALCULATION_MONTHS,
+  resolveCalculationMonths,
+} from './scheduler/types';
 
 export type {
   DebtPayoffInfo,
@@ -67,7 +72,10 @@ export class SchedulerService {
     incomeOverrides: Map<string, number> = new Map()
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
-    const endDate = addMonths(startDate, SCHEDULE_CALCULATION_MONTHS);
+    // Horizon spans the latest goal deadline (clamped to [12, 60] months) so
+    // goals of any length are paced over their real timeline.
+    const calcMonths = resolveCalculationMonths(startDateStr, goals);
+    const endDate = addMonths(startDate, calcMonths);
 
     const allIncomes: ReturnType<typeof projectIncome> = [];
     for (const income of incomes) {
@@ -141,15 +149,23 @@ export class SchedulerService {
       minSavingsPerPaycheck
     );
 
+    // Full-horizon squeeze indicator, carried so viewport slicing can keep the
+    // warning even when the squeezed paycheck falls outside the visible window.
+    const savingsSqueezedCount = paychecks.filter(
+      (p) => p.savingsSqueezed && !p.isShortfall
+    ).length;
+
     const fullSchedule: ScheduleData = {
       startDate: format(startDate, 'yyyy-MM-dd'),
       endDate: format(endDate, 'yyyy-MM-dd'),
       paychecks,
       fullPaychecks: paychecks,
-      viewportMonths: SCHEDULE_CALCULATION_MONTHS,
+      calculationMonths: calcMonths,
+      savingsSqueezedCount,
+      viewportMonths: calcMonths,
       entries: convertToLegacyEntries(paychecks, startingBalance),
       summary: calculateSummary(paychecks, startingBalance, maxBudgetRemaining),
-      recommendations: generateRecommendations(paychecks, bills, startingBalance),
+      recommendations: generateRecommendations(paychecks, bills, startingBalance, savingsSqueezedCount),
       maxBudgetRemaining,
       goalProjections,
     };
@@ -166,7 +182,8 @@ export class SchedulerService {
     bills: Bill[],
     startingBalance: number
   ): ScheduleData {
-    if (viewportMonths >= SCHEDULE_CALCULATION_MONTHS) {
+    const horizonMonths = fullSchedule.calculationMonths ?? SCHEDULE_CALCULATION_MONTHS;
+    if (viewportMonths >= horizonMonths) {
       return {
         ...fullSchedule,
         paychecks: fullSchedule.fullPaychecks,
@@ -180,7 +197,8 @@ export class SchedulerService {
         recommendations: generateRecommendations(
           fullSchedule.fullPaychecks,
           bills,
-          startingBalance
+          startingBalance,
+          fullSchedule.savingsSqueezedCount
         ),
       };
     }
@@ -206,7 +224,12 @@ export class SchedulerService {
         startingBalance,
         fullSchedule.maxBudgetRemaining
       ),
-      recommendations: generateRecommendations(viewportPaychecks, bills, startingBalance),
+      recommendations: generateRecommendations(
+        viewportPaychecks,
+        bills,
+        startingBalance,
+        fullSchedule.savingsSqueezedCount
+      ),
     };
   }
 }
