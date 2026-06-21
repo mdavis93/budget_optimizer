@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Determine whether this Main Stability run targets main
         id: scope
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -40,7 +40,7 @@ jobs:
 
       - name: Open merge-freeze issue on Main Stability failure
         if: steps.scope.outputs.apply == 'true' && github.event.workflow_run.conclusion == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
@@ -83,7 +83,7 @@ jobs:
 
       - name: Close merge-freeze issues on Main Stability success
         if: steps.scope.outputs.apply == 'true' && github.event.workflow_run.conclusion == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
