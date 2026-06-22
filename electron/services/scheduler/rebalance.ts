@@ -18,6 +18,7 @@ export interface RebalanceHelpers {
   getBalance: (index: number) => number;
   getSurplus: (index: number) => number;
   getDeficit: (index: number) => number;
+  getFundingDeficit: (index: number) => number;
   getTotalDeficit: () => number;
   moveBill: (fromIdx: number, toIdx: number, bill: ProjectedBill) => boolean;
   getMovableBills: (index: number) => ProjectedBill[];
@@ -63,6 +64,19 @@ export function createRebalanceHelpers(
 
   const getDeficit = (index: number): number => {
     return Math.max(0, -getAvailableAfterCommitments(index));
+  };
+
+  // Bills take absolute priority over goal and savings deposits. A paycheck can
+  // always sacrifice its goal reserve and savings floor to pay a bill, so the
+  // only thing protected ahead of bills is the minimum cash-on-hand. This is the
+  // deficit that determines whether a bill is truly unfundable (vs. merely
+  // competing with optional goal/savings allocation).
+  const getFundingAvailable = (index: number): number => {
+    return getIncome(index) - getBillTotal(index) - minCashOnHand;
+  };
+
+  const getFundingDeficit = (index: number): number => {
+    return Math.max(0, -getFundingAvailable(index));
   };
 
   const getTotalDeficit = (): number => {
@@ -137,7 +151,7 @@ export function createRebalanceHelpers(
     });
   };
 
-  return { getBalance, getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills };
+  return { getBalance, getSurplus, getDeficit, getFundingDeficit, getTotalDeficit, moveBill, getMovableBills };
 }
 
 export function rebalancePhase1_DirectMoves(

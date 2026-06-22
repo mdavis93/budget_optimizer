@@ -31,7 +31,7 @@ export function applyFundingPriority(
   const goalReservePerPaycheck = buildGoalReservePerPaycheck(assignments, goals);
   const poolOptions = { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck };
   const helpers = createRebalanceHelpers(assignments, lockedBills, poolOptions, strategy);
-  const { getDeficit, getSurplus, moveBill, getMovableBills } = helpers;
+  const { getDeficit, getFundingDeficit, getSurplus, moveBill, getMovableBills } = helpers;
 
   // Retry prepay moves after rebalance
   let maxPasses = 200;
@@ -65,7 +65,10 @@ export function applyFundingPriority(
 
   for (let i = 0; i < assignments.length; i++) {
     for (const tier of triageTiers) {
-      while (getDeficit(i) > 0) {
+      // Drop bills only when the paycheck genuinely cannot fund them even after
+      // sacrificing every goal and savings deposit. Goal reserves must never
+      // force an otherwise-payable bill to be dropped.
+      while (getFundingDeficit(i) > 0) {
         const billToDrop = assignments[i].bills.find(
           b => b.priority === tier && !b.isUnpayable && !b.isIncomeAttached
         );
