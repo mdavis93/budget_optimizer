@@ -1,4 +1,4 @@
-import { useCallback, useState, MouseEvent } from 'react';
+import { useCallback, useState } from 'react';
 import { useDraftOptional } from '../context/DraftContext';
 import UnsavedChangesModal from '../components/UnsavedChangesModal';
 
@@ -21,21 +21,6 @@ export function useUnsavedChangesGuard() {
       return true;
     },
     [draft?.hasUnsavedChanges]
-  );
-
-  const guardNavigate = useCallback(
-    (
-      event: MouseEvent<HTMLAnchorElement>,
-      navigate: () => void,
-      label = 'leave this page'
-    ) => {
-      if (!draft?.hasUnsavedChanges) {
-        return;
-      }
-      event.preventDefault();
-      guardAction(navigate, label);
-    },
-    [draft?.hasUnsavedChanges, guardAction]
   );
 
   const handleSaveAndContinue = useCallback(async () => {
@@ -65,5 +50,5 @@ export function useUnsavedChangesGuard() {
     />
   );
 
-  return { guardAction, guardNavigate, unsavedDialog };
+  return { guardAction, unsavedDialog };
 }

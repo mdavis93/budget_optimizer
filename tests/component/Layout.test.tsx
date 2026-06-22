@@ -51,7 +51,6 @@ describe('Layout', () => {
     });
     mockUseUnsavedChangesGuard.mockReturnValue({
       guardAction: (action: () => void) => action(),
-      guardNavigate: () => undefined,
       unsavedDialog: null,
     });
   });
@@ -105,7 +104,6 @@ describe('Layout', () => {
       const guardAction = vi.fn();
       mockUseUnsavedChangesGuard.mockReturnValue({
         guardAction,
-        guardNavigate: vi.fn(),
         unsavedDialog: null,
       });
 
@@ -115,19 +113,24 @@ describe('Layout', () => {
       expect(guardAction).toHaveBeenCalledWith(expect.any(Function), 'quit the app');
     });
 
-    it('routes sidebar navigation through guardNavigate', async () => {
+    it('does not guard in-app sidebar navigation even with unsaved changes', async () => {
       const user = userEvent.setup();
-      const guardNavigate = vi.fn();
+      const guardAction = vi.fn();
       mockUseUnsavedChangesGuard.mockReturnValue({
-        guardAction: vi.fn(),
-        guardNavigate,
+        guardAction,
         unsavedDialog: null,
+      });
+      // Pending draft changes present: navigation must still be free.
+      mockUseDraft.mockReturnValue({
+        isDraftMode: true,
+        isDomainDirty: vi.fn(() => true),
       });
 
       renderWithRouter(<Layout />, { route: '/dashboard', mockAPI });
-      await user.click(screen.getByRole('link', { name: /Bills/i }));
+      await user.click(screen.getByRole('link', { name: /Schedule/i }));
 
-      expect(guardNavigate).toHaveBeenCalled();
+      // Exit-only guard: sidebar navigation never routes through guardAction.
+      expect(guardAction).not.toHaveBeenCalled();
     });
 
     it('pings activity on user input after throttle window', async () => {

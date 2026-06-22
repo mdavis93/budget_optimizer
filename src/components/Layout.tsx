@@ -1,5 +1,5 @@
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, type MouseEvent } from 'react';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import {
   LayoutDashboard,
   Wallet,
@@ -42,17 +42,14 @@ export default function Layout() {
   const { lock } = useAuth();
   const { currentBudget, isQuickBudget } = useBudget();
   const { isDraftMode, isDomainDirty } = useDraftData();
-  const { guardAction, guardNavigate, unsavedDialog } = useUnsavedChangesGuard();
+  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
   const location = useLocation();
-  const navigate = useNavigate();
   const currentDomain = ROUTE_DRAFT_DOMAIN[location.pathname];
 
-  const handleNavClick = (to: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-    if (location.pathname === to) {
-      return;
-    }
-    guardNavigate(event, () => navigate(to), 'leave this page');
-  };
+  // In-app navigation never blocks: the draft lives in DraftProvider (above the
+  // routed pages), so switching pages preserves uncommitted changes and lets the
+  // user simulate freely. The unsaved-changes guard only fires on exit actions
+  // (Lock App / Quit App) below.
 
   const handleQuit = () => {
     guardAction(() => window.electronAPI.quitApp(), 'quit the app');
@@ -130,7 +127,6 @@ export default function Layout() {
               <NavLink
                 key={to}
                 to={to}
-                onClick={handleNavClick(to)}
                 className={({ isActive }) =>
                   clsx(
                     'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
@@ -152,7 +148,6 @@ export default function Layout() {
           <div className="p-4 space-y-1 border-t border-[var(--color-border)]">
             <NavLink
               to="/settings"
-              onClick={handleNavClick('/settings')}
               className={({ isActive }) =>
                 clsx(
                   'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
