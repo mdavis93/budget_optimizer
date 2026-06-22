@@ -100,22 +100,28 @@
       "channels": ["schedule:build"]
     },
     {
+      "id": "draft.nav-free",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "In-app navigation is unguarded: switching pages preserves the draft so users can simulate uncommitted changes freely"
+    },
+    {
       "id": "draft.guard-cancel",
       "tier": "critical",
       "domain": "draft",
-      "description": "Unsaved-changes guard: Cancel keeps you on the page with the draft intact"
+      "description": "Exit guard (Lock/Quit): Cancel keeps you in the app with the draft intact"
     },
     {
       "id": "draft.guard-discard",
       "tier": "critical",
       "domain": "draft",
-      "description": "Unsaved-changes guard: Discard All proceeds and drops the draft"
+      "description": "Exit guard (Lock/Quit): Discard All drops the draft and proceeds"
     },
     {
       "id": "draft.guard-save",
       "tier": "critical",
       "domain": "draft",
-      "description": "Unsaved-changes guard: Save All Changes proceeds and persists the draft"
+      "description": "Exit guard (Lock/Quit): Save All Changes persists the draft and proceeds"
     },
 
     {
