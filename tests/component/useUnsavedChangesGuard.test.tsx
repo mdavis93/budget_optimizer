@@ -11,7 +11,7 @@ vi.mock('../../src/context/DraftContext', () => ({
 }));
 
 function GuardHarness() {
-  const { guardAction, guardNavigate, unsavedDialog } = useUnsavedChangesGuard();
+  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,9 +19,6 @@ function GuardHarness() {
     <div>
       <div data-testid="pathname">{location.pathname}</div>
       <button onClick={() => guardAction(() => navigate('/next'), 'navigate')}>go-next</button>
-      <a href="/next" onClick={(event) => guardNavigate(event, () => navigate('/next'), 'navigate')}>
-        link-next
-      </a>
       {unsavedDialog}
     </div>
   );
@@ -44,7 +41,7 @@ describe('useUnsavedChangesGuard', () => {
   });
 
   describe('happy', () => {
-    it('blocks navigation when draft is dirty and allows continue after discard', async () => {
+    it('blocks the guarded action when draft is dirty and allows continue after discard', async () => {
       mockUseDraftOptional.mockReturnValue({
         hasUnsavedChanges: true,
         isSaving: false,
@@ -63,19 +60,22 @@ describe('useUnsavedChangesGuard', () => {
         expect(screen.getByText('next-page')).toBeInTheDocument();
       });
     });
-    it('blocks link navigation when draft is dirty', () => {
+
+    it('runs the guarded action immediately when there are no unsaved changes', async () => {
       mockUseDraftOptional.mockReturnValue({
-        hasUnsavedChanges: true,
+        hasUnsavedChanges: false,
         isSaving: false,
         saveAll: vi.fn().mockResolvedValue(true),
         discardAll: vi.fn(),
       });
 
       renderGuard();
-      fireEvent.click(screen.getByText('link-next'));
+      fireEvent.click(screen.getByText('go-next'));
 
-      expect(screen.getByTestId('pathname')).toHaveTextContent('/');
-      expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('next-page')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
     });
   });
 

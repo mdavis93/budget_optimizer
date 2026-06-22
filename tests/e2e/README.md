@@ -51,8 +51,9 @@ monolithic end-to-end path:
   asserting no stuck spinner (regression guard for the past Goals/Debts hangs).
 - `income`, `bills`, `goals`, `debts` — happy / sad / malicious lanes per domain.
 - `schedule.spec.ts` — income + bills → rendered schedule, plus the empty state.
-- `nav-guard.spec.ts` — the unsaved-changes navigation guard (Cancel / Discard
-  All / Save All Changes).
+- `nav-guard.spec.ts` — the unsaved-changes guard: in-app navigation is free
+  (drafts persist for simulation); only exit actions (Lock/Quit) prompt with
+  Cancel / Discard All / Save All Changes.
 - `auth.spec.ts` — lock → unlock, and a rejected password.
 
 Touchpoint coverage is tracked in `tests/e2e/touchpoint-inventory.json` and
