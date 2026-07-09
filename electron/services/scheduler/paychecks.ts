@@ -7,86 +7,14 @@ import { formatCurrency } from '../../utils/constants';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
-  RebalanceStrategy,
   PaycheckEntry,
   PaycheckAssignment,
-  PaycheckBill,
   GoalDeposit,
   ScheduleEntry,
   ScheduleSummary,
   billOccurrenceKey,
 } from './types';
-import { buildGoalReservePerPaycheck } from './goalReserves';
-import { createRebalanceHelpers, diagnoseUnfundableReason } from './rebalance';
 import { allocateGoalsAndSavings } from './goalSavingsAllocator';
-
-export function applyFundingPriority(
-  assignments: PaycheckAssignment[],
-  lockedBills: Set<string> = new Set(),
-  goals: SavingsGoal[] = [],
-  minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0,
-  strategy: RebalanceStrategy = 'deficit_killer'
-): void {
-  const goalReservePerPaycheck = buildGoalReservePerPaycheck(assignments, goals);
-  const poolOptions = { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck };
-  const helpers = createRebalanceHelpers(assignments, lockedBills, poolOptions, strategy);
-  const { getDeficit, getFundingDeficit, getSurplus, moveBill, getMovableBills } = helpers;
-
-  // Retry prepay moves after rebalance
-  let maxPasses = 200;
-  let madeProgress = true;
-  while (madeProgress && maxPasses > 0) {
-    madeProgress = false;
-    maxPasses--;
-
-    for (let i = assignments.length - 1; i >= 0; i--) {
-      if (getDeficit(i) <= 0) continue;
-
-      const movableBills = getMovableBills(i);
-      for (const bill of movableBills) {
-        for (let j = i - 1; j >= 0; j--) {
-          if (getSurplus(j) >= bill.amount) {
-            if (moveBill(i, j, bill)) {
-              madeProgress = true;
-              break;
-            }
-          }
-        }
-        if (madeProgress) break;
-        if (getDeficit(i) === 0) break;
-      }
-      if (madeProgress) break;
-    }
-  }
-
-  // Triage unfundable bills: Low → Normal → High (Critical never dropped)
-  const triageTiers: Array<'low' | 'normal' | 'high'> = ['low', 'normal', 'high'];
-
-  for (let i = 0; i < assignments.length; i++) {
-    for (const tier of triageTiers) {
-      // Drop bills only when the paycheck genuinely cannot fund them even after
-      // sacrificing every goal and savings deposit. Goal reserves must never
-      // force an otherwise-payable bill to be dropped.
-      while (getFundingDeficit(i) > 0) {
-        const billToDrop = assignments[i].bills.find(
-          b => b.priority === tier && !b.isUnpayable && !b.isIncomeAttached
-        );
-        if (!billToDrop) break;
-        billToDrop.unfundableReason = diagnoseUnfundableReason(
-          i,
-          billToDrop,
-          assignments,
-          lockedBills,
-          minCashOnHand,
-          minSavingsPerPaycheck,
-          goalReservePerPaycheck
-        );
-        billToDrop.isUnpayable = true;
-      }
-    }
-  }
-}
 
 export function buildPaycheckEntries(
   assignments: PaycheckAssignment[],
@@ -116,15 +44,26 @@ export function buildPaycheckEntries(
     const totalBillsAmount = uniqueBills
       .filter(bill => !bill.isUnpayable)
       .reduce((sum, bill) => sum + bill.amount, 0);
+    const unpayableBillsAmount = uniqueBills
+      .filter(bill => bill.isUnpayable)
+      .reduce((sum, bill) => sum + bill.amount, 0);
+    const hasUnpayableBills = unpayableBillsAmount > 0;
     const ledgerBoost = i === 0 ? startingBalance : 0;
-    const grossRemaining = totalIncome - totalBillsAmount + ledgerBoost;
 
-    // Surplus is swept whenever it exists, even if some bills were dropped as
-    // unpayable. A genuinely under-funded paycheck keeps grossRemaining below
-    // minCashOnHand, so surplus stays 0 and nothing is allocated.
-    const surplus = grossRemaining >= minCashOnHand
-      ? Math.max(0, grossRemaining - minCashOnHand)
-      : 0;
+    // Bills always outrank goals, savings, and cash-on-hand. When a paycheck has
+    // unpayable bills it is genuinely under-funded, so the unpaid obligation must
+    // consume the whole pool: nothing goes to goals/savings (surplus = 0) and the
+    // budget remainder counts the unpaid bills, surfacing as a negative figure
+    // equal to how much more income is needed to meet the obligation.
+    const grossRemaining = hasUnpayableBills
+      ? totalIncome - totalBillsAmount - unpayableBillsAmount + ledgerBoost
+      : totalIncome - totalBillsAmount + ledgerBoost;
+
+    const surplus = hasUnpayableBills
+      ? 0
+      : grossRemaining >= minCashOnHand
+        ? Math.max(0, grossRemaining - minCashOnHand)
+        : 0;
 
     return { assignment, uniqueBills, totalIncome, totalBillsAmount, grossRemaining, surplus };
   });
@@ -171,6 +110,9 @@ export function buildPaycheckEntries(
 
     const isShortfall = budgetRemaining < 0;
 
+    const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable).length;
+    const hasUnpayableBills = unpayableCount > 0;
+
     const paycheck: PaycheckEntry = {
       date: paycheckDateStr,
       incomeSources: assignment.incomes.map(inc => ({
@@ -199,6 +141,8 @@ export function buildPaycheckEntries(
       totalSavings: Math.round(totalSavings * 100) / 100,
       isShortfall,
       savingsSqueezed,
+      unpayableCount,
+      hasUnpayableBills,
     };
 
     paychecks.push(paycheck);
@@ -324,17 +268,15 @@ export function generateRecommendations(
     const deficit = Math.abs(firstShortfall.budgetRemaining);
     recommendations.push(
       `Budget shortfall of $${deficit.toFixed(2)} remains on ${format(parseISO(firstShortfall.date), 'MMM d, yyyy')} paycheck. ` +
-      `This couldn't be resolved by prepaying bills. Consider reducing expenses or increasing income.`
+      `Consider reducing expenses or increasing income.`
     );
   } else {
-    // Check if we had to rebalance (bills paid before their natural due date)
-    // This is indicated by paychecks where totalBills > totalIncome but no shortfall
-    const rebalancedPaychecks = paychecks.filter(p =>
+    const earlyPaychecks = paychecks.filter(p =>
       p.totalBills > p.totalIncome && !p.isShortfall && p.budgetRemaining >= 0
     );
-    if (rebalancedPaychecks.length > 0) {
+    if (earlyPaychecks.length > 0) {
       recommendations.push(
-        `Budget optimized! Some bills were scheduled to be paid early to avoid deficits in later paychecks.`
+        `Budget optimized! Some bills were scheduled to be paid early to balance paychecks across the schedule.`
       );
     }
   }

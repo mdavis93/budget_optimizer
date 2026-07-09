@@ -23,13 +23,9 @@ import {
   billOccurrenceKey,
 } from './types';
 import { projectIncome, projectBills } from './projection';
-import {
-  getUniquePaycheckDates,
-  buildInitialPaycheckAssignments,
-  clonePaycheckAssignments,
-  dedupeAssignmentBills,
-} from './assignment';
-import { applyFundingPriority, buildPaycheckEntries } from './paychecks';
+import { getUniquePaycheckDates } from './assignment';
+import { assignBillsExact } from './exactAssignment';
+import { buildPaycheckEntries } from './paychecks';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
   const nonShortfall = paychecks.filter(p => !p.isShortfall);
@@ -479,30 +475,20 @@ export function generateGoalProjections(
 
   const paycheckDates = getUniquePaycheckDates(allIncomes);
 
-  const { paycheckAssignments, manuallyAssignedBills } = buildInitialPaycheckAssignments(
+  const assignments = assignBillsExact(
     paycheckDates,
     allIncomes,
     uniqueBills,
-    skippedBills,
-    manualAssignments,
-    incomeAttachedBillsRaw,
-    goals,
-    minCashOnHand,
-    minSavingsPerPaycheck
+    startingBalance,
+    {
+      skippedBills,
+      manualAssignments,
+      incomeAttachedBillsRaw,
+    }
   );
 
-  const trial = clonePaycheckAssignments(paycheckAssignments);
-  applyFundingPriority(
-    trial,
-    manuallyAssignedBills,
-    goals,
-    minCashOnHand,
-    minSavingsPerPaycheck,
-    'deficit_killer'
-  );
-  dedupeAssignmentBills(trial);
   const paychecks = buildPaycheckEntries(
-    trial,
+    assignments,
     startingBalance,
     maxBudgetRemaining,
     goals,
@@ -518,5 +504,3 @@ export function generateGoalProjections(
     minSavingsPerPaycheck
   );
 }
-
-export { buildGoalReservePerPaycheck, calculateGoalRequirementsPerPaycheck } from './goalReserves';

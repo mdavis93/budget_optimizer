@@ -67,17 +67,6 @@ export function resolveCalculationMonths(
   return Math.min(maxMonths, SCHEDULE_MAX_CALCULATION_MONTHS);
 }
 
-export type RebalanceStrategy = 'deficit_killer' | 'prepay_minimizer' | 'goal_guardian';
-
-export const REBALANCE_STRATEGIES: RebalanceStrategy[] = [
-  'deficit_killer',
-  'prepay_minimizer',
-  'goal_guardian',
-];
-
-/** Max movable bills considered by the Phase F micro-solver per deficit paycheck. */
-export const MICRO_SOLVER_MAX_BILLS = 8;
-
 export interface DebtPayoffInfo {
   billId: string;
   payoffDate: Date;

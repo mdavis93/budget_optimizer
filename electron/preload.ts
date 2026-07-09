@@ -111,7 +111,7 @@ const api = {
   },
 
   schedule: {
-    /** Full schedule: project incomes/bills, rebalance, allocate goals, attach reconciliation analysis. */
+    /** Full schedule: project incomes/bills, exact assignment, allocate goals, attach reconciliation analysis. */
     build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
       ipcRenderer.invoke('schedule:build', startDate, months, startingBalance, overlay),
   },

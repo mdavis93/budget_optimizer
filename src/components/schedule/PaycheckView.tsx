@@ -111,6 +111,9 @@ function PaycheckView({
       <div className="space-y-4">
         {paychecks.map((paycheck) => {
           const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
+          const unpayableCount = visibleBills.filter(bill => bill.isUnpayable).length;
+          const hasUnpayableBills = unpayableCount > 0;
+          const needsAttention = paycheck.isShortfall || hasUnpayableBills;
           const isExpanded = expandedPaychecks.has(paycheck.date);
           const isDropTarget = dropTargetDate === paycheck.date;
           const isDragSource = draggedBill?.sourcePaycheckDate === paycheck.date;
@@ -120,7 +123,7 @@ function PaycheckView({
               key={paycheck.date}
               className={clsx(
                 'card overflow-hidden transition-all',
-                paycheck.isShortfall && 'border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-500/5',
+                needsAttention && 'border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-500/5',
                 isDropTarget && 'ring-2 ring-primary-500 ring-offset-2 bg-primary-50/50 dark:bg-primary-500/10',
                 isDragSource && 'opacity-50'
               )}
@@ -137,13 +140,13 @@ function PaycheckView({
                 <div className="flex items-center gap-4">
                   <div className={clsx(
                     'p-3 rounded-lg',
-                    paycheck.isShortfall 
+                    needsAttention 
                       ? 'bg-danger-100 dark:bg-danger-500/20' 
                       : 'bg-success-100 dark:bg-success-500/20'
                   )}>
                     <Wallet className={clsx(
                       'w-6 h-6',
-                      paycheck.isShortfall 
+                      needsAttention 
                         ? 'text-danger-600 dark:text-danger-500' 
                         : 'text-success-600 dark:text-success-500'
                     )} />
@@ -156,6 +159,15 @@ function PaycheckView({
                       <span>{paycheck.incomeSources.map(s => s.name).join(' + ')}</span>
                       <span>•</span>
                       <span>{visibleBills.length} bill{visibleBills.length !== 1 ? 's' : ''}</span>
+                      {hasUnpayableBills && (
+                        <>
+                          <span>•</span>
+                          <span className="text-danger-600 dark:text-danger-400 font-semibold flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            {unpayableCount} unpayable
+                          </span>
+                        </>
+                      )}
                       {paycheck.goalDeposits && paycheck.goalDeposits.length > 0 && (
                         <>
                           <span>•</span>
@@ -188,7 +200,7 @@ function PaycheckView({
                       {formatCurrency(paycheck.budgetRemaining)}
                     </p>
                   </div>
-                  {paycheck.isShortfall && (
+                  {needsAttention && (
                     <AlertTriangle className="w-6 h-6 text-danger-500" />
                   )}
                   {isExpanded ? (
