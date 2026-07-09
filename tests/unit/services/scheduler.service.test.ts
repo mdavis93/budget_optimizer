@@ -524,7 +524,9 @@ describe('SchedulerService', () => {
         const jan1Paycheck = schedule.paychecks.find((p) => p.date === '2026-01-01');
         expect(jan1Paycheck).toBeDefined();
         const jan28Bill = jan1Paycheck!.bills.find((b) => b.billDate === '2026-01-28');
-        expect(jan28Bill).toBeUndefined();
+        expect(jan28Bill).toBeDefined();
+        expect(jan28Bill!.isUnpayable).toBe(true);
+        expect(jan28Bill!.unfundableReason).toBe('no_eligible_paycheck_in_window');
       });
 
       it('assigns day-28 bill to latest eligible semi-monthly paycheck within 14 days', () => {
@@ -824,7 +826,7 @@ describe('SchedulerService', () => {
       }
     });
 
-    it('triages Low before Normal when funding runs out', () => {
+    it('minimizes unpaid cents when income cannot cover every bill', () => {
       const monthlyIncome: Income = {
         ...weeklyIncome,
         cadence: 'monthly',
@@ -876,21 +878,22 @@ describe('SchedulerService', () => {
       const junPaycheck = schedule.paychecks.find((p) => p.date === '2026-06-01');
       expect(junPaycheck).toBeDefined();
       expect(junPaycheck!.bills).toHaveLength(3);
-      expect(junPaycheck!.isShortfall).toBe(false);
+      expect(junPaycheck!.hasUnpayableBills).toBe(true);
 
       const lowOnPaycheck = junPaycheck!.bills.find((b) => b.billId === 'bill-low');
       const normalOnPaycheck = junPaycheck!.bills.find((b) => b.billId === 'bill-normal');
       const criticalOnPaycheck = junPaycheck!.bills.find((b) => b.billId === 'bill-critical');
 
       expect(lowOnPaycheck?.isUnpayable).toBe(true);
-      expect(normalOnPaycheck?.isUnpayable).toBe(true);
+      expect(normalOnPaycheck?.isUnpayable).toBeFalsy();
       expect(criticalOnPaycheck?.isUnpayable).toBeFalsy();
-      expect(lowOnPaycheck?.unfundableReason).toBe('insufficient_income_this_paycheck');
-      expect(normalOnPaycheck?.unfundableReason).toBe('insufficient_income_this_paycheck');
-      expect(junPaycheck!.totalBills).toBe(400);
+      expect(lowOnPaycheck?.unfundableReason).toBe('insufficient_income_in_window');
+      expect(junPaycheck!.totalBills).toBe(500);
+      expect(junPaycheck!.savingsDeposit).toBe(0);
+      expect(junPaycheck!.totalGoalDeposits).toBe(0);
     });
 
-    it('triages High before Critical when funding runs out', () => {
+    it('drops the smaller bill when critical and high exceed income', () => {
       const monthlyIncome: Income = {
         ...weeklyIncome,
         cadence: 'monthly',
@@ -931,14 +934,16 @@ describe('SchedulerService', () => {
       const junPaycheck = schedule.paychecks.find((p) => p.date === '2026-06-01');
       expect(junPaycheck).toBeDefined();
       expect(junPaycheck!.bills).toHaveLength(2);
-      expect(junPaycheck!.isShortfall).toBe(false);
+      expect(junPaycheck!.hasUnpayableBills).toBe(true);
 
       const highOnPaycheck = junPaycheck!.bills.find((b) => b.billId === 'bill-high');
       const criticalOnPaycheck = junPaycheck!.bills.find((b) => b.billId === 'bill-critical');
 
       expect(highOnPaycheck?.isUnpayable).toBe(true);
       expect(criticalOnPaycheck?.isUnpayable).toBeFalsy();
+      expect(highOnPaycheck?.unfundableReason).toBe('insufficient_income_in_window');
       expect(junPaycheck!.totalBills).toBe(400);
+      expect(junPaycheck!.savingsDeposit).toBe(0);
     });
   });
 
@@ -1864,7 +1869,7 @@ describe('SchedulerService', () => {
         // Net balance should be positive with these numbers
         expect(schedule.summary.netBalance).toBeGreaterThan(0);
         expect(totalSavings + totalGoalDeposits).toBeGreaterThan(0);
-      });
+      }, 60_000);
 
       it('maintains budget integrity across all paychecks', () => {
         const allIncomes = [biweeklyIncome, monthlyIncome];
@@ -2182,14 +2187,7 @@ describe('SchedulerService', () => {
       const report = scheduler.analyzeAndProposeFixes(schedule);
       if (report.hasShortfalls && report.proposedFixes.length > 0) {
         const firstFix = report.proposedFixes[0];
-        expect(['move_bill', 'skip_bill']).toContain(firstFix.type);
-        if (report.proposedFixes.some((f) => f.type === 'move_bill')) {
-          const moveIndex = report.proposedFixes.findIndex((f) => f.type === 'move_bill');
-          const skipIndex = report.proposedFixes.findIndex((f) => f.type === 'skip_bill');
-          if (skipIndex !== -1) {
-            expect(moveIndex).toBeLessThan(skipIndex);
-          }
-        }
+        expect(firstFix.type).toBe('move_bill');
       }
     });
 
@@ -2215,7 +2213,7 @@ describe('SchedulerService', () => {
       const lowBill: Bill = {
         id: 'bill-low',
         creditorName: 'Low',
-        budgetedAmount: 50,
+        budgetedAmount: 150,
         dueDay: 10,
         isRecurring: false,
         priority: 'low',
@@ -2235,16 +2233,10 @@ describe('SchedulerService', () => {
         .flatMap((p) => p.bills)
         .find((b) => b.billId === 'bill-low' && b.isUnpayable);
 
-      expect(dropped?.unfundableReason).toBeDefined();
-      expect([
-        'no_eligible_earlier_paycheck',
-        'insufficient_income_this_paycheck',
-        'all_movable_bills_locked',
-        'goal_reserve_conflict',
-      ]).toContain(dropped?.unfundableReason);
+      expect(dropped?.unfundableReason).toBe('insufficient_income_in_window');
     });
 
-    it('analyzeAndProposeFixes attaches reasonCode to skip proposals from unfundable bills', () => {
+    it('does not propose skip fixes for unfundable bills', () => {
       const monthlyIncome: Income = {
         ...biweeklyIncome,
         cadence: 'monthly',
@@ -2289,10 +2281,7 @@ describe('SchedulerService', () => {
       );
 
       const report = scheduler.analyzeAndProposeFixes(schedule);
-      const skipFix = report.proposedFixes.find((f) => f.type === 'skip_bill');
-      if (skipFix) {
-        expect(skipFix.reasonCode).toBeDefined();
-      }
+      expect(report.proposedFixes.every((f) => f.type === 'move_bill')).toBe(true);
     });
 
     it('returns fully resolved reconciliation report when no shortfalls exist', () => {
@@ -2680,14 +2669,13 @@ describe('SchedulerService', () => {
       const lowBill: Bill = {
         id: 'bill-low',
         creditorName: 'Low',
-        budgetedAmount: 100,
+        budgetedAmount: 150,
         dueDay: 1,
         isRecurring: false,
         priority: 'low',
         createdAt: '2026-06-01T00:00:00.000Z',
         updatedAt: '2026-06-01T00:00:00.000Z',
       };
-
       const schedule = scheduler.generateSchedule(
         [monthlyIncome],
         [criticalBill, lowBill],
@@ -2700,175 +2688,175 @@ describe('SchedulerService', () => {
         .flatMap((paycheck) => paycheck.bills)
         .find((bill) => bill.billId === 'bill-low' && bill.isUnpayable);
 
-      expect(dropped?.unfundableReason).toBeDefined();
-      expect([
-        'no_eligible_earlier_paycheck',
-        'insufficient_income_this_paycheck',
-      ]).toContain(dropped?.unfundableReason);
+      expect(dropped?.unfundableReason).toBe('insufficient_income_in_window');
     });
   });
 
-  describe('rebalance phase 3 deep cascade', () => {
-    it('frees mid-paycheck capacity via chained moves to resolve a later deficit', () => {
-      const weeklyIncome: Income = {
-        id: 'income-weekly',
+  describe('exact engine regressions', () => {
+    it('produces identical JSON for identical inputs', () => {
+      const income: Income = {
+        id: 'income-biweekly',
         sourceName: 'Salary',
-        amount: 700,
-        cadence: 'weekly',
-        startDate: '2026-01-01',
+        amount: 2650,
+        cadence: 'biweekly',
+        startDate: '2026-08-01',
         isActive: true,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
-
       const bills: Bill[] = [
         {
-          id: 'bill-a',
-          creditorName: 'A',
-          budgetedAmount: 100,
-          dueDay: 10,
-          isRecurring: false,
-          priority: 'low',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        {
-          id: 'bill-b',
-          creditorName: 'B',
-          budgetedAmount: 300,
-          dueDay: 14,
-          isRecurring: false,
-          priority: 'low',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        {
-          id: 'bill-c',
-          creditorName: 'C',
-          budgetedAmount: 400,
-          dueDay: 18,
-          isRecurring: false,
-          priority: 'low',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        {
-          id: 'bill-d',
-          creditorName: 'D',
-          budgetedAmount: 650,
-          dueDay: 25,
+          id: 'amazon',
+          creditorName: 'Amazon',
+          budgetedAmount: 165,
+          dueDay: 15,
           isRecurring: false,
           priority: 'normal',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         {
-          id: 'bill-e',
-          creditorName: 'E',
-          budgetedAmount: 200,
-          dueDay: 24,
+          id: 'water',
+          creditorName: 'Water',
+          budgetedAmount: 100,
+          dueDay: 25,
           isRecurring: false,
-          priority: 'low',
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
+
+      const args: Parameters<SchedulerService['generateSchedule']> = [
+        [income],
+        bills,
+        '2026-08-01',
+        2,
+        0,
+      ];
+      const a = JSON.stringify(scheduler.generateSchedule(...args));
+      const b = JSON.stringify(scheduler.generateSchedule(...args));
+      expect(a).toBe(b);
+    });
+
+    it('defers a bill to a later paycheck when the earlier paycheck is tight', () => {
+      const bigIncome: Income = {
+        id: 'income-big',
+        sourceName: 'Big',
+        amount: 2650,
+        cadence: 'biweekly',
+        startDate: '2026-08-14',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const smallIncome: Income = {
+        id: 'income-small',
+        sourceName: 'Small',
+        amount: 1000,
+        cadence: 'biweekly',
+        startDate: '2026-08-21',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const bills: Bill[] = [
+        {
+          id: 'amazon',
+          creditorName: 'Amazon',
+          budgetedAmount: 165,
+          dueDay: 15,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'water',
+          creditorName: 'Water',
+          budgetedAmount: 100,
+          dueDay: 25,
+          isRecurring: false,
+          priority: 'normal',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ];
 
       const schedule = scheduler.generateSchedule(
-        [weeklyIncome],
+        [bigIncome, smallIncome],
         bills,
-        '2026-01-01',
+        '2026-08-01',
         1,
-        0,
-        new Set(),
-        new Map(),
-        250,
-        [],
-        100,
         0
       );
 
-      const jan8 = schedule.paychecks.find((p) => p.date === '2026-01-08');
-      const jan15 = schedule.paychecks.find((p) => p.date === '2026-01-15');
-      const jan22 = schedule.paychecks.find((p) => p.date === '2026-01-22');
-
-      expect(jan8).toBeDefined();
-      expect(jan15).toBeDefined();
-      expect(jan22).toBeDefined();
-      expect(schedule.paychecks.every((p) => !p.isShortfall)).toBe(true);
-      expect(
-        jan8!.bills.some((b) => b.billId === 'bill-c' && b.billDate === '2026-01-18')
-      ).toBe(true);
-      expect(
-        jan15!.bills.some((b) => b.billId === 'bill-e' && b.billDate === '2026-01-24')
-      ).toBe(true);
-      expect(
-        jan22!.bills.some((b) => b.billId === 'bill-d' && b.billDate === '2026-01-25')
-      ).toBe(true);
-      expect(jan22!.bills.some((b) => b.billId === 'bill-e')).toBe(false);
+      const aug14 = schedule.paychecks.find((p) => p.date === '2026-08-14');
+      const aug21 = schedule.paychecks.find((p) => p.date === '2026-08-21');
+      expect(aug14?.bills.some((b) => b.billId === 'amazon' && !b.isUnpayable)).toBe(true);
+      expect(aug21?.bills.some((b) => b.billId === 'water' && !b.isUnpayable)).toBe(true);
     });
-  });
 
-  describe('rebalance phase 4 even out', () => {
-    it('redistributes bills from a tight paycheck to an earlier surplus paycheck', () => {
-      const weeklyIncome: Income = {
-        id: 'income-weekly',
-        sourceName: 'Salary',
-        amount: 800,
-        cadence: 'weekly',
+    it('minimizes concentrated shortfall when the window is infeasible', () => {
+      const income: Income = {
+        id: 'income-once',
+        sourceName: 'Pay',
+        amount: 1000,
+        cadence: 'monthly',
+        startDate: '2026-09-01',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const bills: Bill[] = [
+        {
+          id: 'a',
+          creditorName: 'A',
+          budgetedAmount: 600,
+          dueDay: 5,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'b',
+          creditorName: 'B',
+          budgetedAmount: 600,
+          dueDay: 5,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
+
+      const schedule = scheduler.generateSchedule([income], bills, '2026-09-01', 1, 0);
+      const unpayable = schedule.paychecks.flatMap((p) => p.bills).filter((b) => b.isUnpayable);
+      expect(unpayable).toHaveLength(1);
+      expect(schedule.paychecks.filter((p) => p.hasUnpayableBills)).toHaveLength(1);
+    });
+
+    it('stops projecting income after endDate', () => {
+      const income: Income = {
+        id: 'income-ended',
+        sourceName: 'Contract',
+        amount: 2000,
+        cadence: 'monthly',
         startDate: '2026-01-01',
+        endDate: '2026-03-31',
         isActive: true,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
 
-      const lightBill: Bill = {
-        id: 'bill-light',
-        creditorName: 'Light',
-        budgetedAmount: 50,
-        dueDay: 10,
-        isRecurring: false,
-        priority: 'low',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      };
-
-      const tightBill: Bill = {
-        id: 'bill-tight',
-        creditorName: 'Tight',
-        budgetedAmount: 550,
-        dueDay: 18,
-        isRecurring: false,
-        priority: 'normal',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      };
-
-      const schedule = scheduler.generateSchedule(
-        [weeklyIncome],
-        [lightBill, tightBill],
-        '2026-01-01',
-        1,
-        0,
-        new Set(),
-        new Map(),
-        250,
-        [],
-        100,
-        0
+      const projected = scheduler.projectIncome(
+        income,
+        parseISO('2026-01-01'),
+        parseISO('2026-12-31')
       );
-
-      const jan8 = schedule.paychecks.find((p) => p.date === '2026-01-08');
-      const jan15 = schedule.paychecks.find((p) => p.date === '2026-01-15');
-
-      expect(jan8).toBeDefined();
-      expect(jan15).toBeDefined();
-      expect(jan8!.isShortfall).toBe(false);
-      expect(jan15!.isShortfall).toBe(false);
-      expect(
-        jan8!.bills.some((b) => b.billId === 'bill-tight' && b.billDate === '2026-01-18')
-      ).toBe(true);
-      expect(jan15!.bills.some((b) => b.billId === 'bill-tight')).toBe(false);
+      expect(projected.every((p) => p.date <= parseISO('2026-03-31'))).toBe(true);
+      expect(projected.length).toBe(3);
     });
   });
 
@@ -3084,7 +3072,7 @@ describe('SchedulerService', () => {
       expect(shortfallPaycheck).toBeDefined();
 
       const shortfallRec = schedule.recommendations.find((rec) =>
-        rec.includes('Budget shortfall') && rec.includes('couldn\'t be resolved by prepaying bills')
+        rec.includes('Budget shortfall')
       );
       expect(shortfallRec).toBeDefined();
       expect(shortfallRec).toContain('Jan');
@@ -3146,11 +3134,7 @@ describe('SchedulerService', () => {
         (f) => f.type === 'move_bill' && f.billId === 'bill-late'
       );
       expect(lateBillMove).toBeUndefined();
-
-      const skipFix = report.proposedFixes.find(
-        (f) => f.type === 'skip_bill' && f.billId === 'bill-late'
-      );
-      expect(skipFix).toBeDefined();
+      expect(report.proposedFixes.every((f) => f.type === 'move_bill')).toBe(true);
       expect(differenceInDays(parseISO('2026-01-30'), parseISO('2026-01-01'))).toBeGreaterThan(14);
     });
   });

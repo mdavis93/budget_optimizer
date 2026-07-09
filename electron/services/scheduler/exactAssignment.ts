@@ -3,7 +3,7 @@ import { Bill } from '../database.service';
 import { toCents } from './money';
 import { buildEligibleBills } from './eligibility';
 import { clusterEligibleBills } from './clusters';
-import { solveCluster, SolveBillInput, SolvePaycheck } from './solve';
+import { solveCluster, SolveBillInput, SolvePaycheck, solveClusterBounded } from './solve';
 import {
   PaycheckAssignment,
   ProjectedBill,
@@ -174,7 +174,7 @@ export function assignBillsExact(
       };
     });
 
-    const results = solveCluster(clusterPaychecks, billInputs);
+    const results = solveClusterBounded(clusterPaychecks, billInputs);
     const billByKey = new Map(cluster.map((c) => [c.billKey, c.bill]));
 
     for (const result of results) {

@@ -45,7 +45,9 @@ function computeMetrics(
 
   for (const bill of bills) {
     const a = assignment.get(bill.billKey)!;
-    used.set(a.index, (used.get(a.index) ?? 0) + bill.amountCents);
+    if (!a.unpayable) {
+      used.set(a.index, (used.get(a.index) ?? 0) + bill.amountCents);
+    }
     if (a.unpayable) {
       unpaidCents += bill.amountCents;
     } else {
@@ -131,13 +133,17 @@ export function solveCluster(
       }
 
       assignment.set(bill.billKey, { index, unpayable });
-      used.set(index, prev + bill.amountCents);
+      if (!unpayable) {
+        used.set(index, prev + bill.amountCents);
+      }
 
       if (!bestMetrics || partialUnpaid() <= bestMetrics.unpaidCents) {
         search(billIdx + 1);
       }
 
-      used.set(index, prev);
+      if (!unpayable) {
+        used.set(index, prev);
+      }
       assignment.delete(bill.billKey);
     };
 
@@ -165,4 +171,134 @@ export function solveCluster(
       isUnpayable: a.unpayable,
     };
   });
+}
+
+const MAX_EXACT_CLUSTER_BILLS = 16;
+
+function solveClusterGreedy(
+  paychecks: SolvePaycheck[],
+  bills: SolveBillInput[]
+): SolveBillResult[] {
+  const sortedBills = [...bills].sort((a, b) => a.billKey.localeCompare(b.billKey));
+  const assignment = new Map<string, { index: number; unpayable: boolean }>();
+  const used = new Map<number, number>();
+
+  const capacity = (idx: number) =>
+    paychecks.find((p) => p.index === idx)?.capacityCents ?? 0;
+
+  const tryPlace = (bill: SolveBillInput, index: number, unpayable: boolean) => {
+    const prev = used.get(index) ?? 0;
+    if (!unpayable && prev + bill.amountCents > capacity(index)) return false;
+    assignment.set(bill.billKey, { index, unpayable });
+    if (!unpayable) {
+      used.set(index, prev + bill.amountCents);
+    }
+    return true;
+  };
+
+  const remove = (bill: SolveBillInput) => {
+    const a = assignment.get(bill.billKey);
+    if (!a) return;
+    if (!a.unpayable) {
+      used.set(a.index, (used.get(a.index) ?? 0) - bill.amountCents);
+    }
+    assignment.delete(bill.billKey);
+  };
+
+  for (const bill of sortedBills) {
+    if (bill.lockedIndex !== undefined) {
+      tryPlace(bill, bill.lockedIndex, false);
+      continue;
+    }
+    let placed = false;
+    for (const idx of [...bill.candidateIndices].sort((a, b) => b - a)) {
+      if (tryPlace(bill, idx, false)) {
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const latest = latestEligibleIndex(bill.candidateIndices);
+      tryPlace(bill, latest, true);
+    }
+  }
+
+  const load = (idx: number) => used.get(idx) ?? 0;
+
+  let changed = true;
+  let guard = 500;
+  while (changed && guard-- > 0) {
+    changed = false;
+    for (const pc of paychecks) {
+      if (load(pc.index) <= pc.capacityCents) continue;
+      const onPaycheck = sortedBills.filter(
+        (b) => assignment.get(b.billKey)?.index === pc.index && !assignment.get(b.billKey)!.unpayable
+      );
+      for (const bill of onPaycheck) {
+        for (const idx of [...bill.candidateIndices].filter((i) => i > pc.index).sort((a, b) => b - a)) {
+          remove(bill);
+          if (tryPlace(bill, idx, false)) {
+            changed = true;
+            break;
+          }
+          tryPlace(bill, pc.index, false);
+        }
+        if (changed) break;
+      }
+    }
+  }
+
+  guard = 500;
+  changed = true;
+  while (changed && guard-- > 0) {
+    changed = false;
+    for (const pc of paychecks) {
+      if (load(pc.index) <= pc.capacityCents) continue;
+      const onPaycheck = sortedBills.filter(
+        (b) => assignment.get(b.billKey)?.index === pc.index && !assignment.get(b.billKey)!.unpayable
+      );
+      for (const bill of onPaycheck) {
+        for (const idx of [...bill.candidateIndices].filter((i) => i < pc.index).sort((a, b) => b - a)) {
+          remove(bill);
+          if (tryPlace(bill, idx, false)) {
+            changed = true;
+            break;
+          }
+          tryPlace(bill, pc.index, false);
+        }
+        if (changed) break;
+      }
+    }
+  }
+
+  for (const pc of paychecks) {
+    while (load(pc.index) > pc.capacityCents) {
+      const candidates = sortedBills
+        .filter((b) => assignment.get(b.billKey)?.index === pc.index && !assignment.get(b.billKey)!.unpayable)
+        .sort((a, b) => a.billKey.localeCompare(b.billKey));
+      const bill = candidates[0];
+      if (!bill) break;
+      remove(bill);
+      tryPlace(bill, pc.index, true);
+    }
+  }
+
+  return sortedBills.map((bill) => {
+    const a = assignment.get(bill.billKey)!;
+    return {
+      billKey: bill.billKey,
+      paycheckIndex: a.index,
+      isUnpayable: a.unpayable,
+    };
+  });
+}
+
+export function solveClusterBounded(
+  paychecks: SolvePaycheck[],
+  bills: SolveBillInput[]
+): SolveBillResult[] {
+  if (bills.length <= MAX_EXACT_CLUSTER_BILLS) {
+    return solveCluster(paychecks, bills);
+  }
+  return solveClusterGreedy(paychecks, bills);
 }
