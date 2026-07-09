@@ -151,12 +151,12 @@ describe('validation.service', () => {
       }).valid).toBe(true);
 
       expect(validateReconciliationFix({
-        id: 'fix-2',
-        type: 'skip_bill',
+        id: 'fix-bad-type',
+        type: 'invalid' as 'move_bill',
         billId: 'draft-12345678-abcd',
         billDueDate: '2026-03-15',
         fromPaycheckDate: '2026-03-01',
-      }).valid).toBe(true);
+      }).valid).toBe(false);
 
       expect(validateReconciliationFixes([{
         id: 'fix-bad',
@@ -178,16 +178,6 @@ describe('validation.service', () => {
       expect(badMove.valid).toBe(false);
       expect(badMove.errors.join(' ')).toContain('toPaycheckDate');
 
-      const badSkip = validateReconciliationFix({
-        id: 'fix-3',
-        type: 'skip_bill',
-        billId: 'draft-12345678-abcd',
-        billDueDate: '2026-03-15',
-        fromPaycheckDate: '2026-03-01',
-        toPaycheckDate: 'invalid',
-      } as never);
-      expect(badSkip.valid).toBe(false);
-
       const notArray = validateReconciliationFixes('oops' as never);
       expect(notArray.valid).toBe(false);
       expect(notArray.errors[0]).toContain('array');
@@ -195,10 +185,11 @@ describe('validation.service', () => {
       const tooMany = validateReconciliationFixes(
         Array.from({ length: 101 }, (_, i) => ({
           id: `fix-${i}`,
-          type: 'skip_bill' as const,
+          type: 'move_bill' as const,
           billId: 'draft-12345678-abcd',
           billDueDate: '2026-03-15',
           fromPaycheckDate: '2026-03-01',
+          toPaycheckDate: '2026-02-15',
         }))
       );
       expect(tooMany.valid).toBe(false);

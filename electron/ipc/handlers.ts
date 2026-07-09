@@ -597,8 +597,6 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     for (const fix of fixes) {
       if (fix.type === 'move_bill' && fix.toPaycheckDate) {
         budgetManager.assignBillToPaycheck(fix.billId, fix.billDueDate, fix.toPaycheckDate);
-      } else if (fix.type === 'skip_bill') {
-        budgetManager.skipBill(fix.billId, fix.fromPaycheckDate);
       }
     }
   })));

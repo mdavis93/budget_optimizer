@@ -297,7 +297,7 @@ export interface GoalProjection {
 
 export interface ProposedFix {
   id: string;
-  type: 'move_bill' | 'skip_bill';
+  type: 'move_bill';
   billId: string;
   billName: string;
   billAmount: number;

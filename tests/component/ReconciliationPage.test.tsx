@@ -30,14 +30,14 @@ const baseReport = {
   proposedFixes: [
     {
       id: 'fix-1',
-      type: 'skip_bill' as const,
+      type: 'move_bill' as const,
       billId: 'bill-1',
       billName: 'Rent',
       billAmount: 500,
       billDueDate: '2026-02-01',
       fromPaycheckDate: '2026-02-15',
-      toPaycheckDate: undefined,
-      reason: 'skip helps avoid shortfall',
+      toPaycheckDate: '2026-03-01',
+      reason: 'move to next paycheck',
       impact: 500,
     },
   ],
@@ -49,6 +49,7 @@ describe('ReconciliationPage', () => {
       const onApplyFixes = vi.fn(async () => {});
       render(<ReconciliationPage report={baseReport} onApplyFixes={onApplyFixes} onSkip={vi.fn()} isApplying={false} />);
 
+      expect(screen.queryByText(/Skip "/i)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Apply 1 Fix/i }));
       await waitFor(() => expect(onApplyFixes).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ id: 'fix-1' })])));
     });
@@ -78,7 +79,7 @@ describe('ReconciliationPage', () => {
       expect(screen.getByRole('button', { name: /Apply 0 Fixes/i })).toBeDisabled();
     });
 
-    it('handles mixed move/skip fix selection', async () => {
+    it('handles deselecting one of multiple move fixes', async () => {
       const user = userEvent.setup();
       const onApplyFixes = vi.fn(async () => {});
       render(
@@ -90,14 +91,14 @@ describe('ReconciliationPage', () => {
               {
                 id: 'fix-2',
                 type: 'move_bill',
-                billId: 'bill-1',
-                billName: 'Rent',
-                billAmount: 500,
-                billDueDate: '2026-02-01',
+                billId: 'bill-2',
+                billName: 'Utilities',
+                billAmount: 200,
+                billDueDate: '2026-02-10',
                 fromPaycheckDate: '2026-02-15',
                 toPaycheckDate: '2026-03-01',
-                reason: 'move to next paycheck',
-                impact: 300,
+                reason: 'move utilities to next paycheck',
+                impact: 200,
               },
             ],
           }}

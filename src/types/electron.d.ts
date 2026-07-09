@@ -137,7 +137,7 @@ interface ElectronAPI {
   reconciliation: {
     applyFixes: (fixes: Array<{
       id: string;
-      type: 'move_bill' | 'skip_bill';
+      type: 'move_bill';
       billId: string;
       billDueDate: string;
       fromPaycheckDate: string;

@@ -20,19 +20,6 @@ const moveFix: ProposedFix = {
   impact: 150,
 };
 
-const skipFix: ProposedFix = {
-  id: 'fix-2',
-  type: 'skip_bill',
-  billId: 'bill-2',
-  billName: 'Streaming',
-  billAmount: 25,
-  fromPaycheckDate: '2026-03-15',
-  billDueDate: '2026-03-18',
-  reason: 'legacy reason',
-  impact: 25,
-  reasonCode: 'insufficient_income_this_paycheck',
-};
-
 describe('reconciliationCopy', () => {
   it('renders move counterfactual with dates and amounts', () => {
     const copy = formatProposedFixCopy(moveFix, { deficitAmount: 200 });
@@ -42,16 +29,6 @@ describe('reconciliationCopy', () => {
     );
     expect(copy.ariaMessage).toContain('Mar 15');
     expect(copy.ariaMessage).toContain('$200.00');
-  });
-
-  it('uses reason-specific detail for skip proposals', () => {
-    const copy = formatProposedFixCopy(skipFix);
-    expect(copy.counterfactual).toBe(
-      'Skip Streaming ($25.00) on Mar 15 → frees $25.00 toward Mar 15'
-    );
-    expect(copy.detail).toContain('Mar 15');
-    expect(copy.detail).toContain('Streaming');
-    expect(copy.detail).not.toBe('Defers this bill for one cycle when no eligible move exists within prepay rules.');
   });
 
   it('describes shortfall with dominant unfundable reason', () => {
@@ -67,14 +44,14 @@ describe('reconciliationCopy', () => {
           priority: 'low',
           billDate: '2026-03-18',
           isUnpayable: true,
-          unfundableReason: 'goal_reserve_conflict',
+          unfundableReason: 'insufficient_income_in_window',
         },
       ],
     };
 
     const copy = formatShortfallCopy(shortfall);
     expect(copy.headline).toBe('Mar 15 shortfall: $175.00');
-    expect(copy.explanation).toContain('Savings goal reserves');
+    expect(copy.explanation).toContain('eligibility window');
     expect(copy.ariaMessage).toContain('Mar 15');
   });
 
@@ -86,6 +63,7 @@ describe('reconciliationCopy', () => {
     });
     expect(summary.headline).toBe('We found fixes for your shortfalls');
     expect(summary.body).toContain('paycheck silo');
+    expect(summary.body).not.toContain('skip');
   });
 
   it('summarizes partially resolvable reconciliation reports', () => {
@@ -102,12 +80,12 @@ describe('reconciliationCopy', () => {
   });
 
   it('labels unfundable reason codes for accessibility', () => {
-    const copy = formatUnfundableReasonCopy('no_eligible_earlier_paycheck', {
+    const copy = formatUnfundableReasonCopy('no_eligible_paycheck_in_window', {
       billName: 'Insurance',
       fromPaycheckDate: 'Mar 15',
     });
-    expect(copy.label).toBe('No Earlier Paycheck');
+    expect(copy.label).toBe('No Eligible Paycheck');
     expect(copy.explanation).toContain('Insurance');
-    expect(copy.poolHint).toContain('too early');
+    expect(copy.poolHint).toContain('due date');
   });
 });

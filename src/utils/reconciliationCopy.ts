@@ -56,24 +56,7 @@ const FIX_COPY = {
     ariaMessage:
       'Move {billName}, {billAmount}, to {toPaycheckDate} paycheck to clear the {shortfallPaycheckDate} shortfall of {deficitAmount}.',
   },
-  skip_bill: {
-    headline: 'Skip "{billName}"',
-    counterfactual:
-      'Skip {billName} ({billAmount}) on {fromPaycheckDate} → frees {impactAmount} toward {shortfallPaycheckDate}',
-    detail: 'Defers this bill for one cycle when no eligible move exists within prepay rules.',
-    ariaMessage:
-      'Skip {billName}, {billAmount}, on {fromPaycheckDate} to free {impactAmount} toward the {shortfallPaycheckDate} shortfall.',
-  },
 } as const;
-
-const SKIP_REASON_DETAIL: Partial<Record<UnfundableReason, string>> = {
-  insufficient_income_in_window:
-    'No eligible paycheck in the window has enough income to fund {billName} after other bills.',
-  no_eligible_paycheck_in_window:
-    'No paycheck falls within 14 days on or before {billName}\'s due date.',
-  all_movable_bills_locked:
-    '{billName} cannot move because other bills on this paycheck are locked or income-attached.',
-};
 
 function formatMoney(amount: number): string {
   return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -125,14 +108,7 @@ export function formatProposedFixCopy(
 ): FixCopyEntry {
   const vars = buildCopyVars(fix, options?.deficitAmount);
   const template = FIX_COPY[fix.type];
-  let detail = interpolate(template.detail, { ...vars });
-
-  if (fix.type === 'skip_bill' && fix.reasonCode) {
-    const reasonDetail = SKIP_REASON_DETAIL[fix.reasonCode];
-    if (reasonDetail) {
-      detail = interpolate(reasonDetail, { ...vars });
-    }
-  }
+  const detail = interpolate(template.detail, { ...vars });
 
   return {
     headline: interpolate(template.headline, { ...vars }),
@@ -183,7 +159,7 @@ export function formatReconciliationSummary(report: {
   if (report.canBeFullyResolved) {
     return {
       headline: 'We found fixes for your shortfalls',
-      body: `${count} ${paycheckWord} run short by ${deficit} total. Select the moves and skips below — each fix stays within its paycheck silo.`,
+      body: `${count} ${paycheckWord} run short by ${deficit} total. Select the moves below — each fix stays within its paycheck silo.`,
       ariaMessage: `${count} ${paycheckWord} run short by ${deficit} total. Proposed fixes can resolve the shortfalls without crossing paycheck boundaries.`,
     };
   }

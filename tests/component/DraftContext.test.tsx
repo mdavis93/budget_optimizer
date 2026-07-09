@@ -113,21 +113,6 @@ function DraftHarness() {
       <button onClick={() => draft.discardDomain('budget')}>discard-budget</button>
       <button onClick={() => void draft.saveDomain('budget')}>save-budget</button>
       <button onClick={() => draft.skipBill('bill-1', '2026-01-15')}>duplicate-skip</button>
-      <button
-        onClick={() =>
-          draft.applyReconciliationFixes([
-            {
-              id: 'fix-dup-skip',
-              type: 'skip_bill',
-              billId: 'bill-1',
-              billDueDate: '2026-01-15',
-              fromPaycheckDate: '2026-01-15',
-            },
-          ])
-        }
-      >
-        apply-duplicate-skip
-      </button>
       <button onClick={() => void draft.saveDomain('income')}>save-income-clean</button>
       <button onClick={() => void draft.saveAll()}>save-all-clean</button>
       <div data-testid="overlay-present">{draft.buildDraftOverlay() ? 'yes' : 'no'}</div>
@@ -163,13 +148,6 @@ function DraftHarness() {
               billDueDate: '2026-01-15',
               fromPaycheckDate: '2026-01-15',
               toPaycheckDate: '2026-01-29',
-            },
-            {
-              id: 'fix-skip',
-              type: 'skip_bill',
-              billId: 'bill-1',
-              billDueDate: '2026-01-15',
-              fromPaycheckDate: '2026-01-15',
             },
           ])
         }
@@ -763,17 +741,6 @@ describe('DraftContext', () => {
 
       fireEvent.click(screen.getByText('skip-bill'));
       fireEvent.click(screen.getByText('duplicate-skip'));
-      expect(screen.getByTestId('skipped-count')).toHaveTextContent('1');
-    });
-
-    it('ignores duplicate skip fixes during reconciliation apply', async () => {
-      renderProvider();
-      await waitFor(() => {
-        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
-      });
-
-      fireEvent.click(screen.getByText('skip-bill'));
-      fireEvent.click(screen.getByText('apply-duplicate-skip'));
       expect(screen.getByTestId('skipped-count')).toHaveTextContent('1');
     });
 

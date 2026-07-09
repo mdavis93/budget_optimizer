@@ -101,44 +101,6 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
         }
       }
     }
-
-    // If we still have deficit after move suggestions, suggest skipping low-priority bills
-    const remainingDeficit = shortfall.deficit -
-      proposedFixes
-        .filter(f => f.fromPaycheckDate === shortfall.paycheckDate && f.type === 'move_bill')
-        .reduce((sum, f) => sum + f.impact, 0);
-
-    if (remainingDeficit > 0) {
-      const skippableBills = shortfallPaycheck.bills
-        .filter(b => !b.isIncomeAttached && !b.isUnpayable)
-        .filter(b => b.priority === 'low' || b.priority === 'normal' || b.priority === 'high')
-        .filter(b => !proposedBillMoves.has(`${b.billId}-${b.billDate}`))
-        .sort((a, b) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]);
-
-      let deficitCovered = 0;
-      for (const bill of skippableBills) {
-        if (deficitCovered >= remainingDeficit) break;
-
-        const billKey = `${bill.billId}-${bill.billDate}`;
-        if (proposedBillMoves.has(billKey)) continue;
-
-        proposedFixes.push({
-          id: `fix-${fixIdCounter++}`,
-          type: 'skip_bill',
-          billId: bill.billId,
-          billName: bill.creditorName,
-          billAmount: bill.amount,
-          fromPaycheckDate: shortfall.paycheckDate,
-          billDueDate: bill.billDate,
-          reason: `Skip this ${bill.priority}-priority bill for this cycle`,
-          impact: bill.amount,
-          reasonCode: bill.unfundableReason,
-        });
-
-        proposedBillMoves.add(billKey);
-        deficitCovered += bill.amount;
-      }
-    }
   }
 
   const estimatedResolution = proposedFixes.reduce((sum, f) => sum + f.impact, 0);

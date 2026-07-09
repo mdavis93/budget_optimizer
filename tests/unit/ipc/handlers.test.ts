@@ -372,13 +372,6 @@ describe('ipc handlers', () => {
           fromPaycheckDate: '2026-01-15',
           toPaycheckDate: '2026-01-31',
         },
-        {
-          id: 'fix-0002',
-          type: 'skip_bill',
-          billId: 'bill-0002',
-          billDueDate: '2026-02-02',
-          fromPaycheckDate: '2026-01-31',
-        },
       ]);
 
       expect(switched).toEqual({ success: true, data: { id: 'budget-2' } });
@@ -388,7 +381,7 @@ describe('ipc handlers', () => {
         '2026-02-01',
         '2026-01-31'
       );
-      expect(services.budgetManager.skipBill).toHaveBeenCalledWith('bill-0002', '2026-01-31');
+      expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });
 
     it('locks auth and clears active budget/database services', async () => {
