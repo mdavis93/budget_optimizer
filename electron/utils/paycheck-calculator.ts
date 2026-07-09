@@ -58,16 +58,22 @@ export function getPaycheckDatesForIncome(
   
   if (!income.isActive) return paychecks;
 
+  const incomeEnd = income.endDate ? startOfDay(parseISO(income.endDate)) : null;
+
   let currentDate = parseISO(income.startDate);
   currentDate = startOfDay(currentDate);
 
   // Fast-forward to start date
   while (isBefore(currentDate, startDate)) {
     currentDate = getNextIncomeDate(currentDate, income.cadence);
+    if (incomeEnd && isAfter(currentDate, incomeEnd)) return paychecks;
   }
 
-  // Collect paychecks until end date
-  while (isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) {
+  // Collect paychecks until end date (and income endDate if set)
+  while (
+    (isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) &&
+    (!incomeEnd || !isAfter(currentDate, incomeEnd))
+  ) {
     paychecks.push({
       date: currentDate,
       incomeId: income.id,

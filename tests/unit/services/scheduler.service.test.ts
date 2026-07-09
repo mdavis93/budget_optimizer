@@ -101,6 +101,31 @@ describe('SchedulerService', () => {
         expect(event.date.getTime()).toBeGreaterThanOrEqual(parseISO('2026-01-10').getTime());
       });
     });
+
+    it('stops projecting after income endDate', () => {
+      const income = { ...baseIncome, endDate: '2026-01-15' };
+      const result = scheduler.projectIncome(
+        income,
+        parseISO('2026-01-01'),
+        parseISO('2026-03-01')
+      );
+
+      expect(result.length).toBeGreaterThan(0);
+      result.forEach(event => {
+        expect(event.date.getTime()).toBeLessThanOrEqual(parseISO('2026-01-15').getTime());
+      });
+      expect(result.some(e => format(e.date, 'yyyy-MM-dd') === '2026-01-15')).toBe(true);
+    });
+
+    it('returns empty when endDate is before projection window', () => {
+      const income = { ...baseIncome, endDate: '2025-12-31' };
+      const result = scheduler.projectIncome(
+        income,
+        parseISO('2026-01-01'),
+        parseISO('2026-03-01')
+      );
+      expect(result).toHaveLength(0);
+    });
   });
 
   describe('projectBills', () => {
