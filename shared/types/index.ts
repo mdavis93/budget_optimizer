@@ -198,10 +198,9 @@ export interface DebtWithAmortization {
 // ---------------------------------------------------------------------------
 
 export type UnfundableReason =
-  | 'no_eligible_earlier_paycheck'
-  | 'all_movable_bills_locked'
-  | 'insufficient_income_this_paycheck'
-  | 'goal_reserve_conflict';
+  | 'insufficient_income_in_window'
+  | 'no_eligible_paycheck_in_window'
+  | 'all_movable_bills_locked';
 
 export interface ScheduleEntry {
   date: string;
