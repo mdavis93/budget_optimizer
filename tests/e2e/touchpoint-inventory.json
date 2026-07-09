@@ -188,6 +188,30 @@
       "channels": ["schedule:build"]
     },
     {
+      "id": "schedule.shortfall",
+      "tier": "standard",
+      "domain": "schedule",
+      "description": "A tight budget surfaces negative budget remaining on a paycheck",
+      "routes": ["/schedule"],
+      "channels": ["schedule:build"]
+    },
+    {
+      "id": "schedule.no-skip-suggest",
+      "tier": "standard",
+      "domain": "schedule",
+      "description": "Reconciliation never proposes skipping a bill as an automatic fix",
+      "routes": ["/schedule"],
+      "channels": ["schedule:build"]
+    },
+    {
+      "id": "income.end-date",
+      "tier": "standard",
+      "domain": "income",
+      "description": "Optional income end date is saved and shortens projected paychecks",
+      "routes": ["/income", "/schedule"],
+      "channels": ["income:create", "schedule:build"]
+    },
+    {
       "id": "routes.crawl",
       "tier": "standard",
       "domain": "navigation",

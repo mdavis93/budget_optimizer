@@ -233,7 +233,7 @@ describe('PaycheckView', () => {
                   priority: 'critical',
                   isIncomeAttached: false,
                   isUnpayable: true,
-                  unfundableReason: 'insufficient_funds',
+                  unfundableReason: 'insufficient_income_in_window',
                 },
                 {
                   billId: 'bill-2',
@@ -251,6 +251,7 @@ describe('PaycheckView', () => {
       );
 
       expect(screen.getByText('Unpayable')).toBeInTheDocument();
+      expect(screen.getByText(/1 unpayable/i)).toBeInTheDocument();
       expect(screen.getByText('Per Paycheck')).toBeInTheDocument();
       expect(screen.getAllByText('$-50.00').length).toBeGreaterThan(0);
     });

@@ -115,4 +115,64 @@ test.describe('Schedule', () => {
     await expect(window.getByRole('img', { name: 'Goals at risk' })).toBeVisible();
     await expectNoSpinner(window);
   });
+
+  test('shortfall: a tight budget shows negative budget remaining @schedule.shortfall', async ({ window }) => {
+    await startInNamedBudget(window);
+
+    await seedIncome(window, {
+      sourceName: 'Part Time',
+      amount: 800,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+    });
+    await seedBill(window, {
+      creditorName: 'Rent',
+      budgetedAmount: 2000,
+      dueDay: 1,
+      isRecurring: true,
+      priority: 'critical',
+    });
+    await reloadShell(window);
+    await navigateTo(window, 'Schedule');
+
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    await expect(window.getByText('Budget Remaining').first()).toBeVisible();
+    await expect(window.getByText(/-\$[\d,]+\.\d{2}/).first()).toBeVisible();
+    await expectNoSpinner(window);
+  });
+
+  test('reconciliation: proposed fixes never suggest skipping a bill @schedule.no-skip-suggest', async ({ window }) => {
+    await startInNamedBudget(window);
+
+    await seedIncome(window, {
+      sourceName: 'Tight Pay',
+      amount: 900,
+      cadence: 'monthly',
+      startDate: '2026-01-01',
+      isActive: true,
+    });
+    await seedBill(window, {
+      creditorName: 'Rent',
+      budgetedAmount: 1500,
+      dueDay: 1,
+      isRecurring: true,
+      priority: 'critical',
+    });
+    await seedBill(window, {
+      creditorName: 'Utilities',
+      budgetedAmount: 300,
+      dueDay: 15,
+      isRecurring: true,
+      priority: 'normal',
+    });
+    await reloadShell(window);
+    await navigateTo(window, 'Schedule');
+
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' }).or(
+      window.getByText('Some shortfalls need manual changes')
+    )).toBeVisible({ timeout: 15000 });
+    await expect(window.getByText(/Skip "/i)).toHaveCount(0);
+    await expectNoSpinner(window);
+  });
 });

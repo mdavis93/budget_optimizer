@@ -1,6 +1,6 @@
 {
   "name": "budget-optimizer",
-  "version": "2.8.0",
+  "version": "3.0.0",
   "description": "Secure Budget Optimizer - A desktop app for managing income and optimizing bill payments",
   "author": "Michael Davis",
   "packageManager": "pnpm@9.15.9",

@@ -85,4 +85,25 @@ test.describe('Income', () => {
     expect(await window.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
     await expectNoSpinner(window);
   });
+
+  test('happy: end date on income shortens the schedule horizon @income.end-date', async ({ window }) => {
+    await dialog.getByRole('button', { name: 'Add Income' }).first().click();
+    const dialog = window.getByRole('dialog', { name: 'Add Income Source' });
+    await dialog.locator('#income-source-name').fill('Contract Work');
+    await dialog.locator('#income-amount').fill('3000');
+    await dialog.locator('#income-cadence').selectOption('monthly');
+    await dialog.locator('button[aria-pressed="false"]').click();
+    await dialog.locator('#income-end-date').fill('2026-03-31');
+    await dialog.getByRole('button', { name: 'Add Income' }).click();
+    await window.getByRole('button', { name: 'Save Changes', exact: true }).click();
+
+    await reloadShell(window);
+    await navigateTo(window, 'Income');
+    await expect(window.getByText(/Ending Mar 31, 2026/i)).toBeVisible();
+
+    await navigateTo(window, 'Schedule');
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    await expect(window.getByText('Contract Work')).toHaveCount(3);
+    await expectNoSpinner(window);
+  });
 });
