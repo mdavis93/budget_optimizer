@@ -137,6 +137,10 @@ test.describe('Schedule', () => {
     await navigateTo(window, 'Schedule');
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    const viewScheduleAnyway = window.getByRole('button', { name: 'View Schedule Anyway' });
+    if (await viewScheduleAnyway.isVisible().catch(() => false)) {
+      await viewScheduleAnyway.click();
+    }
     await expect(window.getByText('Budget Remaining').first()).toBeVisible();
     await expect(window.getByText(/-\$[\d,]+\.\d{2}/).first()).toBeVisible();
     await expectNoSpinner(window);
