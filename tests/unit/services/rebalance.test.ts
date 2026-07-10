@@ -110,4 +110,100 @@ describe('rebalancePaycheckAssignments', () => {
     expect(apr30Load).toBeLessThanOrEqual(900);
     expect(1000 - apr30Load).toBeGreaterThanOrEqual(100);
   });
+
+  it('does not move locked bill occurrences', () => {
+    const assignments = buildAssignments([
+      { date: '2027-03-05', income: 1000, bills: [] },
+      {
+        date: '2027-03-12',
+        income: 1000,
+        bills: [
+          { id: 'bill-locked', amount: 400, dueDate: '2027-03-12', priority: 'low' },
+          { id: 'bill-heavy', amount: 700, dueDate: '2027-03-12' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, {
+      ...REBALANCE_OPTS,
+      lockedBillKeys: new Set(['bill-locked-2027-03-12']),
+    });
+
+    expect(assignments[1].bills.some((bill) => bill.billId === 'bill-locked')).toBe(true);
+  });
+
+  it('applies starting balance when relieving overloaded later paychecks', () => {
+    const assignments = buildAssignments([
+      { date: '2027-08-01', income: 1000, bills: [] },
+      {
+        date: '2027-08-08',
+        income: 1000,
+        bills: [{ id: 'bill-x', amount: 960, dueDate: '2027-08-08', priority: 'low' }],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 500, REBALANCE_OPTS);
+
+    expect(assignments[0].bills.some((bill) => bill.billId === 'bill-x')).toBe(true);
+  });
+
+  it('skips paychecks already within target cash-on-hand', () => {
+    const assignments = buildAssignments([
+      { date: '2027-09-01', income: 1000, bills: [{ id: 'bill-a', amount: 700, dueDate: '2027-09-01' }] },
+    ]);
+    const before = JSON.stringify(assignments);
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    expect(JSON.stringify(assignments)).toBe(before);
+  });
+
+  it('leaves break-glass paychecks unchanged when load is above target but below min floor', () => {
+    const assignments = buildAssignments([
+      { date: '2027-10-01', income: 1000, bills: [{ id: 'bill-a', amount: 800, dueDate: '2027-10-01' }] },
+    ]);
+    const beforeIds = assignments[0].bills.map((bill) => bill.billId);
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    expect(assignments[0].bills.map((bill) => bill.billId)).toEqual(beforeIds);
+  });
+
+  it('respects max cascade depth when nested relief is required', () => {
+    const assignments = buildAssignments([
+      { date: '2027-05-01', income: 1000, bills: [{ id: 'bill-a', amount: 700, dueDate: '2027-05-01' }] },
+      { date: '2027-05-08', income: 1000, bills: [{ id: 'bill-b', amount: 700, dueDate: '2027-05-08' }] },
+      {
+        date: '2027-05-15',
+        income: 1000,
+        bills: [
+          { id: 'bill-c', amount: 400, dueDate: '2027-05-15', priority: 'low' },
+          { id: 'bill-d', amount: 500, dueDate: '2027-05-15' },
+        ],
+      },
+    ]);
+
+    const before = assignments[2].bills.reduce((sum, bill) => sum + bill.amount, 0);
+    rebalancePaycheckAssignments(assignments, 0, { ...REBALANCE_OPTS, maxCascadeDepth: 0 });
+    const after = assignments[2].bills.reduce((sum, bill) => sum + bill.amount, 0);
+
+    expect(after).toBe(before);
+  });
+
+  it('ignores unpayable bills when computing paycheck load', () => {
+    const assignments = buildAssignments([
+      { date: '2027-07-01', income: 1000, bills: [] },
+      {
+        date: '2027-07-08',
+        income: 1000,
+        bills: [{ id: 'bill-heavy', amount: 800, dueDate: '2027-07-08' }],
+      },
+    ]);
+    assignments[1].bills[0].isUnpayable = true;
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    expect(assignments[1].bills).toHaveLength(1);
+    expect(assignments[0].bills).toHaveLength(0);
+  });
 });
