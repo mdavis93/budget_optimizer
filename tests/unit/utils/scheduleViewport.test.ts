@@ -135,6 +135,27 @@ describe('applyScheduleViewport', () => {
       expect(viewport.reconciliation?.totalDeficit).toBe(0);
     });
 
+    it('rebuilds reconciliation shortfalls from viewport paychecks when stored list is stale', () => {
+      const fullSchedule = buildSchedule({
+        reconciliation: {
+          needsReconciliation: false,
+          shortfalls: [],
+          proposedFixes: [],
+          canBeFullyResolved: true,
+          totalDeficit: 0,
+          estimatedResolution: 0,
+        },
+      });
+
+      const viewport = applyScheduleViewport(fullSchedule, 12, bills, 1000);
+
+      expect(viewport.summary.shortfallCount).toBe(1);
+      expect(viewport.reconciliation?.shortfalls).toHaveLength(1);
+      expect(viewport.reconciliation?.shortfalls[0].paycheckDate).toBe('2026-08-01');
+      expect(viewport.reconciliation?.totalDeficit).toBe(40);
+      expect(viewport.reconciliation?.needsReconciliation).toBe(true);
+    });
+
     it('keeps the savings-squeeze warning from full-horizon data across viewports', () => {
       // Squeezed paychecks sit in months 9-12, outside a 3-month viewport, but
       // the carried full-horizon count keeps the warning visible.

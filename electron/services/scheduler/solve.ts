@@ -297,7 +297,8 @@ export function solveClusterBounded(
   paychecks: SolvePaycheck[],
   bills: SolveBillInput[]
 ): SolveBillResult[] {
-  if (bills.length <= MAX_EXACT_CLUSTER_BILLS) {
+  const useExact = bills.length <= MAX_EXACT_CLUSTER_BILLS;
+  if (useExact) {
     return solveCluster(paychecks, bills);
   }
   return solveClusterGreedy(paychecks, bills);

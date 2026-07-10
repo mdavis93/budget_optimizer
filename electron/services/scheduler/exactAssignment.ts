@@ -4,7 +4,10 @@ import { toCents } from './money';
 import { buildEligibleBills } from './eligibility';
 import { clusterEligibleBills } from './clusters';
 import { solveCluster, SolveBillInput, SolvePaycheck, solveClusterBounded } from './solve';
+import { rebalancePaycheckAssignments } from './rebalance';
 import {
+  DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_TARGET_CASH_ON_HAND,
   PaycheckAssignment,
   ProjectedBill,
   ProjectedIncome,
@@ -17,6 +20,8 @@ export interface ExactAssignmentOptions {
   manualAssignments?: Map<string, string>;
   incomeAttachedBillsRaw?: Bill[];
   lockedBillKeys?: Set<string>;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
 }
 
 function buildPaycheckSkeleton(
@@ -94,11 +99,14 @@ function applyManualAssignments(
 
 function buildSolvePaychecks(
   assignments: PaycheckAssignment[],
-  startingBalanceCents: number
+  startingBalanceCents: number,
+  targetCashOnHand: number
 ): SolvePaycheck[] {
+  const reserveCents = toCents(targetCashOnHand);
   return assignments.map((assignment, index) => {
     const incomeCents = assignment.incomes.reduce((sum, inc) => sum + toCents(inc.amount), 0);
-    const capacityCents = incomeCents + (index === 0 ? startingBalanceCents : 0);
+    const ledgerBoost = index === 0 ? startingBalanceCents : 0;
+    const capacityCents = Math.max(0, incomeCents + ledgerBoost - reserveCents);
     return {
       index,
       dateMs: assignment.date.getTime(),
@@ -121,6 +129,8 @@ export function assignBillsExact(
   const skippedBills = options.skippedBills ?? new Set();
   const manualAssignments = options.manualAssignments ?? new Map();
   const incomeAttachedBillsRaw = options.incomeAttachedBillsRaw ?? [];
+  const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
+  const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   const lockedKeys = new Set(options.lockedBillKeys ?? []);
 
   const assignments = buildPaycheckSkeleton(paycheckDates, allIncomes);
@@ -142,7 +152,11 @@ export function assignBillsExact(
 
   const eligible = buildEligibleBills(solverBills, assignments, skippedBills);
   const clusters = clusterEligibleBills(eligible);
-  const solvePaychecks = buildSolvePaychecks(assignments, toCents(startingBalance));
+  const solvePaychecks = buildSolvePaychecks(
+    assignments,
+    toCents(startingBalance),
+    targetCashOnHand
+  );
 
   for (const cluster of clusters) {
     const involvedIndices = new Set<number>();
@@ -212,6 +226,13 @@ export function assignBillsExact(
       unfundableReason: 'no_eligible_paycheck_in_window',
     });
   }
+
+  rebalancePaycheckAssignments(assignments, startingBalance, {
+    skippedBills,
+    lockedBillKeys: lockedKeys,
+    targetCashOnHand,
+    minCashOnHand,
+  });
 
   return assignments;
 }

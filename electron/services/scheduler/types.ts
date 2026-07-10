@@ -32,7 +32,6 @@ export const DEFAULT_MIN_CASH_ON_HAND = 100;
 export const SAVINGS_TARGET_PRIMARY = 150;
 /** Fallback per-paycheck savings; below this (when goals consume the surplus) we warn. */
 export const SAVINGS_TARGET_FALLBACK = 100;
-export const MIN_BREATHING_ROOM = 50; // Minimum balance to maintain after bills
 export const MAX_PREPAY_DAYS = 14; // Bills cannot be paid more than 14 days early
 /** Floor (and default) calculation horizon in months. */
 export const SCHEDULE_CALCULATION_MONTHS = 12;

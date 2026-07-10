@@ -50,6 +50,7 @@ describe('PdfService.generateHtml', () => {
     },
     recommendations: ['<img src=x onerror=alert(1)>'],
     maxBudgetRemaining: 850,
+    minCashOnHand: 100,
   };
 
   describe('happy', () => {

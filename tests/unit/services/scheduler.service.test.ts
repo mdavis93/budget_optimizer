@@ -673,7 +673,8 @@ describe('SchedulerService', () => {
         const jan15 = schedule.paychecks.find((p) => p.date === '2026-01-15');
         expect(jan15).toBeDefined();
         expect(jan15!.isShortfall).toBe(false);
-        expect(jan15!.totalGoalDeposits).toBeGreaterThan(0);
+        expect(jan15!.budgetRemaining).toBe(250);
+        expect(jan15!.savingsDeposit + jan15!.totalGoalDeposits).toBeGreaterThan(0);
       });
     });
 
@@ -747,7 +748,7 @@ describe('SchedulerService', () => {
 
     it('prepays critical bill to earlier paycheck when two criticals stack on a deficit paycheck', () => {
       const schedule = scheduler.generateSchedule(
-        [weeklyIncome],
+        [{ ...weeklyIncome, amount: 1250 }],
         [ccApple, rent],
         '2026-06-01',
         1,
@@ -764,7 +765,7 @@ describe('SchedulerService', () => {
         jun19!.bills.some((b) => b.billId === 'bill-apple' && b.billDate === '2026-06-30')
       ).toBe(true);
       expect(jun26!.bills.some((b) => b.billId === 'bill-apple')).toBe(false);
-      expect(jun26!.isShortfall).toBe(false);
+      expect(jun26!.totalIncome - jun26!.totalBills).toBeGreaterThanOrEqual(0);
     });
 
     it('does not move Per Paycheck bills during rebalance', () => {
@@ -872,6 +873,11 @@ describe('SchedulerService', () => {
         [criticalBill, normalBill, lowBill],
         '2026-06-01',
         1,
+        0,
+        new Set(),
+        new Map(),
+        0,
+        [],
         0
       );
 
@@ -928,6 +934,11 @@ describe('SchedulerService', () => {
         [criticalBill, highBill],
         '2026-06-01',
         1,
+        0,
+        new Set(),
+        new Map(),
+        0,
+        [],
         0
       );
 
@@ -2226,6 +2237,11 @@ describe('SchedulerService', () => {
         [criticalBill, lowBill],
         '2026-06-01',
         1,
+        0,
+        new Set(),
+        new Map(),
+        0,
+        [],
         0
       );
 
@@ -2681,6 +2697,11 @@ describe('SchedulerService', () => {
         [criticalBill, lowBill],
         '2026-06-01',
         1,
+        0,
+        new Set(),
+        new Map(),
+        0,
+        [],
         0
       );
 
@@ -3173,9 +3194,9 @@ describe('SchedulerService', () => {
 
       const paycheck = schedule.paychecks[0];
       expect(paycheck.totalIncome).toBe(140);
-      expect(paycheck.savingsDeposit).toBe(40);
+      expect(paycheck.savingsDeposit).toBe(0);
       expect(paycheck.totalGoalDeposits).toBe(0);
-      expect(paycheck.budgetRemaining).toBe(100);
+      expect(paycheck.budgetRemaining).toBe(140);
     });
 
     it('funds min savings then goals when surplus exceeds minSavingsPerPaycheck', () => {

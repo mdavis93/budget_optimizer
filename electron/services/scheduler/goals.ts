@@ -230,9 +230,7 @@ export function generateGoalSuggestions(
 export function calculateGoalProjections(
   goals: SavingsGoal[],
   paychecks: PaycheckEntry[],
-  scheduleEndDate: string,
-  _minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  _minSavingsPerPaycheck: number = 0
+  scheduleEndDate: string
 ): GoalProjection[] {
   const projections: GoalProjection[] = [];
   const scheduleEnd = parseISO(scheduleEndDate);
@@ -499,8 +497,6 @@ export function generateGoalProjections(
   return calculateGoalProjections(
     goals,
     paychecks,
-    format(endDate, 'yyyy-MM-dd'),
-    minCashOnHand,
-    minSavingsPerPaycheck
+    format(endDate, 'yyyy-MM-dd')
   );
 }

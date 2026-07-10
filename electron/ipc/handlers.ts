@@ -548,7 +548,10 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         debtPayoffs,
         incomeOverridesMapOpt
       );
-      data.reconciliation = services.scheduler.analyzeAndProposeFixes(data);
+      data.reconciliation = services.scheduler.analyzeAndProposeFixes({
+        ...data,
+        paychecks: data.fullPaychecks ?? data.paychecks,
+      });
       return data;
     })
   ));

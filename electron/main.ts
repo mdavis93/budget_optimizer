@@ -17,7 +17,9 @@ import { approveExportPath } from './utils/exportPaths';
 // Global error handlers
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
-  dialog.showErrorBox('Application Error', `An unexpected error occurred: ${error.message}`);
+  if (typeof dialog?.showErrorBox === 'function') {
+    dialog.showErrorBox('Application Error', `An unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`);
+  }
 });
 
 process.on('unhandledRejection', (reason, promise) => {

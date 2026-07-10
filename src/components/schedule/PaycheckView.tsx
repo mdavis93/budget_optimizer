@@ -36,6 +36,7 @@ interface PaycheckViewProps {
   collapseAll: () => void;
   formatCurrency: (amount: number) => string;
   maxBudgetRemaining: number;
+  minCashOnHand: number;
   onSkipBill: (billId: string, paycheckDate: string) => void;
   skippingBill: string | null;
   onRestoreBill: (billId: string, billDueDate: string) => void;
@@ -55,6 +56,18 @@ interface PaycheckViewProps {
   savingIncomeKey: string | null;
 }
 
+function isBreakGlassPaycheck(
+  paycheck: PaycheckEntry,
+  maxBudgetRemaining: number,
+  minCashOnHand: number
+): boolean {
+  return (
+    !paycheck.isShortfall &&
+    paycheck.budgetRemaining < maxBudgetRemaining &&
+    paycheck.budgetRemaining >= minCashOnHand
+  );
+}
+
 function PaycheckView({ 
   paychecks, 
   expandedPaychecks, 
@@ -63,6 +76,7 @@ function PaycheckView({
   collapseAll,
   formatCurrency,
   maxBudgetRemaining,
+  minCashOnHand,
   onSkipBill,
   skippingBill,
   onRestoreBill,
@@ -95,7 +109,7 @@ function PaycheckView({
         <div>
           <h3 className="font-semibold">Paychecks ({paychecks.length})</h3>
           <p className="text-xs text-[var(--color-text-muted)]">
-            Budget cap: {formatCurrency(maxBudgetRemaining)} • Excess automatically transferred to savings
+            Target cash on hand: {formatCurrency(maxBudgetRemaining)} • Surplus above target funds goals and savings
           </p>
         </div>
         <div className="flex gap-2">
@@ -114,6 +128,7 @@ function PaycheckView({
           const unpayableCount = visibleBills.filter(bill => bill.isUnpayable).length;
           const hasUnpayableBills = unpayableCount > 0;
           const needsAttention = paycheck.isShortfall || hasUnpayableBills;
+          const isBreakGlass = isBreakGlassPaycheck(paycheck, maxBudgetRemaining, minCashOnHand);
           const isExpanded = expandedPaychecks.has(paycheck.date);
           const isDropTarget = dropTargetDate === paycheck.date;
           const isDragSource = draggedBill?.sourcePaycheckDate === paycheck.date;
@@ -124,6 +139,7 @@ function PaycheckView({
               className={clsx(
                 'card overflow-hidden transition-all',
                 needsAttention && 'border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-500/5',
+                isBreakGlass && !needsAttention && 'border-warning-300/70 dark:border-warning-700/50',
                 isDropTarget && 'ring-2 ring-primary-500 ring-offset-2 bg-primary-50/50 dark:bg-primary-500/10',
                 isDragSource && 'opacity-50'
               )}
@@ -152,8 +168,16 @@ function PaycheckView({
                     )} />
                   </div>
                   <div>
-                    <p className="font-semibold text-lg">
+                    <p className="font-semibold text-lg flex items-center gap-2 flex-wrap">
                       {format(parseISO(paycheck.date), 'EEEE, MMMM d, yyyy')}
+                      {isBreakGlass && (
+                        <span
+                          className="break-glass-tape text-xs font-semibold px-2 py-0.5 rounded-full text-warning-800 dark:text-warning-200"
+                          title="Cash on hand is below your target but above your minimum floor"
+                        >
+                          Break-Glass
+                        </span>
+                      )}
                     </p>
                     <div className="flex items-center gap-4 text-sm text-[var(--color-text-secondary)]">
                       <span>{paycheck.incomeSources.map(s => s.name).join(' + ')}</span>

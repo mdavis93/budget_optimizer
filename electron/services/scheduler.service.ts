@@ -13,6 +13,7 @@ import {
   calculateSummary,
   generateRecommendations,
 } from './scheduler/paychecks';
+import { rebuildReconciliationForViewport } from '@shared/scheduleViewportSlice';
 import { calculateGoalProjections, generateGoalProjections, computeGoalFundingTimeline } from './scheduler/goals';
 import { analyzeAndProposeFixes } from './scheduler/reconciliation';
 import {
@@ -130,7 +131,6 @@ export class SchedulerService {
       allIncomes,
       uniqueBills,
       startingBalance,
-      endDate,
       skippedBills,
       manualAssignments,
       incomeAttachedBillsRaw,
@@ -140,13 +140,10 @@ export class SchedulerService {
       minSavingsPerPaycheck
     );
 
-    // Calculate goal projections
     const goalProjections = calculateGoalProjections(
       goals,
       paychecks,
-      format(endDate, 'yyyy-MM-dd'),
-      minCashOnHand,
-      minSavingsPerPaycheck
+      format(endDate, 'yyyy-MM-dd')
     );
 
     // Full-horizon squeeze indicator, carried so viewport slicing can keep the
@@ -167,6 +164,7 @@ export class SchedulerService {
       summary: calculateSummary(paychecks, startingBalance, maxBudgetRemaining),
       recommendations: generateRecommendations(paychecks, bills, startingBalance, savingsSqueezedCount),
       maxBudgetRemaining,
+      minCashOnHand,
       goalProjections,
     };
 
@@ -184,22 +182,24 @@ export class SchedulerService {
   ): ScheduleData {
     const horizonMonths = fullSchedule.calculationMonths ?? SCHEDULE_CALCULATION_MONTHS;
     if (viewportMonths >= horizonMonths) {
+      const paychecks = fullSchedule.fullPaychecks;
       return {
         ...fullSchedule,
-        paychecks: fullSchedule.fullPaychecks,
+        paychecks,
         viewportMonths,
-        entries: convertToLegacyEntries(fullSchedule.fullPaychecks, startingBalance),
+        entries: convertToLegacyEntries(paychecks, startingBalance),
         summary: calculateSummary(
-          fullSchedule.fullPaychecks,
+          paychecks,
           startingBalance,
           fullSchedule.maxBudgetRemaining
         ),
         recommendations: generateRecommendations(
-          fullSchedule.fullPaychecks,
+          paychecks,
           bills,
           startingBalance,
           fullSchedule.savingsSqueezedCount
         ),
+        reconciliation: rebuildReconciliationForViewport(fullSchedule.reconciliation, paychecks),
       };
     }
 
@@ -229,6 +229,10 @@ export class SchedulerService {
         bills,
         startingBalance,
         fullSchedule.savingsSqueezedCount
+      ),
+      reconciliation: rebuildReconciliationForViewport(
+        fullSchedule.reconciliation,
+        viewportPaychecks
       ),
     };
   }

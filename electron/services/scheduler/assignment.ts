@@ -79,7 +79,6 @@ export function assignBillsToPaychecks(
   allIncomes: ProjectedIncome[],
   allBills: ProjectedBill[],
   startingBalance: number,
-  _endDate: Date,
   skippedBills: Set<string> = new Set(),
   manualAssignments: Map<string, string> = new Map(),
   incomeAttachedBillsRaw: Bill[] = [],
@@ -97,6 +96,8 @@ export function assignBillsToPaychecks(
       skippedBills,
       manualAssignments,
       incomeAttachedBillsRaw,
+      targetCashOnHand: maxBudgetRemaining,
+      minCashOnHand,
     }
   );
 

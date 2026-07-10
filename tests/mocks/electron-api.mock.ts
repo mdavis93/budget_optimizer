@@ -96,6 +96,7 @@ export const createMockSchedule = (overrides = {}) => ({
   },
   recommendations: ['Budget looks balanced'],
   maxBudgetRemaining: 500,
+  minCashOnHand: 100,
   goalProjections: [],
   ...overrides,
 });

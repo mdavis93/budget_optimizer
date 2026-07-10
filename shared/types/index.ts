@@ -356,6 +356,7 @@ export interface ScheduleData {
   summary: ScheduleSummary;
   recommendations: string[];
   maxBudgetRemaining: number;
+  minCashOnHand: number;
   reconciliation?: ReconciliationReport;
   goalProjections?: GoalProjection[];
 }

@@ -77,6 +77,28 @@ body {
   .card {
     @apply bg-[var(--color-bg-secondary)] rounded-xl border border-[var(--color-border)] p-6;
   }
+
+  .break-glass-tape {
+    background-color: rgb(255 251 235 / 0.6);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 6px,
+      rgb(239 68 68 / 0.08) 6px,
+      rgb(239 68 68 / 0.08) 12px
+    );
+  }
+
+  .dark .break-glass-tape {
+    background-color: rgb(120 53 15 / 0.15);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 6px,
+      rgb(239 68 68 / 0.06) 6px,
+      rgb(239 68 68 / 0.06) 12px
+    );
+  }
   
   .label {
     @apply block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5;
