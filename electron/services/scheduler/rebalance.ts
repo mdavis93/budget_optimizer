@@ -1,559 +1,270 @@
-import { isAfter, differenceInDays } from 'date-fns';
 import { PRIORITY_ORDER } from '../../utils/constants';
-import { solvePaycheckDeficit } from '../../utils/rebalanceMicroSolver';
+import { getEligiblePaycheckIndices } from './eligibility';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
-  MAX_PREPAY_DAYS,
-  MICRO_SOLVER_MAX_BILLS,
-  RebalanceStrategy,
-  UnfundableReason,
+  DEFAULT_TARGET_CASH_ON_HAND,
   PaycheckAssignment,
   ProjectedBill,
   billOccurrenceKey,
 } from './types';
-import { buildGoalReservePerPaycheck } from './goalReserves';
-import { SavingsGoal } from '../database.service';
 
-export interface RebalanceHelpers {
-  getBalance: (index: number) => number;
-  getSurplus: (index: number) => number;
-  getDeficit: (index: number) => number;
-  getFundingDeficit: (index: number) => number;
-  getTotalDeficit: () => number;
-  moveBill: (fromIdx: number, toIdx: number, bill: ProjectedBill) => boolean;
-  getMovableBills: (index: number) => ProjectedBill[];
+export interface RebalanceOptions {
+  skippedBills?: Set<string>;
+  lockedBillKeys?: Set<string>;
+  /** Preferred cash-on-hand reserve while placing bills (default: target). */
+  targetCashOnHand?: number;
+  /** Break-glass floor — only accept going this low when target cannot be met. */
+  minCashOnHand?: number;
+  maxPasses?: number;
+  maxCascadeDepth?: number;
 }
 
-export function createRebalanceHelpers(
+function paycheckCapacity(
   assignments: PaycheckAssignment[],
-  lockedBills: Set<string> = new Set(),
-  poolOptions: {
-    minCashOnHand: number;
-    minSavingsPerPaycheck: number;
-    goalReservePerPaycheck: number[];
-  },
-  strategy: RebalanceStrategy = 'deficit_killer'
-): RebalanceHelpers {
-  const { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck } = poolOptions;
-
-  const getBillTotal = (index: number): number =>
-    assignments[index].bills
-      .filter(b => !b.isUnpayable)
-      .reduce((sum, bill) => sum + bill.amount, 0);
-
-  const getIncome = (index: number): number =>
-    assignments[index].incomes.reduce((sum, inc) => sum + inc.amount, 0);
-
-  const getBalance = (index: number): number => getIncome(index) - getBillTotal(index);
-
-  /** Income minus bills and all three-pool commitments for this paycheck silo. */
-  const getAvailableAfterCommitments = (index: number): number => {
-    const goalReserve = goalReservePerPaycheck[index] ?? 0;
-    return (
-      getIncome(index) -
-      getBillTotal(index) -
-      minCashOnHand -
-      minSavingsPerPaycheck -
-      goalReserve
-    );
-  };
-
-  const getSurplus = (index: number): number => {
-    return Math.max(0, getAvailableAfterCommitments(index));
-  };
-
-  const getDeficit = (index: number): number => {
-    return Math.max(0, -getAvailableAfterCommitments(index));
-  };
-
-  // Bills take absolute priority over goal and savings deposits. A paycheck can
-  // always sacrifice its goal reserve and savings floor to pay a bill, so the
-  // only thing protected ahead of bills is the minimum cash-on-hand. This is the
-  // deficit that determines whether a bill is truly unfundable (vs. merely
-  // competing with optional goal/savings allocation).
-  const getFundingAvailable = (index: number): number => {
-    return getIncome(index) - getBillTotal(index) - minCashOnHand;
-  };
-
-  const getFundingDeficit = (index: number): number => {
-    return Math.max(0, -getFundingAvailable(index));
-  };
-
-  const getTotalDeficit = (): number => {
-    return assignments.reduce((sum, _, i) => sum + getDeficit(i), 0);
-  };
-
-  const moveBill = (fromIdx: number, toIdx: number, bill: ProjectedBill): boolean => {
-    const billKey = billOccurrenceKey(bill.billId, bill.date);
-    if (lockedBills.has(billKey) || bill.isIncomeAttached) {
-      return false;
-    }
-
-    const targetPaycheckDate = assignments[toIdx].date;
-    const billDueDate = bill.date;
-    const daysEarly = differenceInDays(billDueDate, targetPaycheckDate);
-
-    if (daysEarly > MAX_PREPAY_DAYS) {
-      return false;
-    }
-
-    const billIndex = assignments[fromIdx].bills.findIndex(b =>
-      b.billId === bill.billId &&
-      b.date.getTime() === bill.date.getTime() &&
-      b.amount === bill.amount
-    );
-
-    if (billIndex === -1) {
-      return false;
-    }
-
-    const alreadyInTarget = assignments[toIdx].bills.some(b =>
-      b.billId === bill.billId &&
-      b.date.getTime() === bill.date.getTime() &&
-      b.amount === bill.amount
-    );
-
-    if (alreadyInTarget) {
-      assignments[fromIdx].bills.splice(billIndex, 1);
-      return true;
-    }
-
-    const [movedBill] = assignments[fromIdx].bills.splice(billIndex, 1);
-    assignments[toIdx].bills.push(movedBill);
-    return true;
-  };
-
-  const getMovableBills = (index: number): ProjectedBill[] => {
-    const bills = [...assignments[index].bills].filter(
-      (b) => !b.isIncomeAttached && !b.isUnpayable
-    );
-
-    if (strategy === 'prepay_minimizer') {
-      return bills.sort((a, b) => {
-        const daysEarlyA = differenceInDays(a.date, assignments[index].date);
-        const daysEarlyB = differenceInDays(b.date, assignments[index].date);
-        return daysEarlyA - daysEarlyB;
-      });
-    }
-
-    if (strategy === 'goal_guardian') {
-      return bills.sort((a, b) => {
-        const priorityDiff = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
-        if (priorityDiff !== 0) return priorityDiff;
-        return a.amount - b.amount;
-      });
-    }
-
-    return bills.sort((a, b) => {
-      const priorityDiff = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-      return b.amount - a.amount;
-    });
-  };
-
-  return { getBalance, getSurplus, getDeficit, getFundingDeficit, getTotalDeficit, moveBill, getMovableBills };
+  startingBalance: number,
+  cashOnHandReserve: number
+): number[] {
+  return assignments.map((assignment, index) => {
+    const income = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
+    const ledgerBoost = index === 0 ? startingBalance : 0;
+    return Math.max(0, income + ledgerBoost - cashOnHandReserve);
+  });
 }
 
-export function rebalancePhase1_DirectMoves(
+function paycheckLoad(assignments: PaycheckAssignment[]): number[] {
+  return assignments.map((assignment) =>
+    assignment.bills
+      .filter((bill) => !bill.isUnpayable)
+      .reduce((sum, bill) => sum + bill.amount, 0)
+  );
+}
+
+function isMovableBill(bill: ProjectedBill, lockedBillKeys: Set<string>): boolean {
+  if (bill.isIncomeAttached) return false;
+  if (bill.isUnpayable) return false;
+  return !lockedBillKeys.has(billOccurrenceKey(bill.billId, bill.date));
+}
+
+function movableBillsOnPaycheck(
+  assignment: PaycheckAssignment,
+  lockedBillKeys: Set<string>
+): ProjectedBill[] {
+  return assignment.bills
+    .filter((bill) => isMovableBill(bill, lockedBillKeys))
+    .sort((a, b) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]);
+}
+
+function removeBillAt(
   assignments: PaycheckAssignment[],
-  helpers: RebalanceHelpers
+  paycheckIndex: number,
+  bill: ProjectedBill
 ): void {
-  const { getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills } = helpers;
-  let maxPasses = 200;
-  let madeProgress = true;
-
-  while (madeProgress && maxPasses > 0 && getTotalDeficit() > 0) {
-    madeProgress = false;
-    maxPasses--;
-
-    for (let i = assignments.length - 1; i >= 0; i--) {
-      const deficitAmount = getDeficit(i);
-      if (deficitAmount <= 0) continue;
-
-      const movableBills = getMovableBills(i).sort((a, b) => {
-        const aFit = Math.abs(a.amount - deficitAmount);
-        const bFit = Math.abs(b.amount - deficitAmount);
-        if (aFit !== bFit) return aFit - bFit;
-        return PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
-      });
-
-      for (const bill of movableBills) {
-        let bestJ = -1;
-        let bestSurplus = Infinity;
-
-        for (let j = i - 1; j >= 0; j--) {
-          const surplus = getSurplus(j);
-          if (surplus >= bill.amount && surplus < bestSurplus) {
-            bestSurplus = surplus;
-            bestJ = j;
-          }
-        }
-
-        if (bestJ !== -1 && moveBill(i, bestJ, bill)) {
-          madeProgress = true;
-        }
-
-        if (getDeficit(i) === 0) break;
-      }
-    }
-  }
+  const key = billOccurrenceKey(bill.billId, bill.date);
+  assignments[paycheckIndex].bills = assignments[paycheckIndex].bills.filter(
+    (candidate) => billOccurrenceKey(candidate.billId, candidate.date) !== key
+  );
 }
 
-export function rebalancePhase2_CascadeMoves(
+function addBillAt(
   assignments: PaycheckAssignment[],
-  helpers: RebalanceHelpers
+  paycheckIndex: number,
+  bill: ProjectedBill
 ): void {
-  const { getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills } = helpers;
-  let maxPasses = 200;
-  let madeProgress = true;
-
-  while (madeProgress && maxPasses > 0 && getTotalDeficit() > 0) {
-    madeProgress = false;
-    maxPasses--;
-
-    for (let deficitIdx = assignments.length - 1; deficitIdx >= 0; deficitIdx--) {
-      if (getDeficit(deficitIdx) === 0) continue;
-
-      for (let midIdx = deficitIdx - 1; midIdx >= 1; midIdx--) {
-        const midMovable = getMovableBills(midIdx);
-
-        for (const midBill of midMovable) {
-          let bestEarlyIdx = -1;
-          let bestSurplus = Infinity;
-
-          for (let earlyIdx = midIdx - 1; earlyIdx >= 0; earlyIdx--) {
-            const surplus = getSurplus(earlyIdx);
-            if (surplus >= midBill.amount && surplus < bestSurplus) {
-              bestSurplus = surplus;
-              bestEarlyIdx = earlyIdx;
-            }
-          }
-
-          if (bestEarlyIdx !== -1 && moveBill(midIdx, bestEarlyIdx, midBill)) {
-            madeProgress = true;
-
-            const newCapacity = getSurplus(midIdx);
-            const deficitBills = getMovableBills(deficitIdx).sort((a, b) => {
-              const deficitAmount = getDeficit(deficitIdx);
-              return Math.abs(a.amount - deficitAmount) - Math.abs(b.amount - deficitAmount);
-            });
-
-            for (const defBill of deficitBills) {
-              if (newCapacity >= defBill.amount && moveBill(deficitIdx, midIdx, defBill)) {
-                break;
-              }
-            }
-          }
-
-          if (getDeficit(deficitIdx) === 0) break;
-        }
-        if (getDeficit(deficitIdx) === 0) break;
-      }
-    }
-  }
+  assignments[paycheckIndex].bills.push({
+    ...bill,
+    isUnpayable: false,
+    unfundableReason: undefined,
+  });
 }
 
-export function rebalancePhase3_DeepCascade(
+function moveBill(
   assignments: PaycheckAssignment[],
-  helpers: RebalanceHelpers
+  bill: ProjectedBill,
+  fromIndex: number,
+  toIndex: number,
+  load: number[]
 ): void {
-  const { getSurplus, getDeficit, getTotalDeficit, moveBill, getMovableBills } = helpers;
-  let maxPasses = 100;
-  let madeProgress = true;
-
-  while (madeProgress && maxPasses > 0 && getTotalDeficit() > 0) {
-    madeProgress = false;
-    maxPasses--;
-
-    for (let deficitIdx = assignments.length - 1; deficitIdx >= 0; deficitIdx--) {
-      const deficit = getDeficit(deficitIdx);
-      if (deficit === 0) continue;
-
-      const deficitBills = getMovableBills(deficitIdx);
-
-      for (const targetBill of deficitBills) {
-        for (let midIdx = deficitIdx - 1; midIdx >= 0; midIdx--) {
-          const currentCapacity = getSurplus(midIdx);
-          const needed = targetBill.amount - currentCapacity;
-
-          if (needed <= 0) {
-            if (moveBill(deficitIdx, midIdx, targetBill)) {
-              madeProgress = true;
-              break;
-            }
-          } else if (midIdx > 0) {
-            const midBills = getMovableBills(midIdx)
-              .filter(b => b.amount <= needed + 50);
-
-            let freedAmount = 0;
-            const billsToMove: { bill: ProjectedBill; to: number }[] = [];
-
-            for (const midBill of midBills) {
-              for (let earlyIdx = midIdx - 1; earlyIdx >= 0; earlyIdx--) {
-                if (getSurplus(earlyIdx) >= midBill.amount) {
-                  billsToMove.push({ bill: midBill, to: earlyIdx });
-                  freedAmount += midBill.amount;
-                  break;
-                }
-              }
-              if (freedAmount >= needed) break;
-            }
-
-            if (freedAmount >= needed) {
-              for (const move of billsToMove) {
-                moveBill(midIdx, move.to, move.bill);
-              }
-              if (getSurplus(midIdx) >= targetBill.amount) {
-                moveBill(deficitIdx, midIdx, targetBill);
-                madeProgress = true;
-                break;
-              }
-            }
-          }
-        }
-        if (madeProgress) break;
-      }
-      if (madeProgress) break;
-    }
-  }
+  removeBillAt(assignments, fromIndex, bill);
+  addBillAt(assignments, toIndex, bill);
+  load[fromIndex] -= bill.amount;
+  load[toIndex] += bill.amount;
 }
 
-export function rebalancePhase4_EvenOut(
-  assignments: PaycheckAssignment[],
-  helpers: RebalanceHelpers,
-  minCashOnHand: number
-): void {
-  const { getBalance, getSurplus, moveBill, getMovableBills } = helpers;
-  let maxPasses = 50;
-  let madeProgress = true;
-
-  while (madeProgress && maxPasses > 0) {
-    madeProgress = false;
-    maxPasses--;
-
-    for (let i = 1; i < assignments.length; i++) {
-      const balance = getBalance(i);
-
-      if (balance >= minCashOnHand && balance < minCashOnHand * 3) {
-        const movableBills = getMovableBills(i);
-
-        for (const bill of movableBills) {
-          for (let j = i - 1; j >= 0; j--) {
-            if (getSurplus(j) >= bill.amount + minCashOnHand) {
-              if (moveBill(i, j, bill)) {
-                madeProgress = true;
-                break;
-              }
-            }
-          }
-          if (madeProgress) break;
-        }
-      }
-      if (madeProgress) break;
-    }
-  }
+function spareCapacity(load: number[], capacity: number[], index: number): number {
+  return capacity[index] - load[index];
 }
 
-export function rebalanceBacktrackSearch(
-  assignments: PaycheckAssignment[],
-  helpers: RebalanceHelpers,
-  maxDepth = 4
-): void {
-  const { getTotalDeficit, getDeficit, getSurplus, moveBill, getMovableBills } = helpers;
-
-  for (let depth = 0; depth < maxDepth && getTotalDeficit() > 0; depth++) {
-    let madeProgress = false;
-
-    for (let i = assignments.length - 1; i >= 0; i--) {
-      if (getDeficit(i) <= 0) continue;
-
-      for (const bill of getMovableBills(i)) {
-        for (let j = i - 1; j >= 0; j--) {
-          if (getSurplus(j) >= bill.amount && moveBill(i, j, bill)) {
-            madeProgress = true;
-            break;
-          }
-        }
-        if (getDeficit(i) === 0) break;
-      }
-      if (madeProgress) break;
-    }
-
-    if (!madeProgress) break;
-  }
+/** Paycheck still needs bill moves — above target, or below min break-glass floor. */
+function needsRelief(
+  load: number,
+  targetCapacity: number,
+  minCapacity: number
+): boolean {
+  if (load <= targetCapacity) return false;
+  if (load <= minCapacity) return false;
+  return true;
 }
 
-export function rebalanceMicroSolver(
+function freeCapacityOnPaycheck(
   assignments: PaycheckAssignment[],
-  helpers: RebalanceHelpers
-): void {
-  const { getDeficit, getTotalDeficit, getSurplus, moveBill, getMovableBills } = helpers;
+  load: number[],
+  capacity: number[],
+  targetIndex: number,
+  amountNeeded: number,
+  skippedBills: Set<string>,
+  lockedBillKeys: Set<string>,
+  depth: number,
+  maxCascadeDepth: number
+): boolean {
+  if (amountNeeded <= 0) return true;
+  if (spareCapacity(load, capacity, targetIndex) >= amountNeeded) return true;
+  if (depth >= maxCascadeDepth) return false;
 
-  if (getTotalDeficit() <= 0) {
-    return;
-  }
+  for (const bill of movableBillsOnPaycheck(assignments[targetIndex], lockedBillKeys)) {
+    const earlierCandidates = getEligiblePaycheckIndices(bill, assignments, skippedBills)
+      .filter((index) => index < targetIndex)
+      .sort((a, b) => b - a);
 
-  let madeProgress = true;
-  while (madeProgress && getTotalDeficit() > 0) {
-    madeProgress = false;
-
-    for (let i = assignments.length - 1; i >= 0; i--) {
-      const deficitAmount = getDeficit(i);
-      if (deficitAmount <= 0) continue;
-
-      const movableBills = getMovableBills(i);
-      if (movableBills.length === 0) continue;
-
-      const earlierPaychecks = assignments.slice(0, i).map((assignment, index) => ({
-        index,
-        dateMs: assignment.date.getTime(),
-        surplus: getSurplus(index),
-      }));
-
-      const solverBills = movableBills.map((bill) => ({
-        key: billOccurrenceKey(bill.billId, bill.date),
-        amount: bill.amount,
-        dueDateMs: bill.date.getTime(),
-      }));
-
-      const plan = solvePaycheckDeficit(
-        i,
-        deficitAmount,
-        earlierPaychecks,
-        solverBills,
-        MAX_PREPAY_DAYS,
-        MICRO_SOLVER_MAX_BILLS
-      );
-
-      if (!plan || plan.moves.length === 0) {
+    for (const earlierIndex of earlierCandidates) {
+      const roomNeeded = Math.max(0, bill.amount - spareCapacity(load, capacity, earlierIndex));
+      if (
+        roomNeeded > 0 &&
+        !freeCapacityOnPaycheck(
+          assignments,
+          load,
+          capacity,
+          earlierIndex,
+          roomNeeded,
+          skippedBills,
+          lockedBillKeys,
+          depth + 1,
+          maxCascadeDepth
+        )
+      ) {
         continue;
       }
 
-      const billByKey = new Map(
-        movableBills.map((bill) => [billOccurrenceKey(bill.billId, bill.date), bill])
-      );
+      if (spareCapacity(load, capacity, earlierIndex) < bill.amount) continue;
 
-      for (const move of plan.moves) {
-        const bill = billByKey.get(move.billKey);
-        if (bill && moveBill(i, move.toIndex, bill)) {
-          madeProgress = true;
-        }
+      moveBill(assignments, bill, targetIndex, earlierIndex, load);
+
+      if (spareCapacity(load, capacity, targetIndex) >= amountNeeded) {
+        return true;
       }
     }
   }
+
+  return spareCapacity(load, capacity, targetIndex) >= amountNeeded;
 }
 
-export function diagnoseUnfundableReason(
-  paycheckIndex: number,
-  bill: ProjectedBill,
+function tryRelieveOverload(
   assignments: PaycheckAssignment[],
-  lockedBills: Set<string>,
-  minCashOnHand: number,
-  minSavingsPerPaycheck: number,
-  goalReservePerPaycheck: number[]
-): UnfundableReason {
-  const income = assignments[paycheckIndex].incomes.reduce((sum, inc) => sum + inc.amount, 0);
-  const billTotal = assignments[paycheckIndex].bills
-    .filter((b) => !b.isUnpayable)
-    .reduce((sum, b) => sum + b.amount, 0);
-  const goalReserve = goalReservePerPaycheck[paycheckIndex] ?? 0;
-
-  if (income < billTotal + minCashOnHand + minSavingsPerPaycheck + goalReserve) {
-    if (goalReserve > 0 && income >= billTotal + minCashOnHand + minSavingsPerPaycheck) {
-      return 'goal_reserve_conflict';
-    }
-    return 'insufficient_income_this_paycheck';
+  load: number[],
+  targetCapacity: number[],
+  minCapacity: number[],
+  overloadedIndex: number,
+  skippedBills: Set<string>,
+  lockedBillKeys: Set<string>,
+  maxCascadeDepth: number
+): boolean {
+  if (
+    !needsRelief(load[overloadedIndex], targetCapacity[overloadedIndex], minCapacity[overloadedIndex])
+  ) {
+    return false;
   }
 
-  let hasEligibleEarlier = false;
-  let hasUnlockedEligibleMove = false;
-  const billKey = billOccurrenceKey(bill.billId, bill.date);
+  let changed = false;
 
-  for (let j = paycheckIndex - 1; j >= 0; j--) {
-    const paycheckDate = assignments[j].date;
-    if (isAfter(paycheckDate, bill.date)) continue;
-    const daysEarly = differenceInDays(bill.date, paycheckDate);
-    if (daysEarly > MAX_PREPAY_DAYS) continue;
+  for (const bill of movableBillsOnPaycheck(assignments[overloadedIndex], lockedBillKeys)) {
+    if (
+      !needsRelief(load[overloadedIndex], targetCapacity[overloadedIndex], minCapacity[overloadedIndex])
+    ) {
+      break;
+    }
 
-    const targetIncome = assignments[j].incomes.reduce((sum, inc) => sum + inc.amount, 0);
-    const targetBills = assignments[j].bills
-      .filter((b) => !b.isUnpayable)
-      .reduce((sum, b) => sum + b.amount, 0);
-    const targetGoalReserve = goalReservePerPaycheck[j] ?? 0;
-    const headroom =
-      targetIncome -
-      targetBills -
-      minCashOnHand -
-      minSavingsPerPaycheck -
-      targetGoalReserve;
+    const earlierCandidates = getEligiblePaycheckIndices(bill, assignments, skippedBills)
+      .filter((index) => index < overloadedIndex)
+      .sort((a, b) => b - a);
 
-    if (headroom >= bill.amount) {
-      hasEligibleEarlier = true;
-      if (!lockedBills.has(billKey) && !bill.isIncomeAttached) {
-        hasUnlockedEligibleMove = true;
+    for (const targetIndex of earlierCandidates) {
+      if (spareCapacity(load, targetCapacity, targetIndex) >= bill.amount) {
+        moveBill(assignments, bill, overloadedIndex, targetIndex, load);
+        changed = true;
+        break;
+      }
+
+      const roomNeeded = bill.amount - spareCapacity(load, targetCapacity, targetIndex);
+      if (
+        freeCapacityOnPaycheck(
+          assignments,
+          load,
+          targetCapacity,
+          targetIndex,
+          roomNeeded,
+          skippedBills,
+          lockedBillKeys,
+          0,
+          maxCascadeDepth
+        ) &&
+        spareCapacity(load, targetCapacity, targetIndex) >= bill.amount
+      ) {
+        moveBill(assignments, bill, overloadedIndex, targetIndex, load);
+        changed = true;
+        break;
       }
     }
   }
 
-  if (!hasEligibleEarlier) {
-    return 'no_eligible_earlier_paycheck';
-  }
-  if (!hasUnlockedEligibleMove) {
-    return 'all_movable_bills_locked';
-  }
-  return 'insufficient_income_this_paycheck';
+  return changed;
 }
 
-export function rebalanceFinalCleanup(assignments: PaycheckAssignment[]): void {
-  // Deduplicate bills across all paychecks
-  const seenBills = new Set<string>();
-  for (const assignment of assignments) {
-    assignment.bills = assignment.bills.filter(bill => {
-      const key = billOccurrenceKey(bill.billId, bill.date);
-      if (seenBills.has(key)) {
-        return false;
-      }
-      seenBills.add(key);
-      return true;
-    });
-  }
-
-  // Re-sort bills by priority
-  for (const assignment of assignments) {
-    assignment.bills.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
-  }
-}
-
-export function rebalanceBills(
+/**
+ * Post-assignment pass: prefer target cash-on-hand on every paycheck, moving
+ * movable bills earlier within the 14-day window. Paychecks may land between
+ * min and target (break-glass) when target is infeasible; only load above the
+ * min floor triggers further relief.
+ */
+export function rebalancePaycheckAssignments(
   assignments: PaycheckAssignment[],
-  lockedBills: Set<string> = new Set(),
-  goals: SavingsGoal[] = [],
-  minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0,
-  strategy: RebalanceStrategy = 'deficit_killer'
+  startingBalance: number,
+  options: RebalanceOptions = {}
 ): void {
-  const goalReservePerPaycheck = buildGoalReservePerPaycheck(assignments, goals);
-  const poolOptions = { minCashOnHand, minSavingsPerPaycheck, goalReservePerPaycheck };
-  const helpers = createRebalanceHelpers(assignments, lockedBills, poolOptions, strategy);
+  const skippedBills = options.skippedBills ?? new Set();
+  const lockedBillKeys = options.lockedBillKeys ?? new Set();
+  const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
+  const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
+  const maxPasses = options.maxPasses ?? 200;
+  const maxCascadeDepth = options.maxCascadeDepth ?? 8;
 
-  // Phase 1: Direct moves - move bills from deficit to surplus paychecks
-  rebalancePhase1_DirectMoves(assignments, helpers);
+  const targetCapacity = paycheckCapacity(assignments, startingBalance, targetCashOnHand);
+  const minCapacity = paycheckCapacity(assignments, startingBalance, minCashOnHand);
+  const load = paycheckLoad(assignments);
 
-  // Phase 2: Cascade moves - create capacity by moving bills between non-deficit paychecks
-  rebalancePhase2_CascadeMoves(assignments, helpers);
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let changed = false;
 
-  // Phase 3: Deep cascade - try moving smaller bills to create room for larger ones
-  rebalancePhase3_DeepCascade(assignments, helpers);
+    for (let index = assignments.length - 1; index >= 0; index--) {
+      if (
+        !needsRelief(load[index], targetCapacity[index], minCapacity[index])
+      ) {
+        continue;
+      }
+      if (
+        tryRelieveOverload(
+          assignments,
+          load,
+          targetCapacity,
+          minCapacity,
+          index,
+          skippedBills,
+          lockedBillKeys,
+          maxCascadeDepth
+        )
+      ) {
+        changed = true;
+      }
+    }
 
-  // Phase 4: Even out paychecks for better breathing room
-  rebalancePhase4_EvenOut(assignments, helpers, minCashOnHand);
-
-  // Phase 5: Bounded backtrack search when deficits remain
-  rebalanceBacktrackSearch(assignments, helpers);
-
-  // Phase 6: Exact micro-solver for stubborn single-paycheck deficits
-  rebalanceMicroSolver(assignments, helpers);
-
-  // Final cleanup: deduplicate and sort
-  rebalanceFinalCleanup(assignments);
+    if (!changed) break;
+  }
 }

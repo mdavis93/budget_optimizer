@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { AlertTriangle, Check, ArrowRight, Calendar, DollarSign, SkipForward } from 'lucide-react';
+import { AlertTriangle, Check, ArrowRight, Calendar, DollarSign } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ReconciliationReport, ProposedFix, ShortfallDetail, PaycheckBill } from '../types';
 import clsx from 'clsx';
@@ -151,7 +151,7 @@ export default function ReconciliationPage({
                 No Automatic Fixes Available
               </h3>
               <p className="text-sm text-danger-800 dark:text-danger-200 mt-1">
-                The shortfalls cannot be resolved by moving or skipping bills. 
+                The shortfalls cannot be resolved by moving bills. 
                 This budget may require increasing income or reducing expenses.
               </p>
             </div>
@@ -309,17 +309,8 @@ function FixCard({
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          {fix.type === 'move_bill' ? (
-            <>
-              <ArrowRight className="w-4 h-4 text-primary-500" />
-              <span className="font-medium">{fixCopy.headline}</span>
-            </>
-          ) : (
-            <>
-              <SkipForward className="w-4 h-4 text-warning-500" />
-              <span className="font-medium">{fixCopy.headline}</span>
-            </>
-          )}
+          <ArrowRight className="w-4 h-4 text-primary-500" />
+          <span className="font-medium">{fixCopy.headline}</span>
         </div>
         
         <div className="mt-1 text-sm font-medium text-primary-700 dark:text-primary-300">

@@ -634,20 +634,6 @@ export function DraftProvider({ children }: { children: ReactNode }) {
                 createdAt: nowIso(),
               },
             ];
-          } else if (fix.type === 'skip_bill') {
-            const key = `${fix.billId}-${fix.fromPaycheckDate}`;
-            const exists = next.skippedBills.some((sb) => `${sb.billId}-${sb.skipDate}` === key);
-            if (!exists) {
-              next.skippedBills = [
-                ...next.skippedBills,
-                {
-                  id: createDraftId(),
-                  billId: fix.billId,
-                  skipDate: fix.fromPaycheckDate,
-                  createdAt: nowIso(),
-                },
-              ];
-            }
           }
         }
         return next;

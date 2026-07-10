@@ -25,6 +25,10 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
       ? format(parseISO(income.startDate), 'yyyy-MM-dd')
       : format(new Date(), 'yyyy-MM-dd')
   );
+  const [hasEndDate, setHasEndDate] = useState(!!income?.endDate);
+  const [endDate, setEndDate] = useState(
+    income?.endDate ? format(parseISO(income.endDate), 'yyyy-MM-dd') : ''
+  );
   const [isActive, setIsActive] = useState(income?.isActive ?? true);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -34,6 +38,7 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
       amount: parseFloat(amount),
       cadence,
       startDate,
+      ...(hasEndDate && endDate ? { endDate } : {}),
       isActive,
     });
   };
@@ -97,6 +102,36 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
           required
         />
       </div>
+
+      <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
+        <span className="text-sm">Set an end date (last payment)</span>
+        <button
+          type="button"
+          onClick={() => setHasEndDate(!hasEndDate)}
+          className={clsx(
+            'transition-colors',
+            hasEndDate ? 'text-primary-500' : 'text-[var(--color-text-muted)]'
+          )}
+          aria-pressed={hasEndDate}
+        >
+          {hasEndDate ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+        </button>
+      </div>
+
+      {hasEndDate && (
+        <div>
+          <label htmlFor="income-end-date" className="label">Ends On (Last Payment)</label>
+          <input
+            id="income-end-date"
+            type="date"
+            value={endDate}
+            min={startDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="input"
+            required={hasEndDate}
+          />
+        </div>
+      )}
 
       <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
         <span className="text-sm">Active Income Source</span>
@@ -219,6 +254,9 @@ export default function IncomePage() {
                   <h3 className="font-medium">{income.sourceName}</h3>
                   <p className="text-sm text-[var(--color-text-secondary)]">
                     {CADENCE_LABELS[income.cadence]} • Starting {format(parseISO(income.startDate), 'MMM d, yyyy')}
+                    {income.endDate && (
+                      <> • Ending {format(parseISO(income.endDate), 'MMM d, yyyy')}</>
+                    )}
                   </p>
                 </div>
               </div>

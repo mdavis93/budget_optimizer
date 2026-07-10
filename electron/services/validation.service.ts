@@ -115,7 +115,7 @@ const ID_REGEX = /^[a-zA-Z0-9-]{8,64}$/;
 
 export interface ReconciliationFixInput {
   id: string;
-  type: 'move_bill' | 'skip_bill';
+  type: 'move_bill';
   billId: string;
   billDueDate: string;
   fromPaycheckDate: string;
@@ -129,8 +129,8 @@ export function validateReconciliationFix(fix: ReconciliationFixInput): Validati
     errors.push('Fix id is required and must be 128 characters or less');
   }
 
-  if (fix.type !== 'move_bill' && fix.type !== 'skip_bill') {
-    errors.push('Fix type must be move_bill or skip_bill');
+  if (fix.type !== 'move_bill') {
+    errors.push('Fix type must be move_bill');
   }
 
   if (!ID_REGEX.test(fix.billId)) {
@@ -149,10 +149,6 @@ export function validateReconciliationFix(fix: ReconciliationFixInput): Validati
     if (!fix.toPaycheckDate || !DATE_REGEX.test(fix.toPaycheckDate)) {
       errors.push('move_bill requires a valid toPaycheckDate');
     }
-  }
-
-  if (fix.type === 'skip_bill' && fix.toPaycheckDate !== undefined && !DATE_REGEX.test(fix.toPaycheckDate)) {
-    errors.push('Invalid toPaycheckDate');
   }
 
   return { valid: errors.length === 0, errors };

@@ -398,7 +398,7 @@ export default function SettingsPage() {
                 />
               </div>
               <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                Any surplus above this amount is sent to savings
+                Surplus above this amount funds goals and savings
               </p>
             </div>
 

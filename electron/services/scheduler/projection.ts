@@ -18,14 +18,20 @@ export function projectIncome(income: Income, startDate: Date, endDate: Date): P
   const events: ProjectedIncome[] = [];
   if (!income.isActive) return events;
 
+  const incomeEnd = income.endDate ? startOfDay(parseISO(income.endDate)) : null;
+
   let currentDate = parseISO(income.startDate);
   currentDate = startOfDay(currentDate);
 
   while (isBefore(currentDate, startDate)) {
     currentDate = getNextIncomeDate(currentDate, income.cadence);
+    if (incomeEnd && isAfter(currentDate, incomeEnd)) return events;
   }
 
-  while (isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) {
+  while (
+    (isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) &&
+    (!incomeEnd || !isAfter(currentDate, incomeEnd))
+  ) {
     events.push({
       date: currentDate,
       sourceId: income.id,

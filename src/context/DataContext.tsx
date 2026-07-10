@@ -64,6 +64,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const fullScheduleRef = useRef<ScheduleData | null>(null);
   const scheduleCacheRef = useRef<ScheduleCacheEntry | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const incomes = draft.incomes;
   const bills = draft.bills;
@@ -291,21 +292,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [bills, scheduleStartingBalance]);
 
   const applyScheduleResult = useCallback((data: ScheduleData) => {
-    fullScheduleRef.current = {
+    const fullHorizonMonths = data.calculationMonths ?? data.viewportMonths;
+    const canonical: ScheduleData = {
       ...data,
       paychecks: data.fullPaychecks,
-      viewportMonths: 12,
+      viewportMonths: fullHorizonMonths,
     };
-    setSchedule(data);
+    fullScheduleRef.current = canonical;
+    if (scheduleCacheRef.current) {
+      scheduleCacheRef.current = {
+        ...scheduleCacheRef.current,
+        data: canonical,
+      };
+    }
+    const viewportSchedule = applyScheduleViewport(
+      canonical,
+      data.viewportMonths,
+      bills,
+      scheduleStartingBalance
+    );
+    if (!mountedRef.current) {
+      return viewportSchedule;
+    }
+    setSchedule(viewportSchedule);
     setScheduleMonthsState(data.viewportMonths);
-    return data;
-  }, []);
+    return viewportSchedule;
+  }, [bills, scheduleStartingBalance]);
 
   const generateScheduleImmediate = useCallback(async (
     startDate: string,
     months: number,
     startingBalance: number
   ): Promise<ScheduleData | null> => {
+    if (!mountedRef.current) {
+      return null;
+    }
     setIsLoading(true);
     try {
       const overlay = draft.buildDraftOverlay();
@@ -320,17 +341,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
         startingBalance,
         overlay
       );
+      if (!mountedRef.current) {
+        return null;
+      }
       if (result.success && result.data) {
-        scheduleCacheRef.current = { hash: cacheKey, data: result.data };
-        return applyScheduleResult(result.data);
+        const fullHorizonMonths = result.data.calculationMonths ?? result.data.viewportMonths;
+        const canonical: ScheduleData = {
+          ...result.data,
+          paychecks: result.data.fullPaychecks,
+          viewportMonths: fullHorizonMonths,
+        };
+        scheduleCacheRef.current = { hash: cacheKey, data: canonical };
+        fullScheduleRef.current = canonical;
+        return applyScheduleResult(canonical);
       }
       setError(result.error || 'Failed to generate schedule');
       return null;
     } catch {
-      setError('Failed to generate schedule');
+      if (mountedRef.current) {
+        setError('Failed to generate schedule');
+      }
       return null;
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [draft, applyScheduleResult]);
 
@@ -360,7 +395,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [generateScheduleImmediate]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }

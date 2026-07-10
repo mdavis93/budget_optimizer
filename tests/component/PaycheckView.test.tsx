@@ -32,6 +32,7 @@ function baseProps() {
     collapseAll: vi.fn(),
     formatCurrency,
     maxBudgetRemaining: 500,
+    minCashOnHand: 100,
     onSkipBill: vi.fn(),
     skippingBill: null,
     onRestoreBill: vi.fn(),
@@ -67,6 +68,49 @@ describe('PaycheckView', () => {
       expect(props.expandAll).toHaveBeenCalledTimes(1);
       expect(props.collapseAll).toHaveBeenCalledTimes(1);
       expect(props.togglePaycheck).toHaveBeenCalledWith('2026-01-15');
+    });
+
+    it('shows Break-Glass badge when cash is between min and target', () => {
+      const props = baseProps();
+      renderWithRouter(
+        <PaycheckView
+          {...props}
+          paychecks={[
+            createMockPaycheck({
+              date: '2026-02-15',
+              budgetRemaining: 150,
+              isShortfall: false,
+            }),
+          ]}
+          maxBudgetRemaining={250}
+          minCashOnHand={100}
+        />
+      );
+
+      expect(screen.getByText('Break-Glass')).toBeInTheDocument();
+    });
+
+    it('does not show Break-Glass badge at target or shortfall', () => {
+      const props = baseProps();
+      const { rerender } = renderWithRouter(
+        <PaycheckView
+          {...props}
+          paychecks={[createMockPaycheck({ budgetRemaining: 250, isShortfall: false })]}
+          maxBudgetRemaining={250}
+          minCashOnHand={100}
+        />
+      );
+      expect(screen.queryByText('Break-Glass')).not.toBeInTheDocument();
+
+      rerender(
+        <PaycheckView
+          {...props}
+          paychecks={[createMockPaycheck({ budgetRemaining: 50, isShortfall: true })]}
+          maxBudgetRemaining={250}
+          minCashOnHand={100}
+        />
+      );
+      expect(screen.queryByText('Break-Glass')).not.toBeInTheDocument();
     });
   });
 
@@ -233,7 +277,7 @@ describe('PaycheckView', () => {
                   priority: 'critical',
                   isIncomeAttached: false,
                   isUnpayable: true,
-                  unfundableReason: 'insufficient_funds',
+                  unfundableReason: 'insufficient_income_in_window',
                 },
                 {
                   billId: 'bill-2',
@@ -251,6 +295,7 @@ describe('PaycheckView', () => {
       );
 
       expect(screen.getByText('Unpayable')).toBeInTheDocument();
+      expect(screen.getByText(/1 unpayable/i)).toBeInTheDocument();
       expect(screen.getByText('Per Paycheck')).toBeInTheDocument();
       expect(screen.getAllByText('$-50.00').length).toBeGreaterThan(0);
     });

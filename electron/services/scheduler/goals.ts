@@ -23,13 +23,9 @@ import {
   billOccurrenceKey,
 } from './types';
 import { projectIncome, projectBills } from './projection';
-import {
-  getUniquePaycheckDates,
-  buildInitialPaycheckAssignments,
-  clonePaycheckAssignments,
-  dedupeAssignmentBills,
-} from './assignment';
-import { applyFundingPriority, buildPaycheckEntries } from './paychecks';
+import { getUniquePaycheckDates } from './assignment';
+import { assignBillsExact } from './exactAssignment';
+import { buildPaycheckEntries } from './paychecks';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
   const nonShortfall = paychecks.filter(p => !p.isShortfall);
@@ -234,9 +230,7 @@ export function generateGoalSuggestions(
 export function calculateGoalProjections(
   goals: SavingsGoal[],
   paychecks: PaycheckEntry[],
-  scheduleEndDate: string,
-  _minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  _minSavingsPerPaycheck: number = 0
+  scheduleEndDate: string
 ): GoalProjection[] {
   const projections: GoalProjection[] = [];
   const scheduleEnd = parseISO(scheduleEndDate);
@@ -479,30 +473,20 @@ export function generateGoalProjections(
 
   const paycheckDates = getUniquePaycheckDates(allIncomes);
 
-  const { paycheckAssignments, manuallyAssignedBills } = buildInitialPaycheckAssignments(
+  const assignments = assignBillsExact(
     paycheckDates,
     allIncomes,
     uniqueBills,
-    skippedBills,
-    manualAssignments,
-    incomeAttachedBillsRaw,
-    goals,
-    minCashOnHand,
-    minSavingsPerPaycheck
+    startingBalance,
+    {
+      skippedBills,
+      manualAssignments,
+      incomeAttachedBillsRaw,
+    }
   );
 
-  const trial = clonePaycheckAssignments(paycheckAssignments);
-  applyFundingPriority(
-    trial,
-    manuallyAssignedBills,
-    goals,
-    minCashOnHand,
-    minSavingsPerPaycheck,
-    'deficit_killer'
-  );
-  dedupeAssignmentBills(trial);
   const paychecks = buildPaycheckEntries(
-    trial,
+    assignments,
     startingBalance,
     maxBudgetRemaining,
     goals,
@@ -513,10 +497,6 @@ export function generateGoalProjections(
   return calculateGoalProjections(
     goals,
     paychecks,
-    format(endDate, 'yyyy-MM-dd'),
-    minCashOnHand,
-    minSavingsPerPaycheck
+    format(endDate, 'yyyy-MM-dd')
   );
 }
-
-export { buildGoalReservePerPaycheck, calculateGoalRequirementsPerPaycheck } from './goalReserves';

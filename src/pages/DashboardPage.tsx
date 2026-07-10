@@ -123,7 +123,7 @@ export default function DashboardPage() {
   const formatWholeCurrency = (amount: number) => formatCurrency(amount, { fractionDigits: 0 });
 
   const netMonthly = totalMonthlyIncome - totalMonthlyBills;
-  const hasShortfalls = schedule?.summary?.shortfallCount ?? 0 > 0;
+  const hasShortfalls = (schedule?.summary?.shortfallCount ?? 0) > 0;
 
   return (
     <div className="space-y-6">

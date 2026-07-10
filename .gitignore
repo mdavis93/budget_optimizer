@@ -18,6 +18,7 @@ npm-debug.log*
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 

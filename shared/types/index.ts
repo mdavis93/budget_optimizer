@@ -43,6 +43,8 @@ export interface Income {
   amount: number;
   cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
   startDate: string;
+  /** Last payment date (inclusive). Omit for open-ended income. */
+  endDate?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -53,6 +55,7 @@ export interface IncomeInput {
   amount: number;
   cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
   startDate: string;
+  endDate?: string;
   isActive: boolean;
 }
 
@@ -195,10 +198,9 @@ export interface DebtWithAmortization {
 // ---------------------------------------------------------------------------
 
 export type UnfundableReason =
-  | 'no_eligible_earlier_paycheck'
-  | 'all_movable_bills_locked'
-  | 'insufficient_income_this_paycheck'
-  | 'goal_reserve_conflict';
+  | 'insufficient_income_in_window'
+  | 'no_eligible_paycheck_in_window'
+  | 'all_movable_bills_locked';
 
 export interface ScheduleEntry {
   date: string;
@@ -247,6 +249,10 @@ export interface PaycheckEntry {
   isShortfall: boolean;
   /** True when goals consumed surplus that pushed this paycheck's savings below the fallback target. */
   savingsSqueezed?: boolean;
+  /** Number of bills in this paycheck that could not be funded (triaged to unpayable). */
+  unpayableCount?: number;
+  /** True when one or more bills in this paycheck could not be funded. */
+  hasUnpayableBills?: boolean;
 }
 
 export interface GoalSuggestion {
@@ -291,7 +297,7 @@ export interface GoalProjection {
 
 export interface ProposedFix {
   id: string;
-  type: 'move_bill' | 'skip_bill';
+  type: 'move_bill';
   billId: string;
   billName: string;
   billAmount: number;
@@ -350,6 +356,7 @@ export interface ScheduleData {
   summary: ScheduleSummary;
   recommendations: string[];
   maxBudgetRemaining: number;
+  minCashOnHand: number;
   reconciliation?: ReconciliationReport;
   goalProjections?: GoalProjection[];
 }

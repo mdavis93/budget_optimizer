@@ -111,6 +111,20 @@ describe('paycheck-calculator', () => {
       expect(result[0].incomeName).toBe('Salary');
       expect(result[0].amount).toBe(2000);
     });
+
+    it('stops at income endDate when set', () => {
+      const income = { ...baseIncome, endDate: '2026-01-15' };
+      const result = getPaycheckDatesForIncome(
+        income,
+        parseISO('2026-01-01'),
+        parseISO('2026-03-01')
+      );
+
+      expect(result.length).toBeGreaterThan(0);
+      result.forEach(p => {
+        expect(p.date.getTime()).toBeLessThanOrEqual(parseISO('2026-01-15').getTime());
+      });
+    });
   });
 
   describe('getPaycheckDatesInRange', () => {

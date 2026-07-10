@@ -32,6 +32,25 @@ describe('IncomePage', () => {
       expect(screen.getByText('$2,500.00')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Edit Primary Job/i })).toBeInTheDocument();
     });
+
+    it('shows end date on income card when set', () => {
+      mockUseData.mockReturnValue({
+        incomes: [
+          createMockIncome({
+            sourceName: 'Side Gig',
+            amount: 500,
+            startDate: '2026-01-01',
+            endDate: '2026-08-31',
+          }),
+        ],
+        createIncome,
+        updateIncome,
+        deleteIncome,
+      });
+
+      render(<IncomePage />);
+      expect(screen.getByText(/Ending Aug 31, 2026/i)).toBeInTheDocument();
+    });
   });
 
   describe('sad', () => {
@@ -50,6 +69,24 @@ describe('IncomePage', () => {
   });
 
   describe('hostile', () => {
+    it('submits end date when enabled on add income form', async () => {
+      const user = userEvent.setup();
+      render(<IncomePage />);
+      await user.click(screen.getAllByRole('button', { name: /Add Income/i })[0]);
+
+      fireEvent.change(screen.getByLabelText('Income Source Name'), { target: { value: 'Temp Job' } });
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1200' } });
+      await user.click(screen.getByText('Set an end date (last payment)').closest('div')!.querySelector('button')!);
+      fireEvent.change(screen.getByLabelText('Ends On (Last Payment)'), { target: { value: '2026-12-31' } });
+      await user.click(screen.getAllByRole('button', { name: 'Add Income' })[1]);
+
+      await waitFor(() => {
+        expect(createIncome).toHaveBeenCalledWith(
+          expect.objectContaining({ endDate: '2026-12-31' })
+        );
+      });
+    });
+
     it('submits add, edit, and delete income actions', async () => {
       const user = userEvent.setup();
       render(<IncomePage />);
@@ -74,9 +111,9 @@ describe('IncomePage', () => {
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       await user.click(screen.getByRole('button', { name: /Edit Primary Job/i }));
-      const sourceInput = screen.getByLabelText('Income Source Name');
-      await user.clear(sourceInput);
-      await user.type(sourceInput, 'Primary Job Updated');
+      fireEvent.change(screen.getByLabelText('Income Source Name'), {
+        target: { value: 'Primary Job Updated' },
+      });
       await user.click(screen.getByRole('button', { name: 'Update Income' }));
       await waitFor(() => {
         expect(updateIncome).toHaveBeenCalledWith(

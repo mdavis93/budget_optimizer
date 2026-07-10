@@ -61,17 +61,6 @@ function buildSchedule(overrides: Partial<ScheduleData> = {}): ScheduleData {
           reason: 'avoid shortfall',
           impact: 100,
         },
-        {
-          id: 'fix-aug',
-          type: 'skip_bill',
-          billId: 'bill-8',
-          billName: 'August Bill',
-          billAmount: 120,
-          fromPaycheckDate: '2026-08-01',
-          billDueDate: '2026-08-01',
-          reason: 'avoid shortfall',
-          impact: 120,
-        },
       ],
       canBeFullyResolved: false,
       totalDeficit: 40,
@@ -144,6 +133,27 @@ describe('applyScheduleViewport', () => {
       expect(viewport.reconciliation?.proposedFixes.map((fix) => fix.id)).toEqual(['fix-june']);
       expect(viewport.reconciliation?.needsReconciliation).toBe(false);
       expect(viewport.reconciliation?.totalDeficit).toBe(0);
+    });
+
+    it('rebuilds reconciliation shortfalls from viewport paychecks when stored list is stale', () => {
+      const fullSchedule = buildSchedule({
+        reconciliation: {
+          needsReconciliation: false,
+          shortfalls: [],
+          proposedFixes: [],
+          canBeFullyResolved: true,
+          totalDeficit: 0,
+          estimatedResolution: 0,
+        },
+      });
+
+      const viewport = applyScheduleViewport(fullSchedule, 12, bills, 1000);
+
+      expect(viewport.summary.shortfallCount).toBe(1);
+      expect(viewport.reconciliation?.shortfalls).toHaveLength(1);
+      expect(viewport.reconciliation?.shortfalls[0].paycheckDate).toBe('2026-08-01');
+      expect(viewport.reconciliation?.totalDeficit).toBe(40);
+      expect(viewport.reconciliation?.needsReconciliation).toBe(true);
     });
 
     it('keeps the savings-squeeze warning from full-horizon data across viewports', () => {

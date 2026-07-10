@@ -35,7 +35,7 @@ export default function SchedulePage() {
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
   } = useData();
-  const { isQuickBudget } = useBudget();
+  const { isQuickBudget, currentBudget } = useBudget();
   const draft = useDraft();
   const billAssignments = draft.billAssignments;
   const incomeOverrides = draft.incomeOverrides;
@@ -537,7 +537,7 @@ export default function SchedulePage() {
                 Budget Has Unresolved Shortfalls
               </h3>
               <p className="text-sm text-warning-800 dark:text-warning-200 mt-1">
-                {schedule.reconciliation.shortfalls.length} paycheck{schedule.reconciliation.shortfalls.length !== 1 ? 's' : ''} have 
+                {schedule.summary.shortfallCount} paycheck{schedule.summary.shortfallCount !== 1 ? 's' : ''} have 
                 negative balances totaling ${schedule.reconciliation.totalDeficit.toLocaleString('en-US', { minimumFractionDigits: 2 })}.
                 {schedule.reconciliation.proposedFixes.length > 0 && (
                   <button 
@@ -612,7 +612,8 @@ export default function SchedulePage() {
           expandAll={expandAll}
           collapseAll={collapseAll}
           formatCurrency={formatCurrency}
-          maxBudgetRemaining={schedule?.maxBudgetRemaining || 250}
+          maxBudgetRemaining={schedule?.maxBudgetRemaining ?? currentBudget?.targetCashOnHand ?? 250}
+          minCashOnHand={schedule?.minCashOnHand ?? currentBudget?.minCashOnHand ?? 100}
           onSkipBill={handleSkipBill}
           skippingBill={skippingBill}
           onRestoreBill={handleRestoreBill}
