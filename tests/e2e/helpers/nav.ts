@@ -19,9 +19,13 @@ export type NavTarget =
  * capitalization, so match the DOM text case-insensitively.
  */
 export async function navigateTo(window: Page, target: NavTarget): Promise<void> {
-  // Exact match: sidebar labels are exact, and avoids colliding with in-page
-  // links like the dashboard's "View full schedule".
-  await window.getByRole('link', { name: target, exact: true }).click();
+  // Scope to the sidebar and match the label span only. Draft dirty dots add an
+  // aria-label that breaks exact accessible-name matching on the whole link.
+  const nav = window.locator('aside nav');
+  await nav
+    .locator('a')
+    .filter({ has: window.locator('span.flex-1', { hasText: target, exact: true }) })
+    .click();
   await expect(window.getByRole('heading', { name: new RegExp(target, 'i') }).first()).toBeVisible();
   await expectNoSpinner(window);
 }

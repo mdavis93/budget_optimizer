@@ -87,7 +87,7 @@ test.describe('Income', () => {
   });
 
   test('happy: end date on income shortens the schedule horizon @income.end-date', async ({ window }) => {
-    await dialog.getByRole('button', { name: 'Add Income' }).first().click();
+    await window.getByRole('button', { name: 'Add Income' }).first().click();
     const dialog = window.getByRole('dialog', { name: 'Add Income Source' });
     await dialog.locator('#income-source-name').fill('Contract Work');
     await dialog.locator('#income-amount').fill('3000');

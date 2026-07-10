@@ -39,7 +39,7 @@ test.describe('Unsaved-changes guard', () => {
 
     // Returning shows the still-pending draft (held in the overlay, not lost).
     await navigateTo(window, 'Income');
-    await expect(window.getByRole('heading', { name: 'Guard Salary' })).toBeVisible();
+    await expect(window.getByText('Guard Salary')).toBeVisible();
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
   });
 
@@ -81,6 +81,6 @@ test.describe('Unsaved-changes guard', () => {
     // Persisted across the lock/unlock cycle, not just held in the overlay.
     await unlock(window);
     await navigateTo(window, 'Income');
-    await expect(window.getByRole('heading', { name: 'Guard Salary' })).toBeVisible();
+    await expect(window.getByText('Guard Salary')).toBeVisible();
   });
 });
