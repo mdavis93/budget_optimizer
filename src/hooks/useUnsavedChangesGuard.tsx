@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useDraftOptional } from '../context/DraftContext';
 import UnsavedChangesModal from '../components/UnsavedChangesModal';
 
@@ -7,7 +7,11 @@ interface PendingAction {
   action: () => void | Promise<void>;
 }
 
-export function useUnsavedChangesGuard() {
+interface UseUnsavedChangesGuardOptions {
+  listenForWindowClose?: boolean;
+}
+
+export function useUnsavedChangesGuard(options?: UseUnsavedChangesGuardOptions) {
   const draft = useDraftOptional();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
@@ -22,6 +26,16 @@ export function useUnsavedChangesGuard() {
     },
     [draft?.hasUnsavedChanges]
   );
+
+  useEffect(() => {
+    if (!options?.listenForWindowClose || !window.electronAPI?.onCloseRequested) {
+      return;
+    }
+
+    return window.electronAPI.onCloseRequested(() => {
+      guardAction(() => window.electronAPI.quitApp(), 'close the app');
+    });
+  }, [guardAction, options?.listenForWindowClose]);
 
   const handleSaveAndContinue = useCallback(async () => {
     if (!pendingAction || !draft) return;

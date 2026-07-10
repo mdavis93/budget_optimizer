@@ -27,6 +27,15 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 let mainWindow: BrowserWindow | null = null;
+let allowWindowClose = false;
+
+function shutdownApp() {
+  if (services?.database) {
+    services.database.close();
+  }
+  allowWindowClose = true;
+  app.quit();
+}
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 
@@ -52,6 +61,7 @@ function resolveWindowIcon() {
 }
 
 function createWindow() {
+  allowWindowClose = false;
   const windowIcon = resolveWindowIcon();
 
   mainWindow = new BrowserWindow({
@@ -96,7 +106,17 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  mainWindow.on('close', (event) => {
+    if (allowWindowClose) {
+      return;
+    }
+
+    event.preventDefault();
+    mainWindow?.webContents.send('app:close-requested');
+  });
+
   mainWindow.on('closed', () => {
+    allowWindowClose = false;
     mainWindow = null;
   });
 }
@@ -160,11 +180,7 @@ app.on('before-quit', () => {
 });
 
 ipcMain.handle('app:quit', () => {
-  // Close database and quit app gracefully
-  if (services?.database) {
-    services.database.close();
-  }
-  app.quit();
+  shutdownApp();
 });
 
 ipcMain.handle('app:check-biometric-available', async () => {

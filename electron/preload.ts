@@ -8,6 +8,11 @@ const api = {
   showOpenDialog: (options: Electron.OpenDialogOptions) => 
     ipcRenderer.invoke('app:show-open-dialog', options),
   quitApp: () => ipcRenderer.invoke('app:quit'),
+  onCloseRequested: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('app:close-requested', handler);
+    return () => ipcRenderer.removeListener('app:close-requested', handler);
+  },
 
   budget: {
     getAll: () => ipcRenderer.invoke('budget:get-all'),
