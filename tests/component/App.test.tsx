@@ -24,6 +24,7 @@ vi.mock('../../src/context/BudgetContext', () => ({
 
 vi.mock('../../src/context/DraftContext', () => ({
   DraftProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useDraftOptional: () => null,
 }));
 
 vi.mock('../../src/components/Layout', () => ({
