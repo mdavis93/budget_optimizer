@@ -24,6 +24,10 @@ stubs native dialogs (Keychain save prompt, file save/open) so headless runs
 never block. Each test therefore boots into first-run setup and creates — then
 destroys — its own encrypted vault. No credentials or data outlive a test.
 
+Teardown calls the production `quitApp` IPC (`app:quit` → graceful shutdown) so
+tests that leave unsaved drafts can exit without hanging on the native close
+guard. That is harness lifecycle cleanup, not an auth bypass.
+
 Helpers (`helpers/`):
 
 - `auth.ts` — `completeSetup` (create master password + recovery key + skip
@@ -32,6 +36,7 @@ Helpers (`helpers/`):
   A named budget enables **draft mode** (edits stage in an overlay until
   "Save Changes"); Quick Budget persists instantly.
 - `nav.ts` — `navigateTo` + `expectNoSpinner` (the load-regression guard).
+- `schedule.ts` — `dismissReconciliationIfPresent` when shortfall overlay blocks Schedule.
 - `seed.ts` — pre-seed via real `electronAPI.*.create`, then `reloadShell`
   (which reselects the budget from the picker, mirroring a real relaunch) so
   the renderer re-reads the snapshot.

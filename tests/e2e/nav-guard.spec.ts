@@ -53,7 +53,7 @@ test.describe('Unsaved-changes guard', () => {
 
     await expect(guard).toBeHidden();
     await expect(window.getByRole('heading', { name: 'Income Sources' })).toBeVisible();
-    await expect(window.getByRole('heading', { name: 'Guard Salary' })).toBeVisible();
+    await expect(window.getByText('Guard Salary')).toBeVisible();
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
   });
 
@@ -64,6 +64,7 @@ test.describe('Unsaved-changes guard', () => {
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
     await guard.getByRole('button', { name: 'Discard All' }).click();
 
+    await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible({ timeout: 15000 });
     // Locks back to the login screen; on unlock the draft is gone.
     await unlock(window);
     await navigateTo(window, 'Income');
@@ -78,6 +79,8 @@ test.describe('Unsaved-changes guard', () => {
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
     await guard.getByRole('button', { name: 'Save All Changes' }).click();
 
+    await expect(guard).toBeHidden();
+    await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible({ timeout: 15000 });
     // Persisted across the lock/unlock cycle, not just held in the overlay.
     await unlock(window);
     await navigateTo(window, 'Income');

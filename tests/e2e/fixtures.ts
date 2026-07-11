@@ -35,6 +35,21 @@ function buildLaunchEnv(): Record<string, string> {
   return env;
 }
 
+/** Shut down via production quit IPC so close-guard tests with dirty drafts can teardown. */
+async function forceQuitHarnessApp(app: ElectronApplication): Promise<void> {
+  try {
+    const page = await app.firstWindow();
+    await page.evaluate(() => window.electronAPI.quitApp());
+  } catch {
+    // Window may already be gone if a prior quit succeeded
+  }
+  try {
+    await app.close();
+  } catch {
+    // Process may already have exited after quitApp → shutdownApp()
+  }
+}
+
 export type HarnessFixtures = {
   /** Throwaway, per-test `userData` directory. Created on use, deleted on teardown. */
   userDataDir: string;
@@ -93,7 +108,7 @@ export const test = base.extend<HarnessFixtures>({
 
     await use(app);
 
-    await app.close();
+    await forceQuitHarnessApp(app);
   },
 
   window: async ({ electronApp }, use) => {
