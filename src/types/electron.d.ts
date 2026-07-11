@@ -46,6 +46,7 @@ interface ElectronAPI {
     filters?: Array<{ name: string; extensions: string[] }>;
   }) => Promise<{ canceled: boolean; filePaths: string[] }>;
   quitApp: () => Promise<void>;
+  onCloseRequested: (callback: () => void) => () => void;
 
   budget: {
     getAll: () => Promise<ApiResult<Budget[]>>;

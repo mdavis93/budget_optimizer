@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import { navigateTo, expectNoSpinner } from './helpers/nav';
+import { dismissReconciliationIfPresent } from './helpers/schedule';
 import { reloadShell, seedBill, seedGoal, seedIncome } from './helpers/seed';
 
 /**
@@ -137,10 +138,7 @@ test.describe('Schedule', () => {
     await navigateTo(window, 'Schedule');
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
-    const viewScheduleAnyway = window.getByRole('button', { name: 'View Schedule Anyway' });
-    if (await viewScheduleAnyway.isVisible().catch(() => false)) {
-      await viewScheduleAnyway.click();
-    }
+    await dismissReconciliationIfPresent(window);
     await expect(window.getByText('Budget Remaining').first()).toBeVisible();
     await expect(window.getByText(/-\$[\d,]+\.\d{2}/).first()).toBeVisible();
     await expectNoSpinner(window);
@@ -173,9 +171,8 @@ test.describe('Schedule', () => {
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
 
-    await expect(window.getByRole('heading', { name: 'Payment Schedule' }).or(
-      window.getByText('Some shortfalls need manual changes')
-    )).toBeVisible({ timeout: 15000 });
+    await dismissReconciliationIfPresent(window);
+    await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
     await expect(window.getByText(/Skip "/i)).toHaveCount(0);
     await expectNoSpinner(window);
   });

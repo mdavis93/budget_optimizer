@@ -140,6 +140,7 @@ export const createMockElectronAPI = () => {
     showSaveDialog: vi.fn().mockResolvedValue({ canceled: false, filePath: '/test/path' }),
     showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ['/test/file'] }),
     quitApp: vi.fn().mockResolvedValue(undefined),
+    onCloseRequested: vi.fn(() => () => {}),
 
     budget: {
       getAll: vi.fn().mockResolvedValue({ success: true, data: [createMockBudget()] }),

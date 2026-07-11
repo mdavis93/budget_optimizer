@@ -196,7 +196,10 @@ describe('DebtsPage', () => {
         );
       });
 
-      fireEvent.click(screen.getByRole('button', { name: /Edit debt/i }));
+      await waitFor(() => {
+        expect(document.querySelector('.animate-spin')).toBeNull();
+      });
+      fireEvent.click(await screen.findByRole('button', { name: /Edit debt/i }));
       fireEvent.change(screen.getByLabelText('Monthly Payment'), {
         target: { value: '130' },
       });

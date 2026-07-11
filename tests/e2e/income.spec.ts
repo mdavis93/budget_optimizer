@@ -92,9 +92,11 @@ test.describe('Income', () => {
     await dialog.locator('#income-source-name').fill('Contract Work');
     await dialog.locator('#income-amount').fill('3000');
     await dialog.locator('#income-cadence').selectOption('monthly');
-    await dialog.locator('button[aria-pressed="false"]').click();
+    await dialog.locator('#income-start-date').fill('2026-01-01');
+    await dialog.getByText('Set an end date (last payment)').locator('..').getByRole('button').click();
     await dialog.locator('#income-end-date').fill('2026-03-31');
     await dialog.getByRole('button', { name: 'Add Income' }).click();
+    await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
     await window.getByRole('button', { name: 'Save Changes', exact: true }).click();
 
     await reloadShell(window);

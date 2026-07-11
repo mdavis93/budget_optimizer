@@ -19,10 +19,10 @@ export type NavTarget =
  * capitalization, so match the DOM text case-insensitively.
  */
 export async function navigateTo(window: Page, target: NavTarget): Promise<void> {
-  // Scope to the sidebar and match the label span only. Draft dirty dots add an
-  // aria-label that breaks exact accessible-name matching on the whole link.
-  const nav = window.locator('aside nav');
-  await nav
+  // Scope to aside (Settings lives in the footer div, outside <nav>). Match the
+  // label span only — draft dirty dots add an aria-label on the link.
+  const sidebar = window.locator('aside');
+  await sidebar
     .locator('a')
     .filter({ has: window.locator('span.flex-1', { hasText: target, exact: true }) })
     .click();

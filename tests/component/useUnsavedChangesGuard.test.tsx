@@ -154,5 +154,29 @@ describe('useUnsavedChangesGuard', () => {
       fireEvent.click(screen.getByText('go-next'));
       expect(screen.getByText('Saving...')).toBeInTheDocument();
     });
+
+    it('listens for native window close when configured', () => {
+      const onCloseRequested = vi.fn(() => () => {});
+      window.electronAPI = {
+        ...window.electronAPI,
+        onCloseRequested,
+        quitApp: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: false,
+        isSaving: false,
+        saveAll: vi.fn(),
+        discardAll: vi.fn(),
+      });
+
+      function CloseGuardHarness() {
+        useUnsavedChangesGuard({ listenForWindowClose: true });
+        return null;
+      }
+
+      render(<CloseGuardHarness />);
+      expect(onCloseRequested).toHaveBeenCalledTimes(1);
+    });
   });
 });
