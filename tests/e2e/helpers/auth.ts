@@ -37,4 +37,5 @@ export async function unlock(window: Page, password: string = E2E_PASSWORD): Pro
   await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
   await window.locator('#password').fill(password);
   await window.getByRole('button', { name: 'Unlock' }).click();
+  await expect(window.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
 }

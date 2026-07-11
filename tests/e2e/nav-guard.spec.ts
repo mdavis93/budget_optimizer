@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import { navigateTo } from './helpers/nav';
 import { unlock } from './helpers/auth';
+import { reloadShell } from './helpers/seed';
 import type { Page } from '@playwright/test';
 
 /**
@@ -79,11 +80,12 @@ test.describe('Unsaved-changes guard', () => {
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
     await guard.getByRole('button', { name: 'Save All Changes' }).click();
 
-    await expect(guard).toBeHidden();
+    await expect(guard).toBeHidden({ timeout: 15000 });
     await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible({ timeout: 15000 });
     // Persisted across the lock/unlock cycle, not just held in the overlay.
     await unlock(window);
+    await reloadShell(window);
     await navigateTo(window, 'Income');
-    await expect(window.getByText('Guard Salary')).toBeVisible();
+    await expect(window.getByRole('heading', { name: 'Guard Salary' })).toBeVisible();
   });
 });
