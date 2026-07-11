@@ -105,6 +105,8 @@ test.describe('Income', () => {
     await expect(window.getByText(/Ending Mar 31, 2026/i)).toBeVisible();
 
     await navigateTo(window, 'Schedule');
+    await window.locator('#schedule-start-date').fill('2026-01-01');
+    await window.getByRole('button', { name: 'Generate Schedule' }).click();
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
     await expect(window.getByText('Contract Work')).toHaveCount(3);
     await expectNoSpinner(window);
