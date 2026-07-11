@@ -33,6 +33,7 @@ function incomeEquals(a: Income, b: Income): boolean {
     a.amount === b.amount &&
     a.cadence === b.cadence &&
     a.startDate === b.startDate &&
+    a.endDate === b.endDate &&
     a.isActive === b.isActive
   );
 }
@@ -86,6 +87,7 @@ function toIncomeInput(income: Income): IncomeInput {
     amount: income.amount,
     cadence: income.cadence,
     startDate: income.startDate,
+    ...(income.endDate ? { endDate: income.endDate } : {}),
     isActive: income.isActive,
   };
 }

@@ -94,6 +94,7 @@ test.describe('Income', () => {
     await dialog.locator('#income-cadence').selectOption('monthly');
     await dialog.locator('#income-start-date').fill('2026-01-01');
     await dialog.getByText('Set an end date (last payment)').locator('..').getByRole('button').click();
+    await expect(dialog.locator('#income-end-date')).toBeVisible();
     await dialog.locator('#income-end-date').fill('2026-03-31');
     await dialog.getByRole('button', { name: 'Add Income' }).click();
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();

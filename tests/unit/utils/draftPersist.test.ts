@@ -478,6 +478,41 @@ describe('draftPersist', () => {
       expect(billResult.nextDraft.bills[0].id).toBe('bill-real-2');
     });
 
+    it('persists income endDate on create and update', async () => {
+      const committed = makeDraftState({ incomes: [] });
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-3', endDate: '2026-03-31' })],
+      });
+
+      vi.mocked(window.electronAPI.income.create).mockResolvedValueOnce({
+        success: true,
+        data: createMockIncome({ id: 'income-real-3', endDate: '2026-03-31' }),
+      });
+
+      const createResult = await persistIncomeDomain(committed, draft);
+      expect(createResult.success).toBe(true);
+      expect(window.electronAPI.income.create).toHaveBeenCalledWith(
+        expect.objectContaining({ endDate: '2026-03-31' })
+      );
+
+      const saved = createResult.nextCommitted;
+      const updatedDraft = makeDraftState({
+        incomes: [createMockIncome({ id: 'income-real-3', endDate: '2026-06-30' })],
+      });
+
+      vi.mocked(window.electronAPI.income.update).mockResolvedValueOnce({
+        success: true,
+        data: createMockIncome({ id: 'income-real-3', endDate: '2026-06-30' }),
+      });
+
+      const updateResult = await persistIncomeDomain(saved, updatedDraft);
+      expect(updateResult.success).toBe(true);
+      expect(window.electronAPI.income.update).toHaveBeenCalledWith(
+        'income-real-3',
+        expect.objectContaining({ endDate: '2026-06-30' })
+      );
+    });
+
     it('stops persistDomains when goals domain fails', async () => {
       const committed = makeDraftState();
       const draft = makeDraftState({
