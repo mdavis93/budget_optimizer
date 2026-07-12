@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import Modal from '../components/Modal';
 import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
-import { useDraftData, useDraftActions } from '../context/DraftContext';
+import { useDraftData, useDraftStatus, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
@@ -18,7 +18,8 @@ const INITIAL_FORM_VALUES: GoalFormValues = {
 };
 
 export default function GoalsPage() {
-  const { goals, dirtyDomains, budgetFields } = useDraftData();
+  const { goals, budgetFields } = useDraftData();
+  const { dirtyDomains } = useDraftStatus();
   const {
     getGoalProjections,
     reloadSnapshot,

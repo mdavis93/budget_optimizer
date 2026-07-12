@@ -19,7 +19,7 @@ import AppIcon from './AppIcon';
 import { useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
 import { useBudget } from '../context/BudgetContext';
-import { useDraftData } from '../context/DraftContext';
+import { useDraftStatus } from '../context/DraftContext';
 import { usePlatformExit } from '../platform/PlatformExitGuard';
 import GlobalDraftBanner from './GlobalDraftBanner';
 import DraftSaveBar from './DraftSaveBar';
@@ -41,7 +41,7 @@ const navItems = [
 export default function Layout() {
   const { lock } = useAuth();
   const { currentBudget, isQuickBudget } = useBudget();
-  const { isDraftMode, isDomainDirty } = useDraftData();
+  const { isDraftMode, isDomainDirty } = useDraftStatus();
   const { guardAction } = usePlatformExit();
   const location = useLocation();
   const currentDomain = ROUTE_DRAFT_DOMAIN[location.pathname];

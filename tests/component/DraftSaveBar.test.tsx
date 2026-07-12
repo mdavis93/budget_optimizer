@@ -9,6 +9,7 @@ const mockUseDraft = vi.fn();
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
   useDraftData: () => mockUseDraft(),
+  useDraftStatus: () => mockUseDraft(),
   useDraftActions: () => mockUseDraft(),
 }));
 
