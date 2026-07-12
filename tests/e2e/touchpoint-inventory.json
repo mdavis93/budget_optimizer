@@ -106,22 +106,28 @@
       "description": "In-app navigation is unguarded: switching pages preserves the draft so users can simulate uncommitted changes freely"
     },
     {
+      "id": "draft.lock-preserves",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Lock App never prompts: privacy lock preserves the mid-edit draft across unlock"
+    },
+    {
       "id": "draft.guard-cancel",
       "tier": "critical",
       "domain": "draft",
-      "description": "Exit guard (Lock/Quit): Cancel keeps you in the app with the draft intact"
+      "description": "Exit guard (Quit / window close): Cancel keeps you in the app with the draft intact"
     },
     {
       "id": "draft.guard-discard",
       "tier": "critical",
       "domain": "draft",
-      "description": "Exit guard (Lock/Quit): Discard All drops the draft and proceeds"
+      "description": "Exit guard (Quit / window close): Discard All drops the draft and proceeds"
     },
     {
       "id": "draft.guard-save",
       "tier": "critical",
       "domain": "draft",
-      "description": "Exit guard (Lock/Quit): Save All Changes persists the draft and proceeds"
+      "description": "Exit guard (Quit / window close): Save All Changes persists the draft and proceeds"
     },
 
     {

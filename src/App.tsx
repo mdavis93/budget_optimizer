@@ -8,7 +8,7 @@ import BudgetPicker from './components/BudgetPicker';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import LoadingScreen from './components/LoadingScreen';
-import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
+import { PlatformExitGuardProvider } from './platform/PlatformExitGuard';
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SetupPage = lazy(() => import('./pages/SetupPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -53,17 +53,6 @@ function BudgetRequiredRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AppCloseGuard({ children }: { children: React.ReactNode }) {
-  const { unsavedDialog } = useUnsavedChangesGuard({ listenForWindowClose: true });
-
-  return (
-    <>
-      {unsavedDialog}
-      {children}
-    </>
-  );
-}
-
 function App() {
   const { isFirstTime, isLoading, checkAuthStatus } = useAuth();
   const [initializing, setInitializing] = useState(true);
@@ -86,7 +75,7 @@ function App() {
         <HashRouter>
           <BudgetProvider>
           <DraftProvider>
-          <AppCloseGuard>
+          <PlatformExitGuardProvider>
           <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route 
@@ -122,7 +111,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
-          </AppCloseGuard>
+          </PlatformExitGuardProvider>
           </DraftProvider>
           </BudgetProvider>
         </HashRouter>

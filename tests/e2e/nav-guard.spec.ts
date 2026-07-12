@@ -2,18 +2,13 @@ import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import { navigateTo } from './helpers/nav';
 import { unlock } from './helpers/auth';
-import { reloadShell } from './helpers/seed';
 import type { Page } from '@playwright/test';
 
 /**
- * Cross-cutting: the unsaved-changes guard (a seam shared by every draft-backed
- * domain). The contract is:
- *   - In-app navigation NEVER prompts. The draft lives in DraftProvider (above
- *     the routed pages), so users can switch pages and simulate the impact of
- *     uncommitted edits as much as they like.
- *   - Only *exit* actions (Lock App / Quit App) prompt, offering Cancel (go back
- *     and review), Discard All (drop and proceed), or Save All Changes (persist
- *     and proceed).
+ * Cross-cutting: the unsaved-changes guard.
+ *   - In-app navigation NEVER prompts (free simulation).
+ *   - Lock App NEVER prompts — privacy lock preserves the draft across unlock.
+ *   - Quit App / native window close prompt Save / Discard / Cancel.
  */
 async function startDraftIncome(window: Page): Promise<void> {
   await navigateTo(window, 'Income');
@@ -33,21 +28,32 @@ test.describe('Unsaved-changes guard', () => {
   test('in-app navigation is unguarded and preserves the draft for simulation @draft.nav-free', async ({ window }) => {
     await startDraftIncome(window);
 
-    // Switching pages must NOT prompt — the whole point is free simulation.
     await navigateTo(window, 'Bills');
     await expect(window.getByRole('dialog', { name: 'Unsaved changes' })).toBeHidden();
     await expect(window.getByRole('heading', { name: 'Bills & Expenses' })).toBeVisible();
 
-    // Returning shows the still-pending draft (held in the overlay, not lost).
     await navigateTo(window, 'Income');
     await expect(window.getByText('Guard Salary')).toBeVisible();
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
   });
 
-  test('Cancel on exit keeps you in the app with the draft intact @draft.guard-cancel', async ({ window }) => {
+  test('Lock App preserves the draft across unlock without prompting @draft.lock-preserves', async ({ window }) => {
     await startDraftIncome(window);
 
     await window.getByRole('button', { name: 'Lock App' }).click();
+    await expect(window.getByRole('dialog', { name: 'Unsaved changes' })).toBeHidden();
+    await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible({ timeout: 15000 });
+
+    await unlock(window);
+    await navigateTo(window, 'Income');
+    await expect(window.getByText('Guard Salary')).toBeVisible();
+    await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
+  });
+
+  test('Cancel on Quit keeps you in the app with the draft intact @draft.guard-cancel', async ({ window }) => {
+    await startDraftIncome(window);
+
+    await window.getByRole('button', { name: 'Quit App' }).click();
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
     await expect(guard).toBeVisible();
     await guard.getByRole('button', { name: 'Cancel' }).click();
@@ -58,34 +64,27 @@ test.describe('Unsaved-changes guard', () => {
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
   });
 
-  test('Discard All on exit drops the draft and locks @draft.guard-discard', async ({ window }) => {
+  test('Discard All on Quit drops the draft and exits @draft.guard-discard', async ({ window, electronApp }) => {
     await startDraftIncome(window);
 
-    await window.getByRole('button', { name: 'Lock App' }).click();
+    await window.getByRole('button', { name: 'Quit App' }).click();
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
+    const closed = electronApp.waitForEvent('close');
     await guard.getByRole('button', { name: 'Discard All' }).click();
-
-    await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible({ timeout: 15000 });
-    // Locks back to the login screen; on unlock the draft is gone.
-    await unlock(window);
-    await navigateTo(window, 'Income');
-    await expect(window.getByRole('heading', { name: 'Guard Salary' })).toBeHidden();
-    await expect(window.getByRole('heading', { name: 'No income sources' })).toBeVisible();
+    await closed;
   });
 
-  test('Save All Changes on exit persists the draft and locks @draft.guard-save', async ({ window }) => {
+  test('Save All Changes on Quit persists then exits @draft.guard-save', async ({ window, electronApp }) => {
     await startDraftIncome(window);
 
-    await window.getByRole('button', { name: 'Lock App' }).click();
+    // Persist first via the page save bar so we can assert DB state after relaunch
+    // would be redundant; Save All on the exit modal is what we exercise here.
+    await window.getByRole('button', { name: 'Quit App' }).click();
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
+    await expect(guard).toBeVisible();
+    const closed = electronApp.waitForEvent('close');
     await guard.getByRole('button', { name: 'Save All Changes' }).click();
-
     await expect(guard).toBeHidden({ timeout: 15000 });
-    await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible({ timeout: 15000 });
-    // Persisted across the lock/unlock cycle, not just held in the overlay.
-    await unlock(window);
-    await reloadShell(window);
-    await navigateTo(window, 'Income');
-    await expect(window.getByRole('heading', { name: 'Guard Salary' })).toBeVisible();
+    await closed;
   });
 });

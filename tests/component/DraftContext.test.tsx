@@ -841,6 +841,55 @@ describe('DraftContext', () => {
       });
     });
 
+    it('parks a dirty draft across lock and restores it on unlock', async () => {
+      const { rerender } = render(
+        <ToastProvider>
+          <DraftProvider>
+            <DraftHarness />
+          </DraftProvider>
+        </ToastProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
+      });
+
+      fireEvent.click(screen.getByText('create-income'));
+      await waitFor(() => {
+        expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+        expect(screen.getByTestId('income-count')).toHaveTextContent('2');
+      });
+
+      mockUseAuth.mockReturnValue({ isUnlocked: false });
+      rerender(
+        <ToastProvider>
+          <DraftProvider>
+            <DraftHarness />
+          </DraftProvider>
+        </ToastProvider>
+      );
+
+      // Privacy lock must not wipe the mid-edit overlay from the live tree.
+      await waitFor(() => {
+        expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+        expect(screen.getByTestId('income-count')).toHaveTextContent('2');
+      });
+
+      mockUseAuth.mockReturnValue({ isUnlocked: true });
+      rerender(
+        <ToastProvider>
+          <DraftProvider>
+            <DraftHarness />
+          </DraftProvider>
+        </ToastProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+        expect(screen.getByTestId('income-count')).toHaveTextContent('2');
+      });
+    });
+
     it('applyReconciliationFixes move_bill replaces existing assignment', async () => {
       renderProvider();
       await waitFor(() => {
