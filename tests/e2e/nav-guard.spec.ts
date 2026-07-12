@@ -118,9 +118,9 @@ test.describe('Unsaved-changes guard', () => {
     await requestNativeWindowClose(electronApp);
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
     await expect(guard).toBeVisible();
+    // Do not assert modal hide — exit tears down the page (same as Discard).
     const closed = electronApp.waitForEvent('close');
     await guard.getByRole('button', { name: 'Save All Changes' }).click();
-    await expect(guard).toBeHidden({ timeout: 15000 });
     await closed;
   });
 
@@ -130,7 +130,6 @@ test.describe('Unsaved-changes guard', () => {
 
     const closed = electronApp.waitForEvent('close');
     await requestNativeWindowClose(electronApp);
-    await expect(window.getByRole('dialog', { name: 'Unsaved changes' })).toBeHidden();
     await closed;
   });
 });
