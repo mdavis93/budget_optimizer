@@ -905,12 +905,13 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     }
   }, [draft.bills, scheduleStartingBalance]);
 
-  const applyScheduleResult = useCallback((data: ScheduleData) => {
+  const applyScheduleResult = useCallback((data: ScheduleData, requestedMonths: number) => {
     const fullHorizonMonths = data.calculationMonths ?? data.viewportMonths;
     const canonical: ScheduleData = {
       ...data,
       paychecks: data.fullPaychecks,
-      viewportMonths: fullHorizonMonths,
+      calculationMonths: fullHorizonMonths,
+      viewportMonths: requestedMonths,
     };
     fullScheduleRef.current = canonical;
     if (scheduleCacheRef.current) {
@@ -918,13 +919,13 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     }
     const viewportSchedule = applyScheduleViewport(
       canonical,
-      data.viewportMonths,
+      requestedMonths,
       draft.bills,
       scheduleStartingBalance
     );
     if (mountedRef.current) {
       setSchedule(viewportSchedule);
-      setScheduleMonthsState(data.viewportMonths);
+      setScheduleMonthsState(requestedMonths);
     }
     return viewportSchedule;
   }, [draft.bills, scheduleStartingBalance]);
@@ -941,7 +942,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       const overlay = buildDraftOverlay();
       const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
       if (scheduleCacheRef.current?.hash === cacheKey) {
-        return applyScheduleResult(scheduleCacheRef.current.data);
+        return applyScheduleResult(scheduleCacheRef.current.data, months);
       }
 
       const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
@@ -952,11 +953,12 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         const canonical: ScheduleData = {
           ...result.data,
           paychecks: result.data.fullPaychecks,
-          viewportMonths: fullHorizonMonths,
+          calculationMonths: fullHorizonMonths,
+          viewportMonths: months,
         };
         scheduleCacheRef.current = { hash: cacheKey, data: canonical };
         fullScheduleRef.current = canonical;
-        return applyScheduleResult(canonical);
+        return applyScheduleResult(canonical, months);
       }
       setScheduleError(result.error || 'Failed to generate schedule');
       return null;

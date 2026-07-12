@@ -82,12 +82,14 @@ test.describe('Schedule', () => {
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
 
+    const view = window.getByLabel('View');
     const goalOption = window.locator('#schedule-view option', { hasText: 'Through "New Car"' });
     await expect(goalOption).toHaveCount(1);
-    // Month-count values can churn / reset via ScheduleControls' validity effect
-    // when the horizon recomputes; the contract under test is that a distinct
-    // per-goal shortcut exists beyond the fixed 12-month entry.
     await expect.poll(async () => goalOption.getAttribute('value')).not.toBe('12');
+    const goalLabel = (await goalOption.textContent())?.trim();
+    expect(goalLabel).toBeTruthy();
+    await view.selectOption({ label: goalLabel! });
+    await expect(view.locator('option:checked')).toHaveText(goalLabel!);
     await expectNoSpinner(window);
   });
 
