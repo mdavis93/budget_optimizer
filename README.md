@@ -71,6 +71,8 @@ Launch the app from the **new** build in `release/` (not an older copy). The bui
 
 Use `pnpm run electron:build` for production packages — not `pnpm run build`, which skips native dependency sync steps.
 
+For local development, `pnpm test*` / `pnpm electron:dev` / `pnpm test:e2e` auto-swap the `better-sqlite3` ABI via `scripts/use-native.cjs`. If a swap looks stuck, delete `.cache/native/` and re-run. Always use the `pnpm` scripts (bare `vitest` / `playwright` skip the helper).
+
 #### Repeated macOS Keychain prompts after rebuilding
 
 After each rebuild, macOS may ask for Keychain access again until you choose **Always Allow**. The login screen only accesses Keychain when you click **Fill from Keychain** (not on startup).

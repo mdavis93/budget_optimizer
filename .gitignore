@@ -33,6 +33,7 @@ Thumbs.db
 
 # Cache
 .cache/
+.cache/native/
 *.tsbuildinfo
 
 # Test

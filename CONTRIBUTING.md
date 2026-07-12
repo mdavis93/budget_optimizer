@@ -28,17 +28,25 @@ Husky hooks enforce quality before changes reach `origin`. Run `pnpm install` on
 Pre-push runs:
 
 ```bash
-pnpm rebuild better-sqlite3
 pnpm typecheck
 pnpm typecheck:electron    # tsconfig.node project (electron + vite config)
 pnpm lint
-pnpm test:coverage:check   # with clean-output verification
+pnpm test:coverage:check   # use-native node + Vitest coverage + clean-output verification
 pnpm run build:vite && pnpm run verify:csp
 pnpm audit --prod --audit-level critical
 pnpm audit:dev             # full-tree audit (high+), deferred GHSAs allowlisted
 ```
 
 Run manually anytime: `pnpm prepush`.
+
+### Native ABI auto-swap (`better-sqlite3`)
+
+Node unit tests and Electron (`electron:dev` / `test:e2e`) need different `better-sqlite3` ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and swaps (or no-ops) automatically via a marker + load probe + version-keyed cache under `.cache/native/`.
+
+- Prefer `pnpm test`, `pnpm test:run`, `pnpm electron:dev`, and `pnpm test:e2e` — bare `vitest` / `playwright test` bypass the helper.
+- If the ABI looks stuck, delete `.cache/native/` and re-run the script you need.
+- **Do not** restore `.cache/native` from CI caches (`actions/cache` or similar); CI must stay markerless and rely on the positive load probe.
+- Release packaging must use `pnpm electron:build` / `pnpm electron:build:ci` (rebuild + sync). Do not use `pnpm build` for production packages after Node test runs — it skips native sync.
 
 **Paranoia layers:** (1) Husky before push → (2) PR Gate on the PR → (3) Main Stability after merge to `main`.
 
@@ -177,7 +185,7 @@ Fix forward with a follow-up PR; do not treat Main Stability as optional for lon
 
 Local and CI `electron:build` / `electron:build:ci` set `CSC_IDENTITY_AUTO_DISCOVERY=false` so electron-builder does not search for a Developer ID certificate. Unsigned builds are expected until you configure Apple code signing for distribution.
 
-Native modules (`better-sqlite3`, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. The `electron:build` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it.
+Native modules (`better-sqlite3`, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. The `electron:build` / `electron:build:ci` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it. Local day-to-day Node↔Electron flips for tests and `electron:dev` are handled by `scripts/use-native.cjs` (see [Native ABI auto-swap](#native-abi-auto-swap-better-sqlite3)).
 
 ## Code coverage
 

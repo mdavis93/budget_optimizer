@@ -6,8 +6,6 @@ OUTPUT_FILE="${TMPDIR:-/tmp}/budget-optimizer-pre-push-test-output.txt"
 
 echo "Running pre-push quality checks (PR Gate parity)..."
 
-pnpm rebuild better-sqlite3
-
 if rg -q "7289/ingest|#region agent log|debug-f84ef2" src electron; then
   echo "Debug telemetry patterns found in source"
   exit 1
