@@ -29,7 +29,7 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
     <div className="card">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm text-[var(--color-text-secondary)] mb-1">{label}</p>
+          <p className="text-sm text-(--color-text-secondary) mb-1">{label}</p>
           <p className="text-2xl font-semibold">{value}</p>
         </div>
         <div className={clsx('p-2 rounded-lg', color)}>
@@ -43,7 +43,7 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
           <span className={clsx({
             'text-success-500': trend === 'up',
             'text-danger-500': trend === 'down',
-            'text-[var(--color-text-muted)]': trend === 'neutral',
+            'text-(--color-text-muted)': trend === 'neutral',
           })}>
             {trend === 'up' ? 'Positive' : trend === 'down' ? 'Negative' : 'Neutral'} balance trend
           </span>
@@ -129,12 +129,12 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Dashboard</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             Overview of your budget for the next 3 months
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-[var(--color-text-secondary)]">Starting Balance:</label>
+          <label className="text-sm text-(--color-text-secondary)">Starting Balance:</label>
           <input
             type="number"
             value={scheduleStartingBalance}
@@ -171,7 +171,7 @@ export default function DashboardPage() {
           icon={AlertTriangle}
           color={hasShortfalls 
             ? "bg-warning-100 dark:bg-warning-900 text-warning-800 dark:text-warning-200"
-            : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+            : "bg-(--color-bg-tertiary) text-(--color-text-secondary)"
           }
         />
       </div>
@@ -192,7 +192,7 @@ export default function DashboardPage() {
               </ChartSuspense>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)]">
+            <div className="h-64 flex items-center justify-center text-(--color-text-muted)">
               Add income and bills to see your balance projection
             </div>
           )}
@@ -201,7 +201,7 @@ export default function DashboardPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Next 7 Days</h3>
-            <Calendar className="w-5 h-5 text-[var(--color-text-muted)]" />
+            <Calendar className="w-5 h-5 text-(--color-text-muted)" />
           </div>
           
           {upcomingPayments.length > 0 ? (
@@ -211,12 +211,12 @@ export default function DashboardPage() {
                   key={index}
                   className={clsx(
                     'flex items-center justify-between p-3 rounded-lg',
-                    entry.isShortfall ? 'bg-danger-50 dark:bg-danger-500/10' : 'bg-[var(--color-bg-tertiary)]'
+                    entry.isShortfall ? 'bg-danger-50 dark:bg-danger-500/10' : 'bg-(--color-bg-tertiary)'
                   )}
                 >
                   <div>
                     <p className="font-medium text-sm">{entry.description}</p>
-                    <p className="text-xs text-[var(--color-text-muted)]">
+                    <p className="text-xs text-(--color-text-muted)">
                       {format(parseISO(entry.date), 'EEE, MMM d')}
                     </p>
                   </div>
@@ -230,7 +230,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-[var(--color-text-muted)]">
+            <div className="text-center py-8 text-(--color-text-muted)">
               No upcoming payments this week
             </div>
           )}

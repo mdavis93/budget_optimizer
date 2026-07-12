@@ -52,7 +52,7 @@ export default function PaycheckIncomeRow({
                 type="button"
                 title="Edit gross income for this paycheck"
                 onClick={onEdit}
-                className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
+                className="p-1.5 rounded-md text-(--color-text-secondary) hover:bg-(--color-bg-tertiary) hover:text-(--color-text-primary)"
               >
                 <Pencil className="w-4 h-4" />
               </button>
@@ -73,7 +73,7 @@ export default function PaycheckIncomeRow({
       {isEditing && (
         <div className="flex flex-wrap items-end gap-2 pt-1 border-t border-success-200/60 dark:border-success-500/20">
           <div className="flex-1 min-w-[140px]">
-            <label className="text-xs text-[var(--color-text-muted)] block mb-0.5">
+            <label className="text-xs text-(--color-text-muted) block mb-0.5">
               Gross for this paycheck
             </label>
             <input

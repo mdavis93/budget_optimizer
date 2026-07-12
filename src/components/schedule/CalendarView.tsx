@@ -62,16 +62,16 @@ const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps
         </button>
       </div>
       
-      <div className="grid grid-cols-7 gap-px bg-[var(--color-border)] rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-(--color-border) rounded-lg overflow-hidden">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="bg-[var(--color-bg-tertiary)] p-2 text-center text-sm font-medium">
+          <div key={day} className="bg-(--color-bg-tertiary) p-2 text-center text-sm font-medium">
             {day}
           </div>
         ))}
         
         {calendarDays.map((day, index) => {
           if (!day) {
-            return <div key={index} className="bg-[var(--color-bg-primary)] p-2 min-h-[100px]" />;
+            return <div key={index} className="bg-(--color-bg-primary) p-2 min-h-[100px]" />;
           }
           
           const dateKey = format(day, 'yyyy-MM-dd');
@@ -82,7 +82,7 @@ const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps
             <div
               key={index}
               className={clsx(
-                'bg-[var(--color-bg-primary)] p-2 min-h-[100px]',
+                'bg-(--color-bg-primary) p-2 min-h-[100px]',
                 paycheck?.isShortfall && 'bg-danger-50 dark:bg-danger-500/10',
                 isToday && 'ring-2 ring-inset ring-primary-500'
               )}
@@ -95,16 +95,16 @@ const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps
               </p>
               {paycheck && (
                 <div className="space-y-1">
-                  <div className="text-xs px-1 py-0.5 rounded bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400 truncate">
+                  <div className="text-xs px-1 py-0.5 rounded-sm bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400 truncate">
                     +{formatWholeCurrency(paycheck.totalIncome)}
                   </div>
                   {paycheck.bills.length > 0 && (
-                    <div className="text-xs px-1 py-0.5 rounded bg-danger-100 text-danger-700 dark:bg-danger-500/20 dark:text-danger-400 truncate">
+                    <div className="text-xs px-1 py-0.5 rounded-sm bg-danger-100 text-danger-700 dark:bg-danger-500/20 dark:text-danger-400 truncate">
                       {paycheck.bills.length} bills
                     </div>
                   )}
                   {paycheck.savingsDeposit > 0 && (
-                    <div className="text-xs px-1 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400 truncate flex items-center gap-0.5">
+                    <div className="text-xs px-1 py-0.5 rounded-sm bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400 truncate flex items-center gap-0.5">
                       <PiggyBank className="w-3 h-3" />
                       {formatWholeCurrency(paycheck.savingsDeposit)}
                     </div>

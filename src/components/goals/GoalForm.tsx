@@ -91,7 +91,7 @@ export default function GoalForm({
           step="0.01"
         />
         {isCreate && (
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             Amount you've already set aside for this goal
           </p>
         )}
@@ -112,7 +112,7 @@ export default function GoalForm({
           <option value={5}>5 - Lowest</option>
         </select>
         {isCreate && (
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             Higher priority goals are funded first
           </p>
         )}

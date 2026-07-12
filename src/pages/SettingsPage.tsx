@@ -157,7 +157,7 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-2xl">
       <div>
         <h2 className="text-2xl font-semibold">Settings</h2>
-        <p className="text-[var(--color-text-secondary)]">
+        <p className="text-(--color-text-secondary)">
           Customize your app preferences and security settings
         </p>
       </div>
@@ -181,7 +181,7 @@ export default function SettingsPage() {
       <section className="space-y-4">
         <div>
           <h3 className="text-lg font-semibold">Saved immediately</h3>
-          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+          <p className="text-sm text-(--color-text-secondary) mt-1">
             These preferences are written to disk as soon as you change them.
           </p>
         </div>
@@ -215,7 +215,7 @@ export default function SettingsPage() {
         <section className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold">Requires Save (Budget)</h3>
-            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+            <p className="text-sm text-(--color-text-secondary) mt-1">
               Changes here stay unsaved until you use Save Changes on the Budgets page or Save All
               from the banner.
             </p>
@@ -233,12 +233,12 @@ export default function SettingsPage() {
         </section>
       )}
 
-      <div className="card bg-[var(--color-bg-tertiary)]">
+      <div className="card bg-(--color-bg-tertiary)">
         <h3 className="font-semibold mb-2">About Budget Optimizer</h3>
-        <p className="text-sm text-[var(--color-text-secondary)]">
+        <p className="text-sm text-(--color-text-secondary)">
           Version {APP_VERSION}
         </p>
-        <p className="text-sm text-[var(--color-text-secondary)] mt-2">
+        <p className="text-sm text-(--color-text-secondary) mt-2">
           A secure desktop app for managing your income and optimizing bill payments.
           Your data is encrypted locally using AES-256-GCM encryption.
         </p>

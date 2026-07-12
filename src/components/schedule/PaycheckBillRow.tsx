@@ -61,9 +61,9 @@ export default function PaycheckBillRow({
     >
       <div className="flex items-center gap-3">
         {!bill.isUnpayable && (
-          <GripVertical className="w-4 h-4 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+          <GripVertical className="w-4 h-4 text-(--color-text-muted) opacity-0 group-hover:opacity-100 transition-opacity" />
         )}
-        <span className={clsx('font-medium', bill.isUnpayable && 'line-through text-[var(--color-text-muted)]')}>
+        <span className={clsx('font-medium', bill.isUnpayable && 'line-through text-(--color-text-muted)')}>
           {bill.creditorName}
         </span>
         {bill.isUnpayable && (
@@ -85,7 +85,7 @@ export default function PaycheckBillRow({
         )}>
           {PRIORITY_LABELS[bill.priority]}
         </span>
-        <span className="text-xs text-[var(--color-text-muted)]">
+        <span className="text-xs text-(--color-text-muted)">
           {bill.isIncomeAttached
             ? 'Per Paycheck'
             : `Due: ${monthName}${bill.dueDay}${bill.dueDay === 1 ? 'st' : bill.dueDay === 2 ? 'nd' : bill.dueDay === 3 ? 'rd' : 'th'}`}
@@ -99,7 +99,7 @@ export default function PaycheckBillRow({
               onRestoreBill(bill.billId, bill.billDate);
             }}
             disabled={isRestoring}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-500 flex items-center gap-1 shadow-sm"
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded-sm bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-500 flex items-center gap-1 shadow-xs"
             title="Restore to original paycheck"
           >
             <RotateCcw className="w-3 h-3" />
@@ -112,7 +112,7 @@ export default function PaycheckBillRow({
             onSkipBill(bill.billId, paycheckDate);
           }}
           disabled={isSkipping}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 flex items-center gap-1 shadow-sm"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded-sm bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 flex items-center gap-1 shadow-xs"
           title="Skip this payment (already paid or not due)"
         >
           <SkipForward className="w-3 h-3" />

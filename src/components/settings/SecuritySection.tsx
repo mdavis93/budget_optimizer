@@ -27,12 +27,12 @@ export default function SecuritySection({
       </div>
       
       <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 rounded-lg bg-[var(--color-bg-tertiary)]">
+        <div className="flex items-center justify-between p-4 rounded-lg bg-(--color-bg-tertiary)">
           <div className="flex items-center gap-3">
-            <Key className="w-5 h-5 text-[var(--color-text-secondary)]" />
+            <Key className="w-5 h-5 text-(--color-text-secondary)" />
             <div>
               <p className="font-medium">Master Password</p>
-              <p className="text-sm text-[var(--color-text-secondary)]">
+              <p className="text-sm text-(--color-text-secondary)">
                 Change your encryption password
               </p>
             </div>
@@ -46,12 +46,12 @@ export default function SecuritySection({
         </div>
 
         {biometricAvailable && (
-          <div className="flex items-center justify-between p-4 rounded-lg bg-[var(--color-bg-tertiary)]">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-(--color-bg-tertiary)">
             <div className="flex items-center gap-3">
-              <Fingerprint className="w-5 h-5 text-[var(--color-text-secondary)]" />
+              <Fingerprint className="w-5 h-5 text-(--color-text-secondary)" />
               <div>
                 <p className="font-medium">Fingerprint Unlock</p>
-                <p className="text-sm text-[var(--color-text-secondary)]">
+                <p className="text-sm text-(--color-text-secondary)">
                   {biometricEnabled 
                     ? 'Use Touch ID to unlock the app'
                     : 'Enable fingerprint authentication'
@@ -72,12 +72,12 @@ export default function SecuritySection({
           </div>
         )}
 
-        <div className="flex items-center justify-between p-4 rounded-lg bg-[var(--color-bg-tertiary)]">
+        <div className="flex items-center justify-between p-4 rounded-lg bg-(--color-bg-tertiary)">
           <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-[var(--color-text-secondary)]" />
+            <Clock className="w-5 h-5 text-(--color-text-secondary)" />
             <div>
               <label htmlFor="settings-auto-lock" className="font-medium block">Auto-Lock</label>
-              <p className="text-sm text-[var(--color-text-secondary)]">
+              <p className="text-sm text-(--color-text-secondary)">
                 Automatically lock after inactivity
               </p>
             </div>

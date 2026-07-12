@@ -121,10 +121,10 @@ export default function BudgetsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Budgets</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             Manage your budgets and switch between them
           </p>
-          <p className="text-sm text-[var(--color-text-muted)] mt-2 max-w-2xl">
+          <p className="text-sm text-(--color-text-muted) mt-2 max-w-2xl">
             Edit budget settings here. Switch to a budget to edit its incomes, bills, and schedule.
           </p>
         </div>
@@ -162,9 +162,9 @@ export default function BudgetsPage() {
       )}
 
       {isLoading ? (
-        <div className="text-center py-8 text-[var(--color-text-muted)]">Loading budgets...</div>
+        <div className="text-center py-8 text-(--color-text-muted)">Loading budgets...</div>
       ) : budgets.length === 0 ? (
-        <div className="text-center py-16 text-[var(--color-text-muted)]">
+        <div className="text-center py-16 text-(--color-text-muted)">
           <Briefcase className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>No budgets yet. Create your first budget to get started.</p>
         </div>

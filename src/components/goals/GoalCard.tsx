@@ -38,12 +38,12 @@ export default function GoalCard({
     <div className="card">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[var(--color-surface-hover)]">
-            <Target className="w-5 h-5 text-[var(--color-text-muted)]" />
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-(--color-surface-hover)">
+            <Target className="w-5 h-5 text-(--color-text-muted)" />
           </div>
           <div>
             <h3 className="font-semibold">{goal.name}</h3>
-            <p className="text-sm text-[var(--color-text-secondary)]">
+            <p className="text-sm text-(--color-text-secondary)">
               Priority: {goal.priority}
             </p>
           </div>
@@ -52,10 +52,10 @@ export default function GoalCard({
         <div className="flex items-center gap-2">
           <button
             onClick={() => onEdit(goal)}
-            className="p-2 hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
+            className="p-2 hover:bg-(--color-surface-hover) rounded-lg transition-colors"
             aria-label={`Edit ${goal.name}`}
           >
-            <Pencil className="w-4 h-4 text-[var(--color-text-muted)]" />
+            <Pencil className="w-4 h-4 text-(--color-text-muted)" />
           </button>
           <button
             onClick={() => onDelete(goal.id)}
@@ -69,19 +69,19 @@ export default function GoalCard({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div>
-          <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Target</p>
+          <p className="text-xs text-(--color-text-muted) uppercase tracking-wide">Target</p>
           <p className="font-semibold">{formatCurrency(goal.targetAmount)}</p>
         </div>
         <div>
-          <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Already Saved</p>
+          <p className="text-xs text-(--color-text-muted) uppercase tracking-wide">Already Saved</p>
           <p className="font-semibold">{formatCurrency(goal.alreadySaved)}</p>
         </div>
         <div>
-          <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Remaining</p>
+          <p className="text-xs text-(--color-text-muted) uppercase tracking-wide">Remaining</p>
           <p className="font-semibold">{formatCurrency(remainingAmount)}</p>
         </div>
         <div>
-          <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Deadline</p>
+          <p className="text-xs text-(--color-text-muted) uppercase tracking-wide">Deadline</p>
           <p className="font-semibold">{format(parseISO(goal.targetDate), 'MMM yyyy')}</p>
         </div>
       </div>
@@ -95,7 +95,7 @@ export default function GoalCard({
                 {projection.achievabilityPercent}%
               </span>
             </div>
-            <div className="relative w-full bg-[var(--color-surface-hover)] rounded-full h-5">
+            <div className="relative w-full bg-(--color-surface-hover) rounded-full h-5">
               <div
                 className="h-5 rounded-full transition-all bg-purple-500"
                 style={{ width: `${Math.min(100, projection.achievabilityPercent)}%` }}

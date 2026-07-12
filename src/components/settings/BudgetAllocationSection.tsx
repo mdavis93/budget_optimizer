@@ -25,7 +25,7 @@ export default function BudgetAllocationSection({
         <Target className="w-5 h-5 text-primary-500" />
         <h3 className="font-semibold">Budget Allocation</h3>
       </div>
-      <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+      <p className="text-sm text-(--color-text-secondary) mb-4">
         Configure how surplus funds are allocated between cash reserves, savings, and goals for {budgetName}.
       </p>
       
@@ -33,7 +33,7 @@ export default function BudgetAllocationSection({
         <div>
           <label htmlFor="settings-target-cash" className="label">Target Cash on Hand</label>
           <div className="flex items-center gap-2">
-            <span className="text-[var(--color-text-secondary)]">$</span>
+            <span className="text-(--color-text-secondary)">$</span>
             <input
               id="settings-target-cash"
               type="number"
@@ -44,7 +44,7 @@ export default function BudgetAllocationSection({
               className="input w-32"
             />
           </div>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+          <p className="text-sm text-(--color-text-muted) mt-1">
             Surplus above this amount funds goals and savings
           </p>
         </div>
@@ -52,7 +52,7 @@ export default function BudgetAllocationSection({
         <div>
           <label htmlFor="settings-min-cash" className="label">Minimum Cash on Hand</label>
           <div className="flex items-center gap-2">
-            <span className="text-[var(--color-text-secondary)]">$</span>
+            <span className="text-(--color-text-secondary)">$</span>
             <input
               id="settings-min-cash"
               type="number"
@@ -63,18 +63,18 @@ export default function BudgetAllocationSection({
               className="input w-32"
             />
           </div>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+          <p className="text-sm text-(--color-text-muted) mt-1">
             Floor balance - goals cannot reduce cash below this
           </p>
         </div>
 
-        <div className="pt-2 border-t border-[var(--color-border)]">
+        <div className="pt-2 border-t border-(--color-border)">
           <label htmlFor="settings-min-savings" className="label flex items-center gap-2">
             <Wallet className="w-4 h-4" />
             Minimum Savings per Paycheck
           </label>
           <div className="flex items-center gap-2">
-            <span className="text-[var(--color-text-secondary)]">$</span>
+            <span className="text-(--color-text-secondary)">$</span>
             <input
               id="settings-min-savings"
               type="number"
@@ -85,7 +85,7 @@ export default function BudgetAllocationSection({
               className="input w-32"
             />
           </div>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+          <p className="text-sm text-(--color-text-muted) mt-1">
             This amount goes to savings first, before allocating to goals. 
             Set to 0 to let goals take priority over savings.
           </p>

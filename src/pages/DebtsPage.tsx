@@ -183,7 +183,7 @@ export default function DebtsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Debt Tracking</h1>
-          <p className="text-[var(--color-text-muted)] mt-1">
+          <p className="text-(--color-text-muted) mt-1">
             Track your debt payoff progress and see amortization projections
           </p>
         </div>
@@ -206,7 +206,7 @@ export default function DebtsPage() {
 
       {hasAnyContent && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-[var(--color-text-muted)]">Sort:</span>
+          <span className="text-sm text-(--color-text-muted)">Sort:</span>
           {(
             [
               ['name', 'A–Z'],
@@ -223,7 +223,7 @@ export default function DebtsPage() {
                 'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
                 debtSort === mode
                   ? 'bg-primary-500 text-white'
-                  : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'
+                  : 'bg-(--color-bg-tertiary) text-(--color-text-secondary) hover:bg-(--color-bg-secondary)'
               )}
             >
               {label}
@@ -236,19 +236,19 @@ export default function DebtsPage() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="card p-4">
-              <p className="text-sm text-[var(--color-text-muted)]">Total Debt Balance</p>
+              <p className="text-sm text-(--color-text-muted)">Total Debt Balance</p>
               <p className="text-2xl font-bold text-danger-400">
                 ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div className="card p-4">
-              <p className="text-sm text-[var(--color-text-muted)]">Total Interest (All Debts)</p>
+              <p className="text-sm text-(--color-text-muted)">Total Interest (All Debts)</p>
               <p className="text-2xl font-bold text-warning-400">
                 ${totalInterest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div className="card p-4">
-              <p className="text-sm text-[var(--color-text-muted)]">Longest Payoff</p>
+              <p className="text-sm text-(--color-text-muted)">Longest Payoff</p>
               <p className="text-2xl font-bold">
                 {maxPayoffMonths > 0 ? `${maxPayoffMonths} months` : '—'}
               </p>
@@ -256,7 +256,7 @@ export default function DebtsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-[var(--color-text-muted)]">View:</span>
+            <span className="text-sm text-(--color-text-muted)">View:</span>
             {([3, 6, 12, 'max'] as const).map((period) => (
               <button
                 key={period}
@@ -265,7 +265,7 @@ export default function DebtsPage() {
                   'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
                   timePeriod === period
                     ? 'bg-primary-500 text-white'
-                    : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'
+                    : 'bg-(--color-bg-tertiary) text-(--color-text-secondary) hover:bg-(--color-bg-secondary)'
                 )}
               >
                 {period === 'max' ? 'MAX' : `${period} mo`}
@@ -286,7 +286,7 @@ export default function DebtsPage() {
           {untrackedDebtBills.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-medium text-[var(--color-text-muted)] uppercase tracking-wide">
+                <h2 className="text-sm font-medium text-(--color-text-muted) uppercase tracking-wide">
                   Finish Setting Up Your Debts
                 </h2>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-warning-500/10 text-warning-400 font-medium">
@@ -297,16 +297,16 @@ export default function DebtsPage() {
                 {untrackedBillGroups.map((group) => (
                   <details
                     key={`untracked-${group.key}`}
-                    className="group rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] overflow-hidden"
+                    className="group rounded-lg border border-(--color-border) bg-(--color-bg-primary) overflow-hidden"
                   >
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
                       <div className="flex items-center gap-2 min-w-0">
-                        <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] transition-transform group-open:rotate-180" />
+                        <ChevronDown className="h-4 w-4 shrink-0 text-(--color-text-muted) transition-transform group-open:rotate-180" />
                         <span className="font-medium truncate">{group.key}</span>
-                        <span className="text-xs text-[var(--color-text-muted)]">({group.items.length})</span>
+                        <span className="text-xs text-(--color-text-muted)">({group.items.length})</span>
                       </div>
                     </summary>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-[var(--color-border)] px-4 pb-4 pt-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-(--color-border) px-4 pb-4 pt-3">
                       {group.items.map((bill) => (
                         <UnsetupDebtCard
                           key={bill.id}
@@ -324,7 +324,7 @@ export default function DebtsPage() {
           {debtsWithAmortization.length > 0 && (
             <div className="space-y-4">
               {untrackedDebtBills.length > 0 && (
-                <h2 className="text-sm font-medium text-[var(--color-text-muted)] uppercase tracking-wide">
+                <h2 className="text-sm font-medium text-(--color-text-muted) uppercase tracking-wide">
                   Tracking ({debtsWithAmortization.length})
                 </h2>
               )}
@@ -332,15 +332,15 @@ export default function DebtsPage() {
                 {trackedDebtGroups.map((group) => (
                   <details
                     key={`tracked-${group.key}`}
-                    className="group rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] overflow-hidden"
+                    className="group rounded-lg border border-(--color-border) bg-(--color-bg-primary) overflow-hidden"
                   >
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
                       <div className="flex items-center gap-2 min-w-0">
-                        <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-text-muted)] transition-transform group-open:rotate-180" />
+                        <ChevronDown className="h-4 w-4 shrink-0 text-(--color-text-muted) transition-transform group-open:rotate-180" />
                         <span className="font-medium truncate">{group.key}</span>
-                        <span className="text-xs text-[var(--color-text-muted)]">({group.items.length})</span>
+                        <span className="text-xs text-(--color-text-muted)">({group.items.length})</span>
                       </div>
-                      <span className="text-xs text-[var(--color-text-muted)] shrink-0 tabular-nums">
+                      <span className="text-xs text-(--color-text-muted) shrink-0 tabular-nums">
                         $
                         {group.items
                           .reduce((sum, d) => sum + d.debt.principalBalance, 0)
@@ -348,7 +348,7 @@ export default function DebtsPage() {
                         balance
                       </span>
                     </summary>
-                    <div className="space-y-4 border-t border-[var(--color-border)] px-4 pb-4 pt-3">
+                    <div className="space-y-4 border-t border-(--color-border) px-4 pb-4 pt-3">
                       {group.items.map((debtData) => (
                         <DebtCard
                           key={debtData.debt.id}

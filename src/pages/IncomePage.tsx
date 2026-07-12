@@ -61,7 +61,7 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
       <div>
         <label htmlFor="income-amount" className="label">Amount</label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">$</span>
           <input
             id="income-amount"
             type="number"
@@ -103,14 +103,14 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
         />
       </div>
 
-      <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
+      <div className="flex items-center justify-between p-3 rounded-lg bg-(--color-bg-tertiary)">
         <span className="text-sm">Set an end date (last payment)</span>
         <button
           type="button"
           onClick={() => setHasEndDate(!hasEndDate)}
           className={clsx(
             'transition-colors',
-            hasEndDate ? 'text-primary-500' : 'text-[var(--color-text-muted)]'
+            hasEndDate ? 'text-primary-500' : 'text-(--color-text-muted)'
           )}
           aria-pressed={hasEndDate}
         >
@@ -133,14 +133,14 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
         </div>
       )}
 
-      <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
+      <div className="flex items-center justify-between p-3 rounded-lg bg-(--color-bg-tertiary)">
         <span className="text-sm">Active Income Source</span>
         <button
           type="button"
           onClick={() => setIsActive(!isActive)}
           className={clsx(
             'transition-colors',
-            isActive ? 'text-success-500' : 'text-[var(--color-text-muted)]'
+            isActive ? 'text-success-500' : 'text-(--color-text-muted)'
           )}
         >
           {isActive ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
@@ -196,7 +196,7 @@ export default function IncomePage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Income Sources</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             Manage your income sources and payment schedules
           </p>
         </div>
@@ -242,18 +242,18 @@ export default function IncomePage() {
                   'p-3 rounded-lg',
                   income.isActive 
                     ? 'bg-success-100 dark:bg-success-500/20' 
-                    : 'bg-[var(--color-bg-tertiary)]'
+                    : 'bg-(--color-bg-tertiary)'
                 )}>
                   <Wallet className={clsx(
                     'w-6 h-6',
                     income.isActive 
                       ? 'text-success-600 dark:text-success-500' 
-                      : 'text-[var(--color-text-muted)]'
+                      : 'text-(--color-text-muted)'
                   )} />
                 </div>
                 <div>
                   <h3 className="font-medium">{income.sourceName}</h3>
-                  <p className="text-sm text-[var(--color-text-secondary)]">
+                  <p className="text-sm text-(--color-text-secondary)">
                     {CADENCE_LABELS[income.cadence]} • Starting {format(parseISO(income.startDate), 'MMM d, yyyy')}
                     {income.endDate && (
                       <> • Ending {format(parseISO(income.endDate), 'MMM d, yyyy')}</>
@@ -265,7 +265,7 @@ export default function IncomePage() {
               <div className="flex items-center gap-6">
                 <div className="text-right">
                   <p className="text-lg font-semibold">{formatCurrency(income.amount)}</p>
-                  <p className="text-xs text-[var(--color-text-muted)]">
+                  <p className="text-xs text-(--color-text-muted)">
                     ~{formatCurrency(getMonthlyIncomeEquivalent(income))}/mo
                   </p>
                 </div>
@@ -274,7 +274,7 @@ export default function IncomePage() {
                   <button
                     onClick={() => setEditingIncome(income)}
                     aria-label={`Edit ${income.sourceName}`}
-                    className="p-2 rounded-lg hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+                    className="p-2 rounded-lg hover:bg-(--color-bg-tertiary) text-(--color-text-secondary)"
                   >
                     <Pencil className="w-5 h-5" />
                   </button>

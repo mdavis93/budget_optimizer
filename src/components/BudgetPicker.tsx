@@ -46,20 +46,20 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
             <Briefcase className="w-8 h-8 text-primary-600 dark:text-primary-400" />
           </div>
           <h1 className="text-2xl font-bold">Select a Budget</h1>
-          <p className="text-[var(--color-text-secondary)] mt-2">
+          <p className="text-(--color-text-secondary) mt-2">
             Choose a budget to work with or create a new one
           </p>
         </div>
 
         {isLoading ? (
-          <div className="text-center py-8 text-[var(--color-text-muted)]">
+          <div className="text-center py-8 text-(--color-text-muted)">
             Loading budgets...
           </div>
         ) : (
@@ -68,7 +68,7 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
               <button
                 key={budget.id}
                 onClick={() => handleSelectBudget(budget.id)}
-                className="w-full p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:border-primary-500 hover:bg-[var(--color-bg-tertiary)] transition-colors text-left group"
+                className="w-full p-4 rounded-lg border border-(--color-border) bg-(--color-bg-secondary) hover:border-primary-500 hover:bg-(--color-bg-tertiary) transition-colors text-left group"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -79,14 +79,14 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
                       <h3 className="font-semibold group-hover:text-primary-500 transition-colors">
                         {budget.name}
                       </h3>
-                      <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+                      <div className="flex items-center gap-3 text-xs text-(--color-text-muted)">
                         <span>{budget.incomeCount} income{budget.incomeCount !== 1 ? 's' : ''}</span>
                         <span>·</span>
                         <span>{budget.billCount} bill{budget.billCount !== 1 ? 's' : ''}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="text-right text-xs text-[var(--color-text-muted)]">
+                  <div className="text-right text-xs text-(--color-text-muted)">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
                       {format(parseISO(budget.updatedAt), 'MMM d')}
@@ -104,11 +104,11 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
             ))}
 
             {showCreateForm ? (
-              <form onSubmit={handleCreateBudget} className="p-4 rounded-lg border border-primary-500 bg-[var(--color-bg-secondary)]">
+              <form onSubmit={handleCreateBudget} className="p-4 rounded-lg border border-primary-500 bg-(--color-bg-secondary)">
                 <h3 className="font-semibold mb-3">Create New Budget</h3>
                 <div className="space-y-3">
                   <div>
-                    <label htmlFor="picker-budget-name" className="block text-sm text-[var(--color-text-secondary)] mb-1">
+                    <label htmlFor="picker-budget-name" className="block text-sm text-(--color-text-secondary) mb-1">
                       Budget Name
                     </label>
                     <input
@@ -122,7 +122,7 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
                     />
                   </div>
                   <div>
-                    <label htmlFor="picker-starting-balance" className="block text-sm text-[var(--color-text-secondary)] mb-1">
+                    <label htmlFor="picker-starting-balance" className="block text-sm text-(--color-text-secondary) mb-1">
                       Starting Balance
                     </label>
                     <input
@@ -137,7 +137,7 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
                     />
                   </div>
                   <div>
-                    <label htmlFor="picker-target-cash" className="block text-sm text-[var(--color-text-secondary)] mb-1">
+                    <label htmlFor="picker-target-cash" className="block text-sm text-(--color-text-secondary) mb-1">
                       Target Cash on Hand
                     </label>
                     <input
@@ -150,12 +150,12 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
                       min="0"
                       step="1"
                     />
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                    <p className="text-xs text-(--color-text-muted) mt-1">
                       Excess over this amount goes to savings
                     </p>
                   </div>
                   <div>
-                    <label htmlFor="picker-min-cash" className="block text-sm text-[var(--color-text-secondary)] mb-1">
+                    <label htmlFor="picker-min-cash" className="block text-sm text-(--color-text-secondary) mb-1">
                       Minimum Cash on Hand
                     </label>
                     <input
@@ -168,7 +168,7 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
                       min="0"
                       step="1"
                     />
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                    <p className="text-xs text-(--color-text-muted) mt-1">
                       Protected floor for pocket cash (goals cannot consume below this)
                     </p>
                   </div>
@@ -193,14 +193,14 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
             ) : (
               <button
                 onClick={() => setShowCreateForm(true)}
-                className="w-full p-4 rounded-lg border border-dashed border-[var(--color-border)] hover:border-primary-500 hover:bg-[var(--color-bg-tertiary)] transition-colors text-left flex items-center gap-3"
+                className="w-full p-4 rounded-lg border border-dashed border-(--color-border) hover:border-primary-500 hover:bg-(--color-bg-tertiary) transition-colors text-left flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-full bg-[var(--color-bg-tertiary)] flex items-center justify-center">
-                  <Plus className="w-5 h-5 text-[var(--color-text-muted)]" />
+                <div className="w-10 h-10 rounded-full bg-(--color-bg-tertiary) flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-(--color-text-muted)" />
                 </div>
                 <div>
                   <h3 className="font-medium">Create New Budget</h3>
-                  <p className="text-xs text-[var(--color-text-muted)]">
+                  <p className="text-xs text-(--color-text-muted)">
                     Start a new budget from scratch
                   </p>
                 </div>
@@ -209,10 +209,10 @@ export default function BudgetPicker({ onBudgetSelected }: BudgetPickerProps) {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[var(--color-border)]" />
+                <div className="w-full border-t border-(--color-border)" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-[var(--color-bg-primary)] px-2 text-[var(--color-text-muted)]">
+                <span className="bg-(--color-bg-primary) px-2 text-(--color-text-muted)">
                   or
                 </span>
               </div>

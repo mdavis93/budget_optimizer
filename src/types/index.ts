@@ -20,7 +20,7 @@ export const PRIORITY_COLORS: Record<Bill['priority'], string> = {
   critical: 'text-danger-500',
   high: 'text-warning-500',
   normal: 'text-primary-500',
-  low: 'text-[var(--color-text-muted)]',
+  low: 'text-(--color-text-muted)',
 };
 
 export const CATEGORY_OPTIONS = [

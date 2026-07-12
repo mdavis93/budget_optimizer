@@ -42,7 +42,7 @@ export default function BudgetCard({
       {isEditing ? (
         <div className="space-y-3">
           <div>
-            <label htmlFor={`edit-name-${budget.id}`} className="block text-sm text-[var(--color-text-secondary)] mb-1">
+            <label htmlFor={`edit-name-${budget.id}`} className="block text-sm text-(--color-text-secondary) mb-1">
               Name
             </label>
             <input
@@ -55,7 +55,7 @@ export default function BudgetCard({
             />
           </div>
           <div>
-            <label htmlFor={`edit-balance-${budget.id}`} className="block text-sm text-[var(--color-text-secondary)] mb-1">
+            <label htmlFor={`edit-balance-${budget.id}`} className="block text-sm text-(--color-text-secondary) mb-1">
               Starting Balance
             </label>
             <input
@@ -69,7 +69,7 @@ export default function BudgetCard({
             />
           </div>
           <div>
-            <label htmlFor={`edit-target-${budget.id}`} className="block text-sm text-[var(--color-text-secondary)] mb-1">
+            <label htmlFor={`edit-target-${budget.id}`} className="block text-sm text-(--color-text-secondary) mb-1">
               Target Cash on Hand
             </label>
             <input
@@ -83,7 +83,7 @@ export default function BudgetCard({
             />
           </div>
           <div>
-            <label htmlFor={`edit-min-${budget.id}`} className="block text-sm text-[var(--color-text-secondary)] mb-1">
+            <label htmlFor={`edit-min-${budget.id}`} className="block text-sm text-(--color-text-secondary) mb-1">
               Minimum Cash on Hand
             </label>
             <input
@@ -136,7 +136,7 @@ export default function BudgetCard({
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-4 text-sm text-[var(--color-text-muted)]">
+              <div className="flex items-center gap-4 text-sm text-(--color-text-muted)">
                 <span>{budget.incomeCount} income{budget.incomeCount !== 1 ? 's' : ''}</span>
                 <span>·</span>
                 <span>{budget.billCount} bill{budget.billCount !== 1 ? 's' : ''}</span>
@@ -147,7 +147,7 @@ export default function BudgetCard({
                 <span>·</span>
                 <span>${budget.minCashOnHand.toLocaleString()} min</span>
               </div>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              <p className="text-xs text-(--color-text-muted) mt-1">
                 Updated {format(parseISO(budget.updatedAt), 'MMM d, yyyy')}
               </p>
             </div>

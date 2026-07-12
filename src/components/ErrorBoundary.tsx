@@ -54,7 +54,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
 
             {this.state.error && (
-              <div className="mb-6 p-3 bg-gray-900 rounded border border-gray-700">
+              <div className="mb-6 p-3 bg-gray-900 rounded-sm border border-gray-700">
                 <p className="text-sm font-mono text-red-400 break-all">
                   {this.state.error.message}
                 </p>
@@ -64,14 +64,14 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="flex gap-3">
               <button
                 onClick={this.handleGoHome}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-sm transition-colors"
               >
                 <Home className="w-4 h-4" />
                 Go Home
               </button>
               <button
                 onClick={this.handleReload}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-sm transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 Reload App
@@ -83,7 +83,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-400">
                   Show error details
                 </summary>
-                <pre className="mt-2 p-3 bg-gray-900 rounded text-xs text-gray-400 overflow-auto max-h-48">
+                <pre className="mt-2 p-3 bg-gray-900 rounded-sm text-xs text-gray-400 overflow-auto max-h-48">
                   {this.state.errorInfo.componentStack}
                 </pre>
               </details>

@@ -34,7 +34,7 @@ export default function PasswordStrength({ password }: PasswordStrengthProps) {
             key={i}
             className={clsx(
               'h-1 flex-1 rounded-full transition-colors',
-              i <= score ? color : 'bg-[var(--color-border)]'
+              i <= score ? color : 'bg-(--color-border)'
             )}
           />
         ))}

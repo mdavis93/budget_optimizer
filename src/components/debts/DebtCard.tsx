@@ -45,7 +45,7 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
           </div>
           <div>
             <h3 className="font-semibold text-lg">{bill.creditorName}</h3>
-            <p className="text-sm text-[var(--color-text-muted)]">
+            <p className="text-sm text-(--color-text-muted)">
               ${debt.monthlyPayment.toFixed(2)}/mo min payment
               {extraPayment > 0 && (
                 <span className="text-success-400">
@@ -58,10 +58,10 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
         <div className="flex items-center gap-2">
           <button
             onClick={onEdit}
-            className="p-2 rounded-lg hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            className="p-2 rounded-lg hover:bg-(--color-bg-tertiary) transition-colors"
             aria-label="Edit debt"
           >
-            <Pencil className="w-4 h-4 text-[var(--color-text-muted)]" />
+            <Pencil className="w-4 h-4 text-(--color-text-muted)" />
           </button>
           <button
             onClick={onDelete}
@@ -75,21 +75,21 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+          <div className="flex items-center gap-1.5 text-(--color-text-muted)">
             <DollarSign className="w-4 h-4" />
             <span className="text-xs">Balance</span>
           </div>
           <p className="text-lg font-semibold">${debt.principalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
         </div>
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+          <div className="flex items-center gap-1.5 text-(--color-text-muted)">
             <Percent className="w-4 h-4" />
             <span className="text-xs">APR</span>
           </div>
           <p className="text-lg font-semibold">{(debt.apr * 100).toFixed(2)}%</p>
         </div>
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+          <div className="flex items-center gap-1.5 text-(--color-text-muted)">
             <Calendar className="w-4 h-4" />
             <span className="text-xs">Payoff Date</span>
           </div>
@@ -100,7 +100,7 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
           </p>
         </div>
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+          <div className="flex items-center gap-1.5 text-(--color-text-muted)">
             <TrendingDown className="w-4 h-4" />
             <span className="text-xs">Total Interest</span>
           </div>
@@ -110,16 +110,16 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
         </div>
       </div>
 
-      <div className="pt-4 border-t border-[var(--color-border)]">
+      <div className="pt-4 border-t border-(--color-border)">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-medium">Payment Breakdown</h4>
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS.principal }} />
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.principal }} />
               <span>Principal: ${displayedPrincipal.toFixed(2)}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS.interest }} />
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.interest }} />
               <span>Interest: ${displayedInterest.toFixed(2)}</span>
             </div>
           </div>
@@ -131,13 +131,13 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
           </ChartSuspense>
         </div>
 
-        <div className="mt-4 p-3 rounded-lg bg-[var(--color-bg-tertiary)] text-sm">
+        <div className="mt-4 p-3 rounded-lg bg-(--color-bg-tertiary) text-sm">
           <div className="flex justify-between">
-            <span className="text-[var(--color-text-muted)]">Total Payments ({amortization.monthsToPayoff} months)</span>
+            <span className="text-(--color-text-muted)">Total Payments ({amortization.monthsToPayoff} months)</span>
             <span className="font-medium">${amortization.totalPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="flex justify-between mt-1">
-            <span className="text-[var(--color-text-muted)]">Amount Over Principal</span>
+            <span className="text-(--color-text-muted)">Amount Over Principal</span>
             <span className="font-medium text-danger-400">
               +${(amortization.totalPayments - amortization.totalPrincipal).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </span>

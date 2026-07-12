@@ -60,7 +60,7 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
       <div>
         <label htmlFor="bill-budgeted-amount" className="label">Budgeted Amount</label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">$</span>
           <input
             id="bill-budgeted-amount"
             type="number"
@@ -85,7 +85,7 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
               'px-3 py-2 rounded-lg text-sm font-medium transition-colors border',
               !isIncomeAttached
                 ? 'bg-primary-500 text-white border-primary-500'
-                : 'border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)]'
+                : 'border-(--color-border) hover:bg-(--color-bg-tertiary)'
             )}
           >
             Due Date Based
@@ -97,13 +97,13 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
               'px-3 py-2 rounded-lg text-sm font-medium transition-colors border',
               isIncomeAttached
                 ? 'bg-primary-500 text-white border-primary-500'
-                : 'border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)]'
+                : 'border-(--color-border) hover:bg-(--color-bg-tertiary)'
             )}
           >
             Per Paycheck
           </button>
         </div>
-        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+        <p className="text-xs text-(--color-text-muted) mt-1">
           {isIncomeAttached 
             ? 'This expense occurs every time the selected income is received'
             : 'This bill is due on a specific day each month'}
@@ -125,7 +125,7 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
               <option key={income.id} value={income.id}>{income.sourceName}</option>
             ))}
           </select>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             This expense will automatically appear on every paycheck from this source
           </p>
         </div>
@@ -160,7 +160,7 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
                 <option key={income.id} value={income.id}>{income.sourceName}</option>
               ))}
             </select>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <p className="text-xs text-(--color-text-muted) mt-1">
               Optionally assign this bill to paychecks from a specific income source
             </p>
           </div>
@@ -199,26 +199,26 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
                     ? 'bg-warning-500 text-white border-warning-500'
                     : p === 'normal'
                     ? 'bg-primary-500 text-white border-primary-500'
-                    : 'bg-[var(--color-text-muted)] text-white border-[var(--color-text-muted)]'
-                  : 'border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)]'
+                    : 'bg-(--color-text-muted) text-white border-(--color-text-muted)'
+                  : 'border-(--color-border) hover:bg-(--color-bg-tertiary)'
               )}
             >
               {PRIORITY_LABELS[p]}
             </button>
           ))}
         </div>
-        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+        <p className="text-xs text-(--color-text-muted) mt-1">
           Critical bills (rent, utilities) are prioritized in scheduling
         </p>
       </div>
 
-      <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-(--color-bg-tertiary)">
         <input
           type="checkbox"
           id="isRecurring"
           checked={isRecurring}
           onChange={(e) => setIsRecurring(e.target.checked)}
-          className="w-4 h-4 rounded border-[var(--color-border)]"
+          className="w-4 h-4 rounded-sm border-(--color-border)"
         />
         <label htmlFor="isRecurring" className="text-sm">
           Recurring monthly bill
@@ -327,7 +327,7 @@ export default function BillsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Bills & Expenses</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             Manage your recurring bills and expenses
           </p>
         </div>
@@ -368,14 +368,14 @@ export default function BillsPage() {
 
       {categories.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-[var(--color-text-secondary)]">Filter:</span>
+          <span className="text-sm text-(--color-text-secondary)">Filter:</span>
           <button
             onClick={() => setFilterCategory('all')}
             className={clsx(
               'px-3 py-1 rounded-full text-sm transition-colors',
               filterCategory === 'all'
                 ? 'bg-primary-500 text-white'
-                : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)]'
+                : 'bg-(--color-bg-tertiary) hover:bg-(--color-border)'
             )}
           >
             All
@@ -388,7 +388,7 @@ export default function BillsPage() {
                 'px-3 py-1 rounded-full text-sm transition-colors',
                 filterCategory === cat
                   ? 'bg-primary-500 text-white'
-                  : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)]'
+                  : 'bg-(--color-bg-tertiary) hover:bg-(--color-border)'
               )}
             >
               {cat}
@@ -399,7 +399,7 @@ export default function BillsPage() {
 
       {bills.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-[var(--color-text-secondary)]">Sort:</span>
+          <span className="text-sm text-(--color-text-secondary)">Sort:</span>
           {(['amount', 'dueDate', 'default'] as const).map((mode) => (
             <button
               key={mode}
@@ -409,7 +409,7 @@ export default function BillsPage() {
                 'px-3 py-1 rounded-full text-sm transition-colors',
                 billSort === mode
                   ? 'bg-primary-500 text-white'
-                  : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)]'
+                  : 'bg-(--color-bg-tertiary) hover:bg-(--color-border)'
               )}
             >
               {mode === 'amount' ? 'Amount' : mode === 'dueDate' ? 'Due date' : 'Default'}
@@ -438,14 +438,14 @@ export default function BillsPage() {
                   bill.priority === 'critical' && 'bg-danger-100 dark:bg-danger-500/20',
                   bill.priority === 'high' && 'bg-warning-100 dark:bg-warning-500/20',
                   bill.priority === 'normal' && 'bg-primary-100 dark:bg-primary-500/20',
-                  bill.priority === 'low' && 'bg-[var(--color-bg-tertiary)]'
+                  bill.priority === 'low' && 'bg-(--color-bg-tertiary)'
                 )}>
                   <Receipt className={clsx(
                     'w-6 h-6',
                     bill.priority === 'critical' && 'text-danger-600 dark:text-danger-500',
                     bill.priority === 'high' && 'text-warning-600 dark:text-warning-500',
                     bill.priority === 'normal' && 'text-primary-600 dark:text-primary-500',
-                    bill.priority === 'low' && 'text-[var(--color-text-muted)]'
+                    bill.priority === 'low' && 'text-(--color-text-muted)'
                   )} />
                 </div>
                 <div>
@@ -456,12 +456,12 @@ export default function BillsPage() {
                       bill.priority === 'critical' && 'bg-danger-100 text-danger-700 dark:bg-danger-900 dark:text-danger-200',
                       bill.priority === 'high' && 'bg-warning-100 text-warning-800 dark:bg-warning-900 dark:text-warning-200',
                       bill.priority === 'normal' && 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-200',
-                      bill.priority === 'low' && 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]'
+                      bill.priority === 'low' && 'bg-(--color-bg-tertiary) text-(--color-text-secondary)'
                     )}>
                       {PRIORITY_LABELS[bill.priority]}
                     </span>
                   </div>
-                  <p className="text-sm text-[var(--color-text-secondary)]">
+                  <p className="text-sm text-(--color-text-secondary)">
                     {bill.isIncomeAttached ? (
                       <span className="text-primary-500 font-medium">
                         Per Paycheck: {incomes.find(i => i.id === bill.preferredIncomeSourceId)?.sourceName || 'Unknown'}
@@ -484,7 +484,7 @@ export default function BillsPage() {
               <div className="flex items-center gap-6">
                 <div className="text-right">
                   <p className="text-lg font-semibold">{formatCurrency(bill.budgetedAmount)}</p>
-                  <p className="text-xs text-[var(--color-text-muted)]">
+                  <p className="text-xs text-(--color-text-muted)">
                     {bill.isIncomeAttached ? 'Per Paycheck' : bill.isRecurring ? 'Monthly' : 'One-time'}
                   </p>
                 </div>
@@ -493,7 +493,7 @@ export default function BillsPage() {
                   <button
                     onClick={() => setEditingBill(bill)}
                     aria-label={`Edit ${bill.creditorName}`}
-                    className="p-2 rounded-lg hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+                    className="p-2 rounded-lg hover:bg-(--color-bg-tertiary) text-(--color-text-secondary)"
                   >
                     <Pencil className="w-5 h-5" />
                   </button>

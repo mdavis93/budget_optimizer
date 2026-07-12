@@ -198,7 +198,7 @@ export default function GoalsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Savings Goals</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             See whether your goals fit your real paycheck schedule — and how much room you have left.
           </p>
         </div>
@@ -211,9 +211,9 @@ export default function GoalsPage() {
 
       {goals.length === 0 ? (
         <div className="card text-center py-12">
-          <Target className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
+          <Target className="w-12 h-12 mx-auto text-(--color-text-muted) mb-4" />
           <h3 className="text-lg font-medium mb-2">No savings goals yet</h3>
-          <p className="text-[var(--color-text-secondary)] mb-4">
+          <p className="text-(--color-text-secondary) mb-4">
             Create a goal to start tracking your savings targets
           </p>
           <button onClick={handleOpenCreate} className="btn btn-primary inline-flex items-center gap-2">
@@ -262,7 +262,7 @@ export default function GoalsPage() {
       </Modal>
 
       <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete Goal">
-        <p className="text-[var(--color-text-secondary)] mb-6">
+        <p className="text-(--color-text-secondary) mb-6">
           Are you sure you want to delete this goal? This action cannot be undone.
         </p>
         <div className="flex gap-3">

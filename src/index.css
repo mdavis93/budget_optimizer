@@ -1,95 +1,165 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f8fafc;
-  --color-bg-tertiary: #f1f5f9;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
-  --color-border: #e2e8f0;
-  --color-accent: #3b82f6;
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-200: #bbf7d0;
+  --color-success-300: #86efac;
+  --color-success-400: #4ade80;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  --color-success-900: #14532d;
+  --color-success-950: #052e16;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-300: #fcd34d;
+  --color-warning-400: #fbbf24;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+  --color-warning-900: #78350f;
+  --color-warning-950: #451a03;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-300: #fca5a5;
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+  --color-danger-900: #7f1d1d;
+  --color-danger-950: #450a0a;
+
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: JetBrains Mono, Menlo, monospace;
 }
 
-.dark {
-  --color-bg-primary: #0f172a;
-  --color-bg-secondary: #1e293b;
-  --color-bg-tertiary: #334155;
-  --color-text-primary: #f8fafc;
-  --color-text-secondary: #cbd5e1;
-  --color-text-muted: #64748b;
-  --color-border: #334155;
-  --color-accent: #60a5fa;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  :root {
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f8fafc;
+    --color-bg-tertiary: #f1f5f9;
+    --color-text-primary: #0f172a;
+    --color-text-secondary: #475569;
+    --color-text-muted: #94a3b8;
+    --color-border: #e2e8f0;
+    --color-accent: #3b82f6;
+  }
+
+  .dark {
+    --color-bg-primary: #0f172a;
+    --color-bg-secondary: #1e293b;
+    --color-bg-tertiary: #334155;
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #64748b;
+    --color-border: #334155;
+    --color-accent: #60a5fa;
+  }
+
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-app-region: no-drag;
+  }
+
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  body {
+    @apply bg-(--color-bg-primary) text-(--color-text-primary);
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  .titlebar {
+    -webkit-app-region: drag;
+  }
+
+  .titlebar button {
+    -webkit-app-region: no-drag;
+  }
 }
 
-* {
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-app-region: no-drag;
+@utility btn {
+  @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-hidden focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
-input, textarea {
-  -webkit-user-select: text;
-  user-select: text;
+@utility btn-primary {
+  @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
 }
 
-body {
-  @apply bg-[var(--color-bg-primary)] text-[var(--color-text-primary)];
-  font-family: 'Inter', system-ui, sans-serif;
-  overflow: hidden;
+@utility btn-secondary {
+  @apply btn bg-(--color-bg-tertiary) text-(--color-text-primary) hover:bg-(--color-border) focus:ring-primary-500;
 }
 
-.titlebar {
-  -webkit-app-region: drag;
+@utility btn-danger {
+  @apply btn bg-danger-500 text-white hover:bg-danger-600 focus:ring-danger-500;
 }
 
-.titlebar button {
-  -webkit-app-region: no-drag;
+@utility btn-ghost {
+  @apply btn bg-transparent hover:bg-(--color-bg-tertiary) text-(--color-text-secondary);
 }
 
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  
-  .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
-  }
-  
-  .btn-secondary {
-    @apply btn bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] hover:bg-[var(--color-border)] focus:ring-primary-500;
-  }
-  
-  .btn-danger {
-    @apply btn bg-danger-500 text-white hover:bg-danger-600 focus:ring-danger-500;
-  }
-  
-  .btn-ghost {
-    @apply btn bg-transparent hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)];
-  }
-  
-  .input {
-    @apply w-full px-4 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
-  }
-  
-  .card {
-    @apply bg-[var(--color-bg-secondary)] rounded-xl border border-[var(--color-border)] p-6;
-  }
+@utility input {
+  @apply w-full px-4 py-2.5 rounded-lg border border-(--color-border) bg-(--color-bg-primary) text-(--color-text-primary) placeholder-(--color-text-muted) focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+}
 
-  .break-glass-tape {
-    background-color: rgb(255 251 235 / 0.6);
-    background-image: repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 6px,
-      rgb(239 68 68 / 0.08) 6px,
-      rgb(239 68 68 / 0.08) 12px
-    );
-  }
+@utility card {
+  @apply bg-(--color-bg-secondary) rounded-xl border border-(--color-border) p-6;
+}
 
-  .dark .break-glass-tape {
+@utility break-glass-tape {
+  background-color: rgb(255 251 235 / 0.6);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgb(239 68 68 / 0.08) 6px,
+    rgb(239 68 68 / 0.08) 12px
+  );
+
+  .dark & {
     background-color: rgb(120 53 15 / 0.15);
     background-image: repeating-linear-gradient(
       -45deg,
@@ -99,10 +169,10 @@ body {
       rgb(239 68 68 / 0.06) 12px
     );
   }
-  
-  .label {
-    @apply block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5;
-  }
+}
+
+@utility label {
+  @apply block text-sm font-medium text-(--color-text-secondary) mb-1.5;
 }
 
 ::-webkit-scrollbar {
@@ -115,11 +185,11 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-[var(--color-border)] rounded-full;
+  @apply bg-(--color-border) rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-[var(--color-text-muted)];
+  @apply bg-(--color-text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

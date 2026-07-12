@@ -110,7 +110,7 @@ export default function ChangePasswordModal({ isOpen, onClose, onSuccess }: Chan
 
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
         )}

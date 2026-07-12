@@ -60,11 +60,11 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       )}
       role="alert"
     >
-      <Icon className={clsx('w-5 h-5 flex-shrink-0 mt-0.5', iconStyles[toast.type])} />
+      <Icon className={clsx('w-5 h-5 shrink-0 mt-0.5', iconStyles[toast.type])} />
       <p className="flex-1 text-sm">{toast.message}</p>
       <button
         onClick={onDismiss}
-        className="flex-shrink-0 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        className="shrink-0 p-1 rounded-sm hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
         aria-label="Dismiss"
       >
         <X className="w-4 h-4" />
