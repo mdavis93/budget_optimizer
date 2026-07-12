@@ -185,7 +185,7 @@ Fix forward with a follow-up PR; do not treat Main Stability as optional for lon
 
 Local and CI `electron:build` / `electron:build:ci` set `CSC_IDENTITY_AUTO_DISCOVERY=false` so electron-builder does not search for a Developer ID certificate. Unsigned builds are expected until you configure Apple code signing for distribution.
 
-Native modules (`better-sqlite3`, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. The `electron:build` / `electron:build:ci` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it. Local day-to-day Node↔Electron flips for tests and `electron:dev` are handled by `scripts/use-native.cjs` (see [Native ABI auto-swap](#native-abi-auto-swap-better-sqlite3)).
+Native modules (`better-sqlite3`, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. Electron 42+ no longer ships a package-level `postinstall` that downloads the Electron binary, so the root `postinstall` runs `node node_modules/electron/install.js` first. The `electron:build` / `electron:build:ci` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it. Local day-to-day Node↔Electron flips for tests and `electron:dev` are handled by `scripts/use-native.cjs` (see [Native ABI auto-swap](#native-abi-auto-swap-better-sqlite3)).
 
 ## Code coverage
 

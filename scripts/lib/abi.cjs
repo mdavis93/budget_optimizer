@@ -211,6 +211,7 @@ function loadsUnderNode() {
 function loadsUnderElectron() {
   const binary = getElectronBinaryPath();
   if (!fs.existsSync(binary)) {
+    console.warn(`Electron binary missing at ${binary}; cannot probe better-sqlite3 under Electron`);
     return false;
   }
 
@@ -229,7 +230,19 @@ function loadsUnderElectron() {
         stdio: ['ignore', 'pipe', 'pipe'],
       }
     );
-    return result.status === 0;
+    if (result.error) {
+      console.warn(`Electron probe failed (${binary}): ${result.error.message}`);
+      return false;
+    }
+    if (result.status !== 0) {
+      const detail = String(result.stderr || result.stdout || '').trim();
+      console.warn(
+        `Electron probe failed (${binary}): exit ${result.status}` +
+          (detail ? ` — ${detail}` : '')
+      );
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }

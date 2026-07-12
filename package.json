@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "electron:dev": "node scripts/use-native.cjs electron && node scripts/sync-app-icon.cjs && node scripts/electron-launch-env.cjs concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:reinstall": "node scripts/fix-electron-install.cjs",
-    "postinstall": "electron-builder install-app-deps && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs",
+    "postinstall": "node node_modules/electron/install.js && electron-builder install-app-deps && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs",
     "reset-local-data": "bash scripts/reset-local-data.sh",
     "electron:build": "node scripts/sync-app-icon.cjs && pnpm run build:vite && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder && node scripts/verify-packaged-app.cjs",
     "electron:build:ci": "node scripts/sync-app-icon.cjs && pnpm run build:vite && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never && node scripts/verify-packaged-app.cjs",

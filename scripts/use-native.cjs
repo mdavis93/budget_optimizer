@@ -9,6 +9,7 @@ const {
   nativeCacheDir,
   getNodeAbi,
   getElectronAbi,
+  getElectronBinaryPath,
   getBetterSqlite3Version,
   loadsUnderNode,
   loadsUnderElectron,
@@ -47,6 +48,17 @@ function resolveTargetAbi(target) {
     );
   }
   return abi;
+}
+
+function assertElectronBinaryPresent() {
+  const binary = getElectronBinaryPath();
+  if (fs.existsSync(binary)) {
+    return;
+  }
+  fail(
+    `Electron binary missing at ${binary}. Electron 42+ no longer downloads itself in postinstall; ` +
+      'run: node node_modules/electron/install.js (or pnpm install to run the root postinstall).'
+  );
 }
 
 function loadsUnderTarget(target) {
@@ -174,6 +186,9 @@ function main() {
   }
 
   const targetAbi = resolveTargetAbi(target);
+  if (target === 'electron') {
+    assertElectronBinaryPresent();
+  }
   const identity = buildIdentity(bs3Version, targetAbi);
   const cachePath = resolveUnderNativeCache(cacheFileName(bs3Version, targetAbi));
 
