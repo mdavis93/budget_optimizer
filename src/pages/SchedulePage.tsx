@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, List, RefreshCw } from 'lucide-react';
-import { useDraft, useSchedule } from '../context/DraftContext';
+import { useDraftData, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { format, parseISO } from 'date-fns';
-import { PaycheckBill, PaycheckEntry, ProposedFix } from '../types';
+import { PaycheckEntry } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -14,21 +14,14 @@ import {
   ScheduleSummaryCards,
   ReconciliationBanner,
   ScheduleRecommendations,
-  type DraggedBill,
 } from '../components/schedule';
-import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
-import { buildScheduleInputHash } from '../utils/scheduleInputHash';
 import { formatCurrency } from '../utils/formatCurrency';
+import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
+import { useScheduleMutations } from '../hooks/useScheduleMutations';
 
 type ViewMode = 'paycheck' | 'calendar';
 
 const EMPTY_PAYCHECKS: PaycheckEntry[] = [];
-
-interface PendingAssignment {
-  billId: string;
-  billDueDate: string;
-  paycheckDate: string;
-}
 
 export default function SchedulePage() {
   const {
@@ -38,29 +31,45 @@ export default function SchedulePage() {
     scheduleStartDate: startDate,
     scheduleMonths: months,
     scheduleStartingBalance: startingBalance,
+    scheduleInputHash,
     setScheduleStartDate: setStartDate,
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
   } = useSchedule();
-  const { isQuickBudget, currentBudget } = useBudget();
-  const draft = useDraft();
-  const incomes = draft.incomes;
-  const bills = draft.bills;
-  const billAssignments = draft.billAssignments;
-  const incomeOverrides = draft.incomeOverrides;
+  const { currentBudget } = useBudget();
+  const { incomes, bills, billAssignments, incomeOverrides } = useDraftData();
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
-  const [skippingBill, setSkippingBill] = useState<string | null>(null);
-  const [restoringBill, setRestoringBill] = useState<string | null>(null);
-  const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
-  const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
-  const [savingIncomeKey, setSavingIncomeKey] = useState<string | null>(null);
-  const [isAssigning, setIsAssigning] = useState(false);
-  const [showReconciliation, setShowReconciliation] = useState(false);
-  const [dismissedReconciliation, setDismissedReconciliation] = useState(false);
-  const [isApplyingFixes, setIsApplyingFixes] = useState(false);
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
-  const [pendingAssignment, setPendingAssignment] = useState<PendingAssignment | null>(null);
+  const {
+    skippingBill,
+    restoringBill,
+    savingIncomeKey,
+    showReconciliation,
+    dismissedReconciliation,
+    isApplyingFixes,
+    setShowReconciliation,
+    setDismissedReconciliation,
+    handleApplyFixes,
+    handleSkipReconciliation,
+    handleSkipBill,
+    handleRestoreBill,
+    handleSaveIncomeOverride,
+    handleClearIncomeOverride,
+  } = useScheduleMutations();
+  const {
+    draggedBill,
+    dropTargetDate,
+    isAssigning,
+    pendingAssignment,
+    setPendingAssignment,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    handleConfirmAssignment,
+  } = useBillDragAssignment();
 
   // Calculate total goal deposits from all paychecks
   const totalGoalDeposits = useMemo(() => {
@@ -103,243 +112,16 @@ export default function SchedulePage() {
     setRecommendationsExpanded(hasActionableRecommendations);
   }, [hasActionableRecommendations]);
 
-  // Check if reconciliation is needed when schedule changes
-  useEffect(() => {
-    if (schedule?.reconciliation?.needsReconciliation && !dismissedReconciliation) {
-      setShowReconciliation(true);
-    } else {
-      setShowReconciliation(false);
-    }
-  }, [schedule?.reconciliation?.needsReconciliation, dismissedReconciliation]);
-
-  // Reset dismissed state when schedule parameters change
-  useEffect(() => {
-    setDismissedReconciliation(false);
-  }, [startDate, startingBalance]);
-
-  const handleApplyFixes = useCallback(async (fixes: ProposedFix[]) => {
-    setIsApplyingFixes(true);
-    try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.reconciliation.applyFixes(
-          fixes.map(f => ({
-            id: f.id,
-            type: f.type,
-            billId: f.billId,
-            billDueDate: f.billDueDate,
-            fromPaycheckDate: f.fromPaycheckDate,
-            toPaycheckDate: f.toPaycheckDate,
-          }))
-        );
-        if (result.success) {
-          setShowReconciliation(false);
-          setDismissedReconciliation(false);
-          generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (draft.applyReconciliationFixes(fixes)) {
-        setShowReconciliation(false);
-        setDismissedReconciliation(false);
-        generateSchedule(startDate, months, startingBalance, { force: true });
-      }
-    } catch {
-      // Error handling done through UI state
-    } finally {
-      setIsApplyingFixes(false);
-    }
-  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
-
-  const handleSkipReconciliation = useCallback(() => {
-    setDismissedReconciliation(true);
-    setShowReconciliation(false);
-  }, []);
-
-  const dataHash = useMemo(
-    () =>
-      buildScheduleInputHash({
-        incomes,
-        bills,
-        skippedBills: draft.skippedBills,
-        billAssignments: draft.billAssignments,
-        incomeOverrides: draft.incomeOverrides,
-        budgetFields: draft.budgetFields,
-      }),
-    [
-      incomes,
-      bills,
-      draft.skippedBills,
-      draft.billAssignments,
-      draft.incomeOverrides,
-      draft.budgetFields,
-    ]
-  );
-
   useEffect(() => {
     if (incomes.length > 0 || bills.length > 0) {
       generateSchedule(startDate, months, startingBalance);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
-  }, [startDate, startingBalance, dataHash]);
+  }, [startDate, startingBalance, scheduleInputHash]);
 
   const handleRefresh = () => {
     generateSchedule(startDate, months, startingBalance, { force: true });
   };
-
-  const handleSkipBill = useCallback(async (billId: string, paycheckDate: string) => {
-    setSkippingBill(`${billId}-${paycheckDate}`);
-    try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.skippedBills.skip(billId, paycheckDate);
-        if (result.success) {
-          await draft.reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (draft.skipBill(billId, paycheckDate)) {
-        generateSchedule(startDate, months, startingBalance, { force: true });
-      }
-    } catch {
-      // Error handling done through UI state
-    } finally {
-      setSkippingBill(null);
-    }
-  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
-
-  const handleRestoreBill = useCallback(async (billId: string, billDueDate: string) => {
-    setRestoringBill(`${billId}-${billDueDate}`);
-    try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.billAssignments.remove(billId, billDueDate);
-        if (result.success) {
-          await draft.reloadSnapshot();
-        }
-      } else {
-        draft.removeBillAssignment(billId, billDueDate);
-      }
-    } catch {
-      // Error handling done through UI state
-    } finally {
-      setRestoringBill(null);
-    }
-  }, [isQuickBudget, draft]);
-
-  const handleDragStart = useCallback((bill: PaycheckBill, sourcePaycheckDate: string) => {
-    setDraggedBill({
-      billId: bill.billId,
-      creditorName: bill.creditorName,
-      amount: bill.amount,
-      sourcePaycheckDate,
-      dueDay: bill.dueDay,
-      billDate: bill.billDate,
-    });
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedBill(null);
-    setDropTargetDate(null);
-  }, []);
-
-  const handleDragOver = useCallback((e: DragEvent, paycheckDate: string) => {
-    e.preventDefault();
-    if (draggedBill && paycheckDate !== draggedBill.sourcePaycheckDate) {
-      setDropTargetDate(paycheckDate);
-    }
-  }, [draggedBill]);
-
-  const handleDragLeave = useCallback(() => {
-    setDropTargetDate(null);
-  }, []);
-
-  const handleSaveIncomeOverride = useCallback(async (incomeId: string, paycheckDate: string, amount: number) => {
-    const key = `${incomeId}-${paycheckDate}`;
-    setSavingIncomeKey(key);
-    try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.incomeOverrides.set(incomeId, paycheckDate, amount);
-        if (result.success) {
-          await draft.reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (draft.setIncomeOverride(incomeId, paycheckDate, amount)) {
-        await generateSchedule(startDate, months, startingBalance, { force: true });
-      }
-    } finally {
-      setSavingIncomeKey(null);
-    }
-  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
-
-  const handleClearIncomeOverride = useCallback(async (incomeId: string, paycheckDate: string) => {
-    const key = `${incomeId}-${paycheckDate}`;
-    setSavingIncomeKey(key);
-    try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.incomeOverrides.remove(incomeId, paycheckDate);
-        if (result.success) {
-          await draft.reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (draft.removeIncomeOverride(incomeId, paycheckDate)) {
-        await generateSchedule(startDate, months, startingBalance, { force: true });
-      }
-    } finally {
-      setSavingIncomeKey(null);
-    }
-  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
-
-  const applyBillAssignment = useCallback(async (
-    billId: string,
-    billDueDate: string,
-    targetPaycheckDate: string
-  ) => {
-    setIsAssigning(true);
-    try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.billAssignments.assign(
-          billId,
-          billDueDate,
-          targetPaycheckDate
-        );
-        if (result.success) {
-          await draft.reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else {
-        draft.assignBill(billId, billDueDate, targetPaycheckDate);
-      }
-    } catch {
-      // Error handling done through UI state
-    } finally {
-      setIsAssigning(false);
-    }
-  }, [generateSchedule, startDate, months, startingBalance, isQuickBudget, draft]);
-
-  const handleDrop = useCallback(async (e: DragEvent, targetPaycheckDate: string) => {
-    e.preventDefault();
-    setDropTargetDate(null);
-    
-    if (!draggedBill || targetPaycheckDate === draggedBill.sourcePaycheckDate) {
-      return;
-    }
-
-    const { billId, billDate: billDueDate } = draggedBill;
-
-    if (needsAssignmentConfirmation(billDueDate, targetPaycheckDate)) {
-      setPendingAssignment({ billId, billDueDate, paycheckDate: targetPaycheckDate });
-      setDraggedBill(null);
-      return;
-    }
-
-    await applyBillAssignment(billId, billDueDate, targetPaycheckDate);
-    setDraggedBill(null);
-  }, [draggedBill, applyBillAssignment]);
-
-  const handleConfirmAssignment = useCallback(async () => {
-    if (!pendingAssignment) return;
-    await applyBillAssignment(
-      pendingAssignment.billId,
-      pendingAssignment.billDueDate,
-      pendingAssignment.paycheckDate
-    );
-    setPendingAssignment(null);
-  }, [pendingAssignment, applyBillAssignment]);
 
   const togglePaycheck = useCallback((date: string) => {
     setExpandedPaychecks(prev => {
