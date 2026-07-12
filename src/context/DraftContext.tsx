@@ -106,6 +106,8 @@ const DraftStatusContext = createContext<DraftStatusContextValue | null>(null);
 const DraftActionsContext = createContext<DraftActionsContextValue | null>(null);
 
 const nowIso = () => new Date().toISOString();
+const equalDomains = (left: Set<DraftDomain>, right: Set<DraftDomain>) =>
+  left.size === right.size && Array.from(left).every((domain) => right.has(domain));
 
 export function DraftProvider({ children }: { children: ReactNode }) {
   const { isUnlocked } = useAuth();
@@ -175,7 +177,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         const empty = createEmptyDraftState();
         setCommitted(empty);
         setDraft(empty);
-        setDirtyDomains(new Set());
+        setDirtyDomains((prev) => (prev.size === 0 ? prev : new Set()));
       }
       return;
     }
@@ -185,7 +187,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       const empty = createEmptyDraftState();
       setCommitted(empty);
       setDraft(empty);
-      setDirtyDomains(new Set());
+      setDirtyDomains((prev) => (prev.size === 0 ? prev : new Set()));
       return;
     }
 
@@ -226,7 +228,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
       setCommitted(snapshot);
       setDraft(copyDraftState(snapshot));
-      setDirtyDomains(new Set());
+      setDirtyDomains((prev) => (prev.size === 0 ? prev : new Set()));
     } finally {
       setIsLoading(false);
     }
@@ -238,7 +240,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isDraftMode) {
-      setDirtyDomains(computeDirtyDomains(committed, draft));
+      setDirtyDomains((previous) => {
+        const next = computeDirtyDomains(committed, draft);
+        return equalDomains(previous, next) ? previous : next;
+      });
     }
   }, [committed, draft, isDraftMode]);
 
@@ -247,7 +252,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const markDirty = useCallback((domain: DraftDomain) => {
-    setDirtyDomains((prev) => new Set(prev).add(domain));
+    setDirtyDomains((prev) => (prev.has(domain) ? prev : new Set(prev).add(domain)));
   }, []);
 
   const buildDraftOverlay = useCallback((): DraftOverlay | undefined => {
