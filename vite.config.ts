@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import electron from 'vite-plugin-electron/simple';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,6 +37,7 @@ export default defineConfig(async ({ mode }) => {
   return {
   plugins: [
     react(),
+    tailwindcss(),
     {
       name: 'production-csp',
       transformIndexHtml(html: string) {

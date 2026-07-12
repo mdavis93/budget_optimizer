@@ -150,15 +150,15 @@ export default function SchedulePage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-semibold">Payment Schedule</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             View your optimized payment schedule
           </p>
         </div>
         
         <div className="card text-center py-16">
-          <Calendar className="w-16 h-16 text-[var(--color-text-muted)] mx-auto mb-4" />
+          <Calendar className="w-16 h-16 text-(--color-text-muted) mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">No Schedule Available</h3>
-          <p className="text-[var(--color-text-secondary)] max-w-md mx-auto">
+          <p className="text-(--color-text-secondary) max-w-md mx-auto">
             Add income sources and bills to generate an optimized payment schedule.
           </p>
         </div>
@@ -172,7 +172,7 @@ export default function SchedulePage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-semibold">Payment Schedule</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             {schedule ? `${format(parseISO(schedule.startDate), 'MMM d, yyyy')} - ${format(parseISO(schedule.endDate), 'MMM d, yyyy')}` : 'Loading...'}
           </p>
         </div>
@@ -192,18 +192,18 @@ export default function SchedulePage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Payment Schedule</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             {schedule ? `${format(parseISO(schedule.startDate), 'MMM d, yyyy')} - ${format(parseISO(schedule.endDate), 'MMM d, yyyy')}` : 'Loading...'}
           </p>
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-[var(--color-bg-secondary)] rounded-lg p-1">
+          <div className="flex items-center gap-2 bg-(--color-bg-secondary) rounded-lg p-1">
             <button
               onClick={() => setViewMode('paycheck')}
               className={clsx(
                 'p-2 rounded-md transition-colors',
-                viewMode === 'paycheck' ? 'bg-[var(--color-bg-primary)] shadow-sm' : 'hover:bg-[var(--color-bg-tertiary)]'
+                viewMode === 'paycheck' ? 'bg-(--color-bg-primary) shadow-xs' : 'hover:bg-(--color-bg-tertiary)'
               )}
               title="Paycheck View"
             >
@@ -213,7 +213,7 @@ export default function SchedulePage() {
               onClick={() => setViewMode('calendar')}
               className={clsx(
                 'p-2 rounded-md transition-colors',
-                viewMode === 'calendar' ? 'bg-[var(--color-bg-primary)] shadow-sm' : 'hover:bg-[var(--color-bg-tertiary)]'
+                viewMode === 'calendar' ? 'bg-(--color-bg-primary) shadow-xs' : 'hover:bg-(--color-bg-tertiary)'
               )}
               title="Calendar View"
             >

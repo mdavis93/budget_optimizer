@@ -80,7 +80,7 @@ export default function DebtForm({ debt, bills, existingDebtBillIds, preselected
       <div>
         <label htmlFor="debt-principal" className="label">Remaining Balance (Principal)</label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">$</span>
           <input
             id="debt-principal"
             type="number"
@@ -110,14 +110,14 @@ export default function DebtForm({ debt, bills, existingDebtBillIds, preselected
             placeholder="0.00"
             required
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">%</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">%</span>
         </div>
       </div>
 
       <div>
         <label htmlFor="debt-monthly-payment" className="label">Monthly Payment</label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">$</span>
           <input
             id="debt-monthly-payment"
             type="number"
@@ -130,21 +130,21 @@ export default function DebtForm({ debt, bills, existingDebtBillIds, preselected
             required
           />
         </div>
-        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+        <p className="text-xs text-(--color-text-muted) mt-1">
           The amount you pay each month toward this debt
         </p>
       </div>
 
       {selectedBill && monthlyPayment && (
-        <div className="p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
-          <p className="text-sm font-medium text-[var(--color-text-secondary)]">Extra Payment (auto-calculated)</p>
+        <div className="p-3 rounded-lg bg-(--color-bg-secondary) border border-(--color-border)">
+          <p className="text-sm font-medium text-(--color-text-secondary)">Extra Payment (auto-calculated)</p>
           <p className={clsx(
             'text-lg font-semibold',
-            extraPayment > 0 ? 'text-success-400' : 'text-[var(--color-text-muted)]'
+            extraPayment > 0 ? 'text-success-400' : 'text-(--color-text-muted)'
           )}>
             {extraPayment > 0 ? `+$${extraPayment.toFixed(2)}/mo` : 'None'}
           </p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             Based on bill budget (${selectedBill.budgetedAmount.toFixed(2)}) minus minimum payment.
             To pay extra, increase the budgeted amount on the linked bill.
           </p>

@@ -119,7 +119,7 @@ export default function ExportPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold">Export</h2>
-        <p className="text-[var(--color-text-secondary)]">
+        <p className="text-(--color-text-secondary)">
           Export your budget report as PDF, HTML, or a spreadsheet
         </p>
       </div>
@@ -132,9 +132,9 @@ export default function ExportPage() {
             : 'bg-danger-50 dark:bg-danger-500/10 text-danger-700 dark:text-danger-400'
         )}>
           {exportStatus.type === 'success' ? (
-            <CheckCircle className="w-5 h-5 flex-shrink-0" />
+            <CheckCircle className="w-5 h-5 shrink-0" />
           ) : (
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <AlertCircle className="w-5 h-5 shrink-0" />
           )}
           {exportStatus.message}
         </div>
@@ -172,7 +172,7 @@ export default function ExportPage() {
           <div>
             <label htmlFor="export-starting-balance" className="label">Starting Balance</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">$</span>
               <input
                 id="export-starting-balance"
                 type="number"
@@ -196,41 +196,41 @@ export default function ExportPage() {
       </div>
 
       {schedule && (
-        <div className="card bg-[var(--color-bg-tertiary)]">
+        <div className="card bg-(--color-bg-tertiary)">
           <h3 className="font-semibold mb-2">Preview</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
             <div>
-              <p className="text-[var(--color-text-muted)]">Period</p>
+              <p className="text-(--color-text-muted)">Period</p>
               <p className="font-medium">
                 {format(parseISO(schedule.startDate), 'MMM d')} - {format(parseISO(schedule.endDate), 'MMM d, yyyy')}
               </p>
             </div>
             <div>
-              <p className="text-[var(--color-text-muted)]">Total Income</p>
+              <p className="text-(--color-text-muted)">Total Income</p>
               <p className="font-medium text-success-500">
                 ${schedule.summary.totalIncome.toLocaleString()}
               </p>
             </div>
             <div>
-              <p className="text-[var(--color-text-muted)]">Total Expenses</p>
+              <p className="text-(--color-text-muted)">Total Expenses</p>
               <p className="font-medium text-danger-500">
                 ${schedule.summary.totalExpenses.toLocaleString()}
               </p>
             </div>
             <div>
-              <p className="text-[var(--color-text-muted)]">Total Saved</p>
+              <p className="text-(--color-text-muted)">Total Saved</p>
               <p className="font-medium text-primary-500">
                 ${schedule.summary.finalSavingsBalance.toLocaleString()}
               </p>
             </div>
             <div>
-              <p className="text-[var(--color-text-muted)]">Paychecks</p>
+              <p className="text-(--color-text-muted)">Paychecks</p>
               <p className="font-medium">{schedule.paychecks.length}</p>
             </div>
           </div>
           {totalGoalDeposits > 0 && (
-            <div className="mt-3 pt-3 border-t border-[var(--color-border)] text-sm">
-              <span className="text-[var(--color-text-muted)]">Goals Total: </span>
+            <div className="mt-3 pt-3 border-t border-(--color-border) text-sm">
+              <span className="text-(--color-text-muted)">Goals Total: </span>
               <span className="font-medium text-success-500">
                 ${totalGoalDeposits.toLocaleString()}
               </span>
@@ -295,9 +295,9 @@ export default function ExportPage() {
         />
       </div>
 
-      <div className="card bg-[var(--color-bg-tertiary)]">
+      <div className="card bg-(--color-bg-tertiary)">
         <h3 className="font-semibold mb-2">Export Tips</h3>
-        <ul className="space-y-1 text-sm text-[var(--color-text-secondary)]">
+        <ul className="space-y-1 text-sm text-(--color-text-secondary)">
           <li>• PDF exports use the system print engine; page breaks keep paycheck cycles intact.</li>
           <li>• HTML exports can be opened in any browser and saved as PDF via the browser print dialog.</li>
           <li>• Spreadsheets open in Excel or Numbers, and can be uploaded to Google Drive to open in Google Sheets.</li>
@@ -341,16 +341,16 @@ function ExportCard({
         </div>
         <div>
           <h3 className="font-semibold text-lg">{title}</h3>
-          <p className="text-sm text-[var(--color-text-secondary)]">
+          <p className="text-sm text-(--color-text-secondary)">
             {description}
           </p>
         </div>
       </div>
 
-      <ul className="space-y-2 mb-6 text-sm text-[var(--color-text-secondary)] flex-1">
+      <ul className="space-y-2 mb-6 text-sm text-(--color-text-secondary) flex-1">
         {bullets.map((b, i) => (
           <li key={i} className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-success-500 flex-shrink-0" />
+            <CheckCircle className="w-4 h-4 text-success-500 shrink-0" />
             {b}
           </li>
         ))}

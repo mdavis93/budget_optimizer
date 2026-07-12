@@ -191,12 +191,12 @@ export default function SummaryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Summary</h2>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             Budget trends and projections
           </p>
         </div>
         
-        <div className="flex items-center gap-1 bg-[var(--color-bg-tertiary)] rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-(--color-bg-tertiary) rounded-lg p-1">
           {([3, 6, 12] as TimePeriod[]).map((period) => (
             <button
               key={period}
@@ -205,7 +205,7 @@ export default function SummaryPage() {
                 'px-4 py-2 rounded-md text-sm font-medium transition-colors',
                 timePeriod === period
                   ? 'bg-primary-500 text-white'
-                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                  : 'text-(--color-text-secondary) hover:text-(--color-text-primary)'
               )}
             >
               {period} Months
@@ -215,13 +215,13 @@ export default function SummaryPage() {
       </div>
 
       {isLoading && (
-        <div className="text-center py-8 text-[var(--color-text-muted)]">
+        <div className="text-center py-8 text-(--color-text-muted)">
           Loading trends...
         </div>
       )}
 
       {!hasData && !isLoading && (
-        <div className="text-center py-16 text-[var(--color-text-muted)]">
+        <div className="text-center py-16 text-(--color-text-muted)">
           Add income and bills to see your budget trends
         </div>
       )}
@@ -240,7 +240,7 @@ export default function SummaryPage() {
                   </ChartSuspense>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)]">
+                <div className="h-64 flex items-center justify-center text-(--color-text-muted)">
                   No data available
                 </div>
               )}
@@ -261,11 +261,11 @@ export default function SummaryPage() {
                       {categoryData.slice(0, 8).map((cat) => (
                         <div key={cat.name} className="flex items-center gap-2 text-xs">
                           <div
-                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            className="w-3 h-3 rounded-full shrink-0"
                             style={{ backgroundColor: cat.color }}
                           />
                           <span className="truncate flex-1">{cat.name}</span>
-                          <span className="text-[var(--color-text-muted)] font-mono">
+                          <span className="text-(--color-text-muted) font-mono">
                             {formatWholeCurrency(cat.value)}
                           </span>
                         </div>
@@ -274,7 +274,7 @@ export default function SummaryPage() {
                   </div>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center text-[var(--color-text-muted)]">
+                <div className="h-64 flex items-center justify-center text-(--color-text-muted)">
                   No expense data available
                 </div>
               )}
@@ -286,12 +286,12 @@ export default function SummaryPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold">Savings Projection</h3>
-                <p className="text-xs text-[var(--color-text-muted)]">
+                <p className="text-xs text-(--color-text-muted)">
                   Daily accrual with monthly compounding
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <label htmlFor="summary-apy" className="text-xs text-[var(--color-text-muted)]">APY:</label>
+                <label htmlFor="summary-apy" className="text-xs text-(--color-text-muted)">APY:</label>
                 <input
                   id="summary-apy"
                   type="number"
@@ -302,7 +302,7 @@ export default function SummaryPage() {
                   onChange={(e) => handleAPYChange(parseFloat(e.target.value) || 0)}
                   className="input w-20 text-sm py-1"
                 />
-                <span className="text-xs text-[var(--color-text-muted)]">%</span>
+                <span className="text-xs text-(--color-text-muted)">%</span>
               </div>
             </div>
             {savingsProjectionData.length > 0 ? (
@@ -312,7 +312,7 @@ export default function SummaryPage() {
                 </ChartSuspense>
               </div>
             ) : (
-              <div className="h-80 flex items-center justify-center text-[var(--color-text-muted)]">
+              <div className="h-80 flex items-center justify-center text-(--color-text-muted)">
                 No savings data available
               </div>
             )}

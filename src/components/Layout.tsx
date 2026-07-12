@@ -82,20 +82,20 @@ export default function Layout() {
     <>
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
       >
         Skip to main content
       </a>
-      <div className="flex h-screen bg-[var(--color-bg-primary)]">
-        <aside className="w-64 flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)]">
-          <div className="titlebar h-14 flex items-center px-6 border-b border-[var(--color-border)]">
+      <div className="flex h-screen bg-(--color-bg-primary)">
+        <aside className="w-64 flex flex-col bg-(--color-bg-secondary) border-r border-(--color-border)">
+          <div className="titlebar h-14 flex items-center px-6 border-b border-(--color-border)">
             <div className="flex items-center gap-2 pl-16">
               <AppIcon className="w-6 h-6" />
               <span className="font-semibold text-lg">Budget Optimizer</span>
             </div>
           </div>
 
-          <div className="px-4 py-3 border-b border-[var(--color-border)]">
+          <div className="px-4 py-3 border-b border-(--color-border)">
             {isQuickBudget ? (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warning-500 dark:bg-warning-600">
                 <Zap className="w-4 h-4 text-white" />
@@ -111,9 +111,9 @@ export default function Layout() {
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-bg-tertiary)]">
-                <Briefcase className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                <span className="text-sm text-[var(--color-text-secondary)]">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-(--color-bg-tertiary)">
+                <Briefcase className="w-4 h-4 text-(--color-text-secondary)" />
+                <span className="text-sm text-(--color-text-secondary)">
                   No budget selected
                 </span>
               </div>
@@ -130,7 +130,7 @@ export default function Layout() {
                     'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary-500/10 text-primary-500'
-                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]'
+                      : 'text-(--color-text-secondary) hover:bg-(--color-bg-tertiary) hover:text-(--color-text-primary)'
                   )
                 }
               >
@@ -143,7 +143,7 @@ export default function Layout() {
             ))}
           </nav>
           
-          <div className="p-4 space-y-1 border-t border-[var(--color-border)]">
+          <div className="p-4 space-y-1 border-t border-(--color-border)">
             <NavLink
               to="/settings"
               className={({ isActive }) =>
@@ -151,7 +151,7 @@ export default function Layout() {
                   'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-primary-500/10 text-primary-500'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]'
+                    : 'text-(--color-text-secondary) hover:bg-(--color-bg-tertiary) hover:text-(--color-text-primary)'
                 )
               }
             >
@@ -163,14 +163,14 @@ export default function Layout() {
             </NavLink>
             <button
               onClick={handleLock}
-              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-(--color-text-secondary) hover:bg-(--color-bg-tertiary) hover:text-(--color-text-primary)"
             >
               <Lock className="w-5 h-5" />
               Lock App
             </button>
             <button
               onClick={handleQuit}
-              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-[var(--color-text-secondary)] hover:bg-danger-50 dark:hover:bg-danger-500/10 hover:text-danger-600 dark:hover:text-danger-500"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-(--color-text-secondary) hover:bg-danger-50 dark:hover:bg-danger-500/10 hover:text-danger-600 dark:hover:text-danger-500"
             >
               <Power className="w-5 h-5" />
               Quit App
@@ -179,7 +179,7 @@ export default function Layout() {
         </aside>
         
         <main id="main-content" className="flex-1 flex flex-col overflow-hidden">
-          <div className="titlebar h-14 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] flex items-center px-6">
+          <div className="titlebar h-14 bg-(--color-bg-secondary) border-b border-(--color-border) flex items-center px-6">
             <h1 className="text-lg font-semibold capitalize">
               {location.pathname.split('/')[1] || 'Dashboard'}
             </h1>

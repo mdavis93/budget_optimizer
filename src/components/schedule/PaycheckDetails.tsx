@@ -63,10 +63,10 @@ export default function PaycheckDetails({
     .reduce((sum, bill) => sum + bill.amount, 0);
 
   return (
-    <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+    <div className="mt-4 pt-4 border-t border-(--color-border)">
       <div className="space-y-4">
         <div>
-          <h4 className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 flex items-center gap-2">
+          <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
             <Wallet className="w-4 h-4" />
             Income
           </h4>
@@ -103,7 +103,7 @@ export default function PaycheckDetails({
                 />
               );
             })}
-            <div className="flex items-center justify-between py-2 px-3 bg-[var(--color-bg-tertiary)] rounded-lg font-semibold">
+            <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
               <span>Total Income</span>
               <span className="font-mono text-success-600 dark:text-success-500">
                 +{formatCurrency(paycheck.totalIncome)}
@@ -114,10 +114,10 @@ export default function PaycheckDetails({
 
         {visibleBills.length > 0 && (
           <div>
-            <h4 className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 flex items-center gap-2">
+            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
               <Receipt className="w-4 h-4" />
               Bills to Pay ({visibleBills.length})
-              <span className="text-xs text-[var(--color-text-muted)]">• Drag bills to move between paychecks</span>
+              <span className="text-xs text-(--color-text-muted)">• Drag bills to move between paychecks</span>
               {isAssigning && <RefreshCw className="w-3 h-3 animate-spin text-primary-500" />}
             </h4>
             <div className="space-y-2">
@@ -146,7 +146,7 @@ export default function PaycheckDetails({
                   billAssignments={billAssignments}
                 />
               ))}
-              <div className="flex items-center justify-between py-2 px-3 bg-[var(--color-bg-tertiary)] rounded-lg font-semibold">
+              <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
                 <span>Total Bills</span>
                 <span className="font-mono text-danger-600 dark:text-danger-500">
                   -{formatCurrency(visibleTotalBills)}
@@ -158,7 +158,7 @@ export default function PaycheckDetails({
 
         {paycheck.goalDeposits && paycheck.goalDeposits.length > 0 && (
           <div>
-            <h4 className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 flex items-center gap-2">
+            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
               <Target className="w-4 h-4" />
               Goal Deposits ({paycheck.goalDeposits.length})
             </h4>
@@ -175,7 +175,7 @@ export default function PaycheckDetails({
                 </div>
               ))}
               {paycheck.totalGoalDeposits > 0 && (
-                <div className="flex items-center justify-between py-2 px-3 bg-[var(--color-bg-tertiary)] rounded-lg font-semibold">
+                <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
                   <span>Total Goal Deposits</span>
                   <span className="font-mono text-purple-600 dark:text-purple-500">
                     -{formatCurrency(paycheck.totalGoalDeposits)}
@@ -188,7 +188,7 @@ export default function PaycheckDetails({
 
         {paycheck.savingsDeposit > 0 && (
           <div>
-            <h4 className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 flex items-center gap-2">
+            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
               <PiggyBank className="w-4 h-4" />
               Savings Transfer
             </h4>
@@ -204,7 +204,7 @@ export default function PaycheckDetails({
           </div>
         )}
 
-        <div className="flex items-center justify-between py-3 px-4 bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)]">
+        <div className="flex items-center justify-between py-3 px-4 bg-(--color-bg-secondary) rounded-lg border border-(--color-border)">
           <span className="font-semibold">Budget Remaining</span>
           <span className={clsx(
             'text-2xl font-mono font-bold',
@@ -214,7 +214,7 @@ export default function PaycheckDetails({
           </span>
         </div>
 
-        <p className="text-xs text-[var(--color-text-muted)] text-center">
+        <p className="text-xs text-(--color-text-muted) text-center">
           Savings Balance: {formatCurrency(paycheck.totalSavings)}
         </p>
       </div>

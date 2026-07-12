@@ -4,7 +4,7 @@ export function ChartSuspense({ children, heightClass = 'h-64' }: { children: Re
   return (
     <Suspense
       fallback={
-        <div className={`${heightClass} animate-pulse rounded-lg bg-[var(--color-bg-tertiary)]`} aria-hidden="true" />
+        <div className={`${heightClass} animate-pulse rounded-lg bg-(--color-bg-tertiary)`} aria-hidden="true" />
       }
     >
       {children}

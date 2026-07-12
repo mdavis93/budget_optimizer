@@ -25,7 +25,7 @@ export default function CreateBudgetForm({
       <h3 className="font-semibold mb-4">Create New Budget</h3>
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label htmlFor="budgets-new-name" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+          <label htmlFor="budgets-new-name" className="block text-sm font-medium text-(--color-text-secondary) mb-1">
             Budget Name
           </label>
           <input
@@ -39,7 +39,7 @@ export default function CreateBudgetForm({
           />
         </div>
         <div>
-          <label htmlFor="budgets-new-balance" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+          <label htmlFor="budgets-new-balance" className="block text-sm font-medium text-(--color-text-secondary) mb-1">
             Starting Balance
           </label>
           <input
@@ -52,12 +52,12 @@ export default function CreateBudgetForm({
             min="0"
             step="0.01"
           />
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             Initial account balance for schedule projections
           </p>
         </div>
         <div>
-          <label htmlFor="budgets-new-target" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+          <label htmlFor="budgets-new-target" className="block text-sm font-medium text-(--color-text-secondary) mb-1">
             Target Cash on Hand
           </label>
           <input
@@ -70,12 +70,12 @@ export default function CreateBudgetForm({
             min="0"
             step="1"
           />
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             Budget remaining target per paycheck (excess goes to savings)
           </p>
         </div>
         <div>
-          <label htmlFor="budgets-new-min" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+          <label htmlFor="budgets-new-min" className="block text-sm font-medium text-(--color-text-secondary) mb-1">
             Minimum Cash on Hand
           </label>
           <input
@@ -88,7 +88,7 @@ export default function CreateBudgetForm({
             min="0"
             step="1"
           />
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-(--color-text-muted) mt-1">
             Protected floor for pocket cash (goals cannot consume below this)
           </p>
         </div>

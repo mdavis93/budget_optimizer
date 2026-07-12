@@ -16,7 +16,7 @@ export default function ReconciliationBanner({
   return (
     <div className="card border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/30">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-warning-600 dark:text-warning-400 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="w-5 h-5 text-warning-600 dark:text-warning-400 shrink-0 mt-0.5" />
         <div className="flex-1">
           <h3 className="font-semibold text-warning-900 dark:text-warning-100">
             Budget Has Unresolved Shortfalls

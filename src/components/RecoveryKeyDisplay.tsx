@@ -59,19 +59,19 @@ IMPORTANT:
           <AlertTriangle className="w-6 h-6 text-warning-700 dark:text-warning-200" />
         </div>
         <h2 className="text-xl font-semibold mb-2">{title}</h2>
-        <p className="text-[var(--color-text-secondary)] text-sm">
+        <p className="text-(--color-text-secondary) text-sm">
           {description}
         </p>
       </div>
 
-      <div className="bg-[var(--color-bg-tertiary)] rounded-lg p-4 border border-[var(--color-border)]">
+      <div className="bg-(--color-bg-tertiary) rounded-lg p-4 border border-(--color-border)">
         <div className="grid grid-cols-3 gap-2 mb-4">
           {words.map((word, index) => (
             <div 
               key={index}
-              className="flex items-center gap-2 bg-[var(--color-bg-primary)] rounded px-2 py-1.5"
+              className="flex items-center gap-2 bg-(--color-bg-primary) rounded-sm px-2 py-1.5"
             >
-              <span className="text-xs text-[var(--color-text-muted)] w-4">{index + 1}.</span>
+              <span className="text-xs text-(--color-text-muted) w-4">{index + 1}.</span>
               <span className="font-mono text-sm">{word}</span>
             </div>
           ))}
@@ -116,13 +116,13 @@ IMPORTANT:
         </ul>
       </div>
 
-      <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-bg-tertiary)]">
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-(--color-bg-tertiary)">
         <input
           type="checkbox"
           id="confirmSaved"
           checked={confirmed}
           onChange={(e) => setConfirmed(e.target.checked)}
-          className="w-4 h-4 rounded border-[var(--color-border)]"
+          className="w-4 h-4 rounded-sm border-(--color-border)"
         />
         <label htmlFor="confirmSaved" className="text-sm">
           I have saved my recovery key in a safe place

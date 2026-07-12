@@ -92,7 +92,7 @@ export default function SetupPage() {
 
   if (step === 'recovery-key' && recoveryKey) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+      <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
         <div className="titlebar fixed top-0 left-0 right-0 h-8" />
         
         <div className="w-full max-w-md">
@@ -107,7 +107,7 @@ export default function SetupPage() {
 
   if (step === 'biometric') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+      <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
         <div className="titlebar fixed top-0 left-0 right-0 h-8" />
         
         <div className="w-full max-w-sm text-center">
@@ -115,7 +115,7 @@ export default function SetupPage() {
             <Fingerprint className="w-8 h-8 text-primary-500" />
           </div>
           <h1 className="text-2xl font-semibold mb-2">Enable Fingerprint Unlock</h1>
-          <p className="text-[var(--color-text-secondary)] mb-8">
+          <p className="text-(--color-text-secondary) mb-8">
             Use your fingerprint for faster, secure access to your budget data.
           </p>
           
@@ -141,7 +141,7 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
       <div className="titlebar fixed top-0 left-0 right-0 h-8" />
       
       <div className="w-full max-w-sm">
@@ -150,7 +150,7 @@ export default function SetupPage() {
             <AppIcon className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-semibold mb-2">Create Master Password</h1>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             This password will encrypt all your financial data. Make sure it's strong and memorable.
           </p>
         </div>
@@ -169,7 +169,7 @@ export default function SetupPage() {
 
           {(error || validationError) && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
               {error || validationError}
             </div>
           )}
@@ -201,7 +201,7 @@ export default function SetupPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-(--color-text-muted) hover:text-(--color-text-secondary)"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
@@ -225,7 +225,7 @@ export default function SetupPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-(--color-text-muted) hover:text-(--color-text-secondary)"
               >
                 {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
@@ -248,7 +248,7 @@ export default function SetupPage() {
             </button>
           </div>
           
-          <p className="text-xs text-[var(--color-text-muted)] text-center">
+          <p className="text-xs text-(--color-text-muted) text-center">
             Your password is never stored. A recovery key will be generated next.
           </p>
         </form>

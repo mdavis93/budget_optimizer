@@ -22,15 +22,15 @@ export default function ScheduleSummaryCards({
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       <div className="card">
-        <p className="text-sm text-[var(--color-text-secondary)] mb-1">Total Income</p>
+        <p className="text-sm text-(--color-text-secondary) mb-1">Total Income</p>
         <p className="text-xl font-semibold text-success-500">{formatCurrency(summary.totalIncome)}</p>
       </div>
       <div className="card">
-        <p className="text-sm text-[var(--color-text-secondary)] mb-1">Total Expenses</p>
+        <p className="text-sm text-(--color-text-secondary) mb-1">Total Expenses</p>
         <p className="text-xl font-semibold text-danger-500">{formatCurrency(summary.totalExpenses)}</p>
       </div>
       <div className="card">
-        <p className="text-sm text-[var(--color-text-secondary)] mb-1">Net Balance</p>
+        <p className="text-sm text-(--color-text-secondary) mb-1">Net Balance</p>
         <p className={clsx(
           'text-xl font-semibold',
           summary.netBalance >= 0 ? 'text-success-500' : 'text-danger-500'
@@ -82,10 +82,10 @@ export default function ScheduleSummaryCards({
         </p>
       </div>
       <div className="card">
-        <p className="text-sm text-[var(--color-text-secondary)] mb-1">Shortfalls</p>
+        <p className="text-sm text-(--color-text-secondary) mb-1">Shortfalls</p>
         <p className={clsx(
           'text-xl font-semibold',
-          summary.shortfallCount > 0 ? 'text-warning-500' : 'text-[var(--color-text-primary)]'
+          summary.shortfallCount > 0 ? 'text-warning-500' : 'text-(--color-text-primary)'
         )}>
           {summary.shortfallCount}
         </p>

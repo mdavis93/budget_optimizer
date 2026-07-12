@@ -29,7 +29,7 @@ export default function AppearanceSection({ theme, setTheme }: AppearanceSection
                   'flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors',
                   theme === value
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-600 dark:text-primary-400'
-                    : 'border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)]'
+                    : 'border-(--color-border) hover:bg-(--color-bg-tertiary)'
                 )}
               >
                 <Icon className="w-5 h-5" />

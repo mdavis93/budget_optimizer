@@ -40,7 +40,7 @@ export default function DebtAmortizationChart({ data }: DebtAmortizationChartPro
         />
         <Legend
           wrapperStyle={{ paddingTop: '10px' }}
-          formatter={(value) => <span className="text-[var(--color-text-secondary)]">{value}</span>}
+          formatter={(value) => <span className="text-(--color-text-secondary)">{value}</span>}
         />
         <Bar dataKey="principal" stackId="a" fill={CHART_COLORS.principal} name="Principal" radius={[0, 0, 0, 0]} />
         <Bar dataKey="interest" stackId="a" fill={CHART_COLORS.interest} name="Interest" radius={[4, 4, 0, 0]} />

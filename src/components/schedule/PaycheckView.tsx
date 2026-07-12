@@ -92,7 +92,7 @@ function PaycheckView({
   if (paychecks.length === 0) {
     return (
       <div className="card text-center py-12">
-        <p className="text-[var(--color-text-muted)]">No paychecks in the selected period</p>
+        <p className="text-(--color-text-muted)">No paychecks in the selected period</p>
       </div>
     );
   }
@@ -102,7 +102,7 @@ function PaycheckView({
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-semibold">Paychecks ({paychecks.length})</h3>
-          <p className="text-xs text-[var(--color-text-muted)]">
+          <p className="text-xs text-(--color-text-muted)">
             Target cash on hand: {formatCurrency(maxBudgetRemaining)} • Surplus above target funds goals and savings
           </p>
         </div>
@@ -173,7 +173,7 @@ function PaycheckView({
                         </span>
                       )}
                     </p>
-                    <div className="flex items-center gap-4 text-sm text-[var(--color-text-secondary)]">
+                    <div className="flex items-center gap-4 text-sm text-(--color-text-secondary)">
                       <span>{paycheck.incomeSources.map(s => s.name).join(' + ')}</span>
                       <span>•</span>
                       <span>{visibleBills.length} bill{visibleBills.length !== 1 ? 's' : ''}</span>
@@ -210,7 +210,7 @@ function PaycheckView({
                 
                 <div className="flex items-center gap-6">
                   <div className="text-right">
-                    <p className="text-xs text-[var(--color-text-muted)]">Budget Remaining</p>
+                    <p className="text-xs text-(--color-text-muted)">Budget Remaining</p>
                     <p className={clsx(
                       'text-xl font-semibold font-mono',
                       paycheck.budgetRemaining >= 0 ? 'text-success-500' : 'text-danger-500'
@@ -222,9 +222,9 @@ function PaycheckView({
                     <AlertTriangle className="w-6 h-6 text-danger-500" />
                   )}
                   {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-[var(--color-text-muted)]" />
+                    <ChevronUp className="w-5 h-5 text-(--color-text-muted)" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-[var(--color-text-muted)]" />
+                    <ChevronDown className="w-5 h-5 text-(--color-text-muted)" />
                   )}
                 </div>
               </button>

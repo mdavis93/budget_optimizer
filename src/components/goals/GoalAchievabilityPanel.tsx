@@ -100,10 +100,10 @@ function formatSignedCurrency(amount: number): string {
 
 function PanelSkeleton() {
   return (
-    <div className="rounded-lg border border-[var(--color-border)] p-3 mt-3 min-h-[5.5rem] animate-pulse space-y-2">
-      <div className="h-5 w-32 bg-[var(--color-surface-hover)] rounded-full" />
-      <div className="h-4 w-full bg-[var(--color-surface-hover)] rounded" />
-      <div className="h-4 w-3/4 bg-[var(--color-surface-hover)] rounded" />
+    <div className="rounded-lg border border-(--color-border) p-3 mt-3 min-h-22 animate-pulse space-y-2">
+      <div className="h-5 w-32 bg-(--color-surface-hover) rounded-full" />
+      <div className="h-4 w-full bg-(--color-surface-hover) rounded-sm" />
+      <div className="h-4 w-3/4 bg-(--color-surface-hover) rounded-sm" />
     </div>
   );
 }
@@ -181,7 +181,7 @@ const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
         'rounded-lg border p-3 mt-3',
         tierStyle.border,
         tierStyle.bg,
-        showTimeline ? 'min-h-[7rem]' : 'min-h-[5.5rem]'
+        showTimeline ? 'min-h-28' : 'min-h-22'
       )}
     >
       <p className="sr-only">{messaging.ariaMessage}</p>
@@ -247,7 +247,7 @@ const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
       )}
 
       {messaging.footnote && (
-        <p className="text-xs text-[var(--color-text-muted)] mt-2 italic">{messaging.footnote}</p>
+        <p className="text-xs text-(--color-text-muted) mt-2 italic">{messaging.footnote}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3">

@@ -29,7 +29,7 @@ export default function ConfirmDialog({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
       <div className="space-y-6">
-        <p className="text-[var(--color-text-secondary)]">{message}</p>
+        <p className="text-(--color-text-secondary)">{message}</p>
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="btn-secondary">
             {cancelText}

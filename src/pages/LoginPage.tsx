@@ -141,7 +141,7 @@ export default function LoginPage() {
 
   if (mode === 'show-new-recovery' && newRecoveryKey) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+      <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
         <div className="titlebar fixed top-0 left-0 right-0 h-8" />
         
         <div className="w-full max-w-md">
@@ -158,13 +158,13 @@ export default function LoginPage() {
 
   if (mode === 'new-password') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+      <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
         <div className="titlebar fixed top-0 left-0 right-0 h-8" />
         
         <div className="w-full max-w-sm">
           <button
             onClick={() => setMode('recovery')}
-            className="flex items-center gap-1 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] mb-6"
+            className="flex items-center gap-1 text-sm text-(--color-text-secondary) hover:text-(--color-text-primary) mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -175,7 +175,7 @@ export default function LoginPage() {
               <Check className="w-8 h-8 text-success-500" />
             </div>
             <h1 className="text-2xl font-semibold mb-2">Create New Password</h1>
-            <p className="text-[var(--color-text-secondary)]">
+            <p className="text-(--color-text-secondary)">
               Recovery key verified! Create a new master password.
             </p>
           </div>
@@ -194,7 +194,7 @@ export default function LoginPage() {
 
             {newPasswordError && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 {newPasswordError}
               </div>
             )}
@@ -226,7 +226,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-(--color-text-muted) hover:text-(--color-text-secondary)"
                 >
                   {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -269,13 +269,13 @@ export default function LoginPage() {
 
   if (mode === 'recovery') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+      <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
         <div className="titlebar fixed top-0 left-0 right-0 h-8" />
         
         <div className="w-full max-w-sm">
           <button
             onClick={handleBackToLogin}
-            className="flex items-center gap-1 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] mb-6"
+            className="flex items-center gap-1 text-sm text-(--color-text-secondary) hover:text-(--color-text-primary) mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Login
@@ -286,7 +286,7 @@ export default function LoginPage() {
               <Key className="w-8 h-8 text-warning-500" />
             </div>
             <h1 className="text-2xl font-semibold mb-2">Recover Account</h1>
-            <p className="text-[var(--color-text-secondary)]">
+            <p className="text-(--color-text-secondary)">
               Enter your 12-word recovery key to reset your password.
             </p>
           </div>
@@ -294,7 +294,7 @@ export default function LoginPage() {
           <form onSubmit={handleVerifyRecoveryKey} className="space-y-4">
             {recoveryError && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 {recoveryError}
               </div>
             )}
@@ -309,7 +309,7 @@ export default function LoginPage() {
                 placeholder="word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12"
                 autoFocus
               />
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              <p className="text-xs text-(--color-text-muted) mt-1">
                 Enter all 12 words separated by spaces
               </p>
             </div>
@@ -323,8 +323,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 p-4 rounded-lg bg-[var(--color-bg-tertiary)]">
-            <p className="text-xs text-[var(--color-text-muted)]">
+          <div className="mt-6 p-4 rounded-lg bg-(--color-bg-tertiary)">
+            <p className="text-xs text-(--color-text-muted)">
               Don't have your recovery key? Unfortunately, without it, your encrypted data cannot be recovered. 
               You would need to start fresh with a new account.
             </p>
@@ -335,7 +335,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-(--color-bg-primary) p-4">
       <div className="titlebar fixed top-0 left-0 right-0 h-8" />
       
       <div className="w-full max-w-sm">
@@ -344,7 +344,7 @@ export default function LoginPage() {
             <AppIcon className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-semibold mb-2">Welcome Back</h1>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-(--color-text-secondary)">
             Enter your master password to unlock
           </p>
         </div>
@@ -363,7 +363,7 @@ export default function LoginPage() {
 
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 dark:bg-danger-500/10 text-danger-600 dark:text-danger-500 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
               {error}
             </div>
           )}
@@ -395,12 +395,12 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-(--color-text-muted) hover:text-(--color-text-secondary)"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            <p className="text-xs text-(--color-text-muted) mt-1">
               {filledFromKeychain
                 ? 'Password filled from system credential store.'
                 : 'If you saved your password to Keychain, click Fill from Keychain to use it.'}
@@ -419,10 +419,10 @@ export default function LoginPage() {
             <>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-[var(--color-border)]" />
+                  <div className="w-full border-t border-(--color-border)" />
                 </div>
                 <div className="relative flex justify-center text-xs">
-                  <span className="px-2 bg-[var(--color-bg-primary)] text-[var(--color-text-muted)]">
+                  <span className="px-2 bg-(--color-bg-primary) text-(--color-text-muted)">
                     or
                   </span>
                 </div>
@@ -444,7 +444,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <button
             onClick={() => setMode('recovery')}
-            className="text-sm text-[var(--color-text-secondary)] hover:text-primary-500 transition-colors"
+            className="text-sm text-(--color-text-secondary) hover:text-primary-500 transition-colors"
           >
             Forgot password?
           </button>

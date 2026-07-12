@@ -114,11 +114,11 @@ function SavingsTooltip({
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   return (
-    <div className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg p-3 shadow-lg">
+    <div className="bg-(--color-bg-secondary) border border-(--color-border) rounded-lg p-3 shadow-lg">
       <p className="text-sm font-medium mb-1">{label}</p>
       <p className="text-lg font-semibold">{formatCurrency(point.total)}</p>
-      <hr className="my-2 border-[var(--color-border)]" />
-      <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+      <hr className="my-2 border-(--color-border)" />
+      <div className="text-xs text-(--color-text-muted) space-y-1">
         <p>Principal: {formatCurrency(point.principal)}</p>
         <p>Interest: {formatCurrency(point.interest)}</p>
       </div>

@@ -99,7 +99,7 @@ export default function ReconciliationPage({
               >
                 Select All
               </button>
-              <span className="text-[var(--color-text-muted)]">|</span>
+              <span className="text-(--color-text-muted)">|</span>
               <button 
                 onClick={selectNone}
                 className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
@@ -124,15 +124,15 @@ export default function ReconciliationPage({
             })}
           </div>
 
-          <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
+          <div className="mt-6 pt-4 border-t border-(--color-border)">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-[var(--color-text-secondary)]">
+                <p className="text-sm text-(--color-text-secondary)">
                   Selected {selectedFixes.size} of {report.proposedFixes.length} fixes
                 </p>
                 <p className="font-semibold">
                   Estimated resolution: {formatCurrency(selectedImpact)} of {formatCurrency(report.totalDeficit)} 
-                  <span className="text-[var(--color-text-muted)] font-normal ml-2">
+                  <span className="text-(--color-text-muted) font-normal ml-2">
                     ({Math.round((selectedImpact / report.totalDeficit) * 100)}%)
                   </span>
                 </p>
@@ -145,7 +145,7 @@ export default function ReconciliationPage({
       {report.proposedFixes.length === 0 && (
         <div className="card bg-danger-50 dark:bg-danger-900/20 border-danger-300 dark:border-danger-700">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-danger-500 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
             <div>
               <h3 className="font-semibold text-danger-900 dark:text-danger-100">
                 No Automatic Fixes Available
@@ -159,7 +159,7 @@ export default function ReconciliationPage({
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-4 border-t border-[var(--color-border)]">
+      <div className="flex items-center justify-between pt-4 border-t border-(--color-border)">
         <button
           onClick={onSkip}
           disabled={isApplying}
@@ -218,7 +218,7 @@ function ShortfallCard({ shortfall }: { shortfall: ShortfallDetail }) {
           <BillItem key={`${bill.billId}-${idx}`} bill={bill} />
         ))}
         {shortfall.bills.length > 5 && (
-          <p className="text-sm text-[var(--color-text-muted)] pl-6">
+          <p className="text-sm text-(--color-text-muted) pl-6">
             + {shortfall.bills.length - 5} more bills
           </p>
         )}
@@ -240,7 +240,7 @@ function BillItem({ bill }: { bill: PaycheckBill }) {
     critical: 'text-danger-500',
     high: 'text-warning-500',
     normal: 'text-primary-500',
-    low: 'text-[var(--color-text-muted)]',
+    low: 'text-(--color-text-muted)',
   };
 
   return (
@@ -261,12 +261,12 @@ function BillItem({ bill }: { bill: PaycheckBill }) {
             <span className="text-xs text-danger-500">unfunded</span>
           )}
         </div>
-        <span className="text-[var(--color-text-secondary)]">
+        <span className="text-(--color-text-secondary)">
           {formatCurrency(bill.amount)}
         </span>
       </div>
       {reasonCopy && (
-        <p className="mt-0.5 pl-3.5 text-xs text-[var(--color-text-muted)]">
+        <p className="mt-0.5 pl-3.5 text-xs text-(--color-text-muted)">
           {reasonCopy.label}: {reasonCopy.poolHint}
         </p>
       )}
@@ -296,7 +296,7 @@ function FixCard({
         'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
         isSelected 
           ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
-          : 'border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)]'
+          : 'border-(--color-border) hover:bg-(--color-bg-tertiary)'
       )}
       aria-label={fixCopy.ariaMessage}
     >
@@ -304,7 +304,7 @@ function FixCard({
         type="checkbox"
         checked={isSelected}
         onChange={onToggle}
-        className="mt-1 w-4 h-4 rounded border-[var(--color-border)] text-primary-600 focus:ring-primary-500"
+        className="mt-1 w-4 h-4 rounded-sm border-(--color-border) text-primary-600 focus:ring-primary-500"
       />
       
       <div className="flex-1 min-w-0">
@@ -317,7 +317,7 @@ function FixCard({
           {fixCopy.counterfactual}
         </div>
         
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+        <p className="mt-1 text-xs text-(--color-text-muted)">
           {fixCopy.detail}
         </p>
       </div>

@@ -29,9 +29,9 @@ export default function SavingsSection({ savingsAPY, onSavingsAPYChange, isLoadi
               className="input w-24"
               disabled={isLoading}
             />
-            <span className="text-[var(--color-text-secondary)]">%</span>
+            <span className="text-(--color-text-secondary)">%</span>
           </div>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+          <p className="text-sm text-(--color-text-muted) mt-1">
             Annual Percentage Yield for savings projections in the Summary view
           </p>
         </div>

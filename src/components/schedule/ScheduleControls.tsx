@@ -78,7 +78,7 @@ export default function ScheduleControls({
         <div>
           <label htmlFor="schedule-starting-balance" className="label">Starting checking balance</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]">$</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-(--color-text-muted)">$</span>
             <input
               id="schedule-starting-balance"
               type="number"

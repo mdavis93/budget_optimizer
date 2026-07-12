@@ -20,7 +20,7 @@ export default function UnsavedChangesModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Unsaved changes" size="sm">
       <div className="space-y-6">
-        <p className="text-[var(--color-text-secondary)]">
+        <p className="text-(--color-text-secondary)">
           You have unsaved budget changes. Save them before you {actionLabel}, or discard to proceed without saving.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
