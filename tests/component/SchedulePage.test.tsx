@@ -5,17 +5,13 @@ import { createMockElectronAPI, createMockSchedule } from '../mocks/electron-api
 import { renderWithRouter } from '../helpers/renderWithProviders';
 
 const mockUseData = vi.fn();
-const mockUseDraft = vi.fn();
+const mockUseDraftActions = vi.fn();
 const mockUseBudget = vi.fn();
 
-vi.mock('../../src/context/DataContext', () => ({
-  useData: () => mockUseData(),
-}));
-
 vi.mock('../../src/context/DraftContext', () => ({
-  useDraft: () => mockUseDraft(),
-  useDraftData: () => mockUseDraft(),
-  useDraftActions: () => mockUseDraft(),
+  useDraftData: () => mockUseData(),
+  useDraftActions: () => mockUseDraftActions(),
+  useSchedule: () => mockUseData(),
 }));
 
 vi.mock('../../src/context/BudgetContext', () => ({
@@ -142,10 +138,7 @@ describe('SchedulePage', () => {
     vi.clearAllMocks();
     window.electronAPI = mockAPI as unknown as Window['electronAPI'];
     mockUseBudget.mockReturnValue({ isQuickBudget: false });
-    mockUseDraft.mockReturnValue({
-      billAssignments: [],
-      incomeOverrides: [],
-      skippedBills: [],
+    mockUseDraftActions.mockReturnValue({
       reloadSnapshot,
       skipBill,
       removeBillAssignment,
@@ -157,6 +150,8 @@ describe('SchedulePage', () => {
     mockUseData.mockReturnValue({
       incomes: [{ id: 'inc-1' }],
       bills: [{ id: 'bill-1' }],
+      billAssignments: [],
+      incomeOverrides: [],
       schedule: createMockSchedule({
         paychecks: [createMockSchedule().paychecks[0]],
         recommendations: [],
@@ -166,6 +161,7 @@ describe('SchedulePage', () => {
       scheduleStartDate: '2026-01-01',
       scheduleMonths: 3,
       scheduleStartingBalance: 1000,
+      scheduleInputHash: 'test-hash',
       setScheduleStartDate: vi.fn(),
       setScheduleMonths: vi.fn(),
       setScheduleStartingBalance: vi.fn(),

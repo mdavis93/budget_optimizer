@@ -6,8 +6,12 @@ import { createMockBill, createMockIncome } from '../mocks/electron-api.mock';
 
 const mockUseData = vi.fn();
 
-vi.mock('../../src/context/DataContext', () => ({
-  useData: () => mockUseData(),
+vi.mock('../../src/context/DraftContext', () => ({
+  useDraftData: () => {
+    const data = mockUseData();
+    return { bills: data.bills, incomes: data.incomes };
+  },
+  useDraftActions: () => mockUseData(),
 }));
 
 describe('BillsPage', () => {

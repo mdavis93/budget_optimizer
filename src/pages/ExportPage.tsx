@@ -8,18 +8,16 @@ import {
   AlertCircle,
   Loader2
 } from 'lucide-react';
-import { useData } from '../context/DataContext';
+import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 
 type ExportKind = 'pdf' | 'html' | 'spreadsheet';
 
 export default function ExportPage() {
-  const { 
+  const {
     schedule, 
     generateSchedule, 
-    incomes, 
-    bills,
     scheduleStartDate: startDate,
     scheduleMonths: months,
     scheduleStartingBalance: startingBalance,
@@ -27,7 +25,8 @@ export default function ExportPage() {
     setScheduleStartDate: setStartDate,
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
-  } = useData();
+  } = useSchedule();
+  const { incomes, bills } = useDraftData();
   const [exportStatus, setExportStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CreditCard, Plus, ChevronDown } from 'lucide-react';
-import { useData } from '../context/DataContext';
 import { useDraftData, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
@@ -21,8 +20,7 @@ import {
 } from '../components/debts';
 
 export default function DebtsPage() {
-  const { bills } = useData();
-  const { debts } = useDraftData();
+  const { debts, bills } = useDraftData();
   const {
     getDebtsWithAmortization,
     reloadSnapshot,

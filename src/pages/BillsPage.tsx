@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Receipt, AlertTriangle } from 'lucide-react';
-import { useData } from '../context/DataContext';
+import { useDraftActions, useDraftData } from '../context/DraftContext';
 import { Bill, BillInput, Income, PRIORITY_LABELS, CATEGORY_OPTIONS } from '../types';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -240,7 +240,8 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
 type BillSortMode = 'amount' | 'dueDate' | 'default';
 
 export default function BillsPage() {
-  const { bills, incomes, createBill, updateBill, deleteBill } = useData();
+  const { bills, incomes } = useDraftData();
+  const { createBill, updateBill, deleteBill } = useDraftActions();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);

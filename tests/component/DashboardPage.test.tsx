@@ -6,8 +6,12 @@ import DashboardPage from '../../src/pages/DashboardPage';
 
 const mockUseData = vi.fn();
 
-vi.mock('../../src/context/DataContext', () => ({
-  useData: () => mockUseData(),
+vi.mock('../../src/context/DraftContext', () => ({
+  useDraftData: () => {
+    const data = mockUseData();
+    return { incomes: data.incomes, bills: data.bills };
+  },
+  useSchedule: () => mockUseData(),
 }));
 
 vi.mock('recharts', () => ({

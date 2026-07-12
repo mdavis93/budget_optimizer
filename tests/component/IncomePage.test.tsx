@@ -6,8 +6,9 @@ import { createMockIncome } from '../mocks/electron-api.mock';
 
 const mockUseData = vi.fn();
 
-vi.mock('../../src/context/DataContext', () => ({
-  useData: () => mockUseData(),
+vi.mock('../../src/context/DraftContext', () => ({
+  useDraftData: () => ({ incomes: mockUseData().incomes }),
+  useDraftActions: () => mockUseData(),
 }));
 
 describe('IncomePage', () => {

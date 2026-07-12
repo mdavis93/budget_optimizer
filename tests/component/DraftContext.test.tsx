@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { DraftProvider, useDraft, useDraftOptional } from '../../src/context/DraftContext';
+import { DraftProvider, useDraft, useDraftOptional, useSchedule } from '../../src/context/DraftContext';
 import { ToastProvider } from '../../src/components/Toast';
 import { createMockElectronAPI, createMockIncome, createMockBill } from '../mocks/electron-api.mock';
 import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
@@ -275,6 +275,32 @@ function DraftHarness() {
   );
 }
 
+function ScheduleHarness() {
+  const { incomes, bills } = useDraft();
+  const {
+    schedule,
+    scheduleStartDate,
+    scheduleStartingBalance,
+    generateSchedule,
+    setScheduleMonths,
+  } = useSchedule();
+
+  return (
+    <div>
+      <div data-testid="schedule-paycheck-count">{schedule?.paychecks.length ?? 0}</div>
+      <button
+        onClick={() =>
+          void generateSchedule(scheduleStartDate, 12, scheduleStartingBalance, { force: true })
+        }
+      >
+        generate-schedule
+      </button>
+      <button onClick={() => setScheduleMonths(2)}>set-schedule-viewport</button>
+      <div data-testid="schedule-input-count">{incomes.length + bills.length}</div>
+    </div>
+  );
+}
+
 describe('DraftContext', () => {
   let mockAPI: ReturnType<typeof createMockElectronAPI>;
 
@@ -390,17 +416,32 @@ describe('DraftContext', () => {
     });
   });
 
-  function renderProvider() {
+  function renderProvider(children: React.ReactNode = <DraftHarness />) {
     return render(
       <ToastProvider>
         <DraftProvider>
-          <DraftHarness />
+          {children}
         </DraftProvider>
       </ToastProvider>
     );
   }
 
   describe('happy', () => {
+    it('owns schedule generation and cached viewport in the Draft provider', async () => {
+      renderProvider(<ScheduleHarness />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-input-count')).toHaveTextContent('2');
+      });
+      fireEvent.click(screen.getByText('generate-schedule'));
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-paycheck-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('set-schedule-viewport'));
+      expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+    });
+
     it('creates income and marks income domain dirty', async () => {
       renderProvider();
 
