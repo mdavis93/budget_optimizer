@@ -76,7 +76,7 @@ export default function ScheduleSummaryCards({
           'text-xl font-semibold',
           hasAtRiskGoals
             ? 'text-warning-600 dark:text-warning-400'
-            : 'text-success-600 dark:text-warning-400'
+            : 'text-success-600 dark:text-success-400'
         )}>
           {formatCurrency(totalGoalDeposits)}
         </p>
