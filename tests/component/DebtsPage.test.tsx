@@ -204,8 +204,12 @@ describe('DebtsPage', () => {
       await waitFor(() => {
         expect(updateDebt).toHaveBeenCalled();
       });
+      // updateDebt mutates draft debts → useEffect reloads amortization; wait out the spinner
+      await waitFor(() => {
+        expect(document.querySelector('.animate-spin')).toBeNull();
+      });
 
-      fireEvent.click(screen.getByRole('button', { name: /Delete debt/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Delete debt/i }));
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       await waitFor(() => {
         expect(deleteDebtAction).toHaveBeenCalled();
@@ -321,8 +325,11 @@ describe('DebtsPage', () => {
         expect(mockAPI.debts.update).toHaveBeenCalled();
         expect(reloadSnapshot).toHaveBeenCalled();
       });
+      await waitFor(() => {
+        expect(document.querySelector('.animate-spin')).toBeNull();
+      });
 
-      fireEvent.click(screen.getByRole('button', { name: /Delete debt/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Delete debt/i }));
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       await waitFor(() => {
         expect(mockAPI.debts.delete).toHaveBeenCalled();
