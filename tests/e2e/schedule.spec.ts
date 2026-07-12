@@ -138,9 +138,14 @@ test.describe('Schedule', () => {
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
-    await pinScheduleStart(window);
-
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    // Wait for auto-schedule settle (reconciliation overlay or remaining summary).
+    await Promise.race([
+      window.getByRole('button', { name: 'View Schedule Anyway' }).waitFor({ state: 'visible' }),
+      window.getByText('Budget Remaining').first().waitFor({ state: 'visible' }),
+    ]);
+    // Do not pin/regenerate: shortfall auto-opens reconciliation and regenerating
+    // races the overlay back over the Generate control.
     await dismissReconciliationIfPresent(window);
     await expect(window.getByText('Budget Remaining').first()).toBeVisible();
     await expect(window.getByText(/-\$[\d,]+\.\d{2}/).first()).toBeVisible();
@@ -173,10 +178,13 @@ test.describe('Schedule', () => {
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
-    await pinScheduleStart(window);
-
-    await dismissReconciliationIfPresent(window);
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
+    await Promise.race([
+      window.getByRole('button', { name: 'View Schedule Anyway' }).waitFor({ state: 'visible' }),
+      window.getByText('Budget Remaining').first().waitFor({ state: 'visible' }),
+    ]);
+    // Same as shortfall: assert against the auto-opened schedule surface.
+    await dismissReconciliationIfPresent(window);
     await expect(window.getByText(/Skip "/i)).toHaveCount(0);
     await expectNoSpinner(window);
   });

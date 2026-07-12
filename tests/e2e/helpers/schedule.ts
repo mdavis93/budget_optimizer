@@ -27,5 +27,7 @@ export async function pinScheduleStart(
   ]);
   await dismissReconciliationIfPresent(window);
   await startDate.fill(date);
+  // Filling can rebuild the schedule and re-open reconciliation; clear it again.
+  await dismissReconciliationIfPresent(window);
   await window.getByRole('button', { name: 'Generate Schedule' }).click();
 }
