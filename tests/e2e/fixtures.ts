@@ -37,6 +37,17 @@ function buildLaunchEnv(): Record<string, string> {
 
 /** Shut down via production quit IPC so close-guard tests with dirty drafts can teardown. */
 async function forceQuitHarnessApp(app: ElectronApplication): Promise<void> {
+  // Exit-guard tests already call quitApp(). Once the process is gone,
+  // Playwright's app.process()/firstWindow()/close() can throw or hang ~30s.
+  try {
+    const child = app.process();
+    if (!child || child.exitCode !== null || child.killed) {
+      return;
+    }
+  } catch {
+    return;
+  }
+
   try {
     const page = await app.firstWindow();
     await page.evaluate(() => window.electronAPI.quitApp());
