@@ -12,7 +12,7 @@
     "analyze": "ANALYZE=1 vite build",
     "verify:csp": "node scripts/verify-production-csp.cjs",
     "preview": "vite preview",
-    "electron:dev": "node scripts/sync-app-icon.cjs && node scripts/electron-launch-env.cjs concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "node scripts/use-native.cjs electron && node scripts/sync-app-icon.cjs && node scripts/electron-launch-env.cjs concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:reinstall": "node scripts/fix-electron-install.cjs",
     "postinstall": "electron-builder install-app-deps && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs",
     "reset-local-data": "bash scripts/reset-local-data.sh",
@@ -22,12 +22,12 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "typecheck:electron": "tsc -p tsconfig.node.json --noEmit",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:coverage:check": "vitest run --coverage",
-    "test:ui": "vitest --ui",
-    "test:e2e": "playwright test",
+    "test": "node scripts/use-native.cjs node && vitest",
+    "test:run": "node scripts/use-native.cjs node && vitest run",
+    "test:coverage": "node scripts/use-native.cjs node && vitest run --coverage",
+    "test:coverage:check": "node scripts/use-native.cjs node && vitest run --coverage",
+    "test:ui": "node scripts/use-native.cjs node && vitest --ui",
+    "test:e2e": "node scripts/use-native.cjs electron && playwright test",
     "test:e2e:touchpoints": "node scripts/e2e-touchpoints.cjs",
     "audit:dev": "node scripts/audit-dev.cjs",
     "sbom": "pnpm dlx @cyclonedx/cdxgen@^11 --type pnpm --output sbom.json --no-recurse",
@@ -91,7 +91,8 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "!.cache/**"
     ],
     "npmRebuild": false,
     "mac": {
