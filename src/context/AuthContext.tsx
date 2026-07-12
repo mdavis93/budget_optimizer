@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 
 interface AuthContextType {
   isUnlocked: boolean;
@@ -25,9 +25,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initialStatusResolvedRef = useRef(false);
 
   const checkAuthStatus = useCallback(async () => {
-    setIsLoading(true);
+    // Only the first status probe may flash the full-app loading screen.
+    // Later refreshes (setup → dashboard, lock/unlock) must not unmount the
+    // router — that races navigate() into /login on Linux CI.
+    const isInitialProbe = !initialStatusResolvedRef.current;
+    if (isInitialProbe) {
+      setIsLoading(true);
+    }
     try {
       const firstTime = await window.electronAPI.auth.isFirstTimeSetup();
       setIsFirstTime(firstTime);
@@ -49,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsFirstTime(true);
       setIsUnlocked(false);
     } finally {
+      initialStatusResolvedRef.current = true;
       setIsLoading(false);
     }
   }, []);

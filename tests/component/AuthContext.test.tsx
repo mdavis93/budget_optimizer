@@ -60,6 +60,33 @@ describe('AuthContext', () => {
       expect(mockAPI.auth.isBiometricEnabled).toHaveBeenCalledTimes(1);
     });
 
+    it('does not flash loading on subsequent checkAuthStatus calls', async () => {
+      mockAPI.auth.isFirstTimeSetup.mockResolvedValue(false);
+      mockAPI.checkBiometricAvailable.mockResolvedValue(false);
+      mockAPI.auth.isUnlocked.mockResolvedValue(true);
+
+      let resolveSecondIsUnlocked: (value: boolean) => void = () => undefined;
+      renderProvider();
+      fireEvent.click(screen.getByText('check'));
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      mockAPI.auth.isUnlocked.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveSecondIsUnlocked = resolve;
+          })
+      );
+      fireEvent.click(screen.getByText('check'));
+      expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      resolveSecondIsUnlocked(true);
+      await waitFor(() => {
+        expect(screen.getByTestId('unlocked')).toHaveTextContent('true');
+      });
+      expect(screen.getByTestId('loading')).toHaveTextContent('false');
+    });
+
     it('creates password, unlocks, and locks', async () => {
       mockAPI.auth.createMasterPassword.mockResolvedValue({ success: true, recoveryKey: 'rk' });
       mockAPI.auth.unlock.mockResolvedValue({ success: true });

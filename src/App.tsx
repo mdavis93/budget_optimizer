@@ -54,7 +54,7 @@ function BudgetRequiredRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const { isFirstTime, isLoading, checkAuthStatus } = useAuth();
+  const { isFirstTime, isUnlocked, checkAuthStatus } = useAuth();
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
@@ -65,7 +65,10 @@ function App() {
     init();
   }, [checkAuthStatus]);
 
-  if (initializing || isLoading) {
+  // Gate the tree only on the boot probe. Subsequent isLoading flips must not
+  // unmount HashRouter — that drops in-flight navigate() from SetupPage and
+  // leaves Linux CI (no biometric step) stranded on Welcome Back.
+  if (initializing) {
     return <LoadingScreen />;
   }
 
@@ -84,7 +87,11 @@ function App() {
             />
             <Route 
               path="/setup" 
-              element={isFirstTime ? <SetupPage /> : <Navigate to="/login" replace />} 
+              element={
+                isFirstTime
+                  ? <SetupPage />
+                  : <Navigate to={isUnlocked ? '/' : '/login'} replace />
+              } 
             />
             <Route
               path="/"
