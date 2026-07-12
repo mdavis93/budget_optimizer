@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import { navigateTo } from './helpers/nav';
 import { unlock } from './helpers/auth';
+import { requestNativeWindowClose } from './helpers/electron';
 import type { Page } from '@playwright/test';
 
 /**
@@ -83,6 +84,52 @@ test.describe('Unsaved-changes guard', () => {
     // Do not assert modal hide — quit tears down the page (same as Discard).
     const closed = electronApp.waitForEvent('close');
     await guard.getByRole('button', { name: 'Save All Changes' }).click();
+    await closed;
+  });
+
+  test('Cancel on native close keeps the app open with the draft intact @draft.native-close-cancel', async ({ window, electronApp }) => {
+    await startDraftIncome(window);
+
+    await requestNativeWindowClose(electronApp);
+    const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
+    await expect(guard).toBeVisible();
+    await guard.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(guard).toBeHidden();
+    await expect(window.getByRole('heading', { name: 'Income Sources' })).toBeVisible();
+    await expect(window.getByText('Guard Salary')).toBeVisible();
+    await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
+  });
+
+  test('Discard All on native close exits the app @draft.native-close-discard', async ({ window, electronApp }) => {
+    await startDraftIncome(window);
+
+    await requestNativeWindowClose(electronApp);
+    const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
+    await expect(guard).toBeVisible();
+    const closed = electronApp.waitForEvent('close');
+    await guard.getByRole('button', { name: 'Discard All' }).click();
+    await closed;
+  });
+
+  test('Save All Changes on native close exits after persisting @draft.native-close-save', async ({ window, electronApp }) => {
+    await startDraftIncome(window);
+
+    await requestNativeWindowClose(electronApp);
+    const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
+    await expect(guard).toBeVisible();
+    // Do not assert modal hide — exit tears down the page (same as Discard).
+    const closed = electronApp.waitForEvent('close');
+    await guard.getByRole('button', { name: 'Save All Changes' }).click();
+    await closed;
+  });
+
+  test('native close with a clean draft exits without prompting @draft.native-close-clean', async ({ window, electronApp }) => {
+    await navigateTo(window, 'Income');
+    await expect(window.getByRole('heading', { name: 'No income sources' })).toBeVisible();
+
+    const closed = electronApp.waitForEvent('close');
+    await requestNativeWindowClose(electronApp);
     await closed;
   });
 });

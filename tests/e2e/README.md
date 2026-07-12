@@ -39,6 +39,7 @@ Helpers (`helpers/`):
 - `schedule.ts` — `dismissReconciliationIfPresent` when shortfall overlay blocks Schedule;
   `pinScheduleStart` to align the viewport with seeded absolute dates.
 - `dates.ts` — shared absolute `yyyy-MM-dd` anchors for income/schedule/goal seeds.
+- `electron.ts` — `requestNativeWindowClose` to exercise the red-X / OS close path.
 - `seed.ts` — pre-seed via real `electronAPI.*.create`, then `reloadShell`
   (which reselects the budget from the picker, mirroring a real relaunch) so
   the renderer re-reads the snapshot.
@@ -59,7 +60,8 @@ monolithic end-to-end path:
 - `income`, `bills`, `goals`, `debts` — happy / sad / malicious lanes per domain.
 - `schedule.spec.ts` — income + bills → rendered schedule, plus the empty state.
 - `nav-guard.spec.ts` — unsaved-changes contract: in-app nav is free; Lock App
-  preserves drafts without prompting; Quit App prompts Cancel / Discard / Save.
+  preserves drafts without prompting; Quit App and native window close prompt
+  Cancel / Discard / Save (plus clean native-close exits without a modal).
 - `auth.spec.ts` — lock → unlock, and a rejected password.
 
 Touchpoint coverage is tracked in `tests/e2e/touchpoint-inventory.json` and
