@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
-import { Calendar, List, AlertTriangle, RefreshCw, PiggyBank, Target, ChevronDown } from 'lucide-react';
+import { Calendar, List, RefreshCw } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useDraft } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
@@ -8,7 +8,15 @@ import { PaycheckBill, ProposedFix } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { PaycheckView, CalendarView, ScheduleControls, type DraggedBill } from '../components/schedule';
+import {
+  PaycheckView,
+  CalendarView,
+  ScheduleControls,
+  ScheduleSummaryCards,
+  ReconciliationBanner,
+  ScheduleRecommendations,
+  type DraggedBill,
+} from '../components/schedule';
 import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
 import { buildScheduleInputHash } from '../utils/scheduleInputHash';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -455,153 +463,32 @@ export default function SchedulePage() {
       />
 
       {schedule?.summary && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="card">
-            <p className="text-sm text-[var(--color-text-secondary)] mb-1">Total Income</p>
-            <p className="text-xl font-semibold text-success-500">{formatCurrency(schedule.summary.totalIncome)}</p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-[var(--color-text-secondary)] mb-1">Total Expenses</p>
-            <p className="text-xl font-semibold text-danger-500">{formatCurrency(schedule.summary.totalExpenses)}</p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-[var(--color-text-secondary)] mb-1">Net Balance</p>
-            <p className={clsx(
-              'text-xl font-semibold',
-              schedule.summary.netBalance >= 0 ? 'text-success-500' : 'text-danger-500'
-            )}>
-              {formatCurrency(schedule.summary.netBalance)}
-            </p>
-          </div>
-          <div className="card bg-primary-50 dark:bg-primary-500/10 border-primary-200 dark:border-primary-800">
-            <div className="flex items-center gap-2 mb-1">
-              <PiggyBank className="w-4 h-4 text-primary-500" />
-              <p className="text-sm text-primary-700 dark:text-primary-400">Total Saved</p>
-            </div>
-            <p className="text-xl font-semibold text-primary-600 dark:text-primary-400">
-              {formatCurrency(schedule.summary.finalSavingsBalance)}
-            </p>
-          </div>
-          <div className={clsx(
-            'card',
-            hasAtRiskGoals
-              ? 'bg-warning-50 dark:bg-warning-500/10 border-warning-200 dark:border-warning-800'
-              : 'bg-success-50 dark:bg-success-500/10 border-success-200 dark:border-success-800'
-          )}>
-            <div className="flex items-center gap-2 mb-1">
-              <Target className={clsx('w-4 h-4', hasAtRiskGoals ? 'text-warning-500' : 'text-success-500')} />
-              <p className={clsx(
-                'text-sm',
-                hasAtRiskGoals
-                  ? 'text-warning-700 dark:text-warning-400'
-                  : 'text-success-700 dark:text-success-400'
-              )}>Goals Total</p>
-              {hasAtRiskGoals && (
-                <span
-                  role="img"
-                  aria-label="Goals at risk"
-                  title="One or more goals may not be funded by their deadline. Open the Goals page for details and suggestions."
-                  className="inline-flex"
-                >
-                  <AlertTriangle className="w-4 h-4 text-warning-500" />
-                </span>
-              )}
-            </div>
-            <p className={clsx(
-              'text-xl font-semibold',
-              hasAtRiskGoals
-                ? 'text-warning-600 dark:text-warning-400'
-                : 'text-success-600 dark:text-success-400'
-            )}>
-              {formatCurrency(totalGoalDeposits)}
-            </p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-[var(--color-text-secondary)] mb-1">Shortfalls</p>
-            <p className={clsx(
-              'text-xl font-semibold',
-              schedule.summary.shortfallCount > 0 ? 'text-warning-500' : 'text-[var(--color-text-primary)]'
-            )}>
-              {schedule.summary.shortfallCount}
-            </p>
-          </div>
-        </div>
+        <ScheduleSummaryCards
+          summary={schedule.summary}
+          totalGoalDeposits={totalGoalDeposits}
+          hasAtRiskGoals={hasAtRiskGoals}
+        />
       )}
 
       {dismissedReconciliation && schedule?.reconciliation?.needsReconciliation && (
-        <div className="card border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/30">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning-600 dark:text-warning-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-warning-900 dark:text-warning-100">
-                Budget Has Unresolved Shortfalls
-              </h3>
-              <p className="text-sm text-warning-800 dark:text-warning-200 mt-1">
-                {schedule.summary.shortfallCount} paycheck{schedule.summary.shortfallCount !== 1 ? 's' : ''} have 
-                negative balances totaling ${schedule.reconciliation.totalDeficit.toLocaleString('en-US', { minimumFractionDigits: 2 })}.
-                {schedule.reconciliation.proposedFixes.length > 0 && (
-                  <button 
-                    onClick={() => {
-                      setDismissedReconciliation(false);
-                      setShowReconciliation(true);
-                    }}
-                    className="ml-2 text-warning-700 dark:text-warning-300 underline hover:no-underline"
-                  >
-                    View suggested fixes
-                  </button>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
+        <ReconciliationBanner
+          shortfallCount={schedule.summary.shortfallCount}
+          totalDeficit={schedule.reconciliation.totalDeficit}
+          hasProposedFixes={schedule.reconciliation.proposedFixes.length > 0}
+          onViewSuggestedFixes={() => {
+            setDismissedReconciliation(false);
+            setShowReconciliation(true);
+          }}
+        />
       )}
 
       {schedule?.recommendations && schedule.recommendations.length > 0 && (
-        <div className={clsx(
-          'card',
-          hasActionableRecommendations 
-            ? 'border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/30'
-            : 'border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-500/10'
-        )}>
-          <button
-            onClick={() => setRecommendationsExpanded(!recommendationsExpanded)}
-            className="w-full flex items-center justify-between text-left"
-          >
-            <h3 className={clsx(
-              'font-semibold',
-              hasActionableRecommendations
-                ? 'text-warning-700 dark:text-warning-400'
-                : 'text-primary-700 dark:text-primary-400'
-            )}>
-              {hasActionableRecommendations ? 'Action Recommended' : 'Budget Insights'}
-            </h3>
-            <ChevronDown className={clsx(
-              'w-5 h-5 transition-transform',
-              hasActionableRecommendations
-                ? 'text-warning-600 dark:text-warning-400'
-                : 'text-primary-600 dark:text-primary-400',
-              recommendationsExpanded && 'rotate-180'
-            )} />
-          </button>
-          {recommendationsExpanded && (
-            <ul className="space-y-2 mt-3">
-              {schedule.recommendations.map((rec, index) => (
-                <li key={index} className={clsx(
-                  'flex items-start gap-2 text-sm',
-                  hasActionableRecommendations
-                    ? 'text-warning-700 dark:text-warning-300'
-                    : 'text-primary-700 dark:text-primary-300'
-                )}>
-                  <span className={clsx(
-                    'mt-0.5',
-                    hasActionableRecommendations ? 'text-warning-500' : 'text-primary-500'
-                  )}>→</span>
-                  {rec}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <ScheduleRecommendations
+          recommendations={schedule.recommendations}
+          hasActionableRecommendations={hasActionableRecommendations}
+          expanded={recommendationsExpanded}
+          onToggle={() => setRecommendationsExpanded(!recommendationsExpanded)}
+        />
       )}
 
       {viewMode === 'paycheck' ? (
