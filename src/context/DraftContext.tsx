@@ -23,6 +23,7 @@ import {
   SavingsGoal,
   SavingsGoalInput,
   SkippedBill,
+  ScheduleData,
 } from '../types';
 import {
   DraftBudgetFields,
@@ -43,6 +44,14 @@ import {
   getRequiredSaveDomains,
   persistDomains,
 } from '../utils/draftPersist';
+import { format, startOfMonth } from 'date-fns';
+import { applyScheduleViewport } from '../utils/scheduleViewport';
+import {
+  buildScheduleCacheKey,
+  SCHEDULE_DEBOUNCE_MS,
+  type ScheduleCacheEntry,
+} from '../utils/scheduleCache';
+import { buildScheduleInputHash } from '../utils/scheduleInputHash';
 
 interface DraftDataContextValue {
   draft: DraftState;
@@ -74,12 +83,12 @@ interface DraftActionsContextValue {
   discardDomain: (domain: DraftDomain) => void;
   discardAll: () => void;
   reloadSnapshot: () => Promise<void>;
-  createIncome: (input: IncomeInput) => boolean;
-  updateIncome: (id: string, input: IncomeInput) => boolean;
-  deleteIncome: (id: string) => boolean;
-  createBill: (input: BillInput) => boolean;
-  updateBill: (id: string, input: BillInput) => boolean;
-  deleteBill: (id: string) => boolean;
+  createIncome: (input: IncomeInput) => Promise<boolean>;
+  updateIncome: (id: string, input: IncomeInput) => Promise<boolean>;
+  deleteIncome: (id: string) => Promise<boolean>;
+  createBill: (input: BillInput) => Promise<boolean>;
+  updateBill: (id: string, input: BillInput) => Promise<boolean>;
+  deleteBill: (id: string) => Promise<boolean>;
   createDebt: (input: DebtInput) => boolean;
   updateDebt: (id: string, input: Partial<DebtInput>) => boolean;
   deleteDebt: (id: string) => boolean;
@@ -98,14 +107,36 @@ interface DraftActionsContextValue {
   getGoalProjections: () => Promise<GoalProjection[]>;
 }
 
+interface ScheduleContextValue {
+  schedule: ScheduleData | null;
+  isLoading: boolean;
+  error: string | null;
+  scheduleStartDate: string;
+  scheduleMonths: number;
+  scheduleStartingBalance: number;
+  scheduleInputHash: string;
+  setScheduleStartDate: (date: string) => void;
+  setScheduleMonths: (months: number) => void;
+  setScheduleStartingBalance: (balance: number) => void;
+  generateSchedule: (
+    startDate: string,
+    months: number,
+    startingBalance: number,
+    options?: { force?: boolean }
+  ) => Promise<ScheduleData | null>;
+  clearError: () => void;
+}
+
 export type DraftContextValue =
   DraftDataContextValue & DraftStatusContextValue & DraftActionsContextValue;
 
 const DraftDataContext = createContext<DraftDataContextValue | null>(null);
 const DraftStatusContext = createContext<DraftStatusContextValue | null>(null);
 const DraftActionsContext = createContext<DraftActionsContextValue | null>(null);
+const ScheduleContext = createContext<ScheduleContextValue | null>(null);
 
 const nowIso = () => new Date().toISOString();
+const defaultScheduleStartDate = () => format(startOfMonth(new Date()), 'yyyy-MM-dd');
 const equalDomains = (left: Set<DraftDomain>, right: Set<DraftDomain>) =>
   left.size === right.size && Array.from(left).every((domain) => right.has(domain));
 
@@ -119,6 +150,17 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const [dirtyDomains, setDirtyDomains] = useState<Set<DraftDomain>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduleData | null>(null);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleMonths, setScheduleMonthsState] = useState(3);
+  const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
+  const [quickBudgetStartDate, setQuickBudgetStartDate] = useState(defaultScheduleStartDate);
+
+  const fullScheduleRef = useRef<ScheduleData | null>(null);
+  const scheduleCacheRef = useRef<ScheduleCacheEntry | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const isDraftMode = !isQuickBudget && hasBudgetSelected;
 
@@ -237,6 +279,35 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     reloadSnapshot();
   }, [reloadSnapshot, currentBudget?.id, isQuickBudget]);
+
+  useEffect(() => {
+    setSchedule(null);
+    fullScheduleRef.current = null;
+    scheduleCacheRef.current = null;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, [isUnlocked, hasBudgetSelected, currentBudget?.id]);
+
+  useEffect(() => {
+    if (draft.budget?.startingBalance !== undefined) {
+      setScheduleStartingBalance(draft.budget.startingBalance);
+    } else if (currentBudget?.startingBalance !== undefined) {
+      setScheduleStartingBalance(currentBudget.startingBalance);
+    }
+  }, [draft.budget?.startingBalance, currentBudget?.startingBalance]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isDraftMode) {
@@ -369,8 +440,19 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     setDirtyDomains(new Set());
   }, []);
 
-  const createIncome = useCallback((input: IncomeInput): boolean => {
-    if (isQuickBudget) return false;
+  const createIncome = useCallback(async (input: IncomeInput): Promise<boolean> => {
+    if (isQuickBudget) {
+      try {
+        const result = await window.electronAPI.income.create(input);
+        if (result.success) {
+          await reloadSnapshot();
+          return true;
+        }
+      } catch {
+        // The page remains usable; the next successful refresh restores the snapshot.
+      }
+      return false;
+    }
     const newIncome: Income = {
       id: createDraftId(),
       ...input,
@@ -384,10 +466,21 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty, reloadSnapshot]);
 
-  const updateIncome = useCallback((id: string, input: IncomeInput): boolean => {
-    if (isQuickBudget) return false;
+  const updateIncome = useCallback(async (id: string, input: IncomeInput): Promise<boolean> => {
+    if (isQuickBudget) {
+      try {
+        const result = await window.electronAPI.income.update(id, input);
+        if (result.success) {
+          await reloadSnapshot();
+          return true;
+        }
+      } catch {
+        // The page remains usable; the next successful refresh restores the snapshot.
+      }
+      return false;
+    }
     if (isDraftMode) {
       updateDraft((prev) => ({
         ...prev,
@@ -399,10 +492,21 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty, reloadSnapshot]);
 
-  const deleteIncome = useCallback((id: string): boolean => {
-    if (isQuickBudget) return false;
+  const deleteIncome = useCallback(async (id: string): Promise<boolean> => {
+    if (isQuickBudget) {
+      try {
+        const result = await window.electronAPI.income.delete(id);
+        if (result.success) {
+          await reloadSnapshot();
+          return true;
+        }
+      } catch {
+        // The page remains usable; the next successful refresh restores the snapshot.
+      }
+      return false;
+    }
     if (isDraftMode) {
       updateDraft((prev) => ({
         ...prev,
@@ -412,10 +516,21 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty, reloadSnapshot]);
 
-  const createBill = useCallback((input: BillInput): boolean => {
-    if (isQuickBudget) return false;
+  const createBill = useCallback(async (input: BillInput): Promise<boolean> => {
+    if (isQuickBudget) {
+      try {
+        const result = await window.electronAPI.bills.create(input);
+        if (result.success) {
+          await reloadSnapshot();
+          return true;
+        }
+      } catch {
+        // The page remains usable; the next successful refresh restores the snapshot.
+      }
+      return false;
+    }
     const newBill: Bill = {
       id: createDraftId(),
       ...input,
@@ -428,10 +543,21 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty, reloadSnapshot]);
 
-  const updateBill = useCallback((id: string, input: BillInput): boolean => {
-    if (isQuickBudget) return false;
+  const updateBill = useCallback(async (id: string, input: BillInput): Promise<boolean> => {
+    if (isQuickBudget) {
+      try {
+        const result = await window.electronAPI.bills.update(id, input);
+        if (result.success) {
+          await reloadSnapshot();
+          return true;
+        }
+      } catch {
+        // The page remains usable; the next successful refresh restores the snapshot.
+      }
+      return false;
+    }
     if (isDraftMode) {
       updateDraft((prev) => ({
         ...prev,
@@ -443,10 +569,21 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty, reloadSnapshot]);
 
-  const deleteBill = useCallback((id: string): boolean => {
-    if (isQuickBudget) return false;
+  const deleteBill = useCallback(async (id: string): Promise<boolean> => {
+    if (isQuickBudget) {
+      try {
+        const result = await window.electronAPI.bills.delete(id);
+        if (result.success) {
+          await reloadSnapshot();
+          return true;
+        }
+      } catch {
+        // The page remains usable; the next successful refresh restores the snapshot.
+      }
+      return false;
+    }
     if (isDraftMode) {
       updateDraft((prev) => {
         const hadDebt = prev.debts.some((debt) => debt.billId === id);
@@ -464,7 +601,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty, reloadSnapshot]);
 
   const createDebt = useCallback((input: DebtInput): boolean => {
     if (isQuickBudget || !currentBudget) return false;
@@ -729,6 +866,133 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return [];
   }, [buildDraftOverlay]);
 
+  const scheduleStartDate = isQuickBudget
+    ? (currentBudget?.scheduleStartDate ?? quickBudgetStartDate)
+    : (draft.budget?.scheduleStartDate ?? defaultScheduleStartDate());
+
+  const scheduleInputHash = useMemo(
+    () =>
+      buildScheduleInputHash({
+        incomes: draft.incomes,
+        bills: draft.bills,
+        skippedBills: draft.skippedBills,
+        billAssignments: draft.billAssignments,
+        incomeOverrides: draft.incomeOverrides,
+        budgetFields: draft.budget,
+      }),
+    [draft]
+  );
+
+  const setScheduleStartDate = useCallback((date: string) => {
+    if (isQuickBudget) {
+      setQuickBudgetStartDate(date);
+      return;
+    }
+    updateBudgetFields({ scheduleStartDate: date });
+  }, [isQuickBudget, updateBudgetFields]);
+
+  const setScheduleMonths = useCallback((months: number) => {
+    setScheduleMonthsState(months);
+    if (fullScheduleRef.current) {
+      setSchedule(
+        applyScheduleViewport(
+          fullScheduleRef.current,
+          months,
+          draft.bills,
+          scheduleStartingBalance
+        )
+      );
+    }
+  }, [draft.bills, scheduleStartingBalance]);
+
+  const applyScheduleResult = useCallback((data: ScheduleData) => {
+    const fullHorizonMonths = data.calculationMonths ?? data.viewportMonths;
+    const canonical: ScheduleData = {
+      ...data,
+      paychecks: data.fullPaychecks,
+      viewportMonths: fullHorizonMonths,
+    };
+    fullScheduleRef.current = canonical;
+    if (scheduleCacheRef.current) {
+      scheduleCacheRef.current = { ...scheduleCacheRef.current, data: canonical };
+    }
+    const viewportSchedule = applyScheduleViewport(
+      canonical,
+      data.viewportMonths,
+      draft.bills,
+      scheduleStartingBalance
+    );
+    if (mountedRef.current) {
+      setSchedule(viewportSchedule);
+      setScheduleMonthsState(data.viewportMonths);
+    }
+    return viewportSchedule;
+  }, [draft.bills, scheduleStartingBalance]);
+
+  const generateScheduleImmediate = useCallback(async (
+    startDate: string,
+    months: number,
+    startingBalance: number
+  ): Promise<ScheduleData | null> => {
+    if (!mountedRef.current) return null;
+
+    setIsScheduleLoading(true);
+    try {
+      const overlay = buildDraftOverlay();
+      const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
+      if (scheduleCacheRef.current?.hash === cacheKey) {
+        return applyScheduleResult(scheduleCacheRef.current.data);
+      }
+
+      const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
+      if (!mountedRef.current) return null;
+
+      if (result.success && result.data) {
+        const fullHorizonMonths = result.data.calculationMonths ?? result.data.viewportMonths;
+        const canonical: ScheduleData = {
+          ...result.data,
+          paychecks: result.data.fullPaychecks,
+          viewportMonths: fullHorizonMonths,
+        };
+        scheduleCacheRef.current = { hash: cacheKey, data: canonical };
+        fullScheduleRef.current = canonical;
+        return applyScheduleResult(canonical);
+      }
+      setScheduleError(result.error || 'Failed to generate schedule');
+      return null;
+    } catch {
+      if (mountedRef.current) setScheduleError('Failed to generate schedule');
+      return null;
+    } finally {
+      if (mountedRef.current) setIsScheduleLoading(false);
+    }
+  }, [buildDraftOverlay, applyScheduleResult]);
+
+  const generateSchedule = useCallback(async (
+    startDate: string,
+    months: number,
+    startingBalance: number,
+    options?: { force?: boolean }
+  ): Promise<ScheduleData | null> => {
+    if (options?.force) {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      return generateScheduleImmediate(startDate, months, startingBalance);
+    }
+
+    return new Promise((resolve) => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        void generateScheduleImmediate(startDate, months, startingBalance).then(resolve);
+      }, SCHEDULE_DEBOUNCE_MS);
+    });
+  }, [generateScheduleImmediate]);
+
+  const clearScheduleError = useCallback(() => setScheduleError(null), []);
+
   const isDomainDirty = useCallback(
     (domain: DraftDomain) => stateRef.current.dirtyDomains.has(domain),
     []
@@ -828,10 +1092,43 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  const scheduleValue = useMemo(
+    (): ScheduleContextValue => ({
+      schedule,
+      isLoading: isScheduleLoading || isLoading,
+      error: scheduleError,
+      scheduleStartDate,
+      scheduleMonths,
+      scheduleStartingBalance,
+      scheduleInputHash,
+      setScheduleStartDate,
+      setScheduleMonths,
+      setScheduleStartingBalance,
+      generateSchedule,
+      clearError: clearScheduleError,
+    }),
+    [
+      schedule,
+      isScheduleLoading,
+      isLoading,
+      scheduleError,
+      scheduleStartDate,
+      scheduleMonths,
+      scheduleStartingBalance,
+      scheduleInputHash,
+      setScheduleStartDate,
+      setScheduleMonths,
+      generateSchedule,
+      clearScheduleError,
+    ]
+  );
+
   return (
     <DraftActionsContext.Provider value={actionsValue}>
       <DraftStatusContext.Provider value={statusValue}>
-        <DraftDataContext.Provider value={dataValue}>{children}</DraftDataContext.Provider>
+        <DraftDataContext.Provider value={dataValue}>
+          <ScheduleContext.Provider value={scheduleValue}>{children}</ScheduleContext.Provider>
+        </DraftDataContext.Provider>
       </DraftStatusContext.Provider>
     </DraftActionsContext.Provider>
   );
@@ -860,6 +1157,15 @@ export function useDraftActions() {
   const context = useContext(DraftActionsContext);
   if (!context) {
     throw new Error('useDraftActions must be used within a DraftProvider');
+  }
+  return context;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSchedule() {
+  const context = useContext(ScheduleContext);
+  if (!context) {
+    throw new Error('useSchedule must be used within a DraftProvider');
   }
   return context;
 }

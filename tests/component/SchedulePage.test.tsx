@@ -8,14 +8,9 @@ const mockUseData = vi.fn();
 const mockUseDraft = vi.fn();
 const mockUseBudget = vi.fn();
 
-vi.mock('../../src/context/DataContext', () => ({
-  useData: () => mockUseData(),
-}));
-
 vi.mock('../../src/context/DraftContext', () => ({
-  useDraft: () => mockUseDraft(),
-  useDraftData: () => mockUseDraft(),
-  useDraftActions: () => mockUseDraft(),
+  useDraft: () => ({ ...mockUseData(), ...mockUseDraft() }),
+  useSchedule: () => mockUseData(),
 }));
 
 vi.mock('../../src/context/BudgetContext', () => ({

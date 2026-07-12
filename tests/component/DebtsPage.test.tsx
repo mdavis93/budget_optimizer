@@ -10,12 +10,9 @@ const mockUseDraftData = vi.fn();
 const mockUseDraftActions = vi.fn();
 const mockUseBudget = vi.fn();
 
-vi.mock('../../src/context/DataContext', () => ({
-  useData: () => mockUseData(),
-}));
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => ({ ...mockUseDraftData(), ...mockUseDraftActions() }),
-  useDraftData: () => mockUseDraftData(),
+  useDraftData: () => ({ ...mockUseDraftData(), bills: mockUseData().bills }),
   useDraftActions: () => mockUseDraftActions(),
 }));
 vi.mock('../../src/context/BudgetContext', () => ({

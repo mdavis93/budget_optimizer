@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, DragEvent } from 'react';
 import { Calendar, List, RefreshCw } from 'lucide-react';
-import { useData } from '../context/DataContext';
-import { useDraft } from '../context/DraftContext';
+import { useDraft, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { format, parseISO } from 'date-fns';
 import { PaycheckBill, PaycheckEntry, ProposedFix } from '../types';
@@ -32,9 +31,7 @@ interface PendingAssignment {
 }
 
 export default function SchedulePage() {
-  const { 
-    incomes, 
-    bills, 
+  const {
     schedule, 
     generateSchedule, 
     isLoading,
@@ -44,9 +41,11 @@ export default function SchedulePage() {
     setScheduleStartDate: setStartDate,
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
-  } = useData();
+  } = useSchedule();
   const { isQuickBudget, currentBudget } = useBudget();
   const draft = useDraft();
+  const incomes = draft.incomes;
+  const bills = draft.bills;
   const billAssignments = draft.billAssignments;
   const incomeOverrides = draft.incomeOverrides;
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');

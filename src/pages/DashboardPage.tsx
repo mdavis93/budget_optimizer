@@ -9,7 +9,7 @@ import {
   Receipt,
   Calendar
 } from 'lucide-react';
-import { useData } from '../context/DataContext';
+import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
 import { BalanceProjectionChart, ChartSuspense } from '../components/charts/lazyCharts';
 import clsx from 'clsx';
@@ -54,16 +54,15 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
 }
 
 export default function DashboardPage() {
+  const { incomes, bills } = useDraftData();
   const {
-    incomes,
-    bills,
     generateSchedule,
     schedule,
     scheduleStartDate,
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleStartingBalance,
-  } = useData();
+  } = useSchedule();
 
   useEffect(() => {
     let isMounted = true;

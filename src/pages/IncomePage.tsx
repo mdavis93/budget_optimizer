@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Wallet, ToggleLeft, ToggleRight } from 'lucide-react';
-import { useData } from '../context/DataContext';
+import { useDraftActions, useDraftData } from '../context/DraftContext';
 import { Income, IncomeInput, CADENCE_LABELS } from '../types';
 import { getMonthlyIncomeEquivalent } from '../utils/cadence';
 import Modal from '../components/Modal';
@@ -160,7 +160,8 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
 }
 
 export default function IncomePage() {
-  const { incomes, createIncome, updateIncome, deleteIncome } = useData();
+  const { incomes } = useDraftData();
+  const { createIncome, updateIncome, deleteIncome } = useDraftActions();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);

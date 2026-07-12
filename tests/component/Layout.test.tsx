@@ -22,9 +22,6 @@ vi.mock('../../src/context/DraftContext', () => ({
   useDraftStatus: () => mockUseDraft(),
   useDraftActions: () => mockUseDraft(),
 }));
-vi.mock('../../src/context/DataContext', () => ({
-  DataProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
 vi.mock('../../src/platform/PlatformExitGuard', () => ({
   usePlatformExit: () => mockUsePlatformExit(),
 }));

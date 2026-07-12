@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useData } from '../context/DataContext';
+import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { CategoryPieChart, ChartSuspense, IncomeExpensesChart, SavingsAreaChart } from '../components/charts/lazyCharts';
 import { CHART_COLORS } from '../components/charts/chartTheme';
@@ -23,7 +23,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function SummaryPage() {
-  const { incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash } = useData();
+  const { incomes, bills } = useDraftData();
+  const { generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash } = useSchedule();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(3);
   const [scheduleData, setScheduleData] = useState<{
     paychecks: Array<{
