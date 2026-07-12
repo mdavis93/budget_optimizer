@@ -9,6 +9,13 @@ updates:
       prefix: bot
       prefix-development: bot
       include: scope
+    # Electron and TypeScript majors need dedicated migration PRs (ABI/tooling
+    # and typescript-eslint compatibility). Keep them out of grouped majors.
+    ignore:
+      - dependency-name: electron
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       production-patch-minor:
         dependency-type: production
