@@ -89,7 +89,7 @@ Optional polish deferred after audit closure (not blocking releases):
 - **B-07** — Split large page components (DebtsPage, SettingsPage, PaycheckView)
 - **B-09** — Merge or simplify DataContext over DraftContext
 - **E-04** — Context selector memoization to reduce re-renders
-- **6.5** — Electron `^33.4.11` → 42 upgrade (tracked in a dedicated migration plan, not this backlog)
+- **6.5** — Electron `^33.4.11` → 42 upgrade (**Closed** — `electron@^42.6.1`)
 - **5.4** — LP/constraint solver for hard rebalance cases (A-08 enhancement)
 
 Completed since closure: **B-04** (shared types module, #59), **B-08** (BudgetManager current-budget cache), and **5.3 / 6.2** (Playwright E2E safety net, #60).
@@ -279,6 +279,6 @@ Dependency hygiene runs on three layers, all part of the **PR Gate** quality job
 | Production audit | `pnpm audit --prod --audit-level critical` | any **critical** advisory in the production tree |
 | Full-tree audit | `pnpm audit:dev` ([`scripts/audit-dev.cjs`](scripts/audit-dev.cjs)) | any **high+** advisory anywhere, except deferred GHSAs |
 
-**Overrides & deferrals.** Patched versions for vulnerable dev/build transitives are pinned via `overrides` in [`pnpm-workspace.yaml`](pnpm-workspace.yaml). Advisories that can only be cleared by a deferred major upgrade (currently the Electron 33 → 42 migration) are allowlisted by GHSA id in `scripts/audit-dev.cjs` with a justifying comment — add to that list (never silently widen the severity threshold) when an advisory is genuinely blocked on tracked work.
+**Overrides & deferrals.** Patched versions for vulnerable dev/build transitives are pinned via `overrides` in [`pnpm-workspace.yaml`](pnpm-workspace.yaml). Advisories that can only be cleared by a deferred major upgrade are allowlisted by GHSA id in `scripts/audit-dev.cjs` with a justifying comment — add to that list (never silently widen the severity threshold) when an advisory is genuinely blocked on tracked work. The Electron 33 → 42 allowlist entries were removed when that upgrade landed.
 
 **SBOM.** Every quality run generates a CycloneDX SBOM (`pnpm sbom`, via `@cyclonedx/cdxgen`) and uploads it as the **`sbom`** build artifact on the workflow run. It is regenerated each run and is not committed (git-ignored).

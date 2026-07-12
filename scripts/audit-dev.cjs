@@ -17,15 +17,10 @@ const { execSync } = require('node:child_process');
 const THRESHOLD = 'high';
 const SEVERITY_RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 
-// Advisories deferred to the electron 33 -> 42 migration plan. These are
-// high-severity issues in electron itself and are resolved by that major
-// upgrade, not by anything in scope here. Revisit when that plan lands.
-const IGNORED_GHSAS = new Set([
-  'GHSA-532v-xpq5-8h95', // use-after-free in offscreen child window
-  'GHSA-8337-3p73-46f4', // use-after-free in WebContents fullscreen
-  'GHSA-jjp3-mq3x-295m', // use-after-free in PowerMonitor on Windows
-  'GHSA-9wfr-w7mm-pc7f', // renderer command-line switch injection
-]);
+// Allowlist for advisories deferred to a tracked major migration. Empty after
+// the Electron 33 → 42 upgrade; add GHSA ids here (never silently widen the
+// severity threshold) when an advisory is genuinely blocked on planned work.
+const IGNORED_GHSAS = new Set([]);
 
 function getAuditReport() {
   try {

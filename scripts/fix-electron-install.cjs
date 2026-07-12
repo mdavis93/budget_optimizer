@@ -1,24 +1,23 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { createRequire } = require('module');
 
-const electronDir = path.resolve(__dirname, '../node_modules/electron');
+const root = path.resolve(__dirname, '..');
+const electronDir = path.join(root, 'node_modules/electron');
 const { version } = require(path.join(electronDir, 'package.json'));
 const checksums = require(path.join(electronDir, 'checksums.json'));
 const distPath = path.resolve(electronDir, 'dist');
 const platformPath = 'Electron.app/Contents/MacOS/Electron';
+const rootRequire = createRequire(path.join(root, 'package.json'));
+const electronRequire = createRequire(path.join(electronDir, 'package.json'));
 
-function findPnpmPackage(name) {
-  const pnpmDir = path.resolve(__dirname, '../node_modules/.pnpm');
-  const folder = fs.readdirSync(pnpmDir).find((entry) => entry.startsWith(`${name}@`));
-  if (!folder) {
-    throw new Error(`Could not find pnpm package matching ${name}`);
+function resolveDependency(specifier) {
+  try {
+    return rootRequire.resolve(specifier);
+  } catch {
+    return electronRequire.resolve(specifier);
   }
-  const nodeModules = path.join(pnpmDir, folder, 'node_modules');
-  if (name.includes('+')) {
-    return path.join(nodeModules, name.replace('+', '/'));
-  }
-  return path.join(nodeModules, name);
 }
 
 async function extractZip(zipPath, targetDir) {
@@ -27,12 +26,12 @@ async function extractZip(zipPath, targetDir) {
     return;
   }
 
-  const extract = require(findPnpmPackage('extract-zip'));
+  const extract = require(resolveDependency('extract-zip'));
   await extract(zipPath, { dir: targetDir });
 }
 
 async function main() {
-  const { downloadArtifact } = require(findPnpmPackage('@electron+get'));
+  const { downloadArtifact } = require(resolveDependency('@electron/get'));
 
   fs.rmSync(distPath, { recursive: true, force: true });
   fs.rmSync(path.join(electronDir, 'path.txt'), { force: true });

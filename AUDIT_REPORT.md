@@ -1341,7 +1341,7 @@ Notable packages:
 | CI / automation              | **Closed**   | `.github/workflows/` — PR Gate, Main Stability, Dependabot refresh, auto-merge, merge-freeze |
 | Husky prepush                | **Closed**   | Full CI parity via `scripts/pre-push-quality.sh`                                             |
 | Production audit in pipeline | **Closed**   | `npm audit --prod --audit-level critical` in shared quality workflow                         |
-| Electron version             | **Deferred** | Post-audit dependency upgrade track                                                          |
+| Electron version             | **Closed**   | Upgraded to Electron 42; native rebuild + packaging gate verified                            |
 | Dev/build transitive audit   | **Deferred** | Dev deps; production surface reduced via CI prod audit                                       |
 | SBOM / update cadence        | **Deferred** | Post-audit                                                                                   |
 
@@ -1575,7 +1575,7 @@ Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (int
 | 6.4 reconciliation UX  | Accepted | Power-user feature                      |
 | 6.4 export XSS warning | Accepted | Backend fixed (S-03)                    |
 | 6.5 CI / Dependabot    | Closed   | Workflows + Husky prepush               |
-| 6.5 Electron upgrade   | Deferred | Post-audit                              |
+| 6.5 Electron upgrade   | Closed   | Electron 42 + ABI/packaging gate        |
 | 6.5 SBOM               | Deferred | Post-audit                              |
 
 
