@@ -17,6 +17,18 @@ function getNodeAbi() {
 }
 
 function findAbiRegistry() {
+  // Prefer the hoisted install layout (see .npmrc node-linker=hoisted).
+  const hoistedCandidates = [
+    path.join(root, 'node_modules/node-abi/abi_registry.json'),
+    path.join(root, 'node_modules/@electron/rebuild/node_modules/node-abi/abi_registry.json'),
+  ];
+  for (const candidate of hoistedCandidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Isolated pnpm virtual-store layout (node-linker=isolated).
   const pnpmDir = path.join(root, 'node_modules/.pnpm');
   if (!fs.existsSync(pnpmDir)) {
     return null;
@@ -66,6 +78,20 @@ function getElectronBinaryPath() {
   return path.join(electronDir, 'dist/electron');
 }
 
+function getElectronModulesAbiFromPackage() {
+  const abiVersionPath = path.join(root, 'node_modules/electron/abi_version');
+  if (!fs.existsSync(abiVersionPath)) {
+    return null;
+  }
+
+  const abi = String(fs.readFileSync(abiVersionPath, 'utf8')).trim();
+  if (/^\d+$/.test(abi)) {
+    return abi;
+  }
+
+  return null;
+}
+
 function getElectronModulesAbiFromRuntime() {
   const binary = getElectronBinaryPath();
   if (!fs.existsSync(binary)) {
@@ -84,7 +110,18 @@ function getElectronModulesAbiFromRuntime() {
         stdio: ['ignore', 'pipe', 'pipe'],
       }
     );
+    if (result.error) {
+      console.warn(
+        `Could not query Electron runtime ABI (${binary}): ${result.error.message}`
+      );
+      return null;
+    }
     if (result.status !== 0) {
+      const detail = String(result.stderr || result.stdout || '').trim();
+      console.warn(
+        `Could not query Electron runtime ABI (${binary}): exit ${result.status}` +
+          (detail ? ` — ${detail}` : '')
+      );
       return null;
     }
     const abi = String(result.stdout || '').trim();
@@ -124,6 +161,14 @@ function getElectronAbi() {
   const runtimeAbi = getElectronModulesAbiFromRuntime();
   if (runtimeAbi) {
     return runtimeAbi;
+  }
+
+  // Electron ships abi_version with the npm package (no binary spawn required).
+  // Critical on CI when the runtime probe cannot execute the binary yet the ABI
+  // is still known — e.g. before system libs are present, or under xvfb quirks.
+  const packageAbi = getElectronModulesAbiFromPackage();
+  if (packageAbi) {
+    return packageAbi;
   }
 
   const electronVersion = getElectronVersion();
@@ -166,6 +211,7 @@ function loadsUnderNode() {
 function loadsUnderElectron() {
   const binary = getElectronBinaryPath();
   if (!fs.existsSync(binary)) {
+    console.warn(`Electron binary missing at ${binary}; cannot probe better-sqlite3 under Electron`);
     return false;
   }
 
@@ -184,7 +230,19 @@ function loadsUnderElectron() {
         stdio: ['ignore', 'pipe', 'pipe'],
       }
     );
-    return result.status === 0;
+    if (result.error) {
+      console.warn(`Electron probe failed (${binary}): ${result.error.message}`);
+      return false;
+    }
+    if (result.status !== 0) {
+      const detail = String(result.stderr || result.stdout || '').trim();
+      console.warn(
+        `Electron probe failed (${binary}): exit ${result.status}` +
+          (detail ? ` — ${detail}` : '')
+      );
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -217,6 +275,7 @@ module.exports = {
   getElectronAbi,
   getElectronVersion,
   getElectronBinaryPath,
+  getElectronModulesAbiFromPackage,
   getElectronModulesAbiFromRuntime,
   getElectronModulesAbiFromRegistry,
   findAbiRegistry,

@@ -57,6 +57,7 @@ describe('App', () => {
     authState.isUnlocked = true;
     authState.isFirstTime = false;
     authState.isLoading = false;
+    authState.checkAuthStatus = vi.fn(async () => {});
     budgetState.hasBudgetSelected = true;
   });
 
@@ -71,10 +72,20 @@ describe('App', () => {
   });
 
   describe('sad', () => {
-    it('shows loading screen while auth status is loading', async () => {
-      authState.isLoading = true;
+    it('shows loading screen during boot before auth status resolves', async () => {
+      let resolveCheck: () => void = () => undefined;
+      authState.checkAuthStatus = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveCheck = resolve;
+          })
+      );
       render(<App />);
       expect(await screen.findByText('Loading...')).toBeInTheDocument();
+      resolveCheck();
+      await waitFor(() => {
+        expect(authState.checkAuthStatus).toHaveBeenCalled();
+      });
     });
 
     it('redirects locked users to login', async () => {
@@ -93,8 +104,17 @@ describe('App', () => {
       expect(await screen.findByText('Setup Page')).toBeInTheDocument();
     });
 
-    it('redirects non-first-time users away from setup', async () => {
+    it('redirects unlocked users from setup to the app shell', async () => {
       authState.isFirstTime = false;
+      authState.isUnlocked = true;
+      window.location.hash = '#/setup';
+      render(<App />);
+      expect(await screen.findByText('Mock Layout')).toBeInTheDocument();
+    });
+
+    it('redirects locked non-first-time users from setup to login', async () => {
+      authState.isFirstTime = false;
+      authState.isUnlocked = false;
       window.location.hash = '#/setup';
       render(<App />);
       expect(await screen.findByText('Login Page')).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DraftProvider, useDraft, useDraftOptional, useSchedule } from '../../src/context/DraftContext';
 import { ToastProvider } from '../../src/components/Toast';
-import { createMockElectronAPI, createMockIncome, createMockBill } from '../mocks/electron-api.mock';
+import { createMockElectronAPI, createMockIncome, createMockBill, createMockSchedule } from '../mocks/electron-api.mock';
 import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 const mockUseAuth = vi.fn();
@@ -279,6 +279,7 @@ function ScheduleHarness() {
   const { incomes, bills } = useDraft();
   const {
     schedule,
+    scheduleMonths,
     scheduleStartDate,
     scheduleStartingBalance,
     generateSchedule,
@@ -288,6 +289,7 @@ function ScheduleHarness() {
   return (
     <div>
       <div data-testid="schedule-paycheck-count">{schedule?.paychecks.length ?? 0}</div>
+      <div data-testid="schedule-months">{scheduleMonths}</div>
       <button
         onClick={() =>
           void generateSchedule(scheduleStartDate, 12, scheduleStartingBalance, { force: true })
@@ -439,6 +441,33 @@ describe('DraftContext', () => {
       });
 
       fireEvent.click(screen.getByText('set-schedule-viewport'));
+      expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps requested viewport months when calculationMonths is larger', async () => {
+      mockAPI.schedule.build.mockResolvedValue({
+        success: true,
+        data: createMockSchedule({
+          viewportMonths: 12,
+          calculationMonths: 24,
+        }),
+      });
+
+      renderProvider(<ScheduleHarness />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-input-count')).toHaveTextContent('2');
+      });
+      fireEvent.click(screen.getByText('generate-schedule'));
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-paycheck-count')).toHaveTextContent('1');
+      });
+      expect(screen.getByTestId('schedule-months')).toHaveTextContent('12');
+
+      fireEvent.click(screen.getByText('generate-schedule'));
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-months')).toHaveTextContent('12');
+      });
       expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
     });
 

@@ -23,11 +23,17 @@ export async function completeSetup(window: Page, password: string = E2E_PASSWOR
   await window.getByRole('button', { name: 'Continue' }).click();
 
   // Biometric step only appears when the OS reports Touch ID / Hello as
-  // available (true on some macOS dev machines, false in Linux CI).
+  // available (true on some macOS dev machines, false in Linux CI). Wait for
+  // either that step or the budget picker — a short isVisible poll races
+  // Electron 42's slower post-setup transition and leaves the suite stuck on
+  // "Enable Fingerprint Unlock".
   const skipBiometric = window.getByRole('button', { name: 'Skip for now' });
-  if (await skipBiometric.isVisible({ timeout: 2000 }).catch(() => false)) {
+  const budgetPicker = window.getByRole('heading', { name: 'Select a Budget' });
+  await expect(skipBiometric.or(budgetPicker)).toBeVisible({ timeout: 15000 });
+  if (await skipBiometric.isVisible()) {
     await skipBiometric.click();
   }
+  await expect(budgetPicker).toBeVisible({ timeout: 15000 });
 }
 
 /**

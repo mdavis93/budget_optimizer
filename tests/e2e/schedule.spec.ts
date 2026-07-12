@@ -85,11 +85,11 @@ test.describe('Schedule', () => {
     const view = window.getByLabel('View');
     const goalOption = window.locator('#schedule-view option', { hasText: 'Through "New Car"' });
     await expect(goalOption).toHaveCount(1);
-
-    const goalValue = await goalOption.getAttribute('value');
-    expect(goalValue).toBeTruthy();
-    await view.selectOption(goalValue as string);
-    await expect(view).toHaveValue(goalValue as string);
+    await expect.poll(async () => goalOption.getAttribute('value')).not.toBe('12');
+    const goalLabel = (await goalOption.textContent())?.trim();
+    expect(goalLabel).toBeTruthy();
+    await view.selectOption({ label: goalLabel! });
+    await expect(view.locator('option:checked')).toHaveText(goalLabel!);
     await expectNoSpinner(window);
   });
 
