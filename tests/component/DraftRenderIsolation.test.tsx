@@ -1,4 +1,4 @@
-import { Profiler, useState } from 'react';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DraftProvider, useDraftActions, useDraftData, useDraftStatus } from '../../src/context/DraftContext';
@@ -162,31 +162,41 @@ describe('draft render isolation', () => {
 describe('CalendarView memoization', () => {
   it('skips re-renders when unrelated parent state changes', () => {
     const paychecks = [createMockPaycheck({ date: '2026-01-15' })];
-    const calendarRenderDurations: number[] = [];
+    const calendarRenders = vi.fn();
+
+    // Instrument the memoized component's inner render without replacing React.memo.
+    type CalendarProps = { paychecks: typeof paychecks };
+    const memoCalendar = CalendarView as unknown as {
+      type: (props: CalendarProps) => React.ReactNode;
+    };
+    const Inner = memoCalendar.type;
+    memoCalendar.type = ((props: CalendarProps) => {
+      calendarRenders();
+      return Inner(props);
+    }) as typeof Inner;
 
     function Parent() {
       const [count, setCount] = useState(0);
       return (
         <>
           <button onClick={() => setCount((value) => value + 1)}>increment {count}</button>
-          <Profiler
-            id="calendar"
-            onRender={(_id, _phase, actualDuration) => calendarRenderDurations.push(actualDuration)}
-          >
-            <CalendarView paychecks={paychecks} />
-          </Profiler>
+          <CalendarView paychecks={paychecks} />
         </>
       );
     }
 
-    render(<Parent />);
-    calendarRenderDurations.length = 0;
+    try {
+      render(<Parent />);
+      // Initial mount (Strict Mode may double-invoke in development).
+      expect(calendarRenders.mock.calls.length).toBeGreaterThan(0);
+      calendarRenders.mockClear();
 
-    fireEvent.click(screen.getByRole('button', { name: /increment/i }));
+      fireEvent.click(screen.getByRole('button', { name: /increment/i }));
 
-    // The Profiler reports the parent commit, but a memo bailout has near-zero
-    // child render time. A non-memoized CalendarView takes materially longer.
-    expect(calendarRenderDurations).toHaveLength(1);
-    expect(calendarRenderDurations[0]).toBeLessThan(0.1);
+      // CalendarView is memo'd: stable paychecks must bail out before the inner body runs.
+      expect(calendarRenders).not.toHaveBeenCalled();
+    } finally {
+      memoCalendar.type = Inner;
+    }
   });
 });
