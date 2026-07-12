@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { TestMemoryRouter } from '../helpers/router';
 import { useUnsavedChangesGuard } from '../../src/hooks/useUnsavedChangesGuard';
@@ -177,6 +177,78 @@ describe('useUnsavedChangesGuard', () => {
 
       render(<CloseGuardHarness />);
       expect(onCloseRequested).toHaveBeenCalledTimes(1);
+    });
+
+    it('prompts then quits on native close when draft is dirty', async () => {
+      const quitApp = vi.fn().mockResolvedValue(undefined);
+      let closeHandler: (() => void) | undefined;
+      window.electronAPI = {
+        ...window.electronAPI,
+        quitApp,
+        onCloseRequested: (cb: () => void) => {
+          closeHandler = cb;
+          return () => undefined;
+        },
+      };
+
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: true,
+        isSaving: false,
+        saveAll: vi.fn().mockResolvedValue(true),
+        discardAll: vi.fn(),
+      });
+
+      function CloseGuardHarness() {
+        const { unsavedDialog } = useUnsavedChangesGuard({ listenForWindowClose: true });
+        return <>{unsavedDialog}</>;
+      }
+
+      render(<CloseGuardHarness />);
+      expect(closeHandler).toBeDefined();
+      act(() => {
+        closeHandler?.();
+      });
+
+      expect(screen.getByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument();
+      expect(quitApp).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText('Discard All'));
+      await waitFor(() => {
+        expect(quitApp).toHaveBeenCalled();
+      });
+    });
+
+    it('quits immediately on native close when draft is clean', async () => {
+      const quitApp = vi.fn().mockResolvedValue(undefined);
+      let closeHandler: (() => void) | undefined;
+      window.electronAPI = {
+        ...window.electronAPI,
+        quitApp,
+        onCloseRequested: (cb: () => void) => {
+          closeHandler = cb;
+          return () => undefined;
+        },
+      };
+
+      mockUseDraftOptional.mockReturnValue({
+        hasUnsavedChanges: false,
+        isSaving: false,
+        saveAll: vi.fn(),
+        discardAll: vi.fn(),
+      });
+
+      function CloseGuardHarness() {
+        useUnsavedChangesGuard({ listenForWindowClose: true });
+        return null;
+      }
+
+      render(<CloseGuardHarness />);
+      act(() => {
+        closeHandler?.();
+      });
+      await waitFor(() => {
+        expect(quitApp).toHaveBeenCalled();
+      });
     });
   });
 });

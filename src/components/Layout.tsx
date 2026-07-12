@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
 import { useBudget } from '../context/BudgetContext';
 import { useDraftData } from '../context/DraftContext';
-import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
+import { usePlatformExit } from '../platform/PlatformExitGuard';
 import GlobalDraftBanner from './GlobalDraftBanner';
 import DraftSaveBar from './DraftSaveBar';
 import clsx from 'clsx';
@@ -42,14 +42,14 @@ export default function Layout() {
   const { lock } = useAuth();
   const { currentBudget, isQuickBudget } = useBudget();
   const { isDraftMode, isDomainDirty } = useDraftData();
-  const { guardAction, unsavedDialog } = useUnsavedChangesGuard();
+  const { guardAction } = usePlatformExit();
   const location = useLocation();
   const currentDomain = ROUTE_DRAFT_DOMAIN[location.pathname];
 
   // In-app navigation never blocks: the draft lives in DraftProvider (above the
   // routed pages), so switching pages preserves uncommitted changes and lets the
-  // user simulate freely. The unsaved-changes guard only fires on exit actions
-  // (Lock App / Quit App) below.
+  // user simulate freely. Save/Discard prompts only on exit (Quit / window close).
+  // Lock App is privacy-only and does not force settling the draft.
 
   const handleQuit = () => {
     guardAction(() => window.electronAPI.quitApp(), 'quit the app');
@@ -76,12 +76,11 @@ export default function Layout() {
   }, []);
 
   const handleLock = () => {
-    guardAction(lock, 'lock the app');
+    void lock();
   };
 
   return (
     <DataProvider>
-      {unsavedDialog}
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"

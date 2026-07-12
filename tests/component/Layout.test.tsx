@@ -8,7 +8,7 @@ import { createMockElectronAPI } from '../mocks/electron-api.mock';
 const mockUseAuth = vi.fn();
 const mockUseBudget = vi.fn();
 const mockUseDraft = vi.fn();
-const mockUseUnsavedChangesGuard = vi.fn();
+const mockUsePlatformExit = vi.fn();
 
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
@@ -24,8 +24,8 @@ vi.mock('../../src/context/DraftContext', () => ({
 vi.mock('../../src/context/DataContext', () => ({
   DataProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('../../src/hooks/useUnsavedChangesGuard', () => ({
-  useUnsavedChangesGuard: () => mockUseUnsavedChangesGuard(),
+vi.mock('../../src/platform/PlatformExitGuard', () => ({
+  usePlatformExit: () => mockUsePlatformExit(),
 }));
 vi.mock('../../src/components/GlobalDraftBanner', () => ({
   default: () => <div>Mock Global Draft Banner</div>,
@@ -49,9 +49,9 @@ describe('Layout', () => {
       isDraftMode: true,
       isDomainDirty: vi.fn(() => false),
     });
-    mockUseUnsavedChangesGuard.mockReturnValue({
+    mockUsePlatformExit.mockReturnValue({
       guardAction: (action: () => void) => action(),
-      unsavedDialog: null,
+      supportsNativeClose: true,
     });
   });
 
@@ -77,11 +77,19 @@ describe('Layout', () => {
   });
 
   describe('hostile', () => {
-    it('triggers lock action from sidebar button', async () => {
+    it('locks without routing through the exit guard', async () => {
       const user = userEvent.setup();
+      const guardAction = vi.fn();
+      mockUsePlatformExit.mockReturnValue({
+        guardAction,
+        supportsNativeClose: true,
+      });
+
       renderWithRouter(<Layout />, { route: '/dashboard', mockAPI });
       await user.click(screen.getByRole('button', { name: /Lock App/i }));
+
       expect(lock).toHaveBeenCalled();
+      expect(guardAction).not.toHaveBeenCalled();
     });
 
     it('shows quick budget badge and dirty-domain indicators', async () => {
@@ -99,12 +107,12 @@ describe('Layout', () => {
       expect(screen.getAllByLabelText('Unsaved changes').length).toBeGreaterThanOrEqual(2);
     });
 
-    it('guards quit app through unsaved changes hook', async () => {
+    it('guards quit app through platform exit hook', async () => {
       const user = userEvent.setup();
       const guardAction = vi.fn();
-      mockUseUnsavedChangesGuard.mockReturnValue({
+      mockUsePlatformExit.mockReturnValue({
         guardAction,
-        unsavedDialog: null,
+        supportsNativeClose: true,
       });
 
       renderWithRouter(<Layout />, { route: '/dashboard', mockAPI });
@@ -116,9 +124,9 @@ describe('Layout', () => {
     it('does not guard in-app sidebar navigation even with unsaved changes', async () => {
       const user = userEvent.setup();
       const guardAction = vi.fn();
-      mockUseUnsavedChangesGuard.mockReturnValue({
+      mockUsePlatformExit.mockReturnValue({
         guardAction,
-        unsavedDialog: null,
+        supportsNativeClose: true,
       });
       // Pending draft changes present: navigation must still be free.
       mockUseDraft.mockReturnValue({

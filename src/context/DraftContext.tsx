@@ -145,14 +145,58 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshCurrentBudget, loadBudgets]);
 
+  // Privacy lock parks a dirty overlay in memory so unlock can resume simulation.
+  // This is not a memory wipe — the login screen only hides the UI.
+  const parkedDraftRef = useRef<{
+    committed: DraftState;
+    draft: DraftState;
+    dirtyDomains: DraftDomain[];
+    budgetId: string | null;
+  } | null>(null);
+
   const reloadSnapshot = useCallback(async () => {
-    if (!isUnlocked || !hasBudgetSelected) {
+    if (!isUnlocked) {
+      const { dirtyDomains: domains, committed: saved, draft: current, currentBudgetId } =
+        stateRef.current;
+      if (domains.size > 0) {
+        parkedDraftRef.current = {
+          committed: copyDraftState(saved),
+          draft: copyDraftState(current),
+          dirtyDomains: Array.from(domains),
+          budgetId: currentBudgetId,
+        };
+      } else {
+        parkedDraftRef.current = null;
+        const empty = createEmptyDraftState();
+        setCommitted(empty);
+        setDraft(empty);
+        setDirtyDomains(new Set());
+      }
+      return;
+    }
+
+    if (!hasBudgetSelected) {
+      parkedDraftRef.current = null;
       const empty = createEmptyDraftState();
       setCommitted(empty);
       setDraft(empty);
       setDirtyDomains(new Set());
       return;
     }
+
+    const parked = parkedDraftRef.current;
+    if (
+      parked &&
+      parked.dirtyDomains.length > 0 &&
+      parked.budgetId === (currentBudget?.id ?? null)
+    ) {
+      parkedDraftRef.current = null;
+      setCommitted(parked.committed);
+      setDraft(parked.draft);
+      setDirtyDomains(new Set(parked.dirtyDomains));
+      return;
+    }
+    parkedDraftRef.current = null;
 
     setIsLoading(true);
     try {
@@ -181,7 +225,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [isUnlocked, hasBudgetSelected, isQuickBudget]);
+  }, [isUnlocked, hasBudgetSelected, isQuickBudget, currentBudget?.id]);
 
   useEffect(() => {
     reloadSnapshot();
