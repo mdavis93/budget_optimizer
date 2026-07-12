@@ -177,13 +177,9 @@ function main() {
   const identity = buildIdentity(bs3Version, targetAbi);
   const cachePath = resolveUnderNativeCache(cacheFileName(bs3Version, targetAbi));
 
-  // Fast path: marker match + binary present
-  if (readMarker() === identity && fs.existsSync(rebuiltBinary)) {
-    status(`use-native: noop-marker (${target})`);
-    return;
-  }
-
-  // Authoritative probe under target runtime
+  // Always probe under the target runtime. The marker is refreshed after a
+  // successful probe/cache/compile for debugging, but is never trusted alone —
+  // postinstall/rebuild can overwrite the binary while leaving a stale marker.
   if (loadsUnderTarget(target)) {
     writeMarker(identity);
     status(`use-native: noop-probe (${target})`);

@@ -41,11 +41,11 @@ Run manually anytime: `pnpm prepush`.
 
 ### Native ABI auto-swap (`better-sqlite3`)
 
-Node unit tests and Electron (`electron:dev` / `test:e2e`) need different `better-sqlite3` ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and swaps (or no-ops) automatically via a marker + load probe + version-keyed cache under `.cache/native/`.
+Node unit tests and Electron (`electron:dev` / `test:e2e`) need different `better-sqlite3` ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and always load-probes under the *target* runtime (Node or Electron). On success it refreshes a marker under `.cache/native/`; on failure it copies from a version-keyed cache or recompiles. The marker is for debugging only — it is never trusted alone to skip the probe (rebuilds can overwrite the binary while leaving a stale marker).
 
 - Prefer `pnpm test`, `pnpm test:run`, `pnpm electron:dev`, and `pnpm test:e2e` — bare `vitest` / `playwright test` bypass the helper.
 - If the ABI looks stuck, delete `.cache/native/` and re-run the script you need.
-- **Do not** restore `.cache/native` from CI caches (`actions/cache` or similar); CI must stay markerless and rely on the positive load probe.
+- **Do not** restore `.cache/native` from CI caches (`actions/cache` or similar); CI should stay markerless and rely on the positive load probe.
 - Release packaging must use `pnpm electron:build` / `pnpm electron:build:ci` (rebuild + sync). Do not use `pnpm build` for production packages after Node test runs — it skips native sync.
 
 **Paranoia layers:** (1) Husky before push → (2) PR Gate on the PR → (3) Main Stability after merge to `main`.
