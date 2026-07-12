@@ -36,7 +36,9 @@ Helpers (`helpers/`):
   A named budget enables **draft mode** (edits stage in an overlay until
   "Save Changes"); Quick Budget persists instantly.
 - `nav.ts` — `navigateTo` + `expectNoSpinner` (the load-regression guard).
-- `schedule.ts` — `dismissReconciliationIfPresent` when shortfall overlay blocks Schedule.
+- `schedule.ts` — `dismissReconciliationIfPresent` when shortfall overlay blocks Schedule;
+  `pinScheduleStart` to align the viewport with seeded absolute dates.
+- `dates.ts` — shared absolute `yyyy-MM-dd` anchors for income/schedule/goal seeds.
 - `seed.ts` — pre-seed via real `electronAPI.*.create`, then `reloadShell`
   (which reselects the budget from the picker, mirroring a real relaunch) so
   the renderer re-reads the snapshot.
