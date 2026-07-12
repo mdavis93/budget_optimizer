@@ -21,6 +21,7 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => ({ ...mockUseDraftData(), ...mockUseDraftActions() }),
   useDraftData: () => mockUseDraftData(),
+  useDraftStatus: () => mockUseDraftData(),
   useDraftActions: () => mockUseDraftActions(),
 }));
 

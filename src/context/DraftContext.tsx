@@ -46,11 +46,7 @@ import {
 
 interface DraftDataContextValue {
   draft: DraftState;
-  dirtyDomains: Set<DraftDomain>;
-  hasUnsavedChanges: boolean;
-  isDraftMode: boolean;
   isLoading: boolean;
-  isSaving: boolean;
   incomes: Income[];
   bills: Bill[];
   debts: Debt[];
@@ -59,6 +55,13 @@ interface DraftDataContextValue {
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
   budgetFields: DraftBudgetFields | null;
+}
+
+interface DraftStatusContextValue {
+  dirtyDomains: Set<DraftDomain>;
+  hasUnsavedChanges: boolean;
+  isDraftMode: boolean;
+  isSaving: boolean;
   isDomainDirty: (domain: DraftDomain) => boolean;
 }
 
@@ -95,9 +98,11 @@ interface DraftActionsContextValue {
   getGoalProjections: () => Promise<GoalProjection[]>;
 }
 
-export type DraftContextValue = DraftDataContextValue & DraftActionsContextValue;
+export type DraftContextValue =
+  DraftDataContextValue & DraftStatusContextValue & DraftActionsContextValue;
 
 const DraftDataContext = createContext<DraftDataContextValue | null>(null);
+const DraftStatusContext = createContext<DraftStatusContextValue | null>(null);
 const DraftActionsContext = createContext<DraftActionsContextValue | null>(null);
 
 const nowIso = () => new Date().toISOString();
@@ -727,11 +732,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const dataValue = useMemo(
     (): DraftDataContextValue => ({
       draft,
-      dirtyDomains,
-      hasUnsavedChanges: dirtyDomains.size > 0 && isDraftMode,
-      isDraftMode,
       isLoading,
-      isSaving,
       incomes: draft.incomes,
       bills: draft.bills,
       debts: draft.debts,
@@ -740,9 +741,19 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       billAssignments: draft.billAssignments,
       incomeOverrides: draft.incomeOverrides,
       budgetFields: draft.budget,
+    }),
+    [draft, isLoading]
+  );
+
+  const statusValue = useMemo(
+    (): DraftStatusContextValue => ({
+      dirtyDomains,
+      hasUnsavedChanges: dirtyDomains.size > 0 && isDraftMode,
+      isDraftMode,
+      isSaving,
       isDomainDirty,
     }),
-    [draft, dirtyDomains, isDraftMode, isLoading, isSaving, isDomainDirty]
+    [dirtyDomains, isDraftMode, isSaving, isDomainDirty]
   );
 
   const actionsValue = useMemo(
@@ -814,7 +825,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
   return (
     <DraftActionsContext.Provider value={actionsValue}>
-      <DraftDataContext.Provider value={dataValue}>{children}</DraftDataContext.Provider>
+      <DraftStatusContext.Provider value={statusValue}>
+        <DraftDataContext.Provider value={dataValue}>{children}</DraftDataContext.Provider>
+      </DraftStatusContext.Provider>
     </DraftActionsContext.Provider>
   );
 }
@@ -824,6 +837,15 @@ export function useDraftData() {
   const context = useContext(DraftDataContext);
   if (!context) {
     throw new Error('useDraftData must be used within a DraftProvider');
+  }
+  return context;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDraftStatus() {
+  const context = useContext(DraftStatusContext);
+  if (!context) {
+    throw new Error('useDraftStatus must be used within a DraftProvider');
   }
   return context;
 }
@@ -839,13 +861,14 @@ export function useDraftActions() {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useDraft(): DraftContextValue {
-  return { ...useDraftData(), ...useDraftActions() };
+  return { ...useDraftData(), ...useDraftStatus(), ...useDraftActions() };
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useDraftOptional(): DraftContextValue | null {
   const data = useContext(DraftDataContext);
+  const status = useContext(DraftStatusContext);
   const actions = useContext(DraftActionsContext);
-  if (!data || !actions) return null;
-  return { ...data, ...actions };
+  if (!data || !status || !actions) return null;
+  return { ...data, ...status, ...actions };
 }

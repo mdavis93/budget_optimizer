@@ -1,6 +1,6 @@
 import { Save, RotateCcw } from 'lucide-react';
 import { DraftDomain, DRAFT_DOMAIN_LABELS } from '../types/draft';
-import { useDraftData, useDraftActions } from '../context/DraftContext';
+import { useDraftActions, useDraftData, useDraftStatus } from '../context/DraftContext';
 import { getCrossDomainSaveWarning } from '../utils/draftPersist';
 import ConfirmDialog from './ConfirmDialog';
 import { useState } from 'react';
@@ -10,7 +10,8 @@ interface DraftSaveBarProps {
 }
 
 export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
-  const { draft, dirtyDomains, isDraftMode, isDomainDirty, isSaving } = useDraftData();
+  const { draft } = useDraftData();
+  const { dirtyDomains, isDraftMode, isDomainDirty, isSaving } = useDraftStatus();
   const { saveDomains, discardDomain } = useDraftActions();
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [saveConfirm, setSaveConfirm] = useState<{ domains: DraftDomain[]; message: string } | null>(

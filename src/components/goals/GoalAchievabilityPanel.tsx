@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { memo, useId, useState } from 'react';
 import {
   CalendarClock,
   Check,
@@ -108,7 +108,7 @@ function PanelSkeleton() {
   );
 }
 
-export default function GoalAchievabilityPanel({
+const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
   goal,
   projection,
   messaging,
@@ -305,4 +305,6 @@ export default function GoalAchievabilityPanel({
       )}
     </div>
   );
-}
+});
+
+export default GoalAchievabilityPanel;

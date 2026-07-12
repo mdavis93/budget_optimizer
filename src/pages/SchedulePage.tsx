@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { useDraft } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { format, parseISO } from 'date-fns';
-import { PaycheckBill, ProposedFix } from '../types';
+import { PaycheckBill, PaycheckEntry, ProposedFix } from '../types';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -22,6 +22,8 @@ import { buildScheduleInputHash } from '../utils/scheduleInputHash';
 import { formatCurrency } from '../utils/formatCurrency';
 
 type ViewMode = 'paycheck' | 'calendar';
+
+const EMPTY_PAYCHECKS: PaycheckEntry[] = [];
 
 interface PendingAssignment {
   billId: string;
@@ -352,15 +354,15 @@ export default function SchedulePage() {
     });
   }, []);
 
-  const expandAll = () => {
+  const expandAll = useCallback(() => {
     if (schedule?.paychecks) {
       setExpandedPaychecks(new Set(schedule.paychecks.map(p => p.date)));
     }
-  };
+  }, [schedule?.paychecks]);
 
-  const collapseAll = () => {
+  const collapseAll = useCallback(() => {
     setExpandedPaychecks(new Set());
-  };
+  }, []);
 
   if (!schedule && (incomes.length === 0 && bills.length === 0)) {
     return (
@@ -493,7 +495,7 @@ export default function SchedulePage() {
 
       {viewMode === 'paycheck' ? (
         <PaycheckView 
-          paychecks={schedule?.paychecks || []} 
+          paychecks={schedule?.paychecks ?? EMPTY_PAYCHECKS} 
           expandedPaychecks={expandedPaychecks}
           togglePaycheck={togglePaycheck}
           expandAll={expandAll}
@@ -520,7 +522,7 @@ export default function SchedulePage() {
           savingIncomeKey={savingIncomeKey}
         />
       ) : (
-        <CalendarView paychecks={schedule?.paychecks || []} />
+        <CalendarView paychecks={schedule?.paychecks ?? EMPTY_PAYCHECKS} />
       )}
 
       <ConfirmDialog

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { format, startOfMonth, isSameDay } from 'date-fns';
 import { PiggyBank } from 'lucide-react';
 import { PaycheckEntry } from '../../types';
@@ -9,7 +9,7 @@ interface CalendarViewProps {
   paychecks: PaycheckEntry[];
 }
 
-export default function CalendarView({ paychecks }: CalendarViewProps) {
+const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const paychecksByDate = useMemo(() => {
@@ -117,4 +117,6 @@ export default function CalendarView({ paychecks }: CalendarViewProps) {
       </div>
     </div>
   );
-}
+});
+
+export default CalendarView;
