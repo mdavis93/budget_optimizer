@@ -77,14 +77,12 @@ test.describe('Unsaved-changes guard', () => {
   test('Save All Changes on Quit persists then exits @draft.guard-save', async ({ window, electronApp }) => {
     await startDraftIncome(window);
 
-    // Persist first via the page save bar so we can assert DB state after relaunch
-    // would be redundant; Save All on the exit modal is what we exercise here.
     await window.getByRole('button', { name: 'Quit App' }).click();
     const guard = window.getByRole('dialog', { name: 'Unsaved changes' });
     await expect(guard).toBeVisible();
+    // Do not assert modal hide — quit tears down the page (same as Discard).
     const closed = electronApp.waitForEvent('close');
     await guard.getByRole('button', { name: 'Save All Changes' }).click();
-    await expect(guard).toBeHidden({ timeout: 15000 });
     await closed;
   });
 });
