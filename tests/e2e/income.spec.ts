@@ -1,6 +1,8 @@
 import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
+import { E2E_INCOME_END, E2E_SCHEDULE_START } from './helpers/dates';
 import { navigateTo, expectNoSpinner } from './helpers/nav';
+import { pinScheduleStart } from './helpers/schedule';
 import { reloadShell } from './helpers/seed';
 
 /**
@@ -92,10 +94,10 @@ test.describe('Income', () => {
     await dialog.locator('#income-source-name').fill('Contract Work');
     await dialog.locator('#income-amount').fill('3000');
     await dialog.locator('#income-cadence').selectOption('monthly');
-    await dialog.locator('#income-start-date').fill('2026-01-01');
+    await dialog.locator('#income-start-date').fill(E2E_SCHEDULE_START);
     await dialog.getByText('Set an end date (last payment)').locator('..').getByRole('button').click();
     await expect(dialog.locator('#income-end-date')).toBeVisible();
-    await dialog.locator('#income-end-date').fill('2026-03-31');
+    await dialog.locator('#income-end-date').fill(E2E_INCOME_END);
     await dialog.getByRole('button', { name: 'Add Income' }).click();
     await expect(window.getByText('Unsaved changes on Income')).toBeVisible();
     await window.getByRole('button', { name: 'Save Changes', exact: true }).click();
@@ -105,8 +107,7 @@ test.describe('Income', () => {
     await expect(window.getByText(/Ending Mar 31, 2026/i)).toBeVisible();
 
     await navigateTo(window, 'Schedule');
-    await window.locator('#schedule-start-date').fill('2026-01-01');
-    await window.getByRole('button', { name: 'Generate Schedule' }).click();
+    await pinScheduleStart(window, E2E_SCHEDULE_START);
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
     await expect(window.getByText('Contract Work')).toHaveCount(3);
     await expectNoSpinner(window);

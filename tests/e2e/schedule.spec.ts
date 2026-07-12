@@ -1,7 +1,13 @@
 import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
+import {
+  E2E_GOAL_FAR,
+  E2E_GOAL_NEAR,
+  E2E_INCOME_START,
+  E2E_SCHEDULE_START,
+} from './helpers/dates';
 import { navigateTo, expectNoSpinner } from './helpers/nav';
-import { dismissReconciliationIfPresent } from './helpers/schedule';
+import { dismissReconciliationIfPresent, pinScheduleStart } from './helpers/schedule';
 import { reloadShell, seedBill, seedGoal, seedIncome } from './helpers/seed';
 
 /**
@@ -16,7 +22,7 @@ test.describe('Schedule', () => {
       sourceName: 'Acme Payroll',
       amount: 2400,
       cadence: 'biweekly',
-      startDate: '2026-01-02',
+      startDate: E2E_INCOME_START,
       isActive: true,
     });
     await seedBill(window, {
@@ -28,6 +34,7 @@ test.describe('Schedule', () => {
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
+    await pinScheduleStart(window);
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
     await expect(window.getByRole('heading', { name: 'No Schedule Available' })).toBeHidden();
@@ -50,7 +57,7 @@ test.describe('Schedule', () => {
       sourceName: 'Acme Payroll',
       amount: 2400,
       cadence: 'biweekly',
-      startDate: '2026-01-02',
+      startDate: E2E_INCOME_START,
       isActive: true,
     });
     await seedBill(window, {
@@ -60,20 +67,18 @@ test.describe('Schedule', () => {
       isRecurring: true,
       priority: 'critical',
     });
-    // A goal ~2 years out forces the horizon past 12 months, so the dropdown
-    // should expose a distinct "Through <goal>" shortcut.
-    const target = new Date();
-    target.setFullYear(target.getFullYear() + 2);
-    const targetDate = target.toISOString().slice(0, 10);
+    // Absolute far target forces the horizon past 12 months so the dropdown
+    // exposes a distinct "Through <goal>" shortcut.
     await seedGoal(window, {
       name: 'New Car',
       targetAmount: 12000,
-      targetDate,
+      targetDate: E2E_GOAL_FAR,
       alreadySaved: 0,
       priority: 1,
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
+    await pinScheduleStart(window);
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
 
@@ -95,22 +100,19 @@ test.describe('Schedule', () => {
       sourceName: 'Acme Payroll',
       amount: 2400,
       cadence: 'biweekly',
-      startDate: '2026-01-02',
+      startDate: E2E_INCOME_START,
       isActive: true,
     });
-    // A large goal with a near deadline cannot be funded -> at risk.
-    const target = new Date();
-    target.setMonth(target.getMonth() + 6);
-    const targetDate = target.toISOString().slice(0, 10);
     await seedGoal(window, {
       name: 'Impossible Dream',
       targetAmount: 999999,
-      targetDate,
+      targetDate: E2E_GOAL_NEAR,
       alreadySaved: 0,
       priority: 1,
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
+    await pinScheduleStart(window);
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
     await expect(window.getByRole('img', { name: 'Goals at risk' })).toBeVisible();
@@ -124,7 +126,7 @@ test.describe('Schedule', () => {
       sourceName: 'Part Time',
       amount: 800,
       cadence: 'biweekly',
-      startDate: '2026-01-02',
+      startDate: E2E_INCOME_START,
       isActive: true,
     });
     await seedBill(window, {
@@ -136,6 +138,7 @@ test.describe('Schedule', () => {
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
+    await pinScheduleStart(window);
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
     await dismissReconciliationIfPresent(window);
@@ -151,7 +154,7 @@ test.describe('Schedule', () => {
       sourceName: 'Tight Pay',
       amount: 900,
       cadence: 'monthly',
-      startDate: '2026-01-01',
+      startDate: E2E_SCHEDULE_START,
       isActive: true,
     });
     await seedBill(window, {
@@ -170,6 +173,7 @@ test.describe('Schedule', () => {
     });
     await reloadShell(window);
     await navigateTo(window, 'Schedule');
+    await pinScheduleStart(window);
 
     await dismissReconciliationIfPresent(window);
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
