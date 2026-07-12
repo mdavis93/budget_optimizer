@@ -26,11 +26,11 @@ interface PaycheckDetailsProps {
   savingIncomeKey: string | null;
 }
 
-export function incomeOverrideRowKey(incomeId: string, paycheckDate: string): string {
+function incomeOverrideRowKey(incomeId: string, paycheckDate: string): string {
   return `${incomeId}-${paycheckDate}`;
 }
 
-export function hasIncomeOverride(
+function hasIncomeOverride(
   overrides: IncomeOverride[],
   incomeId: string,
   paycheckDate: string

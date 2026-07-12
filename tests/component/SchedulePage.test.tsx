@@ -79,6 +79,37 @@ vi.mock('../../src/components/schedule', () => ({
     </div>
   ),
   CalendarView: () => <div>Mock Calendar View</div>,
+  ScheduleSummaryCards: ({ summary }: { summary: { totalIncome: number; totalExpenses: number } }) => (
+    <div>
+      <div>Total Income</div>
+      <div>${summary.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+      <div>Total Expenses</div>
+    </div>
+  ),
+  ReconciliationBanner: ({ onViewSuggestedFixes }: { onViewSuggestedFixes: () => void }) => (
+    <div>
+      <div>Budget Has Unresolved Shortfalls</div>
+      <button onClick={onViewSuggestedFixes}>View suggested fixes</button>
+    </div>
+  ),
+  ScheduleRecommendations: ({
+    recommendations,
+    hasActionableRecommendations,
+    expanded,
+    onToggle,
+  }: {
+    recommendations: string[];
+    hasActionableRecommendations: boolean;
+    expanded: boolean;
+    onToggle: () => void;
+  }) => (
+    <div>
+      <button onClick={onToggle}>
+        {hasActionableRecommendations ? 'Action Recommended' : 'Budget Insights'}
+      </button>
+      {expanded && recommendations.map((recommendation) => <div key={recommendation}>{recommendation}</div>)}
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/ReconciliationPage', () => ({
