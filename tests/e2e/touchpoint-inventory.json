@@ -129,6 +129,30 @@
       "domain": "draft",
       "description": "Exit guard (Quit / window close): Save All Changes persists the draft and proceeds"
     },
+    {
+      "id": "draft.native-close-cancel",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Native window close with dirty draft: Cancel keeps the app open and the draft intact"
+    },
+    {
+      "id": "draft.native-close-discard",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Native window close with dirty draft: Discard All exits the app"
+    },
+    {
+      "id": "draft.native-close-save",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Native window close with dirty draft: Save All Changes persists then exits"
+    },
+    {
+      "id": "draft.native-close-clean",
+      "tier": "critical",
+      "domain": "draft",
+      "description": "Native window close with a clean draft exits without prompting"
+    },
 
     {
       "id": "bills.untrusted-input",
