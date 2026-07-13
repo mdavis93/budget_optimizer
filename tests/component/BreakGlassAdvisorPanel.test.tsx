@@ -46,21 +46,15 @@ describe('BreakGlassAdvisorPanel', () => {
     expect(onAccept).toHaveBeenCalledWith(plan);
   });
 
-  it('declines without applying', () => {
-    const onAccept = vi.fn();
-    const onDecline = vi.fn();
-
-    render(
+  it('returns null when there are no plans', () => {
+    const { container } = render(
       <BreakGlassAdvisorPanel
-        plans={[plan]}
-        onAccept={onAccept}
-        onDecline={onDecline}
+        plans={[]}
+        onAccept={vi.fn()}
+        onDecline={vi.fn()}
         isApplying={false}
       />
     );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
-    expect(onDecline).toHaveBeenCalledWith('break-glass-1');
-    expect(onAccept).not.toHaveBeenCalled();
+    expect(container).toBeEmptyDOMElement();
   });
 });

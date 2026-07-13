@@ -394,6 +394,32 @@ describe('ipc handlers', () => {
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });
 
+    it('applies break-glass advisor steps as bill assignments', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          assignBillToPaycheck: vi.fn(),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      const result = await ipcMain.invoke('breakGlassAdvisor:apply', [
+        {
+          billId: 'bill-0001',
+          billDueDate: '2026-08-08',
+          fromPaycheckDate: '2026-07-31',
+          toPaycheckDate: '2026-07-24',
+        },
+      ]);
+
+      expect(result).toEqual({ success: true });
+      expect(services.budgetManager.assignBillToPaycheck).toHaveBeenCalledWith(
+        'bill-0001',
+        '2026-08-08',
+        '2026-07-24'
+      );
+    });
+
     it('locks auth and clears active budget/database services', async () => {
       const lock = vi.fn();
       const close = vi.fn();

@@ -173,7 +173,7 @@ function ensureReceiveRoom(
   )) {
     if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
 
-    const earlierIndices: number[] = [];
+    const earlierCandidates: Array<{ index: number; daysEarly: number }> = [];
     for (let earlier = index - 1; earlier >= 0; earlier--) {
       const legality = placementLegality(
         bill.billDate,
@@ -181,10 +181,10 @@ function ensureReceiveRoom(
         scheduleStartDate,
         maxEarlyDays
       );
-      if (legality.ok) earlierIndices.push(earlier);
+      if (legality.ok) earlierCandidates.push({ index: earlier, daysEarly: legality.daysEarly });
     }
 
-    for (const earlierIndex of earlierIndices) {
+    for (const { index: earlierIndex, daysEarly } of earlierCandidates) {
       const snapshotLength = steps.length;
       const snapshotSim = cloneSimAsSim(sim);
 
@@ -207,31 +207,12 @@ function ensureReceiveRoom(
         continue;
       }
 
-      if (receiveRoom(sim[earlierIndex].budgetRemaining, minCashOnHand) < bill.amount) {
-        restoreSim(sim, snapshotSim);
-        steps.length = snapshotLength;
-        continue;
-      }
-
-      const legality = placementLegality(
-        bill.billDate,
-        sim[earlierIndex].date,
-        scheduleStartDate,
-        maxEarlyDays
-      );
-      if (!legality.ok) {
-        restoreSim(sim, snapshotSim);
-        steps.length = snapshotLength;
-        continue;
-      }
-
       applyMove(sim, index, earlierIndex, bill);
-      steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, legality.daysEarly));
+      steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, daysEarly));
 
       if (receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded) {
         return true;
       }
-      // Keep searching with remaining bills if this move wasn't enough alone.
     }
   }
 
@@ -274,7 +255,7 @@ function tryClearBreakGlass(
       sim[targetIndex].bills.filter((candidate) => isMovable(candidate, lockedBillKeys)),
       sort
     )) {
-      const earlierIndices: number[] = [];
+      const earlierCandidates: Array<{ index: number; daysEarly: number }> = [];
       for (let earlier = targetIndex - 1; earlier >= 0; earlier--) {
         const legality = placementLegality(
           bill.billDate,
@@ -282,10 +263,10 @@ function tryClearBreakGlass(
           scheduleStartDate,
           maxEarlyDays
         );
-        if (legality.ok) earlierIndices.push(earlier);
+        if (legality.ok) earlierCandidates.push({ index: earlier, daysEarly: legality.daysEarly });
       }
 
-      for (const earlierIndex of earlierIndices) {
+      for (const { index: earlierIndex, daysEarly } of earlierCandidates) {
         const snapshotLength = steps.length;
         const snapshotSim = cloneSimAsSim(sim);
 
@@ -308,28 +289,8 @@ function tryClearBreakGlass(
           continue;
         }
 
-        if (receiveRoom(sim[earlierIndex].budgetRemaining, minCashOnHand) < bill.amount) {
-          restoreSim(sim, snapshotSim);
-          steps.length = snapshotLength;
-          continue;
-        }
-
-        const legality = placementLegality(
-          bill.billDate,
-          sim[earlierIndex].date,
-          scheduleStartDate,
-          maxEarlyDays
-        );
-        if (!legality.ok) {
-          restoreSim(sim, snapshotSim);
-          steps.length = snapshotLength;
-          continue;
-        }
-
         applyMove(sim, targetIndex, earlierIndex, bill);
-        steps.push(
-          makeStep(bill, sim[targetIndex].date, sim[earlierIndex].date, legality.daysEarly)
-        );
+        steps.push(makeStep(bill, sim[targetIndex].date, sim[earlierIndex].date, daysEarly));
         moved = true;
         break;
       }

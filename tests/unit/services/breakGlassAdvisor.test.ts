@@ -290,6 +290,42 @@ describe('proposeBreakGlassPlans', () => {
     expect(report.plans[0].steps.every((step) => step.daysEarly <= 21)).toBe(true);
   });
 
+  it('returns empty plans for an empty paycheck list', () => {
+    const empty = scheduleOf([]);
+    empty.fullPaychecks = [];
+    empty.paychecks = [];
+    expect(proposeBreakGlassPlans(empty).plans).toEqual([]);
+  });
+
+  it('uses paychecks when fullPaychecks is empty', () => {
+    const withViewportOnly = julyCascadeFixture();
+    withViewportOnly.fullPaychecks = [];
+    const report = proposeBreakGlassPlans(withViewportOnly);
+    expect(report.plans).toHaveLength(1);
+  });
+
+  it('excludes unpayable bills from moves', () => {
+    const report = proposeBreakGlassPlans(
+      scheduleOf([
+        paycheck({ date: '2026-07-03', budgetRemaining: 500 }),
+        paycheck({
+          date: '2026-07-17',
+          budgetRemaining: 150,
+          bills: [
+            bill({
+              billId: 'unpayable',
+              creditorName: 'Unpayable',
+              amount: 120,
+              billDate: '2026-07-20',
+              isUnpayable: true,
+            }),
+          ],
+        }),
+      ])
+    );
+    expect(report.plans).toEqual([]);
+  });
+
   it('rebuildBreakGlassAdvisorForViewport keeps only in-viewport targets', () => {
     const advisor = {
       plans: [
