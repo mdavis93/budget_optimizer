@@ -15,6 +15,13 @@ const mainExternals = [
   'date-fns',
 ];
 
+/** Shared by renderer and electron main/preload builds (plugin does not inherit root aliases). */
+const aliases = {
+  '@': path.resolve(__dirname, './src'),
+  '@electron': path.resolve(__dirname, './electron'),
+  '@shared': path.resolve(__dirname, './shared'),
+};
+
 /** Applied to dist/index.html when mode === 'production'. Dev keeps relaxed CSP in index.html for HMR. */
 const PRODUCTION_CSP =
   "default-src 'self'; " +
@@ -58,6 +65,7 @@ export default defineConfig(async ({ mode }) => {
           options.startup();
         },
         vite: {
+          resolve: { alias: aliases },
           build: {
             outDir: 'dist-electron',
             rolldownOptions: {
@@ -75,6 +83,7 @@ export default defineConfig(async ({ mode }) => {
           options.reload();
         },
         vite: {
+          resolve: { alias: aliases },
           build: {
             outDir: 'dist-electron',
             rolldownOptions: {
@@ -90,11 +99,7 @@ export default defineConfig(async ({ mode }) => {
     })),
   ],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@electron': path.resolve(__dirname, './electron'),
-      '@shared': path.resolve(__dirname, './shared'),
-    },
+    alias: aliases,
   },
   build: {
     outDir: 'dist',
