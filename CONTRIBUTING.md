@@ -34,7 +34,7 @@ pnpm lint
 pnpm test:coverage:check   # use-native node + Vitest coverage + clean-output verification
 pnpm run build:vite && pnpm run verify:csp
 pnpm audit --prod --audit-level critical
-pnpm audit:dev             # full-tree audit (high+), deferred GHSAs allowlisted
+pnpm audit:dev             # full-tree audit (high+); GHSA allowlist currently empty
 ```
 
 Run manually anytime: `pnpm prepush`.
@@ -66,33 +66,47 @@ Budget Optimizer uses a **draft overlay** for the active budget's working data (
 
 Budget **details** (name, balances, cash targets) are registry metadata on the Budgets page. Budget **contents** (incomes, bills, schedule) require switching to that budget first — data never mixes across budgets.
 
+### Exit and lock behavior
+
+| Action | Dirty-draft behavior |
+|--------|----------------------|
+| In-app navigation | No prompt (draft stays) |
+| Lock App | No prompt; draft preserved across unlock |
+| Quit / native window close | Save / Discard / Cancel |
+| Switch budgets | Save / Discard / Cancel (local guard on Budgets) |
+
 ## Schedule semantics (accepted behaviors)
 
 These behaviors are intentional — not bugs. They are covered by unit tests where noted.
 
 ### Income-attached bills (A-03)
 
-Bills linked to a preferred income source (`preferredIncomeId`) are assigned to **every paycheck** from that income in step 2A of the scheduler. Due-day alignment and the 14-day prepay cap do **not** apply on this path. See `electron/services/scheduler/assignment.ts`.
+Bills marked income-attached (`isIncomeAttached` with `preferredIncomeSourceId`) are placed on **every paycheck** that includes that income source before the exact solver runs. Due-day alignment and the 14-day prepay cap do **not** apply on this path. See `applyIncomeAttachedBills` in `electron/services/scheduler/exactAssignment.ts`.
 
 ### Manual assignment (A-02)
 
 Drag-and-drop on the Schedule page may place a bill late or more than 14 days early. The UI shows a **confirmation dialog** before accepting the placement; the user can proceed after confirming. Hard rejection is not enforced — manual placements lock from auto-rebalance.
 
-### Rebalance recommendations (A-08)
+### Assignment and rebalance (A-08)
 
-Schedule generation uses a **heuristic** four-phase rebalancer (with backtrack and micro-solver for hard cases). It is not a global optimizer — shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
+Schedule generation uses an **exact windowed solver** (`exactAssignment` / `solve`) to assign bills within due-date eligibility windows, then a **post-assignment rebalance** (`rebalance.ts`) that prefers each paycheck’s target cash-on-hand and only dips toward the minimum (break-glass) floor when needed. It is not a global LP optimizer — shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation. Optional enhancement: backlog **5.4**.
 
 ## Post-Audit Backlog
 
-Optional polish deferred after audit closure (not blocking releases):
+### Still open
 
-- **B-07** — Split large page components (DebtsPage, SettingsPage, PaycheckView)
-- **B-09** — Merge or simplify DataContext over DraftContext
-- **E-04** — Context selector memoization to reduce re-renders
-- **6.5** — Electron `^33.4.11` → 42 upgrade (**Closed** — `electron@^42.6.1`)
 - **5.4** — LP/constraint solver for hard rebalance cases (A-08 enhancement)
 
-Completed since closure: **B-04** (shared types module, #59), **B-08** (BudgetManager current-budget cache), and **5.3 / 6.2** (Playwright E2E safety net, #60).
+### Closed since audit
+
+- **B-04** — Shared types module (`shared/`, #59)
+- **B-07** — Presentational splits for large pages (#81)
+- **B-08** — BudgetManager current-budget cache
+- **B-09** — Merge DataContext into Draft schedule slice (#83; `DataContext` removed)
+- **E-04** — `DraftStatusContext` + memoization (#82)
+- **5.3 / 6.2** — Playwright E2E safety net (#60)
+- **6.5** — Electron `^33.4.11` → 42 (#90; always-probe ABI helper #89)
+- Dependabot ignore for Electron / TypeScript majors (#93) — see [Dependabot PRs](#dependabot-prs)
 
 ## Pull request descriptions
 
