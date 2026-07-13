@@ -13,7 +13,7 @@ These run automatically when you commit or push:
 | Hook | Checks |
 |------|--------|
 | `commit-msg` | Commitlint (Conventional Commits) |
-| `pre-push` | PR Gate quality parity: typecheck, lint, Vitest coverage, clean test output, production CSP build, critical production dependency audit |
+| `pre-push` | PR Gate quality parity: `typecheck`, `typecheck:electron`, lint, Vitest coverage, clean test output, production CSP build, critical production audit, `audit:dev` (full-tree high+) |
 
 CI re-runs the same quality suite on the PR before auto-merge. Main Stability validates packaging after merge.
 

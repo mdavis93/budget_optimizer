@@ -9,7 +9,7 @@
 **Baseline re-verified:** `main` @ d5e7624  
 **Status:** CLOSED — all findings dispositioned (see [Audit Closure Summary](#audit-closure-summary))
 
-**Post-3.0 balancer update (July 2026):** Debug telemetry removed; `schedule:build` is the sole schedule IPC; reconciliation uses user `targetCashOnHand` / `minCashOnHand`; post-assignment rebalance enforces target/min tiers; `MIN_BREATHING_ROOM` removed.
+**Post-3.0 / post-audit update (July 2026):** Exact windowed assignment engine + post-assignment rebalance (`targetCashOnHand` / `minCashOnHand`); `schedule:build` is the sole schedule IPC; `MIN_BREATHING_ROOM` removed. Architecture snowball closed (B-04, B-07, B-09, E-04 — `DataContext` removed). Electron 42 + always-probe ABI helper. SBOM artifact in CI quality job. Dependabot ignores Electron/TypeScript majors (#93). Living backlog: [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog) (only **5.4** LP solver remains open).
 
 ---
 
@@ -65,7 +65,7 @@ Substantial remediation since the June 10 audit. Revised approximate posture:
 | Additional Quality       | C+            | **B-** — tests, CI, docs greatly improved; bloat/E2E gaps remain              |
 
 
-**Closure summary:** All release-blockers and draft-hardening items closed. Post-audit backlog: architecture polish (B-04, B-07–B-09, E-04), Electron upgrade, E2E draft flows. See [Audit Closure Summary](#audit-closure-summary).
+**Closure summary:** All release-blockers and draft-hardening items closed. Post-audit backlog reduced to optional **5.4** (LP solver). Architecture polish (B-04, B-07–B-09, E-04), Electron 42, E2E, and SBOM are closed. See [Audit Closure Summary](#audit-closure-summary).
 
 Original grades in the table above are unchanged; this block supersedes them for planning purposes only.
 
@@ -90,14 +90,14 @@ Original grades in the table above are unchanged; this block supersedes them for
 The severity counts in the table above reflect the **June 10, 2026 baseline only** and are not updated in place. Final disposition on current `main` (see [Audit Closure Summary](#audit-closure-summary)):
 
 
-| Domain               | Closed  | Accepted       | Deferred            |
-| -------------------- | ------- | -------------- | ------------------- |
-| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0                   |
-| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0                   |
-| Efficiency (E-*)     | 9 / 10  | 0              | 1 (E-04)            |
-| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0                   |
-| Bloat (B-*)          | 6 / 10  | 0              | 4 (B-04, B-07–B-09) |
-| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0                   |
+| Domain               | Closed  | Accepted       | Deferred |
+| -------------------- | ------- | -------------- | -------- |
+| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0        |
+| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0        |
+| Efficiency (E-*)     | 10 / 10 | 0              | 0        |
+| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0        |
+| Bloat (B-*)          | 10 / 10 | 0              | 0        |
+| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0        |
 
 
 The original Critical count (S-01) is **resolved**. Zero findings remain Open or Partial without a final disposition.
@@ -519,7 +519,7 @@ Key commits: `35d1133`, `6fa05a0`, `13f8b21`, `5a1fa68`, `cfd0588`.
 | E-01 | **Closed**   | `generateGoalProjections()` skips rebalance loop; tests assert parity (PR #26) |
 | E-02 | **Closed**   | Debounce + in-memory cache + `scheduleInputHash` (PR #26, #53)                 |
 | E-03 | **Closed**   | Single `budget:get-snapshot` IPC (PR #26)                                      |
-| E-04 | **Deferred** | Context split done; selector memoization optional (post-audit)                 |
+| E-04 | **Closed**   | `DraftStatusContext` + memoization (#82)                               |
 | E-05 | **Closed**   | Route lazy-loading in `App.tsx`                                                |
 | E-06 | **Closed**   | Dead `schedule:generate` removed; single `schedule:build`                      |
 | E-07 | **Closed**   | Shallow `copyDraftState()` on reload; `structuredClone` only on discard paths  |
@@ -664,12 +664,12 @@ The codebase is lean relative to its feature set. Production code is ~~19,487 LO
 | B-01 | **Closed**   | `@react-pdf/renderer` removed; PDF via Chromium `printToPDF`                |
 | B-02 | **Closed**   | Shared `src/utils/formatCurrency.ts` replaces local copies                  |
 | B-03 | **Closed**   | Shared `PRIORITY_LABELS` in `electron/utils/constants.ts`                   |
-| B-04 | **Deferred** | Shared types package — post-audit                                           |
+| B-04 | **Closed**   | Shared types module (`shared/`, #59)                                    |
 | B-05 | **Closed**   | Scheduler split into `electron/services/scheduler/`; handler split deferred |
 | B-06 | **Closed**   | Redundant direct deps removed; `crypto.randomUUID()` in quick-budget        |
-| B-07 | **Deferred** | Large page component splits — post-audit                                    |
-| B-08 | **Deferred** | BudgetManager refactor — post-audit                                         |
-| B-09 | **Deferred** | DataContext merge optional — post-audit                                     |
+| B-07 | **Closed**   | Presentational splits (#81)                                                 |
+| B-08 | **Closed**   | BudgetManager current-budget cache                                          |
+| B-09 | **Closed**   | DataContext → Draft schedule slice (#83; removed)                           |
 | B-10 | **Closed**   | Shared `buildDebtPayoffs()` in handlers; inline duplicate removed           |
 
 
@@ -984,7 +984,7 @@ When shortfalls remain, proposes:
 | A-05 | **Closed**   | Standardized `billOccurrenceKey(billId, yyyy-MM-dd)` in scheduler + IPC             |
 | A-06 | **Closed**   | `optimizeSchedule` removed; API is `schedule.build`                                 |
 | A-07 | **Closed**   | Glide-path allocation active in `paychecks.ts`                                      |
-| A-08 | **Accepted** | Heuristic rebalance with backtrack + micro-solver; README disclaimer                |
+| A-08 | **Accepted** | Exact assignment + post-assignment rebalance; not a global LP; README disclaimer |
 
 
 All algorithm findings dispositioned. Accepted items documented in CONTRIBUTING.
@@ -1343,7 +1343,7 @@ Notable packages:
 | Production audit in pipeline | **Closed**   | `npm audit --prod --audit-level critical` in shared quality workflow                         |
 | Electron version             | **Closed**   | Upgraded to Electron 42; native rebuild + packaging gate verified                            |
 | Dev/build transitive audit   | **Deferred** | Dev deps; production surface reduced via CI prod audit                                       |
-| SBOM / update cadence        | **Deferred** | Post-audit                                                                                   |
+| SBOM / update cadence        | **Closed**   | CycloneDX SBOM artifact on every quality run; Dependabot weekly cadence          |
 
 
 The original claim of "no `.github/workflows`" is **obsolete**.
@@ -1450,7 +1450,7 @@ Phase completion as of this update (original phase rows above unchanged):
 | 0 — Release blockers           | **Complete** — 0.1–0.4 closed (telemetry, export escaping, unlock guards)                                                                         |
 | 1 — Algorithm correctness      | **Complete (accepted limitations A-03, A-08)** — 1.1–1.6 done; A-02 confirm dialog; A-03/A-08 accepted                                            |
 | 2 — Draft / volatile hardening | **Complete** — PRs [#52](https://github.com/mdavis93/budget_optimizer/pull/52)–[#55](https://github.com/mdavis93/budget_optimizer/pull/55)        |
-| 3 — Efficiency & bloat         | **Complete except deferred bloat** — 3.1–3.3, 3.6 done (PR [#26](https://github.com/mdavis93/budget_optimizer/pull/26)); B-04, B-07–B-09 deferred |
+| 3 — Efficiency & bloat         | **Complete** — 3.1–3.3, 3.6 done (PR [#26](https://github.com/mdavis93/budget_optimizer/pull/26)); B-04 / B-07–B-09 / E-04 closed in later PRs (#59, #81–#83) |
 | 4 — Security hardening         | **Complete** — 4.1–4.7 done                                                                                                                       |
 | 5 — Longer-term quality        | **Deferred** — optional items moved to post-audit backlog in CONTRIBUTING                                                                         |
 
@@ -1494,7 +1494,7 @@ Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (int
 | E-01 | Closed   | Lightweight goal projections skip rebalance (#26)          |
 | E-02 | Closed   | Debounce + cache + `scheduleInputHash`                     |
 | E-03 | Closed   | Single `budget:get-snapshot` IPC                           |
-| E-04 | Deferred | Context split done; selector memoization optional          |
+| E-04 | Closed   | `DraftStatusContext` + memoization (#82)                   |
 | E-05 | Closed   | Route lazy-loading                                         |
 | E-06 | Closed   | Single `schedule:build` path                               |
 | E-07 | Closed   | Shallow copy on reload; discard clones intentional         |
@@ -1511,12 +1511,12 @@ Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (int
 | B-01 | Closed   | `@react-pdf/renderer` removed                             |
 | B-02 | Closed   | Shared `src/utils/formatCurrency.ts` (audit closure PR)   |
 | B-03 | Closed   | Shared `PRIORITY_LABELS` in `electron/utils/constants.ts` |
-| B-04 | Deferred | Shared types package                                      |
+| B-04 | Closed   | Shared types module (`shared/`, #59)                      |
 | B-05 | Closed   | Scheduler split; handlers split deferred                  |
 | B-06 | Closed   | Redundant direct deps removed                             |
-| B-07 | Deferred | Large page component splits                               |
-| B-08 | Deferred | BudgetManager refactor                                    |
-| B-09 | Deferred | DataContext merge optional                                |
+| B-07 | Closed   | Presentational splits (#81)                               |
+| B-08 | Closed   | BudgetManager current-budget cache                        |
+| B-09 | Closed   | DataContext → Draft schedule slice (#83; removed)         |
 | B-10 | Closed   | Shared `buildDebtPayoffs()`                               |
 
 
@@ -1532,7 +1532,7 @@ Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (int
 | A-05 | Closed   | `billOccurrenceKey` dedup                                        |
 | A-06 | Closed   | `optimizeSchedule` removed                                       |
 | A-07 | Closed   | Glide-path allocation                                            |
-| A-08 | Accepted | Heuristic rebalance; README disclaimer                           |
+| A-08 | Accepted | Exact assignment + post-assignment rebalance; not a global LP    |
 
 
 ### Volatile / draft (V)
@@ -1576,7 +1576,7 @@ Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (int
 | 6.4 export XSS warning | Accepted | Backend fixed (S-03)                    |
 | 6.5 CI / Dependabot    | Closed   | Workflows + Husky prepush               |
 | 6.5 Electron upgrade   | Closed   | Electron 42 + ABI/packaging gate        |
-| 6.5 SBOM               | Deferred | Post-audit                              |
+| 6.5 SBOM               | Closed   | CycloneDX artifact in quality job       |
 
 
 *This audit is closed as of June 15, 2026. Post-audit backlog tracked in [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog).*
