@@ -190,7 +190,7 @@ describe('rebalancePaycheckAssignments', () => {
     expect(after).toBe(before);
   });
 
-  it('ignores unpayable bills when computing paycheck load', () => {
+  it('funds unpayable bills in place when break-glass spare exists', () => {
     const assignments = buildAssignments([
       { date: '2027-07-01', income: 1000, bills: [] },
       {
@@ -203,7 +203,36 @@ describe('rebalancePaycheckAssignments', () => {
 
     rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
 
+    // Break-glass spare on Jul 8 (min capacity 900) funds the $800 bill in place.
     expect(assignments[1].bills).toHaveLength(1);
+    expect(assignments[1].bills[0].isUnpayable).toBe(false);
     expect(assignments[0].bills).toHaveLength(0);
+  });
+
+  it('rescues unpayable bills onto earlier paychecks using break-glass spare', () => {
+    const assignments = buildAssignments([
+      { date: '2027-02-12', income: 2650, bills: [] },
+      {
+        date: '2027-02-19',
+        income: 1000,
+        bills: [{ id: 'bill-light', amount: 650, dueDate: '2027-02-19' }],
+      },
+      {
+        date: '2027-02-26',
+        income: 2650,
+        bills: [
+          { id: 'bill-core', amount: 2515, dueDate: '2027-02-26' },
+          { id: 'bill-navy', amount: 175, dueDate: '2027-03-03', priority: 'low' },
+        ],
+      },
+    ]);
+    assignments[2].bills[1].isUnpayable = true;
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    const navy = assignments.flatMap((a) => a.bills).find((b) => b.billId === 'bill-navy');
+    expect(navy?.isUnpayable).toBe(false);
+    expect(assignments[1].bills.some((b) => b.billId === 'bill-navy')).toBe(true);
+    expect(assignments[2].bills.some((b) => b.billId === 'bill-navy')).toBe(false);
   });
 });

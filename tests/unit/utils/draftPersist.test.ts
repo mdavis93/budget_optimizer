@@ -49,7 +49,7 @@ describe('draftPersist', () => {
   });
 
   describe('happy', () => {
-    it('marks budget dirty when scheduleStartDate changes', () => {
+    it('marks schedule dirty when scheduleStartDate changes', () => {
       const committed = makeDraftState();
       const draft = makeDraftState({
         budget: {
@@ -59,8 +59,23 @@ describe('draftPersist', () => {
       });
 
       const dirty = computeDirtyDomains(committed, draft);
-      expect(dirty.has('budget')).toBe(true);
+      expect(dirty.has('schedule')).toBe(true);
+      expect(dirty.has('budget')).toBe(false);
       expect(dirty.size).toBe(1);
+    });
+
+    it('marks budget dirty when budget settings change without scheduleStartDate', () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        budget: {
+          ...committed.budget!,
+          name: 'Renamed',
+        },
+      });
+
+      const dirty = computeDirtyDomains(committed, draft);
+      expect(dirty.has('budget')).toBe(true);
+      expect(dirty.has('schedule')).toBe(false);
     });
 
     it('marks all dirty domains when draft changes span entities and schedule', () => {
@@ -129,6 +144,24 @@ describe('draftPersist', () => {
       const budgetOrder = vi.mocked(api.budget.update).mock.invocationCallOrder[0];
       expect(incomeOrder).toBeLessThan(billOrder);
       expect(billOrder).toBeLessThan(budgetOrder);
+    });
+
+    it('persists scheduleStartDate when saving the schedule domain', async () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        budget: {
+          ...committed.budget!,
+          scheduleStartDate: '2026-07-01',
+        },
+      });
+
+      const result = await persistDomains(committed, draft, ['schedule'], 'budget-1');
+
+      expect(result.success).toBe(true);
+      expect(window.electronAPI.budget.update).toHaveBeenCalledWith('budget-1', {
+        scheduleStartDate: '2026-07-01',
+      });
+      expect(result.nextCommitted.budget?.scheduleStartDate).toBe('2026-07-01');
     });
 
     it('maps created draft ids across income, bills, debts, and schedule domains', async () => {
