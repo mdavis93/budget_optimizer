@@ -45,10 +45,11 @@ function isMovableBill(bill: ProjectedBill, lockedBillKeys: Set<string>): boolea
   return !lockedBillKeys.has(billOccurrenceKey(bill.billId, bill.date));
 }
 
-/** Solver-rejected bills that are otherwise free to place within the window. */
+/** Capacity-failed bills that may still fit within the eligibility window. */
 function isRescuableUnpayable(bill: ProjectedBill, lockedBillKeys: Set<string>): boolean {
   if (!bill.isUnpayable) return false;
   if (bill.isIncomeAttached) return false;
+  if (bill.unfundableReason === 'no_eligible_paycheck_in_window') return false;
   return !lockedBillKeys.has(billOccurrenceKey(bill.billId, bill.date));
 }
 
