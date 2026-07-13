@@ -6,10 +6,10 @@
 **Methodology:** Architecture tracing, security pattern review, algorithm analysis, draft-state flow mapping, dependency audit (`npm audit`), test suite execution (`vitest run`)
 
 **Audit closure target:** June 2026  
-**Baseline re-verified:** `main` @ d5e7624  
-**Status:** CLOSED — all findings dispositioned (see [Audit Closure Summary](#audit-closure-summary))
+**Baseline re-verified:** `main` @ d5e7624 (June 15, 2026)  
+**Status:** **DONE — retained for archival purposes only.** All findings are Closed, Accepted, or Won't-do. No living remediation backlog. See [Audit Closure Summary](#audit-closure-summary) for resolving PRs/commits.
 
-**Post-3.0 / post-audit update (July 2026):** Exact windowed assignment engine + post-assignment rebalance (`targetCashOnHand` / `minCashOnHand`); `schedule:build` is the sole schedule IPC; `MIN_BREATHING_ROOM` removed. Architecture snowball closed (B-04, B-07, B-09, E-04 — `DataContext` removed). Electron 42 + always-probe ABI helper. SBOM artifact in CI quality job. Dependabot ignores Electron/TypeScript majors (#93). Living backlog: [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog) (only **5.4** LP solver remains open).
+**Archive note (July 2026):** Post-audit engineering (exact scheduler v3.0, architecture snowball, Electron 42, E2E, SBOM, docs) is complete. Optional LP/constraint solver (**5.4** / A-08 enhancement) is **Won't-do** until product need resurfaces. Historical finding narratives below are preserved; disposition tables and this header are the source of truth for status.
 
 ---
 
@@ -59,13 +59,13 @@ Substantial remediation since the June 10 audit. Revised approximate posture:
 | ------------------------ | ------------- | ----------------------------------------------------------------------------- |
 | Security                 | C+            | **B** — Phase 0/4 items largely closed (12/14 S-* findings)                   |
 | Efficiency               | C             | **B-** — PR #26 + #53 closed most E-* hot paths                               |
-| Limited Bloat            | B-            | **B** — scheduler modularized; B-02/B-03/B-06 closed; B-04/B-07–B-09 deferred |
+| Limited Bloat            | B-            | **B** — scheduler modularized; B-02/B-03/B-06 closed; B-04/B-07–B-09 later closed |
 | Algorithmic Intelligence | B-            | **B** — prepay cap and dedup fixed; A-03, A-08 accepted                       |
 | Volatile / Draft State   | B+            | **A-** — Phase 2 complete (#52–#55); V-07 accepted                            |
-| Additional Quality       | C+            | **B-** — tests, CI, docs greatly improved; bloat/E2E gaps remain              |
+| Additional Quality       | C+            | **B** — tests, CI, docs, E2E, SBOM closed; audit archive only                 |
 
 
-**Closure summary:** All release-blockers and draft-hardening items closed. Post-audit backlog reduced to optional **5.4** (LP solver). Architecture polish (B-04, B-07–B-09, E-04), Electron 42, E2E, and SBOM are closed. See [Audit Closure Summary](#audit-closure-summary).
+**Closure summary:** **Done — archival only.** All release-blockers, draft-hardening, architecture polish, Electron 42, E2E, and SBOM are closed. **5.4** (LP solver) is **Won't-do**. See [Audit Closure Summary](#audit-closure-summary).
 
 Original grades in the table above are unchanged; this block supersedes them for planning purposes only.
 
@@ -90,17 +90,17 @@ Original grades in the table above are unchanged; this block supersedes them for
 The severity counts in the table above reflect the **June 10, 2026 baseline only** and are not updated in place. Final disposition on current `main` (see [Audit Closure Summary](#audit-closure-summary)):
 
 
-| Domain               | Closed  | Accepted       | Deferred |
-| -------------------- | ------- | -------------- | -------- |
-| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0        |
-| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0        |
-| Efficiency (E-*)     | 10 / 10 | 0              | 0        |
-| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0        |
-| Bloat (B-*)          | 10 / 10 | 0              | 0        |
-| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0        |
+| Domain               | Closed  | Accepted       | Won't-do / Deferred |
+| -------------------- | ------- | -------------- | ------------------- |
+| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0                   |
+| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0                   |
+| Efficiency (E-*)     | 10 / 10 | 0              | 0                   |
+| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0 (5.4 Won't-do)    |
+| Bloat (B-*)          | 10 / 10 | 0              | 0                   |
+| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0                   |
 
 
-The original Critical count (S-01) is **resolved**. Zero findings remain Open or Partial without a final disposition.
+The original Critical count (S-01) is **resolved**. Zero findings remain Open without a final disposition. Living remediation backlog is **empty**.
 
 ---
 
@@ -984,7 +984,7 @@ When shortfalls remain, proposes:
 | A-05 | **Closed**   | Standardized `billOccurrenceKey(billId, yyyy-MM-dd)` in scheduler + IPC             |
 | A-06 | **Closed**   | `optimizeSchedule` removed; API is `schedule.build`                                 |
 | A-07 | **Closed**   | Glide-path allocation active in `paychecks.ts`                                      |
-| A-08 | **Accepted** | Exact assignment + post-assignment rebalance; not a global LP; README disclaimer |
+| A-08 | **Accepted** | Exact assignment (#71) + post-assignment rebalance; not a global LP; **5.4 Won't-do**; README disclaimer |
 
 
 All algorithm findings dispositioned. Accepted items documented in CONTRIBUTING.
@@ -1342,8 +1342,8 @@ Notable packages:
 | Husky prepush                | **Closed**   | Full CI parity via `scripts/pre-push-quality.sh`                                             |
 | Production audit in pipeline | **Closed**   | `npm audit --prod --audit-level critical` in shared quality workflow                         |
 | Electron version             | **Closed**   | Upgraded to Electron 42; native rebuild + packaging gate verified                            |
-| Dev/build transitive audit   | **Deferred** | Dev deps; production surface reduced via CI prod audit                                       |
-| SBOM / update cadence        | **Closed**   | CycloneDX SBOM artifact on every quality run; Dependabot weekly cadence          |
+| Dev/build transitive audit   | **Closed**   | Full-tree `pnpm audit:dev` (high+) in quality gate (#61); Electron GHSA allowlist cleared (#90) |
+| SBOM / update cadence        | **Closed**   | CycloneDX SBOM artifact on every quality run; Dependabot weekly cadence (#61, #93) |
 
 
 The original claim of "no `.github/workflows`" is **obsolete**.
@@ -1435,12 +1435,12 @@ Effort key: **S** = hours, **M** = 1–2 days, **L** = 3+ days
 | 5.1 | Split scheduler into modules                           | M (2d)  | B-05, E-09 |
 | 5.2 | Shared types package (renderer + electron)             | M (2d)  | B-04       |
 | 5.3 | E2E tests for draft save/discard/navigation            | M (2d)  | 6.2        |
-| 5.4 | Consider LP/constraint solver for hard rebalance cases | L (1w+) | A-08       |
+| 5.4 | Consider LP/constraint solver for hard rebalance cases | L (1w+) | A-08 — **Won't-do** (July 2026); exact assignment (#71) covers typical cases |
 
 
 ### Current Status
 
-*Updated June 15, 2026 against `main` @ d5e7624.*
+*Updated July 2026 — audit archive complete.*
 
 Phase completion as of this update (original phase rows above unchanged):
 
@@ -1448,11 +1448,11 @@ Phase completion as of this update (original phase rows above unchanged):
 | Phase                          | Status                                                                                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0 — Release blockers           | **Complete** — 0.1–0.4 closed (telemetry, export escaping, unlock guards)                                                                         |
-| 1 — Algorithm correctness      | **Complete (accepted limitations A-03, A-08)** — 1.1–1.6 done; A-02 confirm dialog; A-03/A-08 accepted                                            |
+| 1 — Algorithm correctness      | **Complete (accepted limitations A-03, A-08)** — 1.1–1.6 done; A-02 confirm dialog; A-03/A-08 accepted; **5.4 Won't-do**                          |
 | 2 — Draft / volatile hardening | **Complete** — PRs [#52](https://github.com/mdavis93/budget_optimizer/pull/52)–[#55](https://github.com/mdavis93/budget_optimizer/pull/55)        |
-| 3 — Efficiency & bloat         | **Complete** — 3.1–3.3, 3.6 done (PR [#26](https://github.com/mdavis93/budget_optimizer/pull/26)); B-04 / B-07–B-09 / E-04 closed in later PRs (#59, #81–#83) |
+| 3 — Efficiency & bloat         | **Complete** — 3.1–3.3, 3.6 done (PR [#26](https://github.com/mdavis93/budget_optimizer/pull/26)); B-04 / B-07–B-09 / E-04 closed in later PRs (#59, #81–#84) |
 | 4 — Security hardening         | **Complete** — 4.1–4.7 done                                                                                                                       |
-| 5 — Longer-term quality        | **Deferred** — optional items moved to post-audit backlog in CONTRIBUTING                                                                         |
+| 5 — Longer-term quality        | **Complete** — 5.1–5.3 closed; **5.4 Won't-do** (no living backlog)                                                                               |
 
 
 Key remediation PRs: #26 (efficiency E-01–E-10), #52 (V-01 navigation), #53 (V-03 preview regen), #54 (V-02 cross-domain save), #55 (V-05/V-06/V-07 UX/docs).
@@ -1461,125 +1461,129 @@ Key remediation PRs: #26 (efficiency E-01–E-10), #52 (V-01 navigation), #53 (V
 
 ## Audit Closure Summary
 
-*Closed June 15, 2026. Original June 10 finding text preserved above for history.*
+*Originally closed June 15, 2026 (`#56`). Archive finalized July 2026 — **Done, retained for archival purposes only.***
 
-Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (intentional or acknowledged limitation), or **Deferred** (post-audit backlog — see [CONTRIBUTING.md](CONTRIBUTING.md) Post-Audit Backlog).
+Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (intentional limitation), or **Won't-do** (explicitly declined). There is **no** living deferred backlog.
+
+**Resolving refs:** Prefer GitHub PR numbers. Early Phase 0/1 security and algorithm fixes landed as direct commits before the PR-gated workflow; those use short commit SHAs. `#56` documents dispositions; `#95` refreshes living docs.
 
 ### Security (S)
 
 
-| ID   | Final    | Notes                                                                        |
-| ---- | -------- | ---------------------------------------------------------------------------- |
-| S-01 | Closed   | Telemetry removed; CI grep guards                                            |
-| S-02 | Closed   | `requireUnlocked` + gated IPC                                                |
-| S-03 | Closed   | `escapeHtml` on exports                                                      |
-| S-04 | Closed   | v9/v10 encryption migrations                                                 |
-| S-05 | Closed   | Auto-lock + activity pings                                                   |
-| S-06 | Closed   | Production CSP tightened                                                     |
-| S-07 | Closed   | Settings key allowlist                                                       |
-| S-08 | Closed   | Auth rate limiting                                                           |
-| S-09 | Closed   | Password change uses `offerSave()`                                           |
-| S-10 | Accepted | Static salt removed; legacy accounts without `recoverySalt` blocked at reset |
-| S-11 | Closed   | DB chmod 0o600                                                               |
-| S-12 | Closed   | DevTools dev-only                                                            |
-| S-13 | Closed   | Skip/assignment validation added (audit closure PR)                          |
-| S-14 | Closed   | Draft overlay validated server-side                                          |
+| ID   | Final    | Resolving | Notes                                                                        |
+| ---- | -------- | --------- | ---------------------------------------------------------------------------- |
+| S-01 | Closed   | `cfd0588` | Telemetry removed; CI grep + packaged-app guards                             |
+| S-02 | Closed   | `35d1133` | `requireUnlocked` + gated credentials/export IPC                             |
+| S-03 | Closed   | `35d1133` | `escapeHtml` on PDF/HTML export strings                                      |
+| S-04 | Closed   | `13f8b21` | v9/v10 encryption migrations (goals, debts, metadata, junctions)             |
+| S-05 | Closed   | `6fa05a0` | Auto-lock reset on unlock + activity pings                                   |
+| S-06 | Closed   | `6fa05a0`, `5a1fa68` | Production CSP tightened; stale OAuth origins removed                 |
+| S-07 | Closed   | `6fa05a0` | Settings key allowlist                                                       |
+| S-08 | Closed   | `6fa05a0` | Auth rate limiting + lockout                                                 |
+| S-09 | Closed   | `6fa05a0` | Password change uses `credentials.offerSave()`                               |
+| S-10 | Accepted | `5a1fa68`, `#56` | Per-user recovery salts; legacy accounts without `recoverySalt` blocked |
+| S-11 | Closed   | `13f8b21` | DB file chmod `0o600` on initialize                                          |
+| S-12 | Closed   | `5a1fa68` | DevTools unpackaged-dev only                                                 |
+| S-13 | Closed   | `#57`     | `validateSkippedBill` / `validateBillAssignment` on skip/assign paths        |
+| S-14 | Closed   | `6fa05a0` | `validateDraftOverlay` before schedule computation                           |
 
 
 ### Efficiency (E)
 
 
-| ID   | Final    | Notes                                                      |
-| ---- | -------- | ---------------------------------------------------------- |
-| E-01 | Closed   | Lightweight goal projections skip rebalance (#26)          |
-| E-02 | Closed   | Debounce + cache + `scheduleInputHash`                     |
-| E-03 | Closed   | Single `budget:get-snapshot` IPC                           |
-| E-04 | Closed   | `DraftStatusContext` + memoization (#82)                   |
-| E-05 | Closed   | Route lazy-loading                                         |
-| E-06 | Closed   | Single `schedule:build` path                               |
-| E-07 | Closed   | Shallow copy on reload; discard clones intentional         |
-| E-08 | Closed   | Lazy chart chunks                                          |
-| E-09 | Closed   | Scheduler modularized under `electron/services/scheduler/` |
-| E-10 | Closed   | Vite `manualChunks`                                        |
+| ID   | Final  | Resolving     | Notes                                                      |
+| ---- | ------ | ------------- | ---------------------------------------------------------- |
+| E-01 | Closed | `#26`         | Lightweight goal projections skip full rebalance           |
+| E-02 | Closed | `#26`, `#53`  | Debounce + cache + `scheduleInputHash`                     |
+| E-03 | Closed | `#26`         | Single `budget:get-snapshot` IPC                           |
+| E-04 | Closed | `#82`         | `DraftStatusContext` + memoization                         |
+| E-05 | Closed | `#26`         | Route lazy-loading                                         |
+| E-06 | Closed | `#26`, `5a1fa68` | Single `schedule:build` path                            |
+| E-07 | Closed | `#26`         | Shallow copy on reload; discard clones intentional         |
+| E-08 | Closed | `#26`, `#28`  | Lazy chart chunks                                          |
+| E-09 | Closed | `#26`, `#28`  | Scheduler modularized under `electron/services/scheduler/` |
+| E-10 | Closed | `#26`         | Vite `manualChunks`                                        |
 
 
 ### Limited bloat (B)
 
 
-| ID   | Final    | Notes                                                     |
-| ---- | -------- | --------------------------------------------------------- |
-| B-01 | Closed   | `@react-pdf/renderer` removed                             |
-| B-02 | Closed   | Shared `src/utils/formatCurrency.ts` (audit closure PR)   |
-| B-03 | Closed   | Shared `PRIORITY_LABELS` in `electron/utils/constants.ts` |
-| B-04 | Closed   | Shared types module (`shared/`, #59)                      |
-| B-05 | Closed   | Scheduler split; handlers split deferred                  |
-| B-06 | Closed   | Redundant direct deps removed                             |
-| B-07 | Closed   | Presentational splits (#81)                               |
-| B-08 | Closed   | BudgetManager current-budget cache                        |
-| B-09 | Closed   | DataContext → Draft schedule slice (#83; removed)         |
-| B-10 | Closed   | Shared `buildDebtPayoffs()`                               |
+| ID   | Final  | Resolving    | Notes                                                     |
+| ---- | ------ | ------------ | --------------------------------------------------------- |
+| B-01 | Closed | pre-audit    | `@react-pdf/renderer` removed (Chromium `printToPDF`)     |
+| B-02 | Closed | `#57`        | Shared `src/utils/formatCurrency.ts`                      |
+| B-03 | Closed | `#57`        | Shared `PRIORITY_LABELS` in `electron/utils/constants.ts` |
+| B-04 | Closed | `#59`        | Shared types module (`shared/`)                           |
+| B-05 | Closed | `#26`, `#28` | Scheduler split into modules                              |
+| B-06 | Closed | `#57`        | Redundant direct deps removed (`uuid`, etc.)              |
+| B-07 | Closed | `#81`, `#84` | Presentational splits + SchedulePage hooks                |
+| B-08 | Closed | `#61`        | BudgetManager current-budget cache                        |
+| B-09 | Closed | `#83`        | DataContext → Draft schedule slice (removed)              |
+| B-10 | Closed | `#57`        | Shared `buildDebtPayoffs()`                               |
 
 
 ### Algorithm (A)
 
 
-| ID   | Final    | Notes                                                            |
-| ---- | -------- | ---------------------------------------------------------------- |
-| A-01 | Closed   | `MAX_PREPAY_DAYS` in step 2C                                     |
-| A-02 | Closed   | Confirm-before-override on Schedule (documented in CONTRIBUTING) |
-| A-03 | Accepted | Income-attached bills on every matching paycheck (documented)    |
-| A-04 | Closed   | Single IPC schedule path                                         |
-| A-05 | Closed   | `billOccurrenceKey` dedup                                        |
-| A-06 | Closed   | `optimizeSchedule` removed                                       |
-| A-07 | Closed   | Glide-path allocation                                            |
-| A-08 | Accepted | Exact assignment + post-assignment rebalance; not a global LP    |
+| ID   | Final    | Resolving        | Notes                                                            |
+| ---- | -------- | ---------------- | ---------------------------------------------------------------- |
+| A-01 | Closed   | `6ddaeb7`        | `MAX_PREPAY_DAYS` enforced on automatic assignment               |
+| A-02 | Closed   | `6ddaeb7`, `#56` | Confirm-before-override on Schedule; documented in CONTRIBUTING  |
+| A-03 | Accepted | `#56`            | Income-attached bills on every matching paycheck (documented)    |
+| A-04 | Closed   | `5a1fa68`        | Single IPC schedule path (`schedule:build`)                      |
+| A-05 | Closed   | `6ddaeb7`        | `billOccurrenceKey` dedup                                        |
+| A-06 | Closed   | `5a1fa68`        | `optimizeSchedule` removed                                       |
+| A-07 | Closed   | `6ddaeb7`        | Glide-path / goal allocation path                                |
+| A-08 | Accepted | `#71`, `#56`     | Exact assignment + post-assignment rebalance; not a global LP; **5.4 Won't-do** |
 
 
 ### Volatile / draft (V)
 
 
-| ID   | Final    | Notes                                                      |
-| ---- | -------- | ---------------------------------------------------------- |
-| V-01 | Closed   | Sidebar, Settings, Quit, Lock, budget switch guarded (#52) |
-| V-02 | Closed   | Cross-domain save (#54)                                    |
-| V-03 | Closed   | Preview page regen (#53)                                   |
-| V-04 | Closed   | DraftContext/draftPersist tests                            |
-| V-05 | Closed   | Terminology + CONTRIBUTING                                 |
-| V-06 | Closed   | Settings section labels (#55)                              |
-| V-07 | Accepted | Budget details editable without Switch (#55)               |
-| V-08 | Closed   | Telemetry removed (= S-01)                                 |
+| ID   | Final    | Resolving              | Notes                                                      |
+| ---- | -------- | ---------------------- | ---------------------------------------------------------- |
+| V-01 | Closed   | `#52`, `#68`, `#74`, `#78` | Exit/nav guard evolution; Lock preserves draft; PlatformExitGuard |
+| V-02 | Closed   | `#54`                  | Cross-domain save + confirmation                           |
+| V-03 | Closed   | `#53`                  | Preview page regen on schedule draft inputs                |
+| V-04 | Closed   | `#52`–`#55` era        | DraftContext / draftPersist tests                          |
+| V-05 | Closed   | `#55`                  | "Unsaved changes" terminology + CONTRIBUTING               |
+| V-06 | Closed   | `#55`                  | Settings section labels (immediate vs Save)                |
+| V-07 | Accepted | `#55`                  | Budget details editable without Switch                     |
+| V-08 | Closed   | `cfd0588`              | Telemetry removed (= S-01)                                 |
 
 
 ### Data integrity (D)
 
 
-| ID   | Final    | Notes                                          |
-| ---- | -------- | ---------------------------------------------- |
-| D-01 | Closed   | Same as A-05                                   |
-| D-02 | Closed   | Same as E-07                                   |
-| D-03 | Closed   | Cross-domain save (#54)                        |
-| D-04 | Accepted | Bill delete cascades debts; dual dirty domains |
-| D-05 | Accepted | Threat-model info only                         |
+| ID   | Final    | Resolving | Notes                                          |
+| ---- | -------- | --------- | ---------------------------------------------- |
+| D-01 | Closed   | `6ddaeb7` | Same as A-05                                   |
+| D-02 | Closed   | `#26`     | Same as E-07                                   |
+| D-03 | Closed   | `#54`     | Cross-domain save                              |
+| D-04 | Accepted | `#56`     | Bill delete cascades debts; dual dirty domains |
+| D-05 | Accepted | `#56`     | Threat-model info only                         |
 
 
 ### Section 6 misc
 
 
-| Item                   | Final    | Notes                                   |
-| ---------------------- | -------- | --------------------------------------- |
-| 6.3 README accuracy    | Closed   | Encryption, PBKDF2, Google Sheets fixed |
-| 6.3 product naming     | Accepted | README says "rebalance recommendations" |
-| 6.4 Settings UX        | Closed   | V-06                                    |
-| 6.4 Budgets UX         | Closed   | V-07                                    |
-| 6.4 GlobalDraftBanner  | Accepted | Single-domain uses per-page Save bar    |
-| 6.4 reconciliation UX  | Accepted | Power-user feature                      |
-| 6.4 export XSS warning | Accepted | Backend fixed (S-03)                    |
-| 6.5 CI / Dependabot    | Closed   | Workflows + Husky prepush               |
-| 6.5 Electron upgrade   | Closed   | Electron 42 + ABI/packaging gate        |
-| 6.5 SBOM               | Closed   | CycloneDX artifact in quality job       |
+| Item                   | Final    | Resolving     | Notes                                   |
+| ---------------------- | -------- | ------------- | --------------------------------------- |
+| 6.2 / 5.3 E2E          | Closed   | `#60`         | Playwright real-vault journeys          |
+| 6.3 README accuracy    | Closed   | `13f8b21`, `#95` | Encryption, PBKDF2, exports, stack   |
+| 6.3 product naming     | Accepted | `#56`         | Rebalance / optimize wording            |
+| 6.4 Settings UX        | Closed   | `#55`         | V-06                                    |
+| 6.4 Budgets UX         | Closed   | `#55`         | V-07                                    |
+| 6.4 GlobalDraftBanner  | Accepted | `#56`         | Single-domain uses per-page Save bar    |
+| 6.4 reconciliation UX  | Accepted | `#56`         | Power-user feature                      |
+| 6.4 export XSS warning | Accepted | `35d1133`     | Backend fixed (S-03); no user warning   |
+| 6.5 CI / Dependabot    | Closed   | `#13`, `#19`, `#44`, `#61` | Workflows + Husky + grouped bots |
+| 6.5 Electron upgrade   | Closed   | `#90`, `#89`  | Electron 42 + always-probe ABI helper   |
+| 6.5 SBOM / audit:dev   | Closed   | `#61`, `#90`  | CycloneDX artifact; empty GHSA allowlist |
+| 5.4 LP solver          | Won't-do | —             | Declined July 2026 until product need   |
 
 
-*This audit is closed as of June 15, 2026. Post-audit backlog tracked in [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog).*
+*This audit is **Done — retained for archival purposes only** (July 2026). Living contributor notes: [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog).*
 
 ---
 
