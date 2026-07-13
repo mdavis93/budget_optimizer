@@ -30,7 +30,7 @@ describe('assignBillsExact', () => {
   it('defers a bill to a later paycheck when the earlier one is tight', () => {
     const paycheckDates = [parseISO('2026-08-14'), parseISO('2026-08-21')];
     const allIncomes = [
-      income('2026-08-14', 2650),
+      income('2026-08-14', 415), // capacity above $250 target = $165 → amazon only
       income('2026-08-21', 1000),
     ];
     const allBills = [
@@ -55,6 +55,7 @@ describe('assignBillsExact', () => {
     expect(format(amazonPc!.date, 'yyyy-MM-dd')).toBe('2026-08-14');
     expect(format(waterPc!.date, 'yyyy-MM-dd')).toBe('2026-08-21');
     expect(waterPc!.bills.find((b) => b.billId === 'water')?.isUnpayable).toBeFalsy();
+    expect(amazonPc!.bills.some((b) => b.billId === 'water')).toBe(false);
   });
 
   it('marks one bill unpayable when window income cannot cover both', () => {
