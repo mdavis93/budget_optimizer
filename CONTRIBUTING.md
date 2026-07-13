@@ -265,7 +265,7 @@ When `main` advances (including after a Dependabot PR merges), the **Dependabot 
 
 Auto-merge squash commits do not trigger `push` workflows. **Main Stability Drift Check** dispatches both Main Stability and Dependabot Refresh when `main` advances without a matching workflow run (every 15 minutes). Use `workflow_dispatch` on either workflow for immediate recovery.
 
-Major group PRs may legitimately fail `pr-gate / quality` (breaking migrations). Add the `do-not-automerge` label to hold them without blocking other PRs.
+Major group PRs may legitimately fail `pr-gate / quality` (breaking migrations). Add the `do-not-automerge` label to hold them without blocking other PRs. Automated **major** bumps for `electron` and `typescript` are ignored in [`.github/dependabot.yml`](.github/dependabot.yml) — those upgrades land as dedicated human-owned PRs.
 
 Individual Dependabot PRs opened before grouping was enabled can be closed once grouped replacements appear on the next weekly run.
 
