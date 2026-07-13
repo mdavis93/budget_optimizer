@@ -89,24 +89,27 @@ Drag-and-drop on the Schedule page may place a bill late or more than 14 days ea
 
 ### Assignment and rebalance (A-08)
 
-Schedule generation uses an **exact windowed solver** (`exactAssignment` / `solve`) to assign bills within due-date eligibility windows, then a **post-assignment rebalance** (`rebalance.ts`) that prefers each paycheck’s target cash-on-hand and only dips toward the minimum (break-glass) floor when needed. It is not a global LP optimizer — shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation. Optional enhancement: backlog **5.4**.
+Schedule generation uses an **exact windowed solver** (`exactAssignment` / `solve`) to assign bills within due-date eligibility windows, then a **post-assignment rebalance** (`rebalance.ts`) that prefers each paycheck’s target cash-on-hand and only dips toward the minimum (break-glass) floor when needed. It is not a global LP optimizer — shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation. A full LP/constraint solver (**5.4**) is **Won't-do** unless product need resurfaces.
 
 ## Post-Audit Backlog
 
-### Still open
+**Status:** Empty — audit is **Done, retained for archival purposes only** ([AUDIT_REPORT.md](AUDIT_REPORT.md)).
 
-- **5.4** — LP/constraint solver for hard rebalance cases (A-08 enhancement)
+### Won't-do
+
+- **5.4** — LP/constraint solver for hard rebalance cases (A-08 enhancement). Declined July 2026; revisit only if product need resurfaces. Exact assignment + post-assignment rebalance shipped in `#71`.
 
 ### Closed since audit
 
-- **B-04** — Shared types module (`shared/`, #59)
-- **B-07** — Presentational splits for large pages (#81)
-- **B-08** — BudgetManager current-budget cache
-- **B-09** — Merge DataContext into Draft schedule slice (#83; `DataContext` removed)
-- **E-04** — `DraftStatusContext` + memoization (#82)
-- **5.3 / 6.2** — Playwright E2E safety net (#60)
-- **6.5** — Electron `^33.4.11` → 42 (#90; always-probe ABI helper #89)
-- Dependabot ignore for Electron / TypeScript majors (#93) — see [Dependabot PRs](#dependabot-prs)
+- **B-04** — Shared types module (`shared/`, `#59`)
+- **B-07** — Presentational splits for large pages (`#81`, `#84`)
+- **B-08** — BudgetManager current-budget cache (`#61`)
+- **B-09** — Merge DataContext into Draft schedule slice (`#83`; `DataContext` removed)
+- **E-04** — `DraftStatusContext` + memoization (`#82`)
+- **5.3 / 6.2** — Playwright E2E safety net (`#60`)
+- **6.5** — Electron `^33.4.11` → 42 (`#90`; always-probe ABI helper `#89`)
+- Dependabot ignore for Electron / TypeScript majors (`#93`) — see [Dependabot PRs](#dependabot-prs)
+- Docs currency pass (`#95`); Electron Vite `@shared` aliases (`#96`)
 
 ## Pull request descriptions
 
