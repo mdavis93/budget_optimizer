@@ -11,8 +11,10 @@ import type { DraggedBill } from './PaycheckView';
 interface PaycheckDetailsProps {
   paycheck: PaycheckEntry;
   formatCurrency: (amount: number) => string;
-  onSkipBill: (billId: string, paycheckDate: string) => void;
+  onSkipBill: (billId: string, billDate: string) => void;
+  onUnskipBill: (billId: string, billDate: string) => void;
   skippingBill: string | null;
+  unskippingBill: string | null;
   onRestoreBill: (billId: string, billDueDate: string) => void;
   restoringBill: string | null;
   onDragStart: (bill: PaycheckBill, sourcePaycheckDate: string) => void;
@@ -42,7 +44,9 @@ export default function PaycheckDetails({
   paycheck,
   formatCurrency,
   onSkipBill,
+  onUnskipBill,
   skippingBill,
+  unskippingBill,
   onRestoreBill,
   restoringBill,
   onDragStart,
@@ -59,7 +63,7 @@ export default function PaycheckDetails({
   const [draftIncomeAmount, setDraftIncomeAmount] = useState('');
   const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
   const visibleTotalBills = visibleBills
-    .filter(bill => !bill.isUnpayable)
+    .filter(bill => !bill.isUnpayable && !bill.isSkipped)
     .reduce((sum, bill) => sum + bill.amount, 0);
 
   return (
@@ -137,7 +141,9 @@ export default function PaycheckDetails({
                   paycheckDate={paycheck.date}
                   formatCurrency={formatCurrency}
                   onSkipBill={onSkipBill}
-                  isSkipping={skippingBill === `${bill.billId}-${paycheck.date}`}
+                  onUnskipBill={onUnskipBill}
+                  isSkipping={skippingBill === `${bill.billId}-${bill.billDate}`}
+                  isUnskipping={unskippingBill === `${bill.billId}-${bill.billDate}`}
                   onRestoreBill={onRestoreBill}
                   isRestoring={restoringBill === `${bill.billId}-${bill.billDate}`}
                   onDragStart={onDragStart}

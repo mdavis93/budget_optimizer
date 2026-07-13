@@ -188,6 +188,7 @@ export default function Layout() {
             <GlobalDraftBanner />
             <Outlet />
           </div>
+          {/* Domain save/discard lives in the main column footer (not an overlay). */}
           {currentDomain && <DraftSaveBar domain={currentDomain} />}
         </main>
       </div>

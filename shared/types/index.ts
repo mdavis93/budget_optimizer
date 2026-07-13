@@ -222,6 +222,7 @@ export interface PaycheckBill {
   billDate: string; // The projected due date for this bill occurrence
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  isSkipped?: boolean;
   unfundableReason?: UnfundableReason;
 }
 

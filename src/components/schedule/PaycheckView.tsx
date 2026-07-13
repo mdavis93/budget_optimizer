@@ -31,8 +31,10 @@ interface PaycheckViewProps {
   formatCurrency: (amount: number) => string;
   maxBudgetRemaining: number;
   minCashOnHand: number;
-  onSkipBill: (billId: string, paycheckDate: string) => void;
+  onSkipBill: (billId: string, billDate: string) => void;
+  onUnskipBill: (billId: string, billDate: string) => void;
   skippingBill: string | null;
+  unskippingBill: string | null;
   onRestoreBill: (billId: string, billDueDate: string) => void;
   restoringBill: string | null;
   onDragStart: (bill: PaycheckBill, sourcePaycheckDate: string) => void;
@@ -72,7 +74,9 @@ function PaycheckView({
   maxBudgetRemaining,
   minCashOnHand,
   onSkipBill,
+  onUnskipBill,
   skippingBill,
+  unskippingBill,
   onRestoreBill,
   restoringBill,
   onDragStart,
@@ -119,7 +123,7 @@ function PaycheckView({
       <div className="space-y-4">
         {paychecks.map((paycheck) => {
           const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
-          const unpayableCount = visibleBills.filter(bill => bill.isUnpayable).length;
+          const unpayableCount = visibleBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
           const hasUnpayableBills = unpayableCount > 0;
           const isShortfall = paycheck.isShortfall;
           const isBreakGlass = isBreakGlassPaycheck(paycheck, maxBudgetRemaining, minCashOnHand);
@@ -243,7 +247,9 @@ function PaycheckView({
                   paycheck={paycheck}
                   formatCurrency={formatCurrency}
                   onSkipBill={onSkipBill}
+                  onUnskipBill={onUnskipBill}
                   skippingBill={skippingBill}
+                  unskippingBill={unskippingBill}
                   onRestoreBill={onRestoreBill}
                   restoringBill={restoringBill}
                   onDragStart={onDragStart}

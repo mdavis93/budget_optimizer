@@ -34,6 +34,7 @@ function baseProps() {
     maxBudgetRemaining: 500,
     minCashOnHand: 100,
     onSkipBill: vi.fn(),
+    onUnskipBill: vi.fn(),
     skippingBill: null,
     onRestoreBill: vi.fn(),
     restoringBill: null,
@@ -186,7 +187,7 @@ describe('PaycheckView', () => {
       fireEvent.drop(paycheckCard!);
       fireEvent.dragEnd(rentRow!);
 
-      expect(props.onSkipBill).toHaveBeenCalledWith('bill-1', '2026-01-15');
+      expect(props.onSkipBill).toHaveBeenCalledWith('bill-1', '2026-01-01');
       expect(props.onRestoreBill).toHaveBeenCalledWith('bill-1', '2026-01-01');
       expect(props.onDragStart).toHaveBeenCalledWith(expect.objectContaining({ billId: 'bill-1' }), '2026-01-15');
       expect(props.onDragOver).toHaveBeenCalled();

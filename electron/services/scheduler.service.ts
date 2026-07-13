@@ -104,23 +104,23 @@ export class SchedulerService {
     allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
     allBills.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // Filter out skipped bills and deduplicate (only for date-based bills)
+    // Split skipped occurrences (still shown in UI) from bills that need funding
     const seenBillKeys = new Set<string>();
+    const skippedForDisplay: typeof allBills = [];
     const uniqueBills = allBills.filter(bill => {
       const dateStr = format(bill.date, 'yyyy-MM-dd');
       const skipKey = `${bill.billId}-${dateStr}`;
-
-      // Skip if this bill occurrence is marked as skipped
-      if (skippedBills.has(skipKey)) {
-        return false;
-      }
-
-      // Deduplicate by billId + date
       const dedupKey = billOccurrenceKey(bill.billId, bill.date);
+
       if (seenBillKeys.has(dedupKey)) {
         return false;
       }
       seenBillKeys.add(dedupKey);
+
+      if (skippedBills.has(skipKey)) {
+        skippedForDisplay.push(bill);
+        return false;
+      }
       return true;
     });
 
@@ -137,7 +137,8 @@ export class SchedulerService {
       maxBudgetRemaining,
       goals,
       minCashOnHand,
-      minSavingsPerPaycheck
+      minSavingsPerPaycheck,
+      skippedForDisplay
     );
 
     const goalProjections = calculateGoalProjections(

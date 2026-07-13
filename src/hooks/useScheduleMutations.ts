@@ -12,6 +12,7 @@ export function useScheduleMutations() {
     removeIncomeOverride,
     setIncomeOverride,
     skipBill,
+    unskipBill,
   } = useDraftActions();
   const {
     schedule,
@@ -21,6 +22,7 @@ export function useScheduleMutations() {
     scheduleStartingBalance: startingBalance,
   } = useSchedule();
   const [skippingBill, setSkippingBill] = useState<string | null>(null);
+  const [unskippingBill, setUnskippingBill] = useState<string | null>(null);
   const [restoringBill, setRestoringBill] = useState<string | null>(null);
   const [savingIncomeKey, setSavingIncomeKey] = useState<string | null>(null);
   const [showReconciliation, setShowReconciliation] = useState(false);
@@ -80,17 +82,17 @@ export function useScheduleMutations() {
     setShowReconciliation(false);
   }, []);
 
-  const handleSkipBill = useCallback(async (billId: string, paycheckDate: string) => {
-    setSkippingBill(`${billId}-${paycheckDate}`);
+  const handleSkipBill = useCallback(async (billId: string, billDate: string) => {
+    setSkippingBill(`${billId}-${billDate}`);
     try {
       if (isQuickBudget) {
-        const result = await window.electronAPI.skippedBills.skip(billId, paycheckDate);
+        const result = await window.electronAPI.skippedBills.skip(billId, billDate);
         if (result.success) {
           await reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance, { force: true });
+          await generateSchedule(startDate, months, startingBalance, { force: true });
         }
-      } else if (skipBill(billId, paycheckDate)) {
-        generateSchedule(startDate, months, startingBalance, { force: true });
+      } else if (skipBill(billId, billDate)) {
+        await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } catch {
       // Error handling is reflected through the page's existing UI state.
@@ -105,6 +107,31 @@ export function useScheduleMutations() {
     skipBill,
     startDate,
     startingBalance,
+  ]);
+
+  const handleUnskipBill = useCallback(async (billId: string, billDate: string) => {
+    setUnskippingBill(`${billId}-${billDate}`);
+    try {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.skippedBills.unskip(billId, billDate);
+        if (result.success) {
+          await reloadSnapshot();
+          await generateSchedule(startDate, months, startingBalance, { force: true });
+        }
+      } else if (unskipBill(billId, billDate)) {
+        await generateSchedule(startDate, months, startingBalance, { force: true });
+      }
+    } finally {
+      setUnskippingBill(null);
+    }
+  }, [
+    generateSchedule,
+    isQuickBudget,
+    months,
+    reloadSnapshot,
+    startDate,
+    startingBalance,
+    unskipBill,
   ]);
 
   const handleRestoreBill = useCallback(async (billId: string, billDueDate: string) => {
@@ -183,6 +210,7 @@ export function useScheduleMutations() {
 
   return {
     skippingBill,
+    unskippingBill,
     restoringBill,
     savingIncomeKey,
     showReconciliation,
@@ -193,6 +221,7 @@ export function useScheduleMutations() {
     handleApplyFixes,
     handleSkipReconciliation,
     handleSkipBill,
+    handleUnskipBill,
     handleRestoreBill,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,

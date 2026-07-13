@@ -74,6 +74,32 @@ export function dedupeAssignmentBills(assignments: PaycheckAssignment[]): void {
   }
 }
 
+export function attachSkippedBillsForDisplay(
+  assignments: PaycheckAssignment[],
+  skippedBills: ProjectedBill[]
+): void {
+  for (const bill of skippedBills) {
+    let landing = -1;
+    for (let i = assignments.length - 1; i >= 0; i--) {
+      if (!isAfter(assignments[i].date, bill.date)) {
+        landing = i;
+        break;
+      }
+    }
+    if (landing === -1 && assignments.length > 0) {
+      landing = 0;
+    }
+    if (landing === -1) continue;
+
+    assignments[landing].bills.push({
+      ...bill,
+      isSkipped: true,
+      isUnpayable: false,
+      unfundableReason: undefined,
+    });
+  }
+}
+
 export function assignBillsToPaychecks(
   paycheckDates: Date[],
   allIncomes: ProjectedIncome[],
@@ -85,7 +111,8 @@ export function assignBillsToPaychecks(
   maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0
+  minSavingsPerPaycheck: number = 0,
+  skippedForDisplay: ProjectedBill[] = []
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
@@ -101,6 +128,7 @@ export function assignBillsToPaychecks(
     }
   );
 
+  attachSkippedBillsForDisplay(assignments, skippedForDisplay);
   dedupeAssignmentBills(assignments);
 
   return buildPaycheckEntries(

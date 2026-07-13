@@ -58,7 +58,7 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
     if (!shortfallPaycheck) continue;
 
     const movableBills = [...shortfallPaycheck.bills]
-      .filter(b => !b.isIncomeAttached && !b.isUnpayable)
+      .filter(b => !b.isIncomeAttached && !b.isUnpayable && !b.isSkipped)
       .sort((a, b) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]);
 
     for (const bill of movableBills) {

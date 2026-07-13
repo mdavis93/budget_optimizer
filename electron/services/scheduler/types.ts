@@ -90,6 +90,7 @@ export interface ProjectedBill {
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  isSkipped?: boolean;
   unfundableReason?: UnfundableReason;
 }
 

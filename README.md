@@ -136,7 +136,7 @@ Named-budget edits stay unsaved until **Save Changes** on that page (or **Save A
 
 1. Set starting balance and cash targets (target / minimum cash on hand) on **Budgets** (or the matching draft fields under Settings)
 2. Navigate to "Schedule"
-3. Choose a viewport (fixed months or Through-goal) and click **Generate Schedule**
+3. Choose a viewport (fixed months or Through-goal); the schedule rebuilds automatically when start date, balance, or budget inputs change (use **Refresh** to force an immediate rebuild)
 4. Review the payment timeline, reconciliation prompts, and any rebalance outcomes
 
 ### Exporting

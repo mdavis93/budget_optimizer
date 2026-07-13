@@ -18,6 +18,7 @@ import {
 import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
 import { useScheduleMutations } from '../hooks/useScheduleMutations';
+import { useToast } from '../components/Toast';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -38,11 +39,13 @@ export default function SchedulePage() {
   } = useSchedule();
   const { currentBudget } = useBudget();
   const { incomes, bills, billAssignments, incomeOverrides } = useDraftData();
+  const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
   const {
     skippingBill,
+    unskippingBill,
     restoringBill,
     savingIncomeKey,
     showReconciliation,
@@ -53,6 +56,7 @@ export default function SchedulePage() {
     handleApplyFixes,
     handleSkipReconciliation,
     handleSkipBill,
+    handleUnskipBill,
     handleRestoreBill,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,
@@ -119,8 +123,13 @@ export default function SchedulePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
   }, [startDate, startingBalance, scheduleInputHash]);
 
-  const handleRefresh = () => {
-    generateSchedule(startDate, months, startingBalance, { force: true });
+  const handleRefresh = async () => {
+    const result = await generateSchedule(startDate, months, startingBalance, { force: true });
+    if (result) {
+      showToast('success', 'Schedule refreshed');
+    } else {
+      showToast('error', 'Failed to refresh schedule');
+    }
   };
 
   const togglePaycheck = useCallback((date: string) => {
@@ -236,13 +245,11 @@ export default function SchedulePage() {
         startDate={startDate}
         months={months}
         startingBalance={startingBalance}
-        isLoading={isLoading}
         calculationMonths={schedule?.calculationMonths}
         goals={goalViewportSources}
         onStartDateChange={setStartDate}
         onMonthsChange={setMonths}
         onStartingBalanceChange={setStartingBalance}
-        onGenerate={handleRefresh}
       />
 
       {schedule?.summary && (
@@ -285,7 +292,9 @@ export default function SchedulePage() {
           maxBudgetRemaining={schedule?.maxBudgetRemaining ?? currentBudget?.targetCashOnHand ?? 250}
           minCashOnHand={schedule?.minCashOnHand ?? currentBudget?.minCashOnHand ?? 100}
           onSkipBill={handleSkipBill}
+          onUnskipBill={handleUnskipBill}
           skippingBill={skippingBill}
+          unskippingBill={unskippingBill}
           onRestoreBill={handleRestoreBill}
           restoringBill={restoringBill}
           onDragStart={handleDragStart}

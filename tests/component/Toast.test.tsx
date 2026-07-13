@@ -63,5 +63,16 @@ describe('Toast', () => {
       fireEvent.click(screen.getByRole('button', { name: 'show-success' }));
       expect(screen.getByRole('alert')).toBeInTheDocument();
     });
+
+    it('anchors the toast viewport to --app-toast-bottom', () => {
+      renderWithRouter(
+        <ToastProvider>
+          <ToastHarness />
+        </ToastProvider>,
+        { mockAPI }
+      );
+      const viewport = screen.getByTestId('toast-viewport');
+      expect(viewport).toHaveStyle({ bottom: 'var(--app-toast-bottom, 1rem)' });
+    });
   });
 });

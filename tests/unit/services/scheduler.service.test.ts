@@ -2542,7 +2542,7 @@ describe('SchedulerService', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
 
-    it('omits skipped bill occurrences but keeps later ones', () => {
+    it('marks skipped bill occurrences as skipped but keeps later ones', () => {
       const schedule = scheduler.generateSchedule(
         [monthlyIncome],
         [recurringBill],
@@ -2559,8 +2559,11 @@ describe('SchedulerService', () => {
         .flatMap((paycheck) => paycheck.bills)
         .find((bill) => bill.billDate === '2026-02-15');
 
-      expect(janOccurrence).toBeUndefined();
+      expect(janOccurrence).toBeDefined();
+      expect(janOccurrence?.isSkipped).toBe(true);
+      expect(janOccurrence?.isUnpayable).toBeFalsy();
       expect(febOccurrence).toBeDefined();
+      expect(febOccurrence?.isSkipped).toBeFalsy();
     });
 
     it('assigns preferred-income bills to the matching paycheck stream', () => {
@@ -3353,7 +3356,7 @@ describe('SchedulerService', () => {
       expect(result).toBeNull();
     });
 
-    it('excludes skipped bill occurrences from the schedule', () => {
+    it('keeps skipped bill occurrences visible but unpaid', () => {
       const monthlyIncome: Income = {
         id: 'income-monthly',
         sourceName: 'Salary',
@@ -3388,7 +3391,9 @@ describe('SchedulerService', () => {
       const febOccurrences = schedule.fullPaychecks
         .flatMap((p) => p.bills)
         .filter((b) => b.billId === 'bill-dup' && b.billDate === '2026-02-15');
-      expect(febOccurrences).toHaveLength(0);
+      expect(febOccurrences).toHaveLength(1);
+      expect(febOccurrences[0].isSkipped).toBe(true);
+      expect(febOccurrences[0].isUnpayable).toBeFalsy();
     });
   });
 });

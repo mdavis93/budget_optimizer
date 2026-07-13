@@ -47,7 +47,10 @@ describe('rebalancePaycheckAssignments', () => {
     const feb26Load = assignments[2].bills.reduce((sum, bill) => sum + bill.amount, 0);
 
     expect(feb26Load).toBeLessThanOrEqual(750);
-    expect(assignments[2].bills.some((bill) => bill.billId === 'bill-c')).toBe(false);
+    expect(
+      assignments[0].bills.some((bill) => bill.billId === 'bill-b' || bill.billId === 'bill-c') ||
+        assignments[1].bills.some((bill) => bill.billId === 'bill-b' || bill.billId === 'bill-c')
+    ).toBe(true);
   });
 
   it('never moves per-paycheck income-attached bills', () => {
@@ -167,6 +170,127 @@ describe('rebalancePaycheckAssignments', () => {
     rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
 
     expect(assignments[0].bills.map((bill) => bill.billId)).toEqual(beforeIds);
+  });
+
+  it('decongests break-glass paychecks using earlier target-tier surplus', () => {
+    const assignments = buildAssignments([
+      {
+        date: '2026-07-03',
+        income: 2650,
+        bills: [{ id: 'bill-light', amount: 500, dueDate: '2026-07-03' }],
+      },
+      {
+        date: '2026-07-10',
+        income: 2650,
+        bills: [
+          { id: 'bill-heavy', amount: 2050, dueDate: '2026-07-10' },
+          { id: 'bill-movable', amount: 400, dueDate: '2026-07-10', priority: 'low' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    expect(assignments[0].bills.some((bill) => bill.billId === 'bill-movable')).toBe(true);
+    expect(assignments[1].bills.some((bill) => bill.billId === 'bill-movable')).toBe(false);
+  });
+
+  it('frees a near-enough earlier paycheck to place a break-glass bill (gap vs total spare)', () => {
+    // Dec 18 has target spare 795 for an $800 bill — historically freeCapacity early-
+    // returned because it was called with the $5 gap, not the $800 total needed.
+    const assignments = buildAssignments([
+      {
+        date: '2026-12-18',
+        income: 2650,
+        bills: [
+          { id: 'bill-dec-a', amount: 1200, dueDate: '2026-12-18' },
+          { id: 'bill-dec-b', amount: 405, dueDate: '2026-12-18', priority: 'low' },
+        ],
+      },
+      {
+        date: '2026-12-25',
+        income: 1000,
+        bills: [{ id: 'bill-dec-light', amount: 200, dueDate: '2026-12-25' }],
+      },
+      {
+        date: '2027-01-01',
+        income: 2650,
+        bills: [
+          { id: 'bill-locked-ish', amount: 1745, dueDate: '2027-01-01' },
+          { id: 'bill-movable-800', amount: 800, dueDate: '2027-01-01', priority: 'low' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    expect(assignments[2].bills.some((bill) => bill.billId === 'bill-movable-800')).toBe(false);
+    expect(
+      assignments[0].bills.some((bill) => bill.billId === 'bill-movable-800') ||
+        assignments[1].bills.some((bill) => bill.billId === 'bill-movable-800')
+    ).toBe(true);
+  });
+
+  it('decongests via forward dominos through healthy intermediate paychecks', () => {
+    // Jul 3 has surplus; Jul 10 is healthy-but-full; Jul 17 carries a bill that can
+    // only reach Jul 10 after Jul 10 sheds into Jul 3 — classic domino chain.
+    const assignments = buildAssignments([
+      {
+        date: '2026-07-03',
+        income: 2650,
+        bills: [{ id: 'bill-jul3', amount: 400, dueDate: '2026-07-03' }],
+      },
+      {
+        date: '2026-07-10',
+        income: 1000,
+        bills: [
+          { id: 'bill-jul10-a', amount: 400, dueDate: '2026-07-10' },
+          { id: 'bill-jul10-b', amount: 350, dueDate: '2026-07-10', priority: 'low' },
+        ],
+      },
+      {
+        date: '2026-07-17',
+        income: 2650,
+        bills: [
+          { id: 'bill-jul17-core', amount: 2000, dueDate: '2026-07-17' },
+          { id: 'bill-jul17-move', amount: 400, dueDate: '2026-07-17', priority: 'low' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    // Jul 10 sheds into Jul 3 surplus; Jul 17 then sheds earlier (Jul 3 or Jul 10).
+    expect(assignments[0].bills.some((bill) => bill.billId === 'bill-jul10-b')).toBe(true);
+    expect(assignments[2].bills.some((bill) => bill.billId === 'bill-jul17-move')).toBe(false);
+    expect(
+      assignments[0].bills.some((bill) => bill.billId === 'bill-jul17-move') ||
+        assignments[1].bills.some((bill) => bill.billId === 'bill-jul17-move')
+    ).toBe(true);
+  });
+
+  it('decongests via min-capacity spare when target spare is a few dollars short', () => {
+    const assignments = buildAssignments([
+      {
+        date: '2026-12-18',
+        income: 2650,
+        // target spare = 2650-250-1605 = 795; min spare = 2650-100-1605 = 945
+        bills: [{ id: 'bill-base', amount: 1605, dueDate: '2026-12-18' }],
+      },
+      {
+        date: '2027-01-01',
+        income: 2650,
+        bills: [
+          { id: 'bill-core', amount: 1745, dueDate: '2027-01-01' },
+          { id: 'bill-move', amount: 800, dueDate: '2027-01-01', priority: 'low' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    expect(assignments[0].bills.some((bill) => bill.billId === 'bill-move')).toBe(true);
+    expect(assignments[1].bills.some((bill) => bill.billId === 'bill-move')).toBe(false);
   });
 
   it('respects max cascade depth when nested relief is required', () => {

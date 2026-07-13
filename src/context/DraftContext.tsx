@@ -708,18 +708,29 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const skipBill = useCallback((billId: string, skipDate: string): boolean => {
     if (isQuickBudget) return false;
     if (isDraftMode) {
+      let nextSkipped: SkippedBill[] = stateRef.current.draft.skippedBills;
       updateDraft((prev) => {
         const key = `${billId}-${skipDate}`;
         const exists = prev.skippedBills.some((sb) => `${sb.billId}-${sb.skipDate}` === key);
-        if (exists) return prev;
+        if (exists) {
+          nextSkipped = prev.skippedBills;
+          return prev;
+        }
         const newSkip: SkippedBill = {
           id: createDraftId(),
           billId,
           skipDate,
           createdAt: nowIso(),
         };
-        return { ...prev, skippedBills: [...prev.skippedBills, newSkip] };
+        nextSkipped = [...prev.skippedBills, newSkip];
+        return { ...prev, skippedBills: nextSkipped };
       });
+      const nextDirty = new Set(stateRef.current.dirtyDomains).add('schedule');
+      stateRef.current = {
+        ...stateRef.current,
+        draft: { ...stateRef.current.draft, skippedBills: nextSkipped },
+        dirtyDomains: nextDirty,
+      };
       markDirty('schedule');
       return true;
     }
@@ -729,12 +740,19 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const unskipBill = useCallback((billId: string, skipDate: string): boolean => {
     if (isQuickBudget) return false;
     if (isDraftMode) {
-      updateDraft((prev) => ({
-        ...prev,
-        skippedBills: prev.skippedBills.filter(
+      let nextSkipped: SkippedBill[] = stateRef.current.draft.skippedBills;
+      updateDraft((prev) => {
+        nextSkipped = prev.skippedBills.filter(
           (sb) => !(sb.billId === billId && sb.skipDate === skipDate)
-        ),
-      }));
+        );
+        return { ...prev, skippedBills: nextSkipped };
+      });
+      const nextDirty = new Set(stateRef.current.dirtyDomains).add('schedule');
+      stateRef.current = {
+        ...stateRef.current,
+        draft: { ...stateRef.current.draft, skippedBills: nextSkipped },
+        dirtyDomains: nextDirty,
+      };
       markDirty('schedule');
       return true;
     }
@@ -947,7 +965,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     months: number,
     startingBalance: number
   ): Promise<ScheduleData | null> => {
-    if (!mountedRef.current) return null;
+    if (!mountedRef.current) {
+      return null;
+    }
 
     setIsScheduleLoading(true);
     try {
@@ -958,7 +978,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       }
 
       const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
-      if (!mountedRef.current) return null;
+      if (!mountedRef.current) {
+        return null;
+      }
 
       if (result.success && result.data) {
         const fullHorizonMonths = result.data.calculationMonths ?? result.data.viewportMonths;
@@ -993,6 +1015,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
+      // Force must bypass the in-memory schedule cache; otherwise Refresh is a no-op
+      // when inputs are unchanged after an auto-rebuild.
+      scheduleCacheRef.current = null;
       return generateScheduleImmediate(startDate, months, startingBalance);
     }
 

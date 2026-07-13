@@ -10,26 +10,22 @@ interface ScheduleControlsProps {
   startDate: string;
   months: number;
   startingBalance: number;
-  isLoading: boolean;
   calculationMonths?: number;
   goals?: ReadonlyArray<GoalViewportSource>;
   onStartDateChange: (date: string) => void;
   onMonthsChange: (months: number) => void;
   onStartingBalanceChange: (balance: number) => void;
-  onGenerate: () => void;
 }
 
 export default function ScheduleControls({
   startDate,
   months,
   startingBalance,
-  isLoading,
   calculationMonths = DEFAULT_VIEWPORT_MONTHS,
   goals = [],
   onStartDateChange,
   onMonthsChange,
   onStartingBalanceChange,
-  onGenerate,
 }: ScheduleControlsProps) {
   const viewportOptions = useMemo(
     () => buildViewportOptions(calculationMonths, startDate, goals),
@@ -47,7 +43,7 @@ export default function ScheduleControls({
 
   return (
     <div className="card">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label htmlFor="schedule-start-date" className="label">Start Date</label>
           <input
@@ -88,16 +84,6 @@ export default function ScheduleControls({
               placeholder="0.00"
             />
           </div>
-        </div>
-        
-        <div className="flex items-end">
-          <button
-            onClick={onGenerate}
-            disabled={isLoading}
-            className="btn-primary w-full"
-          >
-            Generate Schedule
-          </button>
         </div>
       </div>
     </div>

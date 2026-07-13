@@ -51,7 +51,22 @@ function applyIncomeAttachedBills(
 
       const paycheckDateStr = format(paycheck.date, 'yyyy-MM-dd');
       const skipKey = `${bill.id}-${paycheckDateStr}`;
-      if (skippedBills.has(skipKey)) continue;
+      if (skippedBills.has(skipKey)) {
+        paycheck.bills.push({
+          date: paycheck.date,
+          billId: bill.id,
+          creditorName: bill.creditorName,
+          amount: bill.budgetedAmount,
+          dueDay: bill.dueDay,
+          priority: bill.priority,
+          category: bill.category,
+          preferredIncomeSourceId: bill.preferredIncomeSourceId,
+          isIncomeAttached: true,
+          isSkipped: true,
+        });
+        keys.add(billOccurrenceKey(bill.id, paycheck.date));
+        continue;
+      }
 
       paycheck.bills.push({
         date: paycheck.date,
@@ -84,7 +99,7 @@ function applyManualAssignments(
     const targetPaycheckDate = manualAssignments.get(assignmentKey);
     if (!targetPaycheckDate) continue;
 
-    const skipKey = `${bill.billId}-${targetPaycheckDate}`;
+    const skipKey = `${bill.billId}-${billDateStr}`;
     if (skippedBills.has(skipKey)) continue;
 
     const paycheckIdx = assignments.findIndex(

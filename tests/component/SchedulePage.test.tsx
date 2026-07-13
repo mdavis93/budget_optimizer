@@ -18,6 +18,10 @@ vi.mock('../../src/context/BudgetContext', () => ({
   useBudget: () => mockUseBudget(),
 }));
 
+vi.mock('../../src/components/Toast', () => ({
+  useToast: () => ({ showToast: vi.fn(), dismissToast: vi.fn() }),
+}));
+
 vi.mock('../../src/components/schedule', () => ({
   ScheduleControls: () => <div>Mock Schedule Controls</div>,
   PaycheckView: ({
@@ -128,6 +132,7 @@ describe('SchedulePage', () => {
   const generateSchedule = vi.fn();
   const applyReconciliationFixes = vi.fn(() => true);
   const skipBill = vi.fn(() => true);
+  const unskipBill = vi.fn(() => true);
   const removeBillAssignment = vi.fn(() => true);
   const assignBill = vi.fn(() => true);
   const setIncomeOverride = vi.fn(() => true);
@@ -141,6 +146,7 @@ describe('SchedulePage', () => {
     mockUseDraftActions.mockReturnValue({
       reloadSnapshot,
       skipBill,
+      unskipBill,
       removeBillAssignment,
       assignBill,
       setIncomeOverride,
