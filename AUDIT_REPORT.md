@@ -90,17 +90,17 @@ Original grades in the table above are unchanged; this block supersedes them for
 The severity counts in the table above reflect the **June 10, 2026 baseline only** and are not updated in place. Final disposition on current `main` (see [Audit Closure Summary](#audit-closure-summary)):
 
 
-| Domain               | Closed  | Accepted       | Deferred |
-| -------------------- | ------- | -------------- | -------- |
-| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0        |
-| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0        |
-| Efficiency (E-*)     | 10 / 10 | 0              | 0        |
-| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0        |
-| Bloat (B-*)          | 10 / 10 | 0              | 0        |
-| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0        |
+| Domain               | Closed  | Accepted       | Won't-do / Deferred |
+| -------------------- | ------- | -------------- | ------------------- |
+| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0                   |
+| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0                   |
+| Efficiency (E-*)     | 10 / 10 | 0              | 0                   |
+| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0 (5.4 Won't-do)    |
+| Bloat (B-*)          | 10 / 10 | 0              | 0                   |
+| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0                   |
 
 
-The original Critical count (S-01) is **resolved**. Zero findings remain Open or Partial without a final disposition.
+The original Critical count (S-01) is **resolved**. Zero findings remain Open without a final disposition. Living remediation backlog is **empty**.
 
 ---
 
