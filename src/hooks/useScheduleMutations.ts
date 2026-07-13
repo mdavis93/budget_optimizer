@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDraftActions, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
-import type { ProposedFix } from '../types';
+import type { BreakGlassPlan, ProposedFix } from '../types';
 
 export function useScheduleMutations() {
   const { isQuickBudget } = useBudget();
   const {
+    applyBreakGlassPlan,
     applyReconciliationFixes,
     reloadSnapshot,
     removeBillAssignment,
@@ -28,6 +29,10 @@ export function useScheduleMutations() {
   const [showReconciliation, setShowReconciliation] = useState(false);
   const [dismissedReconciliation, setDismissedReconciliation] = useState(false);
   const [isApplyingFixes, setIsApplyingFixes] = useState(false);
+  const [dismissedBreakGlassPlanIds, setDismissedBreakGlassPlanIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [isApplyingBreakGlass, setIsApplyingBreakGlass] = useState(false);
 
   useEffect(() => {
     setShowReconciliation(
@@ -37,6 +42,7 @@ export function useScheduleMutations() {
 
   useEffect(() => {
     setDismissedReconciliation(false);
+    setDismissedBreakGlassPlanIds(new Set());
   }, [startDate, startingBalance]);
 
   const handleApplyFixes = useCallback(async (fixes: ProposedFix[]) => {
@@ -80,6 +86,48 @@ export function useScheduleMutations() {
   const handleSkipReconciliation = useCallback(() => {
     setDismissedReconciliation(true);
     setShowReconciliation(false);
+  }, []);
+
+  const visibleBreakGlassPlans = (schedule?.breakGlassAdvisor?.plans ?? []).filter(
+    (plan) => !dismissedBreakGlassPlanIds.has(plan.id)
+  );
+
+  const handleAcceptBreakGlassPlan = useCallback(async (plan: BreakGlassPlan) => {
+    setIsApplyingBreakGlass(true);
+    try {
+      if (isQuickBudget) {
+        const result = await window.electronAPI.breakGlassAdvisor.apply(
+          plan.steps.map((step) => ({
+            billId: step.billId,
+            billDueDate: step.billDueDate,
+            fromPaycheckDate: step.fromPaycheckDate,
+            toPaycheckDate: step.toPaycheckDate,
+          }))
+        );
+        if (result.success) {
+          setDismissedBreakGlassPlanIds((prev) => new Set(prev).add(plan.id));
+          await generateSchedule(startDate, months, startingBalance, { force: true });
+        }
+      } else if (applyBreakGlassPlan(plan)) {
+        setDismissedBreakGlassPlanIds((prev) => new Set(prev).add(plan.id));
+        await generateSchedule(startDate, months, startingBalance, { force: true });
+      }
+    } catch {
+      // Error handling is reflected through the page's existing UI state.
+    } finally {
+      setIsApplyingBreakGlass(false);
+    }
+  }, [
+    applyBreakGlassPlan,
+    generateSchedule,
+    isQuickBudget,
+    months,
+    startDate,
+    startingBalance,
+  ]);
+
+  const handleDeclineBreakGlassPlan = useCallback((planId: string) => {
+    setDismissedBreakGlassPlanIds((prev) => new Set(prev).add(planId));
   }, []);
 
   const handleSkipBill = useCallback(async (billId: string, billDate: string) => {
@@ -220,6 +268,10 @@ export function useScheduleMutations() {
     setDismissedReconciliation,
     handleApplyFixes,
     handleSkipReconciliation,
+    visibleBreakGlassPlans,
+    isApplyingBreakGlass,
+    handleAcceptBreakGlassPlan,
+    handleDeclineBreakGlassPlan,
     handleSkipBill,
     handleUnskipBill,
     handleRestoreBill,

@@ -20,6 +20,7 @@ import {
   IncomeInput,
   IncomeOverride,
   ProposedFix,
+  BreakGlassPlan,
   SavingsGoal,
   SavingsGoalInput,
   SkippedBill,
@@ -102,6 +103,7 @@ interface DraftActionsContextValue {
   setIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => boolean;
   removeIncomeOverride: (incomeId: string, paycheckDate: string) => boolean;
   applyReconciliationFixes: (fixes: ProposedFix[]) => boolean;
+  applyBreakGlassPlan: (plan: BreakGlassPlan) => boolean;
   updateBudgetFields: (updates: Partial<DraftBudgetFields>) => boolean;
   getDebtsWithAmortization: () => Promise<DebtWithAmortization[]>;
   getGoalProjections: () => Promise<GoalProjection[]>;
@@ -862,6 +864,33 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return false;
   }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
 
+  const applyBreakGlassPlan = useCallback((plan: BreakGlassPlan): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      updateDraft((prev) => {
+        let nextAssignments = [...prev.billAssignments];
+        for (const step of plan.steps) {
+          nextAssignments = [
+            ...nextAssignments.filter(
+              (a) => !(a.billId === step.billId && a.billDueDate === step.billDueDate)
+            ),
+            {
+              id: createDraftId(),
+              billId: step.billId,
+              billDueDate: step.billDueDate,
+              paycheckDate: step.toPaycheckDate,
+              createdAt: nowIso(),
+            },
+          ];
+        }
+        return { ...prev, billAssignments: nextAssignments };
+      });
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
   const updateBudgetFields = useCallback((updates: Partial<DraftBudgetFields>): boolean => {
     if (isQuickBudget || !draft.budget) return false;
     if (isDraftMode) {
@@ -1093,6 +1122,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,
+      applyBreakGlassPlan,
       updateBudgetFields,
       getDebtsWithAmortization,
       getGoalProjections,
@@ -1125,6 +1155,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,
+      applyBreakGlassPlan,
       updateBudgetFields,
       getDebtsWithAmortization,
       getGoalProjections,

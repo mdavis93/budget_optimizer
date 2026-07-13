@@ -110,6 +110,25 @@ vi.mock('../../src/components/schedule', () => ({
       {expanded && recommendations.map((recommendation) => <div key={recommendation}>{recommendation}</div>)}
     </div>
   ),
+  BreakGlassAdvisorPanel: ({
+    plans,
+    onAccept,
+    onDecline,
+  }: {
+    plans: Array<{ id: string; headline: string }>;
+    onAccept: (plan: { id: string }) => void;
+    onDecline: (planId: string) => void;
+  }) => (
+    <div data-testid="mock-break-glass-advisor">
+      {plans.map((plan) => (
+        <div key={plan.id}>
+          <div>{plan.headline}</div>
+          <button onClick={() => onAccept(plan)}>accept-break-glass</button>
+          <button onClick={() => onDecline(plan.id)}>decline-break-glass</button>
+        </div>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/ReconciliationPage', () => ({
@@ -131,6 +150,7 @@ describe('SchedulePage', () => {
   const mockAPI = createMockElectronAPI();
   const generateSchedule = vi.fn();
   const applyReconciliationFixes = vi.fn(() => true);
+  const applyBreakGlassPlan = vi.fn(() => true);
   const skipBill = vi.fn(() => true);
   const unskipBill = vi.fn(() => true);
   const removeBillAssignment = vi.fn(() => true);
@@ -152,6 +172,7 @@ describe('SchedulePage', () => {
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,
+      applyBreakGlassPlan,
     });
     mockUseData.mockReturnValue({
       incomes: [{ id: 'inc-1' }],
@@ -181,6 +202,99 @@ describe('SchedulePage', () => {
       expect(screen.getAllByText('$2,000.00').length).toBeGreaterThan(0);
       expect(screen.getByText('Total Expenses')).toBeInTheDocument();
       expect(screen.getByText('Mock Paycheck View (1)')).toBeInTheDocument();
+    });
+
+    it('renders Break Glass Advisor and declines to hide it', async () => {
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+          breakGlassAdvisor: {
+            plans: [
+              {
+                id: 'break-glass-1',
+                targetPaycheckDate: '2026-07-31',
+                headline: 'Clear Break-Glass on Jul 31',
+                maxDaysEarly: 15,
+                clearsBreakGlass: true,
+                steps: [],
+              },
+            ],
+          },
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'decline-break-glass' }));
+      await waitFor(() => {
+        expect(screen.queryByText('Clear Break-Glass on Jul 31')).not.toBeInTheDocument();
+      });
+    });
+
+    it('accepts Break Glass Advisor plan and force-regenerates', async () => {
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+          breakGlassAdvisor: {
+            plans: [
+              {
+                id: 'break-glass-1',
+                targetPaycheckDate: '2026-07-31',
+                headline: 'Clear Break-Glass on Jul 31',
+                maxDaysEarly: 15,
+                clearsBreakGlass: true,
+                steps: [
+                  {
+                    billId: 'rent',
+                    billName: 'Rent',
+                    billAmount: 160,
+                    billDueDate: '2026-08-08',
+                    fromPaycheckDate: '2026-07-31',
+                    toPaycheckDate: '2026-07-24',
+                    daysEarly: 15,
+                    requiresConfirmation: true,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
+      await waitFor(() => {
+        expect(applyBreakGlassPlan).toHaveBeenCalled();
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+      });
     });
   });
 

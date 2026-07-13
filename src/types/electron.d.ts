@@ -146,6 +146,15 @@ interface ElectronAPI {
     }>) => Promise<ApiResult>;
   };
 
+  breakGlassAdvisor: {
+    apply: (steps: Array<{
+      billId: string;
+      billDueDate: string;
+      fromPaycheckDate: string;
+      toPaycheckDate: string;
+    }>) => Promise<ApiResult>;
+  };
+
   export: {
     toPdf: (schedule: ScheduleData, filePath: string) => Promise<ApiResult>;
     toHtml: (schedule: ScheduleData, filePath: string) => Promise<ApiResult>;

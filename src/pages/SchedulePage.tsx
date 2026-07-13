@@ -14,6 +14,7 @@ import {
   ScheduleSummaryCards,
   ReconciliationBanner,
   ScheduleRecommendations,
+  BreakGlassAdvisorPanel,
 } from '../components/schedule';
 import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
@@ -55,6 +56,10 @@ export default function SchedulePage() {
     setDismissedReconciliation,
     handleApplyFixes,
     handleSkipReconciliation,
+    visibleBreakGlassPlans,
+    isApplyingBreakGlass,
+    handleAcceptBreakGlassPlan,
+    handleDeclineBreakGlassPlan,
     handleSkipBill,
     handleUnskipBill,
     handleRestoreBill,
@@ -269,6 +274,15 @@ export default function SchedulePage() {
             setDismissedReconciliation(false);
             setShowReconciliation(true);
           }}
+        />
+      )}
+
+      {visibleBreakGlassPlans.length > 0 && (
+        <BreakGlassAdvisorPanel
+          plans={visibleBreakGlassPlans}
+          onAccept={handleAcceptBreakGlassPlan}
+          onDecline={handleDeclineBreakGlassPlan}
+          isApplying={isApplyingBreakGlass}
         />
       )}
 

@@ -9,6 +9,14 @@ export async function dismissReconciliationIfPresent(window: Page): Promise<void
   }
 }
 
+/** Dismiss Break Glass Advisor panels when present on Schedule. */
+export async function dismissBreakGlassAdvisorIfPresent(window: Page): Promise<void> {
+  const declines = window.getByRole('button', { name: 'Decline' });
+  while (await declines.first().isVisible().catch(() => false)) {
+    await declines.first().click();
+  }
+}
+
 /**
  * Pin the schedule viewport start and regenerate so seeded dates are visible.
  * Shortfall budgets may auto-open reconciliation and hide the date control —
@@ -26,12 +34,15 @@ export async function pinScheduleStart(
     viewAnyway.waitFor({ state: 'visible' }),
   ]);
   await dismissReconciliationIfPresent(window);
+  await dismissBreakGlassAdvisorIfPresent(window);
   await startDate.fill(date);
   // Filling rebuilds the schedule (and may re-open reconciliation); clear it again.
   await dismissReconciliationIfPresent(window);
+  await dismissBreakGlassAdvisorIfPresent(window);
   const refresh = window.getByRole('button', { name: 'Refresh' });
   if (await refresh.isVisible().catch(() => false)) {
     await refresh.click();
     await dismissReconciliationIfPresent(window);
+    await dismissBreakGlassAdvisorIfPresent(window);
   }
 }

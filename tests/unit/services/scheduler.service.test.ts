@@ -2764,19 +2764,19 @@ describe('SchedulerService', () => {
     });
 
     it('defers a bill to a later paycheck when the earlier paycheck is tight', () => {
-      const bigIncome: Income = {
-        id: 'income-big',
-        sourceName: 'Big',
-        amount: 2650,
+      const tightIncome: Income = {
+        id: 'income-tight',
+        sourceName: 'Tight',
+        amount: 415, // capacity above $250 target = $165 → amazon only
         cadence: 'biweekly',
         startDate: '2026-08-14',
         isActive: true,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
-      const smallIncome: Income = {
-        id: 'income-small',
-        sourceName: 'Small',
+      const laterIncome: Income = {
+        id: 'income-later',
+        sourceName: 'Later',
         amount: 1000,
         cadence: 'biweekly',
         startDate: '2026-08-21',
@@ -2808,7 +2808,7 @@ describe('SchedulerService', () => {
       ];
 
       const schedule = scheduler.generateSchedule(
-        [bigIncome, smallIncome],
+        [tightIncome, laterIncome],
         bills,
         '2026-08-01',
         1,
@@ -2819,6 +2819,7 @@ describe('SchedulerService', () => {
       const aug21 = schedule.paychecks.find((p) => p.date === '2026-08-21');
       expect(aug14?.bills.some((b) => b.billId === 'amazon' && !b.isUnpayable)).toBe(true);
       expect(aug21?.bills.some((b) => b.billId === 'water' && !b.isUnpayable)).toBe(true);
+      expect(aug14?.bills.some((b) => b.billId === 'water' && !b.isUnpayable)).toBe(false);
     });
 
     it('minimizes concentrated shortfall when the window is infeasible', () => {

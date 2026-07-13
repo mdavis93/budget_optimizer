@@ -132,6 +132,15 @@ const api = {
     }>) => ipcRenderer.invoke('reconciliation:apply-fixes', fixes),
   },
 
+  breakGlassAdvisor: {
+    apply: (steps: Array<{
+      billId: string;
+      billDueDate: string;
+      fromPaycheckDate: string;
+      toPaycheckDate: string;
+    }>) => ipcRenderer.invoke('breakGlassAdvisor:apply', steps),
+  },
+
   export: {
     toPdf: (schedule: ScheduleData, filePath: string) =>
       ipcRenderer.invoke('export:to-pdf', schedule, filePath),

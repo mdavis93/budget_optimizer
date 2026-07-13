@@ -13,9 +13,13 @@ import {
   calculateSummary,
   generateRecommendations,
 } from './scheduler/paychecks';
-import { rebuildReconciliationForViewport } from '@shared/scheduleViewportSlice';
+import {
+  rebuildBreakGlassAdvisorForViewport,
+  rebuildReconciliationForViewport,
+} from '@shared/scheduleViewportSlice';
 import { calculateGoalProjections, generateGoalProjections, computeGoalFundingTimeline } from './scheduler/goals';
 import { analyzeAndProposeFixes } from './scheduler/reconciliation';
+import { proposeBreakGlassPlans } from './scheduler/breakGlassAdvisor';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
@@ -41,6 +45,9 @@ export type {
   ProposedFix,
   ShortfallDetail,
   ReconciliationReport,
+  BreakGlassAdvisorReport,
+  BreakGlassPlan,
+  BreakGlassPlanStep,
   GoalSuggestion,
   GoalScheduleHealth,
   GoalProjection,
@@ -54,6 +61,7 @@ export class SchedulerService {
   generateGoalProjections = generateGoalProjections;
   calculateGoalProjections = calculateGoalProjections;
   analyzeAndProposeFixes = analyzeAndProposeFixes;
+  proposeBreakGlassPlans = proposeBreakGlassPlans;
   findPreferredPaycheck = findPreferredPaycheck;
   computeGoalFundingTimeline = computeGoalFundingTimeline;
 
@@ -201,6 +209,10 @@ export class SchedulerService {
           fullSchedule.savingsSqueezedCount
         ),
         reconciliation: rebuildReconciliationForViewport(fullSchedule.reconciliation, paychecks),
+        breakGlassAdvisor: rebuildBreakGlassAdvisorForViewport(
+          fullSchedule.breakGlassAdvisor,
+          paychecks
+        ),
       };
     }
 
@@ -233,6 +245,10 @@ export class SchedulerService {
       ),
       reconciliation: rebuildReconciliationForViewport(
         fullSchedule.reconciliation,
+        viewportPaychecks
+      ),
+      breakGlassAdvisor: rebuildBreakGlassAdvisorForViewport(
+        fullSchedule.breakGlassAdvisor,
         viewportPaychecks
       ),
     };

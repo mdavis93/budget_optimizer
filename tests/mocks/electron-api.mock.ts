@@ -282,6 +282,10 @@ export const createMockElectronAPI = () => {
       applyFixes: vi.fn().mockResolvedValue({ success: true }),
     },
 
+    breakGlassAdvisor: {
+      apply: vi.fn().mockResolvedValue({ success: true }),
+    },
+
     export: {
       toPdf: vi.fn().mockResolvedValue({ success: true }),
       toHtml: vi.fn().mockResolvedValue({ success: true }),

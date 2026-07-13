@@ -4,3 +4,4 @@ export { default as ScheduleControls } from './ScheduleControls';
 export { default as ScheduleSummaryCards } from './ScheduleSummaryCards';
 export { default as ReconciliationBanner } from './ReconciliationBanner';
 export { default as ScheduleRecommendations } from './ScheduleRecommendations';
+export { default as BreakGlassAdvisorPanel } from './BreakGlassAdvisorPanel';
