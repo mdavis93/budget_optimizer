@@ -425,9 +425,18 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         next.skippedBills = structuredClone(saved.skippedBills);
         next.billAssignments = structuredClone(saved.billAssignments);
         next.incomeOverrides = structuredClone(saved.incomeOverrides);
+        if (saved.budget && prev.budget) {
+          next.budget = {
+            ...prev.budget,
+            scheduleStartDate: saved.budget.scheduleStartDate,
+          };
+        }
       }
-      if (domain === 'budget' && saved.budget) {
-        next.budget = structuredClone(saved.budget);
+      if (domain === 'budget' && saved.budget && prev.budget) {
+        next.budget = {
+          ...structuredClone(saved.budget),
+          scheduleStartDate: prev.budget.scheduleStartDate,
+        };
       }
       return next;
     });
@@ -842,7 +851,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         ...prev,
         budget: prev.budget ? { ...prev.budget, ...updates } : prev.budget,
       }));
-      markDirty('budget');
+      const onlyScheduleStart =
+        Object.keys(updates).length > 0 &&
+        Object.keys(updates).every((key) => key === 'scheduleStartDate');
+      markDirty(onlyScheduleStart ? 'schedule' : 'budget');
       return true;
     }
     return false;

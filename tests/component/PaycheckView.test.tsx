@@ -72,7 +72,7 @@ describe('PaycheckView', () => {
 
     it('shows Break-Glass badge when cash is between min and target', () => {
       const props = baseProps();
-      renderWithRouter(
+      const { container } = renderWithRouter(
         <PaycheckView
           {...props}
           paychecks={[
@@ -88,6 +88,46 @@ describe('PaycheckView', () => {
       );
 
       expect(screen.getByText('Break-Glass')).toBeInTheDocument();
+      const card = container.querySelector('.card');
+      expect(card?.className).toMatch(/border-warning/);
+      expect(card?.className).toMatch(/break-glass-tape/);
+      expect(card?.className).not.toMatch(/border-danger/);
+    });
+
+    it('keeps Break-Glass warning theme when unpayable bills remain above min', () => {
+      const props = baseProps();
+      const { container } = renderWithRouter(
+        <PaycheckView
+          {...props}
+          paychecks={[
+            createMockPaycheck({
+              date: '2026-03-05',
+              budgetRemaining: 235,
+              isShortfall: false,
+              bills: [
+                {
+                  billId: 'bill-1',
+                  creditorName: 'Affirm: UPS Store',
+                  amount: 50,
+                  dueDay: 5,
+                  billDate: '2026-03-05',
+                  priority: 'normal',
+                  isUnpayable: true,
+                },
+              ],
+            }),
+          ]}
+          maxBudgetRemaining={250}
+          minCashOnHand={100}
+        />
+      );
+
+      expect(screen.getByText('Break-Glass')).toBeInTheDocument();
+      expect(screen.getByText(/1 unpayable/)).toBeInTheDocument();
+      const card = container.querySelector('.card');
+      expect(card?.className).toMatch(/border-warning/);
+      expect(card?.className).toMatch(/break-glass-tape/);
+      expect(card?.className).not.toMatch(/border-danger/);
     });
 
     it('does not show Break-Glass badge at target or shortfall', () => {

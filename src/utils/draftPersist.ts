@@ -70,13 +70,19 @@ function goalEquals(a: SavingsGoal, b: SavingsGoal): boolean {
   );
 }
 
-function budgetEquals(a: DraftBudgetFields, b: DraftBudgetFields): boolean {
+function budgetSettingsEquals(a: DraftBudgetFields, b: DraftBudgetFields): boolean {
   return (
     a.name === b.name &&
     a.startingBalance === b.startingBalance &&
     a.targetCashOnHand === b.targetCashOnHand &&
     a.minCashOnHand === b.minCashOnHand &&
-    a.minSavingsPerPaycheck === b.minSavingsPerPaycheck &&
+    a.minSavingsPerPaycheck === b.minSavingsPerPaycheck
+  );
+}
+
+function budgetEquals(a: DraftBudgetFields, b: DraftBudgetFields): boolean {
+  return (
+    budgetSettingsEquals(a, b) &&
     a.scheduleStartDate === b.scheduleStartDate
   );
 }
@@ -258,7 +264,8 @@ export async function persistGoalsDomain(
 export async function persistScheduleDomain(
   committed: DraftState,
   draft: DraftState,
-  idMaps: { income: Map<string, string>; bill: Map<string, string> }
+  idMaps: { income: Map<string, string>; bill: Map<string, string> },
+  budgetId: string | null = null
 ): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
   const mapIncomeId = (id: string) => idMaps.income.get(id) ?? id;
   const mapBillId = (id: string) => idMaps.bill.get(id) ?? id;
@@ -365,12 +372,37 @@ export async function persistScheduleDomain(
     billAssignments: draftAssignments,
     incomeOverrides: draftOverrides,
   };
-  const nextCommitted = {
+  let nextCommitted: DraftState = {
     ...committed,
     skippedBills: structuredClone(draftSkipped),
     billAssignments: structuredClone(draftAssignments),
     incomeOverrides: structuredClone(draftOverrides),
   };
+
+  // Schedule start date is edited on the Schedule page but stored on the budget
+  // record — persist it with the schedule domain so Budgets/Settings stay clean.
+  if (
+    budgetId &&
+    draft.budget &&
+    committed.budget &&
+    draft.budget.scheduleStartDate !== committed.budget.scheduleStartDate
+  ) {
+    const result = await window.electronAPI.budget.update(budgetId, {
+      scheduleStartDate: draft.budget.scheduleStartDate,
+    });
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Failed to update schedule start date',
+        nextDraft: draft,
+        nextCommitted: committed,
+      };
+    }
+    nextCommitted = {
+      ...nextCommitted,
+      budget: structuredClone(draft.budget),
+    };
+  }
 
   return { success: true, nextDraft, nextCommitted };
 }
@@ -509,10 +541,15 @@ export async function persistDomains(
       nextDraft = result.nextDraft;
       nextCommitted = result.nextCommitted;
     } else if (domain === 'schedule') {
-      const result = await persistScheduleDomain(nextCommitted, nextDraft, {
-        income: incomeIdMap,
-        bill: billIdMap,
-      });
+      const result = await persistScheduleDomain(
+        nextCommitted,
+        nextDraft,
+        {
+          income: incomeIdMap,
+          bill: billIdMap,
+        },
+        budgetId
+      );
       if (!result.success) return result;
       nextDraft = result.nextDraft;
       nextCommitted = result.nextCommitted;
@@ -582,12 +619,19 @@ export function computeDirtyDomains(committed: DraftState, draft: DraftState): S
     assignmentDiff.changed.length > 0 ||
     overrideDiff.added.length > 0 ||
     overrideDiff.removed.length > 0 ||
-    overrideDiff.changed.length > 0
+    overrideDiff.changed.length > 0 ||
+    (committed.budget &&
+      draft.budget &&
+      committed.budget.scheduleStartDate !== draft.budget.scheduleStartDate)
   ) {
     dirty.add('schedule');
   }
 
-  if (committed.budget && draft.budget && !budgetEquals(committed.budget, draft.budget)) {
+  if (
+    committed.budget &&
+    draft.budget &&
+    !budgetSettingsEquals(committed.budget, draft.budget)
+  ) {
     dirty.add('budget');
   }
 

@@ -121,22 +121,23 @@ function PaycheckView({
           const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
           const unpayableCount = visibleBills.filter(bill => bill.isUnpayable).length;
           const hasUnpayableBills = unpayableCount > 0;
-          const needsAttention = paycheck.isShortfall || hasUnpayableBills;
+          const isShortfall = paycheck.isShortfall;
           const isBreakGlass = isBreakGlassPaycheck(paycheck, maxBudgetRemaining, minCashOnHand);
           const isExpanded = expandedPaychecks.has(paycheck.date);
           const isDropTarget = dropTargetDate === paycheck.date;
           const isDragSource = draggedBill?.sourcePaycheckDate === paycheck.date;
+          const cardClassName = clsx(
+            'card overflow-hidden transition-all',
+            isShortfall && 'border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-500/5',
+            isBreakGlass && !isShortfall && 'break-glass-tape border-warning-300 dark:border-warning-700/50',
+            isDropTarget && 'ring-2 ring-primary-500 ring-offset-2 bg-primary-50/50 dark:bg-primary-500/10',
+            isDragSource && 'opacity-50'
+          );
           
           return (
             <div 
               key={paycheck.date}
-              className={clsx(
-                'card overflow-hidden transition-all',
-                needsAttention && 'border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-500/5',
-                isBreakGlass && !needsAttention && 'border-warning-300/70 dark:border-warning-700/50',
-                isDropTarget && 'ring-2 ring-primary-500 ring-offset-2 bg-primary-50/50 dark:bg-primary-500/10',
-                isDragSource && 'opacity-50'
-              )}
+              className={cardClassName}
               onDragOver={(e) => onDragOver(e, paycheck.date)}
               onDragLeave={onDragLeave}
               onDrop={(e) => onDrop(e, paycheck.date)}
@@ -150,15 +151,19 @@ function PaycheckView({
                 <div className="flex items-center gap-4">
                   <div className={clsx(
                     'p-3 rounded-lg',
-                    needsAttention 
-                      ? 'bg-danger-100 dark:bg-danger-500/20' 
-                      : 'bg-success-100 dark:bg-success-500/20'
+                    isShortfall
+                      ? 'bg-danger-100 dark:bg-danger-500/20'
+                      : isBreakGlass
+                        ? 'bg-warning-100 dark:bg-warning-500/20'
+                        : 'bg-success-100 dark:bg-success-500/20'
                   )}>
                     <Wallet className={clsx(
                       'w-6 h-6',
-                      needsAttention 
-                        ? 'text-danger-600 dark:text-danger-500' 
-                        : 'text-success-600 dark:text-success-500'
+                      isShortfall
+                        ? 'text-danger-600 dark:text-danger-500'
+                        : isBreakGlass
+                          ? 'text-warning-600 dark:text-warning-500'
+                          : 'text-success-600 dark:text-success-500'
                     )} />
                   </div>
                   <div>
@@ -166,7 +171,7 @@ function PaycheckView({
                       {format(parseISO(paycheck.date), 'EEEE, MMMM d, yyyy')}
                       {isBreakGlass && (
                         <span
-                          className="break-glass-tape text-xs font-semibold px-2 py-0.5 rounded-full text-warning-800 dark:text-warning-200"
+                          className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 dark:bg-warning-500/20 text-warning-800 dark:text-warning-200"
                           title="Cash on hand is below your target but above your minimum floor"
                         >
                           Break-Glass
@@ -213,12 +218,16 @@ function PaycheckView({
                     <p className="text-xs text-(--color-text-muted)">Budget Remaining</p>
                     <p className={clsx(
                       'text-xl font-semibold font-mono',
-                      paycheck.budgetRemaining >= 0 ? 'text-success-500' : 'text-danger-500'
+                      isShortfall || paycheck.budgetRemaining < 0
+                        ? 'text-danger-500'
+                        : isBreakGlass
+                          ? 'text-warning-600 dark:text-warning-500'
+                          : 'text-success-500'
                     )}>
                       {formatCurrency(paycheck.budgetRemaining)}
                     </p>
                   </div>
-                  {needsAttention && (
+                  {(isShortfall || hasUnpayableBills) && (
                     <AlertTriangle className="w-6 h-6 text-danger-500" />
                   )}
                   {isExpanded ? (
