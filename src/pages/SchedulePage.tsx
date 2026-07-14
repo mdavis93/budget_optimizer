@@ -277,13 +277,34 @@ export default function SchedulePage() {
         />
       )}
 
-      {visibleBreakGlassPlans.length > 0 && (
+      {visibleBreakGlassPlans.length > 0 || isApplyingBreakGlass ? (
         <BreakGlassAdvisorPanel
           plans={visibleBreakGlassPlans}
           onAccept={handleAcceptBreakGlassPlan}
           onDecline={handleDeclineBreakGlassPlan}
           isApplying={isApplyingBreakGlass}
         />
+      ) : null}
+
+      {(isLoading || isApplyingBreakGlass) && (
+        <div
+          className="fixed top-14 bottom-0 left-64 right-0 z-40 flex items-center justify-center bg-black/20 dark:bg-black/40"
+          role="status"
+          aria-live="polite"
+          data-testid="schedule-busy-overlay"
+        >
+          <div className="rounded-xl bg-(--color-bg-primary) border border-(--color-border) shadow-lg px-6 py-5 flex items-center gap-3 max-w-md mx-4">
+            <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
+            <div>
+              <p className="font-medium text-(--color-text-primary)">
+                {isApplyingBreakGlass ? 'Applying adjustments…' : 'Building schedule…'}
+              </p>
+              <p className="text-sm text-(--color-text-secondary)">
+                This can take a few seconds for a full-year projection.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {schedule?.recommendations && schedule.recommendations.length > 0 && (

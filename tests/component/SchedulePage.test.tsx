@@ -117,12 +117,15 @@ vi.mock('../../src/components/schedule', () => ({
     plans,
     onAccept,
     onDecline,
+    isApplying,
   }: {
     plans: Array<{ id: string; headline: string }>;
     onAccept: (plan: { id: string }) => void;
     onDecline: (planId: string) => void;
+    isApplying?: boolean;
   }) => (
     <div data-testid="mock-break-glass-advisor">
+      {isApplying ? <div data-testid="break-glass-applying">Applying</div> : null}
       {plans.map((plan) => (
         <div key={plan.id}>
           <div>{plan.headline}</div>
@@ -352,9 +355,224 @@ describe('SchedulePage', () => {
         expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
       });
     });
+
+    it('hides the accepted plan and shows busy overlay while generate is in flight', async () => {
+      let resolveGenerate: ((value: unknown) => void) | undefined;
+      generateSchedule.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveGenerate = resolve;
+          })
+      );
+
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+          breakGlassAdvisor: {
+            plans: [
+              {
+                id: 'break-glass-2026-07-31',
+                targetPaycheckDate: '2026-07-31',
+                headline: 'Clear Break-Glass on Jul 31',
+                maxDaysEarly: 15,
+                clearsBreakGlass: true,
+                steps: [
+                  {
+                    billId: 'rent',
+                    billName: 'Rent',
+                    billAmount: 160,
+                    billDueDate: '2026-08-08',
+                    fromPaycheckDate: '2026-07-31',
+                    toPaycheckDate: '2026-07-24',
+                    daysEarly: 15,
+                    requiresConfirmation: true,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-busy-overlay')).toBeInTheDocument();
+        expect(screen.getByTestId('break-glass-applying')).toBeInTheDocument();
+        expect(screen.queryByText('Clear Break-Glass on Jul 31')).not.toBeInTheDocument();
+      });
+
+      resolveGenerate?.(createMockSchedule());
+      await waitFor(() => {
+        expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
+      });
+    });
+
+    it('clears busy even when rebuilt schedule still returns the same plan id', async () => {
+      // Residual same-date plan must not sticky-lock the overlay (date-stable ids).
+      generateSchedule.mockResolvedValue(createMockSchedule());
+
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+          breakGlassAdvisor: {
+            plans: [
+              {
+                id: 'break-glass-2026-07-31',
+                targetPaycheckDate: '2026-07-31',
+                headline: 'Clear Break-Glass on Jul 31',
+                maxDaysEarly: 15,
+                clearsBreakGlass: true,
+                steps: [
+                  {
+                    billId: 'rent',
+                    billName: 'Rent',
+                    billAmount: 160,
+                    billDueDate: '2026-08-08',
+                    fromPaycheckDate: '2026-07-31',
+                    toPaycheckDate: '2026-07-24',
+                    daysEarly: 15,
+                    requiresConfirmation: true,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
+
+      await waitFor(() => {
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
+        expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('sad', () => {
+    it('clears busy overlay when applyBreakGlassPlan fails', async () => {
+      applyBreakGlassPlan.mockReturnValueOnce(false);
+
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+          breakGlassAdvisor: {
+            plans: [
+              {
+                id: 'break-glass-2026-07-31',
+                targetPaycheckDate: '2026-07-31',
+                headline: 'Clear Break-Glass on Jul 31',
+                maxDaysEarly: 15,
+                clearsBreakGlass: true,
+                steps: [],
+              },
+            ],
+          },
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
+
+      await waitFor(() => {
+        expect(applyBreakGlassPlan).toHaveBeenCalled();
+        expect(generateSchedule).not.toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
+        expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
+      });
+    });
+
+    it('clears busy overlay when generateSchedule throws', async () => {
+      generateSchedule.mockRejectedValueOnce(new Error('generate failed'));
+
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+          breakGlassAdvisor: {
+            plans: [
+              {
+                id: 'break-glass-2026-07-31',
+                targetPaycheckDate: '2026-07-31',
+                headline: 'Clear Break-Glass on Jul 31',
+                maxDaysEarly: 15,
+                clearsBreakGlass: true,
+                steps: [],
+              },
+            ],
+          },
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
+
+      await waitFor(() => {
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
+        expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
+      });
+    });
+
     it('renders empty schedule state when no income or bills exist', () => {
       mockUseData.mockReturnValue({
         incomes: [],

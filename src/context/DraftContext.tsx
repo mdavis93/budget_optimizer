@@ -867,29 +867,37 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const applyBreakGlassPlan = useCallback((plan: BreakGlassPlan): boolean => {
     if (isQuickBudget) return false;
     if (isDraftMode) {
-      updateDraft((prev) => {
-        let nextAssignments = [...prev.billAssignments];
-        for (const step of plan.steps) {
-          nextAssignments = [
-            ...nextAssignments.filter(
-              (a) => !(a.billId === step.billId && a.billDueDate === step.billDueDate)
-            ),
-            {
-              id: createDraftId(),
-              billId: step.billId,
-              billDueDate: step.billDueDate,
-              paycheckDate: step.toPaycheckDate,
-              createdAt: nowIso(),
-            },
-          ];
-        }
-        return { ...prev, billAssignments: nextAssignments };
-      });
-      markDirty('schedule');
+      // Sync stateRef before returning so an immediate force generateSchedule
+      // sees the new assignments (setDraft alone is async until the next render).
+      const prev = stateRef.current.draft;
+      let nextAssignments = [...prev.billAssignments];
+      for (const step of plan.steps) {
+        nextAssignments = [
+          ...nextAssignments.filter(
+            (a) => !(a.billId === step.billId && a.billDueDate === step.billDueDate)
+          ),
+          {
+            id: createDraftId(),
+            billId: step.billId,
+            billDueDate: step.billDueDate,
+            paycheckDate: step.toPaycheckDate,
+            createdAt: nowIso(),
+          },
+        ];
+      }
+      const nextDraft = { ...prev, billAssignments: nextAssignments };
+      const nextDirty = new Set(stateRef.current.dirtyDomains).add('schedule' as DraftDomain);
+      stateRef.current = {
+        ...stateRef.current,
+        draft: nextDraft,
+        dirtyDomains: nextDirty,
+      };
+      setDraft(nextDraft);
+      setDirtyDomains(nextDirty);
       return true;
     }
     return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+  }, [isDraftMode, isQuickBudget]);
 
   const updateBudgetFields = useCallback((updates: Partial<DraftBudgetFields>): boolean => {
     if (isQuickBudget || !draft.budget) return false;
@@ -998,14 +1006,15 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
+    const overlay = buildDraftOverlay();
+    const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
+    if (scheduleCacheRef.current?.hash === cacheKey) {
+      // Cache hit: apply viewport only — do not flash the schedule busy state.
+      return applyScheduleResult(scheduleCacheRef.current.data, months);
+    }
+
     setIsScheduleLoading(true);
     try {
-      const overlay = buildDraftOverlay();
-      const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
-      if (scheduleCacheRef.current?.hash === cacheKey) {
-        return applyScheduleResult(scheduleCacheRef.current.data, months);
-      }
-
       const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
       if (!mountedRef.current) {
         return null;

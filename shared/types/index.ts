@@ -339,6 +339,7 @@ export interface BreakGlassPlanStep {
 }
 
 export interface BreakGlassPlan {
+  /** Stable entity id: `break-glass-${targetPaycheckDate}` (not ordinal). */
   id: string;
   targetPaycheckDate: string;
   headline: string;

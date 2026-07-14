@@ -32,6 +32,7 @@ export function useScheduleMutations() {
   const [dismissedBreakGlassPlanIds, setDismissedBreakGlassPlanIds] = useState<Set<string>>(
     () => new Set()
   );
+  const [applyingBreakGlassPlanId, setApplyingBreakGlassPlanId] = useState<string | null>(null);
   const [isApplyingBreakGlass, setIsApplyingBreakGlass] = useState(false);
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export function useScheduleMutations() {
   useEffect(() => {
     setDismissedReconciliation(false);
     setDismissedBreakGlassPlanIds(new Set());
+    setApplyingBreakGlassPlanId(null);
   }, [startDate, startingBalance]);
 
   const handleApplyFixes = useCallback(async (fixes: ProposedFix[]) => {
@@ -88,12 +90,22 @@ export function useScheduleMutations() {
     setShowReconciliation(false);
   }, []);
 
-  const visibleBreakGlassPlans = (schedule?.breakGlassAdvisor?.plans ?? []).filter(
-    (plan) => !dismissedBreakGlassPlanIds.has(plan.id)
+  const allAdvisorPlans = schedule?.breakGlassAdvisor?.plans ?? [];
+  // Declines hide that entity; accept hides only while applying (anti-flash for
+  // the await window). Stack membership comes from the latest schedule build.
+  const visibleBreakGlassPlans = allAdvisorPlans.filter(
+    (plan) =>
+      !dismissedBreakGlassPlanIds.has(plan.id) && plan.id !== applyingBreakGlassPlanId
   );
+
+  // Busy while apply/generate is in flight. Do not key off "plan still present":
+  // date-stable ids mean a residual same-date plan would lock the overlay forever.
+  const isBreakGlassBusy =
+    isApplyingBreakGlass || applyingBreakGlassPlanId !== null;
 
   const handleAcceptBreakGlassPlan = useCallback(async (plan: BreakGlassPlan) => {
     setIsApplyingBreakGlass(true);
+    setApplyingBreakGlassPlanId(plan.id);
     try {
       if (isQuickBudget) {
         const result = await window.electronAPI.breakGlassAdvisor.apply(
@@ -105,17 +117,16 @@ export function useScheduleMutations() {
           }))
         );
         if (result.success) {
-          setDismissedBreakGlassPlanIds((prev) => new Set(prev).add(plan.id));
           await generateSchedule(startDate, months, startingBalance, { force: true });
         }
       } else if (applyBreakGlassPlan(plan)) {
-        setDismissedBreakGlassPlanIds((prev) => new Set(prev).add(plan.id));
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } catch {
       // Error handling is reflected through the page's existing UI state.
     } finally {
       setIsApplyingBreakGlass(false);
+      setApplyingBreakGlassPlanId(null);
     }
   }, [
     applyBreakGlassPlan,
@@ -269,7 +280,7 @@ export function useScheduleMutations() {
     handleApplyFixes,
     handleSkipReconciliation,
     visibleBreakGlassPlans,
-    isApplyingBreakGlass,
+    isApplyingBreakGlass: isBreakGlassBusy,
     handleAcceptBreakGlassPlan,
     handleDeclineBreakGlassPlan,
     handleSkipBill,

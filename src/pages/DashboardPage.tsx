@@ -62,6 +62,7 @@ export default function DashboardPage() {
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleStartingBalance,
+    isLoading,
   } = useSchedule();
 
   useEffect(() => {
@@ -185,7 +186,16 @@ export default function DashboardPage() {
             </Link>
           </div>
           
-          {chartData.length > 0 ? (
+          {isLoading ? (
+            <div
+              className="h-64 flex flex-col items-center justify-center gap-3 text-(--color-text-secondary)"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="w-8 h-8 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
+              <p className="text-sm">Building schedule for Balance Projection…</p>
+            </div>
+          ) : chartData.length > 0 ? (
             <div className="h-64">
               <ChartSuspense>
                 <BalanceProjectionChart data={chartData} formatCurrency={formatWholeCurrency} />

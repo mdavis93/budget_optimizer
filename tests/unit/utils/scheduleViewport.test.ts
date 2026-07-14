@@ -98,6 +98,53 @@ describe('applyScheduleViewport', () => {
       expect(viewport.viewportMonths).toBe(12);
     });
 
+    it('restores later Break-Glass advisor plans when viewport expands', () => {
+      const fullSchedule = buildSchedule({
+        breakGlassAdvisor: {
+          plans: [
+            {
+              id: 'break-glass-2026-03-01',
+              targetPaycheckDate: '2026-03-01',
+              headline: 'Clear Break-Glass on Mar 1, 2026',
+              steps: [],
+              maxDaysEarly: 7,
+              clearsBreakGlass: true,
+            },
+            {
+              id: 'break-glass-2026-08-01',
+              targetPaycheckDate: '2026-08-01',
+              headline: 'Clear Break-Glass on Aug 1, 2026',
+              steps: [],
+              maxDaysEarly: 10,
+              clearsBreakGlass: true,
+            },
+            {
+              id: 'break-glass-2026-11-01',
+              targetPaycheckDate: '2026-11-01',
+              headline: 'Clear Break-Glass on Nov 1, 2026',
+              steps: [],
+              maxDaysEarly: 12,
+              clearsBreakGlass: true,
+            },
+          ],
+        },
+      });
+
+      const threeMonth = applyScheduleViewport(fullSchedule, 3, bills, 1000);
+      expect(threeMonth.breakGlassAdvisor?.plans.map((plan) => plan.id)).toEqual([
+        'break-glass-2026-03-01',
+      ]);
+
+      // Expanding months must re-slice from the preserved full advisor (not a
+      // previously trimmed plan list), matching setScheduleMonths on the client.
+      const twelveMonth = applyScheduleViewport(fullSchedule, 12, bills, 1000);
+      expect(twelveMonth.breakGlassAdvisor?.plans.map((plan) => plan.id)).toEqual([
+        'break-glass-2026-03-01',
+        'break-glass-2026-08-01',
+        'break-glass-2026-11-01',
+      ]);
+    });
+
     it('recalculates summary from sliced viewport paychecks', () => {
       const fullSchedule = buildSchedule({
         summary: {

@@ -561,13 +561,21 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         minCashOnHand: resolved.minCashOnHand,
         lockedBillKeys: new Set(manualAssignments.keys()),
       });
-      // Viewport-slice advisor/recon so UI only sees targets/paychecks in view.
-      return services.scheduler.applyViewportFilter(
+      // Slice paychecks for the requested viewport. Keep FULL advisor/recon on the
+      // payload — the renderer caches fullPaychecks and re-slices on month changes;
+      // filtering here would permanently drop out-of-viewport plans from that cache.
+      const viewported = services.scheduler.applyViewportFilter(
         data,
         months,
         resolved.bills,
         effectiveStartingBalance
       );
+      const result = {
+        ...viewported,
+        breakGlassAdvisor: data.breakGlassAdvisor,
+        reconciliation: data.reconciliation,
+      };
+      return result;
     })
   ));
 
