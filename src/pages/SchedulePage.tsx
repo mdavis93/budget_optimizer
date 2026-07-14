@@ -14,10 +14,12 @@ import {
   ScheduleSummaryCards,
   ReconciliationBanner,
   ScheduleRecommendations,
+  BreakGlassAdvisorPanel,
 } from '../components/schedule';
 import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
 import { useScheduleMutations } from '../hooks/useScheduleMutations';
+import { useToast } from '../components/Toast';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -38,11 +40,13 @@ export default function SchedulePage() {
   } = useSchedule();
   const { currentBudget } = useBudget();
   const { incomes, bills, billAssignments, incomeOverrides } = useDraftData();
+  const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
   const {
     skippingBill,
+    unskippingBill,
     restoringBill,
     savingIncomeKey,
     showReconciliation,
@@ -52,7 +56,12 @@ export default function SchedulePage() {
     setDismissedReconciliation,
     handleApplyFixes,
     handleSkipReconciliation,
+    visibleBreakGlassPlans,
+    isApplyingBreakGlass,
+    handleAcceptBreakGlassPlan,
+    handleDeclineBreakGlassPlan,
     handleSkipBill,
+    handleUnskipBill,
     handleRestoreBill,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,
@@ -119,8 +128,13 @@ export default function SchedulePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
   }, [startDate, startingBalance, scheduleInputHash]);
 
-  const handleRefresh = () => {
-    generateSchedule(startDate, months, startingBalance, { force: true });
+  const handleRefresh = async () => {
+    const result = await generateSchedule(startDate, months, startingBalance, { force: true });
+    if (result) {
+      showToast('success', 'Schedule refreshed');
+    } else {
+      showToast('error', 'Failed to refresh schedule');
+    }
   };
 
   const togglePaycheck = useCallback((date: string) => {
@@ -236,13 +250,11 @@ export default function SchedulePage() {
         startDate={startDate}
         months={months}
         startingBalance={startingBalance}
-        isLoading={isLoading}
         calculationMonths={schedule?.calculationMonths}
         goals={goalViewportSources}
         onStartDateChange={setStartDate}
         onMonthsChange={setMonths}
         onStartingBalanceChange={setStartingBalance}
-        onGenerate={handleRefresh}
       />
 
       {schedule?.summary && (
@@ -265,6 +277,36 @@ export default function SchedulePage() {
         />
       )}
 
+      {visibleBreakGlassPlans.length > 0 || isApplyingBreakGlass ? (
+        <BreakGlassAdvisorPanel
+          plans={visibleBreakGlassPlans}
+          onAccept={handleAcceptBreakGlassPlan}
+          onDecline={handleDeclineBreakGlassPlan}
+          isApplying={isApplyingBreakGlass}
+        />
+      ) : null}
+
+      {(isLoading || isApplyingBreakGlass) && (
+        <div
+          className="fixed top-14 bottom-0 left-64 right-0 z-40 flex items-center justify-center bg-black/20 dark:bg-black/40"
+          role="status"
+          aria-live="polite"
+          data-testid="schedule-busy-overlay"
+        >
+          <div className="rounded-xl bg-(--color-bg-primary) border border-(--color-border) shadow-lg px-6 py-5 flex items-center gap-3 max-w-md mx-4">
+            <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
+            <div>
+              <p className="font-medium text-(--color-text-primary)">
+                {isApplyingBreakGlass ? 'Applying adjustments…' : 'Building schedule…'}
+              </p>
+              <p className="text-sm text-(--color-text-secondary)">
+                This can take a few seconds for a full-year projection.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {schedule?.recommendations && schedule.recommendations.length > 0 && (
         <ScheduleRecommendations
           recommendations={schedule.recommendations}
@@ -285,7 +327,9 @@ export default function SchedulePage() {
           maxBudgetRemaining={schedule?.maxBudgetRemaining ?? currentBudget?.targetCashOnHand ?? 250}
           minCashOnHand={schedule?.minCashOnHand ?? currentBudget?.minCashOnHand ?? 100}
           onSkipBill={handleSkipBill}
+          onUnskipBill={handleUnskipBill}
           skippingBill={skippingBill}
+          unskippingBill={unskippingBill}
           onRestoreBill={handleRestoreBill}
           restoringBill={restoringBill}
           onDragStart={handleDragStart}

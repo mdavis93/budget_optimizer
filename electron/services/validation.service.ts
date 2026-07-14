@@ -175,6 +175,56 @@ export function validateReconciliationFixes(fixes: ReconciliationFixInput[]): Va
   return { valid: errors.length === 0, errors };
 }
 
+/** Apply payload for Break-Glass advisor accept (manual assignment upserts). */
+export interface BreakGlassApplyStepInput {
+  billId: string;
+  billDueDate: string;
+  fromPaycheckDate: string;
+  toPaycheckDate: string;
+}
+
+export function validateBreakGlassApplyStep(step: BreakGlassApplyStepInput): ValidationResult {
+  const errors: string[] = [];
+
+  if (!ID_REGEX.test(step.billId)) {
+    errors.push('Invalid billId');
+  }
+  if (!DATE_REGEX.test(step.billDueDate)) {
+    errors.push('Invalid billDueDate');
+  }
+  if (!DATE_REGEX.test(step.fromPaycheckDate)) {
+    errors.push('Invalid fromPaycheckDate');
+  }
+  if (!DATE_REGEX.test(step.toPaycheckDate)) {
+    errors.push('Invalid toPaycheckDate');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateBreakGlassApplySteps(steps: BreakGlassApplyStepInput[]): ValidationResult {
+  const errors: string[] = [];
+
+  if (!Array.isArray(steps)) {
+    return { valid: false, errors: ['Steps must be an array'] };
+  }
+  if (steps.length === 0) {
+    errors.push('At least one step is required');
+  }
+  if (steps.length > 100) {
+    errors.push('Too many steps in one request');
+  }
+
+  steps.forEach((step, index) => {
+    const result = validateBreakGlassApplyStep(step);
+    if (!result.valid) {
+      errors.push(`Step[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  return { valid: errors.length === 0, errors };
+}
+
 export function validateGoal(goal: {
   name: string;
   targetAmount: number;

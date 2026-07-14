@@ -22,7 +22,9 @@ import {
 import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
 import {
   assertValid,
+  validateBreakGlassApplySteps,
   validateReconciliationFixes,
+  BreakGlassApplyStepInput,
   ReconciliationFixInput,
 } from '../services/validation.service';
 
@@ -548,11 +550,32 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         debtPayoffs,
         incomeOverridesMapOpt
       );
-      data.reconciliation = services.scheduler.analyzeAndProposeFixes({
+      const fullHorizon = {
         ...data,
         paychecks: data.fullPaychecks ?? data.paychecks,
+      };
+      data.reconciliation = services.scheduler.analyzeAndProposeFixes(fullHorizon);
+      data.breakGlassAdvisor = services.scheduler.proposeBreakGlassPlans(fullHorizon, {
+        scheduleStartDate: startDate,
+        targetCashOnHand: resolved.targetCashOnHand,
+        minCashOnHand: resolved.minCashOnHand,
+        lockedBillKeys: new Set(manualAssignments.keys()),
       });
-      return data;
+      // Slice paychecks for the requested viewport. Keep FULL advisor/recon on the
+      // payload — the renderer caches fullPaychecks and re-slices on month changes;
+      // filtering here would permanently drop out-of-viewport plans from that cache.
+      const viewported = services.scheduler.applyViewportFilter(
+        data,
+        months,
+        resolved.bills,
+        effectiveStartingBalance
+      );
+      const result = {
+        ...viewported,
+        breakGlassAdvisor: data.breakGlassAdvisor,
+        reconciliation: data.reconciliation,
+      };
+      return result;
     })
   ));
 
@@ -603,6 +626,19 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
     }
   })));
+
+  ipcMain.handle(
+    'breakGlassAdvisor:apply',
+    withBudgetGuard(services, (_, steps: BreakGlassApplyStepInput[]) =>
+      ipcVoid('breakGlassAdvisor:apply', async () => {
+        assertValid(validateBreakGlassApplySteps(steps), 'Invalid break-glass advisor steps');
+        const { budgetManager } = ready();
+        for (const step of steps) {
+          budgetManager.assignBillToPaycheck(step.billId, step.billDueDate, step.toPaycheckDate);
+        }
+      })
+    )
+  );
 
   ipcMain.handle('settings:get', withBudgetGuard(services, () =>
     ipcData('settings:get', () => ready().database.getSettings())

@@ -63,6 +63,34 @@ describe('DraftSaveBar', () => {
       fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
       expect(saveDomains).toHaveBeenCalledWith(['bills']);
     });
+
+    it('renders as a footer and raises the toast anchor above it', () => {
+      const OriginalResizeObserver = globalThis.ResizeObserver;
+      class MockResizeObserver {
+        private callback: ResizeObserverCallback;
+        constructor(callback: ResizeObserverCallback) {
+          this.callback = callback;
+        }
+        observe(target: Element) {
+          this.callback(
+            [{ target, contentRect: { height: 72 } as DOMRectReadOnly } as ResizeObserverEntry],
+            this as unknown as ResizeObserver
+          );
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+      globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+      try {
+        renderWithRouter(<DraftSaveBar domain="bills" />, { mockAPI });
+        expect(screen.getByTestId('draft-save-footer').tagName).toBe('FOOTER');
+        expect(document.documentElement.style.getPropertyValue('--app-toast-bottom')).toMatch(/px$/);
+      } finally {
+        globalThis.ResizeObserver = OriginalResizeObserver;
+        document.documentElement.style.removeProperty('--app-toast-bottom');
+      }
+    });
   });
 
   describe('sad', () => {

@@ -468,7 +468,8 @@ describe('DraftContext', () => {
       await waitFor(() => {
         expect(screen.getByTestId('schedule-months')).toHaveTextContent('12');
       });
-      expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+      // ScheduleHarness uses force: true, so each generate bypasses the cache.
+      expect(mockAPI.schedule.build).toHaveBeenCalledTimes(2);
     });
 
     it('creates income and marks income domain dirty', async () => {

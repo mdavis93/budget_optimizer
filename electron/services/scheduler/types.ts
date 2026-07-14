@@ -11,6 +11,9 @@ import type { UnfundableReason } from '@shared/types';
 // Canonical schedule model lives in the shared module; re-export so existing
 // `from './types'` consumers across the scheduler keep resolving unchanged.
 export type {
+  BreakGlassAdvisorReport,
+  BreakGlassPlan,
+  BreakGlassPlanStep,
   GoalDeposit,
   GoalProjection,
   GoalScheduleHealth,
@@ -33,6 +36,8 @@ export const SAVINGS_TARGET_PRIMARY = 150;
 /** Fallback per-paycheck savings; below this (when goals consume the surplus) we warn. */
 export const SAVINGS_TARGET_FALLBACK = 100;
 export const MAX_PREPAY_DAYS = 14; // Bills cannot be paid more than 14 days early
+/** Advisor may propose early moves up to this many days; never auto-applied. */
+export const MAX_ADVISOR_EARLY_DAYS = 21;
 /** Floor (and default) calculation horizon in months. */
 export const SCHEDULE_CALCULATION_MONTHS = 12;
 /** Cap on the calculation horizon; goals beyond this fall back to projection. */
@@ -90,6 +95,7 @@ export interface ProjectedBill {
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  isSkipped?: boolean;
   unfundableReason?: UnfundableReason;
 }
 

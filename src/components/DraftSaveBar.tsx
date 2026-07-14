@@ -1,9 +1,11 @@
 import { Save, RotateCcw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { DraftDomain, DRAFT_DOMAIN_LABELS } from '../types/draft';
 import { useDraftActions, useDraftData, useDraftStatus } from '../context/DraftContext';
 import { getCrossDomainSaveWarning } from '../utils/draftPersist';
 import ConfirmDialog from './ConfirmDialog';
-import { useState } from 'react';
+
+const DEFAULT_TOAST_BOTTOM = '1rem';
 
 interface DraftSaveBarProps {
   domain: DraftDomain;
@@ -17,8 +19,38 @@ export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
   const [saveConfirm, setSaveConfirm] = useState<{ domains: DraftDomain[]; message: string } | null>(
     null
   );
+  const footerRef = useRef<HTMLDivElement>(null);
+  const isVisible = isDraftMode && isDomainDirty(domain);
 
-  if (!isDraftMode || !isDomainDirty(domain)) {
+  // Keep toasts above this layout footer so they never cover Save/Discard.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!isVisible) {
+      root.style.setProperty('--app-toast-bottom', DEFAULT_TOAST_BOTTOM);
+      return;
+    }
+
+    const footer = footerRef.current;
+    if (!footer) {
+      return;
+    }
+
+    const syncToastOffset = () => {
+      const height = footer.getBoundingClientRect().height;
+      root.style.setProperty('--app-toast-bottom', `${Math.ceil(height) + 16}px`);
+    };
+
+    syncToastOffset();
+    const observer = new ResizeObserver(syncToastOffset);
+    observer.observe(footer);
+
+    return () => {
+      observer.disconnect();
+      root.style.setProperty('--app-toast-bottom', DEFAULT_TOAST_BOTTOM);
+    };
+  }, [isVisible]);
+
+  if (!isVisible) {
     return null;
   }
 
@@ -33,7 +65,12 @@ export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
 
   return (
     <>
-      <div className="shrink-0 border-t border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950 px-6 py-4">
+      <footer
+        ref={footerRef}
+        data-testid="draft-save-footer"
+        aria-label="Unsaved draft actions"
+        className="shrink-0 border-t border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950 px-6 py-4"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-warning-800 dark:text-warning-200">
             Unsaved changes on {DRAFT_DOMAIN_LABELS[domain]}
@@ -59,7 +96,7 @@ export default function DraftSaveBar({ domain }: DraftSaveBarProps) {
             </button>
           </div>
         </div>
-      </div>
+      </footer>
 
       <ConfirmDialog
         isOpen={showDiscardConfirm}

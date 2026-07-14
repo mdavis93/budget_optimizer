@@ -81,6 +81,7 @@
     --color-text-muted: #94a3b8;
     --color-border: #e2e8f0;
     --color-accent: #3b82f6;
+    --app-toast-bottom: 1rem;
   }
 
   .dark {
@@ -104,6 +105,14 @@
   textarea {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  input[type="date"] {
+    color-scheme: light;
+  }
+
+  .dark input[type="date"] {
+    color-scheme: dark;
   }
 
   body {

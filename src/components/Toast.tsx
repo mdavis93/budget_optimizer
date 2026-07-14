@@ -96,7 +96,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast, dismissToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+      <div
+        data-testid="toast-viewport"
+        className="fixed right-4 z-50 flex flex-col gap-2 max-w-sm transition-[bottom] duration-200"
+        style={{ bottom: 'var(--app-toast-bottom, 1rem)' }}
+      >
         {toasts.map(toast => (
           <ToastItem
             key={toast.id}

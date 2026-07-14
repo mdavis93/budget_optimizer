@@ -141,7 +141,16 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
         minCashOnHand: 100,
       })),
       generateGoalProjections: vi.fn(() => []),
-      analyzeAndProposeFixes: vi.fn(() => ({ hasShortfalls: false, proposedFixes: [] })),
+      analyzeAndProposeFixes: vi.fn(() => ({
+        needsReconciliation: false,
+        shortfalls: [],
+        proposedFixes: [],
+        canBeFullyResolved: true,
+        totalDeficit: 0,
+        estimatedResolution: 0,
+      })),
+      proposeBreakGlassPlans: vi.fn(() => ({ plans: [] })),
+      applyViewportFilter: vi.fn((data) => data),
     },
     pdf: {
       generatePdf: vi.fn(async () => ({ success: true })),
@@ -385,6 +394,32 @@ describe('ipc handlers', () => {
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });
 
+    it('applies break-glass advisor steps as bill assignments', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          assignBillToPaycheck: vi.fn(),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      const result = await ipcMain.invoke('breakGlassAdvisor:apply', [
+        {
+          billId: 'bill-0001',
+          billDueDate: '2026-08-08',
+          fromPaycheckDate: '2026-07-31',
+          toPaycheckDate: '2026-07-24',
+        },
+      ]);
+
+      expect(result).toEqual({ success: true });
+      expect(services.budgetManager.assignBillToPaycheck).toHaveBeenCalledWith(
+        'bill-0001',
+        '2026-08-08',
+        '2026-07-24'
+      );
+    });
+
     it('locks auth and clears active budget/database services', async () => {
       const lock = vi.fn();
       const close = vi.fn();
@@ -489,7 +524,16 @@ describe('ipc handlers', () => {
             goalProjections: [{ id: 'gp-1' }],
           })),
           generateGoalProjections: vi.fn(() => [{ id: 'gp-1' }]),
-          analyzeAndProposeFixes: vi.fn(() => ({ hasShortfalls: true, proposedFixes: [] })),
+          analyzeAndProposeFixes: vi.fn(() => ({
+            needsReconciliation: true,
+            shortfalls: [],
+            proposedFixes: [],
+            canBeFullyResolved: false,
+            totalDeficit: 0,
+            estimatedResolution: 0,
+          })),
+          proposeBreakGlassPlans: vi.fn(() => ({ plans: [] })),
+          applyViewportFilter: vi.fn((data) => data),
         },
       });
       registerIpcHandlers(ipcMain as never, services as never);

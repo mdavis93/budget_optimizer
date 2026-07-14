@@ -340,6 +340,7 @@
     "debts:update",
     "debts:delete",
     "reconciliation:apply-fixes",
+    "breakGlassAdvisor:apply",
     "export:to-pdf",
     "export:to-html",
     "export:to-spreadsheet",

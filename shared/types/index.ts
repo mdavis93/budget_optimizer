@@ -222,6 +222,7 @@ export interface PaycheckBill {
   billDate: string; // The projected due date for this bill occurrence
   isIncomeAttached?: boolean;
   isUnpayable?: boolean;
+  isSkipped?: boolean;
   unfundableReason?: UnfundableReason;
 }
 
@@ -324,6 +325,33 @@ export interface ReconciliationReport {
   estimatedResolution: number;
 }
 
+/** One bill move in a Break-Glass advisor cascade (may exceed auto MAX_PREPAY_DAYS). */
+export interface BreakGlassPlanStep {
+  billId: string;
+  billName: string;
+  billAmount: number;
+  billDueDate: string;
+  fromPaycheckDate: string;
+  toPaycheckDate: string;
+  daysEarly: number;
+  /** True when daysEarly > 14 (auto-legal window); accept still applies as a manual lock. */
+  requiresConfirmation: boolean;
+}
+
+export interface BreakGlassPlan {
+  /** Stable entity id: `break-glass-${targetPaycheckDate}` (not ordinal). */
+  id: string;
+  targetPaycheckDate: string;
+  headline: string;
+  steps: BreakGlassPlanStep[];
+  maxDaysEarly: number;
+  clearsBreakGlass: true;
+}
+
+export interface BreakGlassAdvisorReport {
+  plans: BreakGlassPlan[];
+}
+
 export interface ScheduleSummary {
   totalIncome: number;
   totalExpenses: number;
@@ -358,6 +386,8 @@ export interface ScheduleData {
   maxBudgetRemaining: number;
   minCashOnHand: number;
   reconciliation?: ReconciliationReport;
+  /** Residual Break-Glass suggestions after auto rebalance; never auto-applied. */
+  breakGlassAdvisor?: BreakGlassAdvisorReport;
   goalProjections?: GoalProjection[];
 }
 

@@ -1,4 +1,8 @@
-import type { PaycheckEntry, ReconciliationReport } from './types';
+import type {
+  BreakGlassAdvisorReport,
+  PaycheckEntry,
+  ReconciliationReport,
+} from './types';
 
 export function rebuildReconciliationForViewport(
   reconciliation: ReconciliationReport | undefined,
@@ -30,5 +34,17 @@ export function rebuildReconciliationForViewport(
         ? viewportPaychecks.some((paycheck) => paycheck.date === fixDate)
         : true;
     }),
+  };
+}
+
+/** Keep advisor plans whose target paycheck is visible in the current viewport. */
+export function rebuildBreakGlassAdvisorForViewport(
+  advisor: BreakGlassAdvisorReport | undefined,
+  viewportPaychecks: PaycheckEntry[]
+): BreakGlassAdvisorReport | undefined {
+  if (!advisor) return advisor;
+  const visible = new Set(viewportPaychecks.map((paycheck) => paycheck.date));
+  return {
+    plans: advisor.plans.filter((plan) => visible.has(plan.targetPaycheckDate)),
   };
 }

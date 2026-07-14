@@ -145,14 +145,17 @@ function tryPlaceBillOnEarlier(
       return true;
     }
 
-    const roomNeeded = bill.amount - spareCapacity(load, capacity, targetIndex);
+    // Pass the full amount needed as spare — not (amount - currentSpare).
+    // freeCapacity treats amountNeeded as a total spare target; passing the gap
+    // caused a false early-return whenever spare > gap (spare roughly in
+    // [bill/2, bill)).
     if (
       freeCapacityOnPaycheck(
         assignments,
         load,
         capacity,
         targetIndex,
-        roomNeeded,
+        bill.amount,
         skippedBills,
         lockedBillKeys,
         0,
@@ -242,6 +245,28 @@ function needsRelief(
   return true;
 }
 
+/** Break-glass band: above target reserve but still above the min floor. */
+function isBreakGlassLoad(
+  load: number,
+  targetCapacity: number,
+  minCapacity: number
+): boolean {
+  return load > targetCapacity && load <= minCapacity;
+}
+
+function hasEarlierTargetSurplus(
+  load: number[],
+  targetCapacity: number[],
+  fromIndex: number
+): boolean {
+  for (let index = 0; index < fromIndex; index++) {
+    if (spareCapacity(load, targetCapacity, index) > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function freeCapacityOnPaycheck(
   assignments: PaycheckAssignment[],
   load: number[],
@@ -263,15 +288,14 @@ function freeCapacityOnPaycheck(
       .sort((a, b) => b - a);
 
     for (const earlierIndex of earlierCandidates) {
-      const roomNeeded = Math.max(0, bill.amount - spareCapacity(load, capacity, earlierIndex));
       if (
-        roomNeeded > 0 &&
+        spareCapacity(load, capacity, earlierIndex) < bill.amount &&
         !freeCapacityOnPaycheck(
           assignments,
           load,
           capacity,
           earlierIndex,
-          roomNeeded,
+          bill.amount,
           skippedBills,
           lockedBillKeys,
           depth + 1,
@@ -348,6 +372,113 @@ function tryRelieveOverload(
   return changed;
 }
 
+/** Pull bills off break-glass paychecks when an earlier paycheck has target-tier spare. */
+function tryDecongestBreakGlass(
+  assignments: PaycheckAssignment[],
+  load: number[],
+  targetCapacity: number[],
+  minCapacity: number[],
+  congestedIndex: number,
+  skippedBills: Set<string>,
+  lockedBillKeys: Set<string>,
+  maxCascadeDepth: number
+): boolean {
+  if (
+    !isBreakGlassLoad(
+      load[congestedIndex],
+      targetCapacity[congestedIndex],
+      minCapacity[congestedIndex]
+    ) ||
+    !hasEarlierTargetSurplus(load, targetCapacity, congestedIndex)
+  ) {
+    return false;
+  }
+
+  let changed = false;
+  const movable = movableBillsOnPaycheck(assignments[congestedIndex], lockedBillKeys);
+
+  for (const bill of movable) {
+    if (
+      !isBreakGlassLoad(
+        load[congestedIndex],
+        targetCapacity[congestedIndex],
+        minCapacity[congestedIndex]
+      )
+    ) {
+      break;
+    }
+
+    const placed =
+      tryPlaceBillOnEarlier(
+        assignments,
+        load,
+        targetCapacity,
+        bill,
+        congestedIndex,
+        skippedBills,
+        lockedBillKeys,
+        maxCascadeDepth
+      ) ||
+      tryPlaceBillOnEarlier(
+        assignments,
+        load,
+        minCapacity,
+        bill,
+        congestedIndex,
+        skippedBills,
+        lockedBillKeys,
+        maxCascadeDepth
+      );
+    if (placed) {
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+/**
+ * Forward "dominos": while an earlier paycheck has target-tier spare, pull movable
+ * bills from later paychecks nearest-first that are eligible for that earlier
+ * date. Healthy-but-full intermediate weeks are actively lightened so room can
+ * cascade toward a later break-glass paycheck (Jul 3 ← 10 ← 17 ← 24 ← 31).
+ */
+function tryForwardDominoFill(
+  assignments: PaycheckAssignment[],
+  load: number[],
+  targetCapacity: number[],
+  skippedBills: Set<string>,
+  lockedBillKeys: Set<string>
+): boolean {
+  let changed = false;
+
+  for (let earlier = 0; earlier < assignments.length - 1; earlier++) {
+    while (spareCapacity(load, targetCapacity, earlier) > 0) {
+      let placed = false;
+
+      // Nearest later paycheck first — open Jul 10 into Jul 3 before reaching for Jul 17.
+      for (let later = earlier + 1; later < assignments.length && !placed; later++) {
+        // Shed lower-priority bills first so critical stays on the later paycheck when possible.
+        const candidates = movableBillsOnPaycheck(assignments[later], lockedBillKeys).reverse();
+        for (const bill of candidates) {
+          if (spareCapacity(load, targetCapacity, earlier) < bill.amount) continue;
+          const eligible = getEligiblePaycheckIndices(bill, assignments, skippedBills);
+          if (!eligible.includes(earlier)) continue;
+
+          moveBill(assignments, bill, later, earlier, load);
+          changed = true;
+          placed = true;
+          break;
+        }
+      }
+
+      if (!placed) break;
+    }
+  }
+
+  return changed;
+}
+
 /**
  * Post-assignment pass: prefer target cash-on-hand on every paycheck, moving
  * movable bills earlier within the 14-day window. Paychecks may land between
@@ -373,6 +504,20 @@ export function rebalancePaycheckAssignments(
   for (let pass = 0; pass < maxPasses; pass++) {
     let changed = false;
 
+    // 1) Dominos: fill earlier target surplus from later weeks (including healthy-but-full).
+    if (
+      tryForwardDominoFill(
+        assignments,
+        load,
+        targetCapacity,
+        skippedBills,
+        lockedBillKeys
+      )
+    ) {
+      changed = true;
+    }
+
+    // 2) True shortfalls below the min floor.
     for (let index = assignments.length - 1; index >= 0; index--) {
       if (
         !needsRelief(load[index], targetCapacity[index], minCapacity[index])
@@ -381,6 +526,24 @@ export function rebalancePaycheckAssignments(
       }
       if (
         tryRelieveOverload(
+          assignments,
+          load,
+          targetCapacity,
+          minCapacity,
+          index,
+          skippedBills,
+          lockedBillKeys,
+          maxCascadeDepth
+        )
+      ) {
+        changed = true;
+      }
+    }
+
+    // 3) Break-glass leftovers: place earlier at target, then min, with cascade freeCapacity.
+    for (let index = assignments.length - 1; index >= 0; index--) {
+      if (
+        tryDecongestBreakGlass(
           assignments,
           load,
           targetCapacity,

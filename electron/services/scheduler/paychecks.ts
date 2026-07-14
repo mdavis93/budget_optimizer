@@ -39,11 +39,10 @@ export function buildPaycheckEntries(
     });
 
     const totalIncome = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
-    const totalBillsAmount = uniqueBills
-      .filter(bill => !bill.isUnpayable)
-      .reduce((sum, bill) => sum + bill.amount, 0);
+    const fundedBills = uniqueBills.filter(bill => !bill.isUnpayable && !bill.isSkipped);
+    const totalBillsAmount = fundedBills.reduce((sum, bill) => sum + bill.amount, 0);
     const unpayableBillsAmount = uniqueBills
-      .filter(bill => bill.isUnpayable)
+      .filter(bill => bill.isUnpayable && !bill.isSkipped)
       .reduce((sum, bill) => sum + bill.amount, 0);
     const hasUnpayableBills = unpayableBillsAmount > 0;
     const ledgerBoost = i === 0 ? startingBalance : 0;
@@ -97,7 +96,7 @@ export function buildPaycheckEntries(
 
     const isShortfall = budgetRemaining < minCashOnHand;
 
-    const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable).length;
+    const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
     const hasUnpayableBills = unpayableCount > 0;
 
     const paycheck: PaycheckEntry = {
@@ -118,6 +117,7 @@ export function buildPaycheckEntries(
         billDate: format(bill.date, 'yyyy-MM-dd'),
         isIncomeAttached: bill.isIncomeAttached,
         isUnpayable: bill.isUnpayable,
+        isSkipped: bill.isSkipped,
         unfundableReason: bill.unfundableReason,
       })),
       totalBills: Math.round(totalBillsAmount * 100) / 100,

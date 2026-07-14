@@ -13,9 +13,13 @@ import {
   calculateSummary,
   generateRecommendations,
 } from './scheduler/paychecks';
-import { rebuildReconciliationForViewport } from '@shared/scheduleViewportSlice';
+import {
+  rebuildBreakGlassAdvisorForViewport,
+  rebuildReconciliationForViewport,
+} from '@shared/scheduleViewportSlice';
 import { calculateGoalProjections, generateGoalProjections, computeGoalFundingTimeline } from './scheduler/goals';
 import { analyzeAndProposeFixes } from './scheduler/reconciliation';
+import { proposeBreakGlassPlans } from './scheduler/breakGlassAdvisor';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
@@ -41,6 +45,9 @@ export type {
   ProposedFix,
   ShortfallDetail,
   ReconciliationReport,
+  BreakGlassAdvisorReport,
+  BreakGlassPlan,
+  BreakGlassPlanStep,
   GoalSuggestion,
   GoalScheduleHealth,
   GoalProjection,
@@ -54,6 +61,7 @@ export class SchedulerService {
   generateGoalProjections = generateGoalProjections;
   calculateGoalProjections = calculateGoalProjections;
   analyzeAndProposeFixes = analyzeAndProposeFixes;
+  proposeBreakGlassPlans = proposeBreakGlassPlans;
   findPreferredPaycheck = findPreferredPaycheck;
   computeGoalFundingTimeline = computeGoalFundingTimeline;
 
@@ -104,23 +112,23 @@ export class SchedulerService {
     allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
     allBills.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // Filter out skipped bills and deduplicate (only for date-based bills)
+    // Split skipped occurrences (still shown in UI) from bills that need funding
     const seenBillKeys = new Set<string>();
+    const skippedForDisplay: typeof allBills = [];
     const uniqueBills = allBills.filter(bill => {
       const dateStr = format(bill.date, 'yyyy-MM-dd');
       const skipKey = `${bill.billId}-${dateStr}`;
-
-      // Skip if this bill occurrence is marked as skipped
-      if (skippedBills.has(skipKey)) {
-        return false;
-      }
-
-      // Deduplicate by billId + date
       const dedupKey = billOccurrenceKey(bill.billId, bill.date);
+
       if (seenBillKeys.has(dedupKey)) {
         return false;
       }
       seenBillKeys.add(dedupKey);
+
+      if (skippedBills.has(skipKey)) {
+        skippedForDisplay.push(bill);
+        return false;
+      }
       return true;
     });
 
@@ -137,7 +145,8 @@ export class SchedulerService {
       maxBudgetRemaining,
       goals,
       minCashOnHand,
-      minSavingsPerPaycheck
+      minSavingsPerPaycheck,
+      skippedForDisplay
     );
 
     const goalProjections = calculateGoalProjections(
@@ -200,6 +209,10 @@ export class SchedulerService {
           fullSchedule.savingsSqueezedCount
         ),
         reconciliation: rebuildReconciliationForViewport(fullSchedule.reconciliation, paychecks),
+        breakGlassAdvisor: rebuildBreakGlassAdvisorForViewport(
+          fullSchedule.breakGlassAdvisor,
+          paychecks
+        ),
       };
     }
 
@@ -232,6 +245,10 @@ export class SchedulerService {
       ),
       reconciliation: rebuildReconciliationForViewport(
         fullSchedule.reconciliation,
+        viewportPaychecks
+      ),
+      breakGlassAdvisor: rebuildBreakGlassAdvisorForViewport(
+        fullSchedule.breakGlassAdvisor,
         viewportPaychecks
       ),
     };

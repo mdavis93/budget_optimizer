@@ -4,7 +4,10 @@ import {
   convertToLegacyEntries,
   generateRecommendations,
 } from '@shared/schedulePresentation';
-import { rebuildReconciliationForViewport } from '@shared/scheduleViewportSlice';
+import {
+  rebuildBreakGlassAdvisorForViewport,
+  rebuildReconciliationForViewport,
+} from '@shared/scheduleViewportSlice';
 import { Bill, PaycheckEntry, ScheduleData } from '../types';
 
 export const SCHEDULE_CALCULATION_MONTHS = 12;
@@ -51,6 +54,10 @@ export function applyScheduleViewport(
     fullSchedule.reconciliation,
     viewportPaychecks
   );
+  const breakGlassAdvisor = rebuildBreakGlassAdvisorForViewport(
+    fullSchedule.breakGlassAdvisor,
+    viewportPaychecks
+  );
 
   return {
     ...fullSchedule,
@@ -66,5 +73,6 @@ export function applyScheduleViewport(
       fullSchedule.savingsSqueezedCount
     ),
     reconciliation,
+    breakGlassAdvisor,
   };
 }
