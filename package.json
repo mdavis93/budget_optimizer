@@ -82,6 +82,11 @@
     "vitest": "^4.1.10",
     "wait-on": "^9.0.10"
   },
+  "pnpm": {
+    "overrides": {
+      "shell-quote": "1.9.0"
+    }
+  },
   "build": {
     "appId": "com.budgetoptimizer.app",
     "productName": "Budget Optimizer",
