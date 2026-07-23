@@ -25,6 +25,7 @@ import {
 } from './types';
 import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
+import { resolvePaycheckCashOnHand } from './cashOnHandOverrides';
 import { getUniquePaycheckDates } from './assignment';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
@@ -470,6 +471,12 @@ export function generateGoalProjections(
   });
 
   const paycheckDates = getUniquePaycheckDates(allIncomes);
+  const cashOnHandByDate = resolvePaycheckCashOnHand(
+    paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
+    leaves,
+    maxBudgetRemaining,
+    minCashOnHand
+  );
 
   const assignments = assignBillsExact(
     paycheckDates,
@@ -480,6 +487,9 @@ export function generateGoalProjections(
       skippedBills,
       manualAssignments,
       incomeAttachedBillsRaw,
+      targetCashOnHand: maxBudgetRemaining,
+      minCashOnHand,
+      cashOnHandByDate,
     }
   );
 
@@ -489,7 +499,8 @@ export function generateGoalProjections(
     maxBudgetRemaining,
     goals,
     minCashOnHand,
-    minSavingsPerPaycheck
+    minSavingsPerPaycheck,
+    cashOnHandByDate
   );
 
   return calculateGoalProjections(

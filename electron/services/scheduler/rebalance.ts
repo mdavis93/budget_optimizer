@@ -1,5 +1,11 @@
+import { format } from 'date-fns';
 import { PRIORITY_ORDER } from '../../utils/constants';
 import { getEligiblePaycheckIndices } from './eligibility';
+import {
+  cashMinForDate,
+  cashTargetForDate,
+  type CashOnHandByDate,
+} from './cashOnHandOverrides';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
@@ -15,6 +21,8 @@ export interface RebalanceOptions {
   targetCashOnHand?: number;
   /** Break-glass floor — only accept going this low when target cannot be met. */
   minCashOnHand?: number;
+  /** Per-paycheck overrides (unpaid leave); falls back to scalar defaults. */
+  cashOnHandByDate?: CashOnHandByDate;
   maxPasses?: number;
   maxCascadeDepth?: number;
 }
@@ -22,12 +30,12 @@ export interface RebalanceOptions {
 function paycheckCapacity(
   assignments: PaycheckAssignment[],
   startingBalance: number,
-  cashOnHandReserve: number
+  reserves: number[]
 ): number[] {
   return assignments.map((assignment, index) => {
     const income = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
     const ledgerBoost = index === 0 ? startingBalance : 0;
-    return Math.max(0, income + ledgerBoost - cashOnHandReserve);
+    return Math.max(0, income + ledgerBoost - reserves[index]);
   });
 }
 
@@ -172,14 +180,16 @@ function tryPlaceBillOnEarlier(
 }
 
 /**
- * After target/min relief, fund solver-marked unpayables in place at the min
- * floor when possible, otherwise move them earlier using break-glass spare.
+ * After target/min relief, fund solver-marked unpayables in place when possible.
+ * Tier order: target → min (break-glass) → raw income (shortfall, not unpayable).
+ * "Unpayable" means income cannot cover the bill; remaining below min is a shortfall.
  */
 function rescueUnpayableBills(
   assignments: PaycheckAssignment[],
   load: number[],
   targetCapacity: number[],
   minCapacity: number[],
+  incomeCapacity: number[],
   skippedBills: Set<string>,
   lockedBillKeys: Set<string>,
   maxCascadeDepth: number
@@ -188,13 +198,23 @@ function rescueUnpayableBills(
 
   for (let index = 0; index < assignments.length; index++) {
     for (const bill of rescuableUnpayablesOnPaycheck(assignments[index], lockedBillKeys)) {
-      if (spareCapacity(load, targetCapacity, index) >= bill.amount) {
+      const spareAtTarget = spareCapacity(load, targetCapacity, index);
+      const spareAtMin = spareCapacity(load, minCapacity, index);
+      const spareAtIncome = spareCapacity(load, incomeCapacity, index);
+      if (spareAtTarget >= bill.amount) {
         fundUnpayableInPlace(assignments, index, bill, load);
         rescued += 1;
         continue;
       }
 
-      if (spareCapacity(load, minCapacity, index) >= bill.amount) {
+      if (spareAtMin >= bill.amount) {
+        fundUnpayableInPlace(assignments, index, bill, load);
+        rescued += 1;
+        continue;
+      }
+
+      // Income covers the bill but remaining would sit below min — shortfall, not unpayable.
+      if (spareAtIncome >= bill.amount) {
         fundUnpayableInPlace(assignments, index, bill, load);
         rescued += 1;
         continue;
@@ -220,9 +240,20 @@ function rescueUnpayableBills(
           skippedBills,
           lockedBillKeys,
           maxCascadeDepth
+        ) ||
+        tryPlaceBillOnEarlier(
+          assignments,
+          load,
+          incomeCapacity,
+          bill,
+          index,
+          skippedBills,
+          lockedBillKeys,
+          maxCascadeDepth
         )
       ) {
         rescued += 1;
+        continue;
       }
     }
   }
@@ -494,11 +525,29 @@ export function rebalancePaycheckAssignments(
   const lockedBillKeys = options.lockedBillKeys ?? new Set();
   const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
+  const cashOnHandByDate = options.cashOnHandByDate;
   const maxPasses = options.maxPasses ?? 200;
   const maxCascadeDepth = options.maxCascadeDepth ?? 8;
 
-  const targetCapacity = paycheckCapacity(assignments, startingBalance, targetCashOnHand);
-  const minCapacity = paycheckCapacity(assignments, startingBalance, minCashOnHand);
+  const targetReserves = assignments.map((assignment) =>
+    cashTargetForDate(
+      cashOnHandByDate,
+      format(assignment.date, 'yyyy-MM-dd'),
+      targetCashOnHand
+    )
+  );
+  const minReserves = assignments.map((assignment) =>
+    cashMinForDate(cashOnHandByDate, format(assignment.date, 'yyyy-MM-dd'), minCashOnHand)
+  );
+
+  const targetCapacity = paycheckCapacity(assignments, startingBalance, targetReserves);
+  const minCapacity = paycheckCapacity(assignments, startingBalance, minReserves);
+  // Zero-reserve capacity: bills that fit here are payable (may shortfall vs min).
+  const incomeCapacity = paycheckCapacity(
+    assignments,
+    startingBalance,
+    assignments.map(() => 0)
+  );
   const load = paycheckLoad(assignments);
 
   for (let pass = 0; pass < maxPasses; pass++) {
@@ -566,6 +615,7 @@ export function rebalancePaycheckAssignments(
     load,
     targetCapacity,
     minCapacity,
+    incomeCapacity,
     skippedBills,
     lockedBillKeys,
     maxCascadeDepth

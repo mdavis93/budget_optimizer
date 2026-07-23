@@ -310,6 +310,55 @@ describe('SchedulerService', () => {
       expect(paidJanuary.every((p) => p.totalIncome === 2000)).toBe(true);
     });
 
+    it('applies temporary cash-on-hand from unpaid leave to bordering paychecks', () => {
+      const schedule = scheduler.generateSchedule(
+        [income],
+        [],
+        '2026-01-01',
+        3,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0,
+        new Map(),
+        new Map(),
+        [
+          {
+            id: 'leave-cash',
+            budgetId: 'budget-1',
+            incomeId: income.id,
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-28',
+            targetCashOnHand: 80,
+            minCashOnHand: 30,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]
+      );
+
+      const february = schedule.paychecks.filter((p) => p.date.startsWith('2026-02'));
+      expect(february.length).toBe(0);
+
+      const beforeGap = [...schedule.paychecks].reverse().find((p) => p.date < '2026-02-01');
+      const afterGap = schedule.paychecks.find((p) => p.date > '2026-02-28');
+      expect(beforeGap?.targetCashOnHand).toBe(80);
+      expect(beforeGap?.minCashOnHand).toBe(30);
+      expect(afterGap?.targetCashOnHand).toBe(80);
+      expect(afterGap?.minCashOnHand).toBe(30);
+
+      const unaffected = schedule.paychecks.find((p) => p.date < (beforeGap?.date ?? ''));
+      if (unaffected) {
+        expect(unaffected.targetCashOnHand).toBe(250);
+        expect(unaffected.minCashOnHand).toBe(100);
+      }
+    });
+
     it('calculates summary correctly', () => {
       const schedule = scheduler.generateSchedule(
         [income],

@@ -1,8 +1,12 @@
 import {
   format,
-  parseISO,
 } from 'date-fns';
-import { Bill, SavingsGoal } from '../database.service';
+import { SavingsGoal } from '../database.service';
+import {
+  cashMinForDate,
+  cashTargetForDate,
+  type CashOnHandByDate,
+} from './cashOnHandOverrides';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
@@ -24,7 +28,8 @@ export function buildPaycheckEntries(
   maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0
+  minSavingsPerPaycheck: number = 0,
+  cashOnHandByDate?: CashOnHandByDate
 ): PaycheckEntry[] {
   const paychecks: PaycheckEntry[] = [];
   let totalSavings = 0;
@@ -46,6 +51,13 @@ export function buildPaycheckEntries(
       .reduce((sum, bill) => sum + bill.amount, 0);
     const hasUnpayableBills = unpayableBillsAmount > 0;
     const ledgerBoost = i === 0 ? startingBalance : 0;
+    const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
+    const effectiveTarget = cashTargetForDate(
+      cashOnHandByDate,
+      paycheckDateStr,
+      maxBudgetRemaining
+    );
+    const effectiveMin = cashMinForDate(cashOnHandByDate, paycheckDateStr, minCashOnHand);
 
     const grossRemaining = hasUnpayableBills
       ? totalIncome - totalBillsAmount - unpayableBillsAmount + ledgerBoost
@@ -53,15 +65,25 @@ export function buildPaycheckEntries(
 
     const surplus = hasUnpayableBills
       ? 0
-      : grossRemaining >= maxBudgetRemaining
-        ? Math.max(0, grossRemaining - maxBudgetRemaining)
+      : grossRemaining >= effectiveTarget
+        ? Math.max(0, grossRemaining - effectiveTarget)
         : 0;
 
-    return { assignment, uniqueBills, totalIncome, totalBillsAmount, grossRemaining, surplus };
+    return {
+      assignment,
+      uniqueBills,
+      totalIncome,
+      totalBillsAmount,
+      grossRemaining,
+      surplus,
+      effectiveTarget,
+      effectiveMin,
+      paycheckDateStr,
+    };
   });
 
   const allocation = allocateGoalsAndSavings(
-    meta.map(m => ({ date: format(m.assignment.date, 'yyyy-MM-dd'), surplus: m.surplus })),
+    meta.map(m => ({ date: m.paycheckDateStr, surplus: m.surplus })),
     goals.map(goal => ({
       id: goal.id,
       name: goal.name,
@@ -74,10 +96,18 @@ export function buildPaycheckEntries(
   );
 
   for (let assignmentIndex = 0; assignmentIndex < meta.length; assignmentIndex++) {
-    const { assignment, uniqueBills, totalIncome, totalBillsAmount, grossRemaining, surplus } =
-      meta[assignmentIndex];
+    const {
+      assignment,
+      uniqueBills,
+      totalIncome,
+      totalBillsAmount,
+      grossRemaining,
+      surplus,
+      effectiveTarget,
+      effectiveMin,
+      paycheckDateStr,
+    } = meta[assignmentIndex];
     const alloc = allocation.paychecks[assignmentIndex];
-    const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
 
     const goalDeposits: GoalDeposit[] = alloc.goalDeposits.map(deposit => ({
       goalId: deposit.goalId,
@@ -90,11 +120,11 @@ export function buildPaycheckEntries(
 
     let budgetRemaining = grossRemaining;
     if (surplus > 0) {
-      budgetRemaining = maxBudgetRemaining;
+      budgetRemaining = effectiveTarget;
       totalSavings += savingsDeposit;
     }
 
-    const isShortfall = budgetRemaining < minCashOnHand;
+    const isShortfall = budgetRemaining < effectiveMin;
 
     const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
     const hasUnpayableBills = unpayableCount > 0;
@@ -127,6 +157,8 @@ export function buildPaycheckEntries(
       savingsDeposit: Math.round(savingsDeposit * 100) / 100,
       totalSavings: Math.round(totalSavings * 100) / 100,
       isShortfall,
+      targetCashOnHand: effectiveTarget,
+      minCashOnHand: effectiveMin,
       savingsSqueezed,
       unpayableCount,
       hasUnpayableBills,

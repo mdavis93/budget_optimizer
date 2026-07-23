@@ -275,6 +275,10 @@ export interface PaycheckEntry {
   savingsDeposit: number;
   totalSavings: number;
   isShortfall: boolean;
+  /** Effective target cash-on-hand for this paycheck (may be lowered by unpaid leave). */
+  targetCashOnHand?: number;
+  /** Effective min cash-on-hand for this paycheck (may be lowered by unpaid leave). */
+  minCashOnHand?: number;
   /** True when goals consumed surplus that pushed this paycheck's savings below the fallback target. */
   savingsSqueezed?: boolean;
   /** Number of bills in this paycheck that could not be funded (triaged to unpayable). */
@@ -340,6 +344,8 @@ export interface ProposedFix {
 export interface ShortfallDetail {
   paycheckDate: string;
   deficit: number;
+  /** Remaining after bills; >= 0 means bills were covered but cash is below min. */
+  budgetRemaining: number;
   bills: PaycheckBill[];
 }
 
@@ -350,6 +356,7 @@ export interface ReconciliationReport {
   canBeFullyResolved: boolean;
   totalDeficit: number;
   estimatedResolution: number;
+  minCashOnHand?: number;
 }
 
 /** One bill move in a Break-Glass advisor cascade (may exceed auto MAX_PREPAY_DAYS). */

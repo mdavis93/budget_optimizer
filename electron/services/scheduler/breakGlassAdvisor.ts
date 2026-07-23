@@ -32,6 +32,8 @@ interface SimPaycheck {
   date: string;
   budgetRemaining: number;
   bills: PaycheckBill[];
+  targetCashOnHand: number;
+  minCashOnHand: number;
 }
 
 type BillSort = 'amount-desc' | 'amount-asc' | 'priority-desc';
@@ -56,13 +58,15 @@ function isBreakGlassRemaining(
 }
 
 function listBreakGlassDates(
-  sim: SimPaycheck[],
-  targetCashOnHand: number,
-  minCashOnHand: number
+  sim: SimPaycheck[]
 ): Array<{ date: string; budgetRemaining: number }> {
   return sim
     .filter((paycheck) =>
-      isBreakGlassRemaining(paycheck.budgetRemaining, targetCashOnHand, minCashOnHand)
+      isBreakGlassRemaining(
+        paycheck.budgetRemaining,
+        paycheck.targetCashOnHand,
+        paycheck.minCashOnHand
+      )
     )
     .map((paycheck) => ({
       date: paycheck.date,
@@ -70,11 +74,17 @@ function listBreakGlassDates(
     }));
 }
 
-function cloneSim(paychecks: PaycheckEntry[]): SimPaycheck[] {
+function cloneSim(
+  paychecks: PaycheckEntry[],
+  budgetTarget: number,
+  budgetMin: number
+): SimPaycheck[] {
   return paychecks.map((paycheck) => ({
     date: paycheck.date,
     budgetRemaining: paycheck.budgetRemaining,
     bills: paycheck.bills.map((bill) => ({ ...bill })),
+    targetCashOnHand: paycheck.targetCashOnHand ?? budgetTarget,
+    minCashOnHand: paycheck.minCashOnHand ?? budgetMin,
   }));
 }
 
@@ -167,8 +177,8 @@ function makeStep(
   };
 }
 
-function hasShortfall(sim: SimPaycheck[], minCashOnHand: number): boolean {
-  return sim.some((paycheck) => paycheck.budgetRemaining < minCashOnHand);
+function hasShortfall(sim: SimPaycheck[]): boolean {
+  return sim.some((paycheck) => paycheck.budgetRemaining < paycheck.minCashOnHand);
 }
 
 /**
@@ -179,7 +189,6 @@ function ensureReceiveRoom(
   sim: SimPaycheck[],
   index: number,
   amountNeeded: number,
-  minCashOnHand: number,
   scheduleStartDate: string,
   maxEarlyDays: number,
   lockedBillKeys: Set<string>,
@@ -188,7 +197,9 @@ function ensureReceiveRoom(
   depth: number
 ): boolean {
   if (amountNeeded <= 0) return true;
-  if (receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded) return true;
+  if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
+    return true;
+  }
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
     return false;
   }
@@ -219,7 +230,6 @@ function ensureReceiveRoom(
           sim,
           earlierIndex,
           bill.amount,
-          minCashOnHand,
           scheduleStartDate,
           maxEarlyDays,
           lockedBillKeys,
@@ -236,13 +246,13 @@ function ensureReceiveRoom(
       applyMove(sim, index, earlierIndex, bill);
       steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, daysEarly));
 
-      if (receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded) {
+      if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
         return true;
       }
     }
   }
 
-  return receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded;
+  return receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded;
 }
 
 /**
@@ -253,7 +263,6 @@ function ensureReceiveRoomLater(
   sim: SimPaycheck[],
   index: number,
   amountNeeded: number,
-  minCashOnHand: number,
   scheduleStartDate: string,
   maxEarlyDays: number,
   lockedBillKeys: Set<string>,
@@ -262,7 +271,9 @@ function ensureReceiveRoomLater(
   depth: number
 ): boolean {
   if (amountNeeded <= 0) return true;
-  if (receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded) return true;
+  if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
+    return true;
+  }
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
     return false;
   }
@@ -293,7 +304,6 @@ function ensureReceiveRoomLater(
           sim,
           laterIndex,
           bill.amount,
-          minCashOnHand,
           scheduleStartDate,
           maxEarlyDays,
           lockedBillKeys,
@@ -310,13 +320,13 @@ function ensureReceiveRoomLater(
       applyMove(sim, index, laterIndex, bill);
       steps.push(makeStep(bill, sim[index].date, sim[laterIndex].date, daysEarly));
 
-      if (receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded) {
+      if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
         return true;
       }
     }
   }
 
-  return receiveRoom(sim[index].budgetRemaining, minCashOnHand) >= amountNeeded;
+  return receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded;
 }
 
 function cloneSimAsSim(sim: SimPaycheck[]): SimPaycheck[] {
@@ -324,6 +334,8 @@ function cloneSimAsSim(sim: SimPaycheck[]): SimPaycheck[] {
     date: paycheck.date,
     budgetRemaining: paycheck.budgetRemaining,
     bills: paycheck.bills.map((bill) => ({ ...bill })),
+    targetCashOnHand: paycheck.targetCashOnHand,
+    minCashOnHand: paycheck.minCashOnHand,
   }));
 }
 
@@ -331,6 +343,8 @@ function restoreSim(target: SimPaycheck[], source: SimPaycheck[]): void {
   for (let index = 0; index < target.length; index++) {
     target[index].budgetRemaining = source[index].budgetRemaining;
     target[index].bills = source[index].bills.map((bill) => ({ ...bill }));
+    target[index].targetCashOnHand = source[index].targetCashOnHand;
+    target[index].minCashOnHand = source[index].minCashOnHand;
   }
 }
 
@@ -341,8 +355,7 @@ function collectLandings(
   targetIndex: number,
   bill: PaycheckBill,
   scheduleStartDate: string,
-  maxEarlyDays: number,
-  targetCashOnHand: number
+  maxEarlyDays: number
 ): Landing[] {
   const landings: Landing[] = [];
   for (let earlier = targetIndex - 1; earlier >= 0; earlier--) {
@@ -374,14 +387,14 @@ function collectLandings(
     const safeA = leavesAtOrAboveTarget(
       sim[a.index].budgetRemaining,
       bill.amount,
-      targetCashOnHand
+      sim[a.index].targetCashOnHand
     )
       ? 0
       : 1;
     const safeB = leavesAtOrAboveTarget(
       sim[b.index].budgetRemaining,
       bill.amount,
-      targetCashOnHand
+      sim[b.index].targetCashOnHand
     )
       ? 0
       : 1;
@@ -395,8 +408,6 @@ function collectLandings(
 function tryClearBreakGlass(
   base: SimPaycheck[],
   targetIndex: number,
-  targetCashOnHand: number,
-  minCashOnHand: number,
   scheduleStartDate: string,
   maxEarlyDays: number,
   lockedBillKeys: Set<string>,
@@ -405,6 +416,7 @@ function tryClearBreakGlass(
   const sim = cloneSimAsSim(base);
   const steps: BreakGlassPlanStep[] = [];
   let guard = 0;
+  const targetCashOnHand = sim[targetIndex].targetCashOnHand;
 
   while (sim[targetIndex].budgetRemaining < targetCashOnHand && guard++ < MAX_ADVISOR_PLAN_STEPS) {
     let moved = false;
@@ -423,8 +435,7 @@ function tryClearBreakGlass(
         targetIndex,
         bill,
         scheduleStartDate,
-        maxEarlyDays,
-        targetCashOnHand
+        maxEarlyDays
       );
 
       for (const { index: landingIndex, daysEarly, direction } of landings) {
@@ -436,7 +447,6 @@ function tryClearBreakGlass(
                 sim,
                 landingIndex,
                 bill.amount,
-                minCashOnHand,
                 scheduleStartDate,
                 maxEarlyDays,
                 lockedBillKeys,
@@ -448,7 +458,6 @@ function tryClearBreakGlass(
                 sim,
                 landingIndex,
                 bill.amount,
-                minCashOnHand,
                 scheduleStartDate,
                 maxEarlyDays,
                 lockedBillKeys,
@@ -475,7 +484,7 @@ function tryClearBreakGlass(
   }
 
   if (sim[targetIndex].budgetRemaining < targetCashOnHand) return null;
-  if (hasShortfall(sim, minCashOnHand)) return null;
+  if (hasShortfall(sim)) return null;
   if (steps.length === 0 || steps.length > MAX_ADVISOR_PLAN_STEPS) return null;
   return steps;
 }
@@ -561,10 +570,10 @@ export function proposeBreakGlassPlans(
   const scheduleStartDate = options.scheduleStartDate ?? schedule.startDate;
   const lockedBillKeys = options.lockedBillKeys ?? new Set<string>();
 
-  const sim = cloneSim(paychecks);
+  const sim = cloneSim(paychecks, targetCashOnHand, minCashOnHand);
   const plans: BreakGlassPlan[] = [];
   const unsolvable = new Set<string>();
-  const initialBreakGlass = listBreakGlassDates(sim, targetCashOnHand, minCashOnHand);
+  const initialBreakGlass = listBreakGlassDates(sim);
   // Only advise on paychecks that are Break-Glass on the current schedule.
   // Cascade side-effects can shove earlier paychecks into the BG band; treating
   // those as separate plan targets stole slots from real BG events (e.g. July)
@@ -580,7 +589,11 @@ export function proposeBreakGlassPlans(
         initialBgDates.has(paycheck.date) &&
         !handledBgDates.has(paycheck.date) &&
         !unsolvable.has(paycheck.date) &&
-        isBreakGlassRemaining(paycheck.budgetRemaining, targetCashOnHand, minCashOnHand)
+        isBreakGlassRemaining(
+          paycheck.budgetRemaining,
+          paycheck.targetCashOnHand,
+          paycheck.minCashOnHand
+        )
     );
     if (index < 0) break;
 
@@ -590,8 +603,6 @@ export function proposeBreakGlassPlans(
       const candidate = tryClearBreakGlass(
         sim,
         index,
-        targetCashOnHand,
-        minCashOnHand,
         scheduleStartDate,
         maxEarlyDays,
         lockedBillKeys,

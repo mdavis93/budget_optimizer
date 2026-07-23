@@ -22,12 +22,16 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
       canBeFullyResolved: true,
       totalDeficit: 0,
       estimatedResolution: 0,
+      minCashOnHand: schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND,
     };
   }
 
+  const budgetMinCashOnHand = schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
+  const budgetTargetCashOnHand = schedule.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
   const shortfalls: ShortfallDetail[] = shortfallPaychecks.map(p => ({
     paycheckDate: p.date,
     deficit: Math.abs(p.budgetRemaining),
+    budgetRemaining: p.budgetRemaining,
     bills: [...p.bills],
   }));
 
@@ -35,15 +39,14 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
   const proposedFixes: ProposedFix[] = [];
   let fixIdCounter = 1;
 
-  const targetCashOnHand = schedule.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
-  const minCashOnHand = schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
-
   const paycheckSurplus = new Map<string, number>();
   for (const paycheck of schedule.paychecks) {
+    const target = paycheck.targetCashOnHand ?? budgetTargetCashOnHand;
+    const min = paycheck.minCashOnHand ?? budgetMinCashOnHand;
     const movable = movableBillCapacity(
       paycheck.budgetRemaining,
-      targetCashOnHand,
-      minCashOnHand,
+      target,
+      min,
       paycheck.isShortfall
     );
     if (movable > 0) {
@@ -82,8 +85,9 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
           const daysEarly = differenceInDays(billDueDate, targetDate);
 
           if (daysEarly <= MAX_PREPAY_DAYS) {
+            const targetMin = targetPaycheck.minCashOnHand ?? budgetMinCashOnHand;
             const remainingAfterMove = targetPaycheck.budgetRemaining - bill.amount;
-            if (remainingAfterMove < minCashOnHand) {
+            if (remainingAfterMove < targetMin) {
               continue;
             }
 
@@ -119,5 +123,6 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
     canBeFullyResolved,
     totalDeficit,
     estimatedResolution,
+    minCashOnHand: budgetMinCashOnHand,
   };
 }
