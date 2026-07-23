@@ -84,7 +84,11 @@ export default function ReconciliationPage({
 
       <div className="grid gap-4 md:grid-cols-2">
         {report.shortfalls.map((shortfall) => (
-          <ShortfallCard key={shortfall.paycheckDate} shortfall={shortfall} />
+          <ShortfallCard
+            key={shortfall.paycheckDate}
+            shortfall={shortfall}
+            minCashOnHand={report.minCashOnHand ?? 100}
+          />
         ))}
       </div>
 
@@ -192,8 +196,17 @@ export default function ReconciliationPage({
   );
 }
 
-function ShortfallCard({ shortfall }: { shortfall: ShortfallDetail }) {
-  const shortfallCopy = useMemo(() => formatShortfallCopy(shortfall), [shortfall]);
+function ShortfallCard({
+  shortfall,
+  minCashOnHand,
+}: {
+  shortfall: ShortfallDetail;
+  minCashOnHand: number;
+}) {
+  const shortfallCopy = useMemo(
+    () => formatShortfallCopy(shortfall, { minCashOnHand }),
+    [shortfall, minCashOnHand]
+  );
 
   return (
     <div className="card border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-900/10">

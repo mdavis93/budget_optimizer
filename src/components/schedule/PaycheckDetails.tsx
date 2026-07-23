@@ -214,7 +214,11 @@ export default function PaycheckDetails({
           <span className="font-semibold">Budget Remaining</span>
           <span className={clsx(
             'text-2xl font-mono font-bold',
-            paycheck.budgetRemaining >= 0 ? 'text-success-500' : 'text-danger-500'
+            paycheck.budgetRemaining < 0 || paycheck.hasUnpayableBills
+              ? 'text-danger-500'
+              : paycheck.isShortfall
+                ? 'text-warning-600 dark:text-warning-500'
+                : 'text-success-500'
           )}>
             {formatCurrency(paycheck.budgetRemaining)}
           </span>

@@ -35,6 +35,7 @@ describe('reconciliationCopy', () => {
     const shortfall: ShortfallDetail = {
       paycheckDate: '2026-03-15',
       deficit: 175,
+      budgetRemaining: -175,
       bills: [
         {
           billId: 'bill-2',
@@ -55,9 +56,36 @@ describe('reconciliationCopy', () => {
     expect(copy.ariaMessage).toContain('Mar 15');
   });
 
+  it('describes below-min cash when bills are covered', () => {
+    const shortfall: ShortfallDetail = {
+      paycheckDate: '2026-09-18',
+      deficit: 0,
+      budgetRemaining: 0,
+      bills: [],
+    };
+
+    const copy = formatShortfallCopy(shortfall, { minCashOnHand: 100 });
+    expect(copy.explanation).toBe(
+      'Bills on Sep 18 reduce cash on-hand to $0.00, which is below the $100.00 minimum.'
+    );
+    expect(copy.explanation).not.toContain('exceed');
+  });
+
+  it('keeps exceed-income copy when remaining is negative', () => {
+    const shortfall: ShortfallDetail = {
+      paycheckDate: '2026-10-09',
+      deficit: 195,
+      budgetRemaining: -195,
+      bills: [],
+    };
+
+    const copy = formatShortfallCopy(shortfall, { minCashOnHand: 100 });
+    expect(copy.explanation).toContain('exceed this paycheck\'s income');
+  });
+
   it('summarizes fully resolvable reconciliation reports', () => {
     const summary = formatReconciliationSummary({
-      shortfalls: [{ paycheckDate: '2026-03-15', deficit: 100, bills: [] }],
+      shortfalls: [{ paycheckDate: '2026-03-15', deficit: 100, budgetRemaining: -100, bills: [] }],
       totalDeficit: 100,
       canBeFullyResolved: true,
     });
@@ -69,8 +97,8 @@ describe('reconciliationCopy', () => {
   it('summarizes partially resolvable reconciliation reports', () => {
     const summary = formatReconciliationSummary({
       shortfalls: [
-        { paycheckDate: '2026-03-15', deficit: 100, bills: [] },
-        { paycheckDate: '2026-04-15', deficit: 50, bills: [] },
+        { paycheckDate: '2026-03-15', deficit: 100, budgetRemaining: -100, bills: [] },
+        { paycheckDate: '2026-04-15', deficit: 50, budgetRemaining: -50, bills: [] },
       ],
       totalDeficit: 150,
       canBeFullyResolved: false,
