@@ -11,6 +11,7 @@ import { BudgetManager } from './services/budget-manager.service';
 import { DebtService } from './services/debt.service';
 import { CredentialsService } from './services/credentials.service';
 import { registerIpcHandlers } from './ipc/handlers';
+import { ScheduleComputeHost, runScheduleWorkerSmoke } from './services/schedule-compute-host';
 import { logger } from './services/logger.service';
 import { approveExportPath } from './utils/exportPaths';
 
@@ -30,6 +31,9 @@ let mainWindow: BrowserWindow | null = null;
 let allowWindowClose = false;
 
 function shutdownApp() {
+  if (services?.scheduleCompute) {
+    services.scheduleCompute.dispose();
+  }
   if (services?.database) {
     services.database.close();
   }
@@ -128,6 +132,7 @@ let services: {
   database: DatabaseService | null;
   budgetManager: BudgetManager | null;
   scheduler: SchedulerService;
+  scheduleCompute: ScheduleComputeHost;
   pdf: PdfService;
   spreadsheet: SpreadsheetService;
   debt: DebtService;
@@ -149,6 +154,7 @@ app.whenReady().then(async () => {
     database: null,
     budgetManager: null,
     scheduler: new SchedulerService(),
+    scheduleCompute: new ScheduleComputeHost(),
     pdf: new PdfService(),
     spreadsheet: new SpreadsheetService(),
     debt: new DebtService(),
@@ -158,6 +164,16 @@ app.whenReady().then(async () => {
   createWindow();
   
   registerIpcHandlers(ipcMain, services);
+
+  app.on('child-process-gone', (_event, details) => {
+    services.scheduleCompute.notifyChildProcessGone(details.name);
+  });
+
+  if (process.env.SCHEDULE_WORKER_SMOKE === '1') {
+    void runScheduleWorkerSmoke().catch((error) => {
+      logger.error('schedule worker smoke failed:', error);
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -173,7 +189,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  // Close database connection gracefully
+  // Kill schedule utility process before closing the database.
+  if (services?.scheduleCompute) {
+    services.scheduleCompute.dispose();
+  }
   if (services?.database) {
     services.database.close();
   }

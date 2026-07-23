@@ -10,10 +10,10 @@ export interface GuardedServices {
   budgetManager: BudgetManager | null;
 }
 
-export type GuardError = { success: false; error: string };
+export type GuardError = { success: false; error: string; errorCode?: string };
 
 export type ApiSuccess<T> = { success: true; data: T };
-export type ApiFailure = { success: false; error: string };
+export type ApiFailure = { success: false; error: string; errorCode?: string };
 export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
 function getErrorMessage(error: unknown): string {

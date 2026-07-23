@@ -11,6 +11,16 @@ import { DebtService } from '../services/debt.service';
 import { ipcLogger } from '../services/logger.service';
 import { DraftOverlayInput, resolveScheduleInputs } from '../services/draft-overlay.service';
 import { CredentialsService } from '../services/credentials.service';
+import { ScheduleComputeHost } from '../services/schedule-compute-host';
+import {
+  computeScheduleInputHash,
+  serializeScheduleComputeInput,
+} from '../services/schedule-compute-serialize';
+import {
+  isScheduleComputeError,
+  type ScheduleComputeOp,
+} from '@shared/scheduleComputeProtocol';
+import type { GoalProjection, ScheduleData } from '@shared/types';
 import { resolveAppBrowserWindow } from '../utils/dialog';
 import {
   withUnlockGuard,
@@ -18,6 +28,7 @@ import {
   ipcData,
   ipcVoid,
   asReadyServices,
+  type ApiResult,
 } from './guards';
 import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
 import {
@@ -99,10 +110,54 @@ interface Services {
   database: DatabaseService | null;
   budgetManager: BudgetManager | null;
   scheduler: SchedulerService;
+  scheduleCompute: ScheduleComputeHost;
   pdf: PdfService;
   spreadsheet: SpreadsheetService;
   debt: DebtService;
   credentials: CredentialsService;
+}
+
+async function runOffloadedCompute<T>(
+  services: Services,
+  op: ScheduleComputeOp,
+  native: Parameters<typeof serializeScheduleComputeInput>[0],
+  extract: (
+    message: Awaited<ReturnType<ScheduleComputeHost['runJob']>>
+  ) => T
+): Promise<ApiResult<T>> {
+  if (services.scheduleCompute.isDisposed) {
+    return {
+      success: false,
+      error: 'Schedule compute host is disposed',
+      errorCode: 'disposed',
+    };
+  }
+
+  try {
+    const input = serializeScheduleComputeInput(native);
+    const inputHash = computeScheduleInputHash(op, input);
+    const message = await services.scheduleCompute.runJob({
+      op,
+      inputHash,
+      input,
+    });
+    return { success: true, data: extract(message) };
+  } catch (error) {
+    if (isScheduleComputeError(error)) {
+      ipcLogger.error(`schedule compute ${op} failed:`, error.code, error.message);
+      return {
+        success: false,
+        error: error.message,
+        errorCode: error.code,
+      };
+    }
+    ipcLogger.error(`schedule compute ${op} failed:`, error);
+    return {
+      success: false,
+      error: getErrorMessage(error),
+      errorCode: 'worker_error',
+    };
+  }
 }
 
 function initializeDatabaseServices(services: Services): { success: true } | { success: false; error: string } {
@@ -496,88 +551,83 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return result;
   }));
 
-  ipcMain.handle('goals:get-projections', withBudgetGuard(services, (_, overlay?: DraftOverlayInput) =>
-    ipcData('goals:get-projections', () => {
-      const { budgetManager, database } = ready();
-      const resolved = resolveScheduleInputs(budgetManager, database, overlay);
-      if (resolved.goals.length === 0) {
-        return [];
-      }
+  ipcMain.handle('goals:get-projections', withBudgetGuard(services, async (_, overlay?: DraftOverlayInput) => {
+    const { budgetManager, database } = ready();
+    const resolved = resolveScheduleInputs(budgetManager, database, overlay);
+    if (resolved.goals.length === 0) {
+      return { success: true, data: [] as GoalProjection[] };
+    }
 
-      const { skippedSet, manualAssignments, incomeOverridesMap, debtPayoffs } = buildScheduleMaps(
-        resolved,
-        services.debt
-      );
+    const { skippedSet, manualAssignments, incomeOverridesMap, debtPayoffs } = buildScheduleMaps(
+      resolved,
+      services.debt
+    );
 
-      return services.scheduler.generateGoalProjections(
-        resolved.incomes,
-        resolved.bills,
-        resolved.scheduleStartDate,
-        resolved.startingBalance,
-        skippedSet,
+    return runOffloadedCompute(
+      services,
+      'goals',
+      {
+        incomes: resolved.incomes,
+        bills: resolved.bills,
+        startDate: resolved.scheduleStartDate,
+        months: 12,
+        startingBalance: resolved.startingBalance,
+        skippedBills: skippedSet,
         manualAssignments,
-        resolved.targetCashOnHand,
-        resolved.goals,
-        resolved.minCashOnHand,
-        resolved.minSavingsPerPaycheck,
+        targetCashOnHand: resolved.targetCashOnHand,
+        goals: resolved.goals,
+        minCashOnHand: resolved.minCashOnHand,
+        minSavingsPerPaycheck: resolved.minSavingsPerPaycheck,
         debtPayoffs,
-        incomeOverridesMap
-      );
-    })
-  ));
+        incomeOverrides: incomeOverridesMap,
+        leaves: resolved.leaves,
+        nowIso: new Date().toISOString(),
+      },
+      (message) => {
+        if (message.op !== 'goals') {
+          throw new Error('Unexpected compute op for goals');
+        }
+        return message.goalProjections as GoalProjection[];
+      }
+    );
+  }));
 
-  ipcMain.handle('schedule:build', withBudgetGuard(services, (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
-    ipcData('schedule:build', () => {
-      const { budgetManager, database } = ready();
-      const resolved = resolveScheduleInputs(budgetManager, database, overlay);
-      const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
+  ipcMain.handle('schedule:build', withBudgetGuard(services, async (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {
+    const { budgetManager, database } = ready();
+    const resolved = resolveScheduleInputs(budgetManager, database, overlay);
+    const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
 
-      const { skippedSet, manualAssignments, incomeOverridesMap: incomeOverridesMapOpt, debtPayoffs } =
-        buildScheduleMaps(resolved, services.debt);
+    const { skippedSet, manualAssignments, incomeOverridesMap: incomeOverridesMapOpt, debtPayoffs } =
+      buildScheduleMaps(resolved, services.debt);
 
-      const data = services.scheduler.generateSchedule(
-        resolved.incomes,
-        resolved.bills,
+    return runOffloadedCompute(
+      services,
+      'schedule',
+      {
+        incomes: resolved.incomes,
+        bills: resolved.bills,
         startDate,
         months,
-        effectiveStartingBalance,
-        skippedSet,
+        startingBalance: effectiveStartingBalance,
+        skippedBills: skippedSet,
         manualAssignments,
-        resolved.targetCashOnHand,
-        resolved.goals,
-        resolved.minCashOnHand,
-        resolved.minSavingsPerPaycheck,
-        debtPayoffs,
-        incomeOverridesMapOpt
-      );
-      const fullHorizon = {
-        ...data,
-        paychecks: data.fullPaychecks ?? data.paychecks,
-      };
-      data.reconciliation = services.scheduler.analyzeAndProposeFixes(fullHorizon);
-      data.breakGlassAdvisor = services.scheduler.proposeBreakGlassPlans(fullHorizon, {
-        scheduleStartDate: startDate,
         targetCashOnHand: resolved.targetCashOnHand,
+        goals: resolved.goals,
         minCashOnHand: resolved.minCashOnHand,
-        lockedBillKeys: new Set(manualAssignments.keys()),
-      });
-      // Slice paychecks for the requested viewport. Keep FULL advisor/recon on the
-      // payload — the renderer caches fullPaychecks and re-slices on month changes;
-      // filtering here would permanently drop out-of-viewport plans from that cache.
-      const viewported = services.scheduler.applyViewportFilter(
-        data,
-        months,
-        resolved.bills,
-        effectiveStartingBalance
-      );
-      const result = {
-        ...viewported,
-        breakGlassAdvisor: data.breakGlassAdvisor,
-        reconciliation: data.reconciliation,
-      };
-      return result;
-    })
-  ));
+        minSavingsPerPaycheck: resolved.minSavingsPerPaycheck,
+        debtPayoffs,
+        incomeOverrides: incomeOverridesMapOpt,
+        leaves: resolved.leaves,
+        nowIso: new Date().toISOString(),
+      },
+      (message) => {
+        if (message.op !== 'schedule') {
+          throw new Error('Unexpected compute op for schedule');
+        }
+        return message.schedule as ScheduleData;
+      }
+    );
+  }));
 
   ipcMain.handle('export:to-pdf', withBudgetGuard(services, async (_, schedule, filePath: string) => {
     if (!validateExportPath(filePath)) {
@@ -649,29 +699,29 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   ));
 
   // Debt Management
-  ipcMain.handle('debts:get-all', withBudgetGuard(services, () => {
+  ipcMain.handle('debts:get-all', withBudgetGuard(services, async (): Promise<ApiResult<import('@shared/types').Debt[]>> => {
     const { budgetManager, database } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
-      return Promise.resolve({ success: false as const, error: 'No budget selected' });
+      return { success: false, error: 'No budget selected' };
     }
     return ipcData('debts:get-all', () => database.getDebts(state.budgetId!));
   }));
 
-  ipcMain.handle('debts:get-by-bill', withBudgetGuard(services, (_, billId: string) => {
+  ipcMain.handle('debts:get-by-bill', withBudgetGuard(services, async (_, billId: string): Promise<ApiResult<import('@shared/types').Debt | null>> => {
     const { budgetManager, database } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
-      return Promise.resolve({ success: false as const, error: 'No budget selected' });
+      return { success: false, error: 'No budget selected' };
     }
     return ipcData('debts:get-by-bill', () => database.getDebtByBillId(billId, state.budgetId!));
   }));
 
-  ipcMain.handle('debts:create', withBudgetGuard(services, (_, input: DebtInput) => {
+  ipcMain.handle('debts:create', withBudgetGuard(services, async (_, input: DebtInput): Promise<ApiResult<import('@shared/types').Debt>> => {
     const { budgetManager, database } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
-      return Promise.resolve({ success: false as const, error: 'No budget selected' });
+      return { success: false, error: 'No budget selected' };
     }
     return ipcData('debts:create', () => database.createDebt(state.budgetId!, input));
   }));
@@ -729,11 +779,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     });
   }));
 
-  ipcMain.handle('debts:get-all-with-amortization', withBudgetGuard(services, (_, overlay?: DraftOverlayInput) => {
+  ipcMain.handle('debts:get-all-with-amortization', withBudgetGuard(services, async (_, overlay?: DraftOverlayInput): Promise<ApiResult<Array<{ debt: import('@shared/types').Debt; bill: import('@shared/types').Bill | null; amortization: ReturnType<DebtService['calculateAmortization']> }>>> => {
     const { budgetManager, database } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId && !overlay?.debts) {
-      return Promise.resolve({ success: false as const, error: 'No budget selected' });
+      return { success: false, error: 'No budget selected' };
     }
 
     return ipcData('debts:get-all-with-amortization', () => {

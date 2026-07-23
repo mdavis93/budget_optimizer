@@ -133,6 +133,15 @@ if (asarListing) {
 
 verifyBundledExceljs(readPackagedMainSource());
 
+try {
+  asar.extractFile(asarPath, 'dist-electron/schedule-worker.js');
+  console.log('Packaged schedule-worker.js verification passed.');
+} catch (error) {
+  console.error('Packaged dist-electron/schedule-worker.js is missing from asar.');
+  console.error(error.message || error);
+  process.exit(1);
+}
+
 runElectronNodeVerify(
   'SQLite',
   `

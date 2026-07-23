@@ -171,6 +171,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const scheduleCacheRef = useRef<ScheduleCacheEntry | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  /** Monotonic generation so stale/superseded schedule IPC replies are ignored. */
+  const scheduleRequestGenRef = useRef(0);
 
   const isDraftMode = !isQuickBudget && hasBudgetSelected;
 
@@ -1046,6 +1048,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const getGoalProjections = useCallback(async (): Promise<GoalProjection[]> => {
     const overlay = buildDraftOverlay();
     const result = await window.electronAPI.goals.getProjections(overlay);
+    if (result.errorCode === 'superseded') {
+      return [];
+    }
     if (result.success && result.data) {
       return result.data as GoalProjection[];
     }
@@ -1133,10 +1138,19 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return applyScheduleResult(scheduleCacheRef.current.data, months);
     }
 
+    const requestGen = ++scheduleRequestGenRef.current;
     setIsScheduleLoading(true);
     try {
       const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
       if (!mountedRef.current) {
+        return null;
+      }
+      // Stale reply: a newer request was issued while this one was in flight.
+      if (requestGen !== scheduleRequestGenRef.current) {
+        return null;
+      }
+      // Soft-cancel from single-flight host — keep prior UI state, no error toast.
+      if (result.errorCode === 'superseded') {
         return null;
       }
 
@@ -1154,11 +1168,16 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       }
       setScheduleError(result.error || 'Failed to generate schedule');
       return null;
-    } catch {
-      if (mountedRef.current) setScheduleError('Failed to generate schedule');
+    } catch (error) {
+      const throwMsg = error instanceof Error ? error.message : String(error);
+      if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
+        setScheduleError(throwMsg || 'Failed to generate schedule');
+      }
       return null;
     } finally {
-      if (mountedRef.current) setIsScheduleLoading(false);
+      if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
+        setIsScheduleLoading(false);
+      }
     }
   }, [buildDraftOverlay, applyScheduleResult]);
 

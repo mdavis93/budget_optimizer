@@ -523,6 +523,25 @@ describe('DraftContext', () => {
       expect(mockAPI.schedule.build).toHaveBeenCalledTimes(2);
     });
 
+    it('ignores superseded schedule compute without setting an error', async () => {
+      mockAPI.schedule.build.mockResolvedValue({
+        success: false,
+        error: 'Schedule compute job superseded',
+        errorCode: 'superseded',
+      });
+
+      renderProvider(<ScheduleHarness />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('schedule-input-count')).toHaveTextContent('2');
+      });
+      fireEvent.click(screen.getByText('generate-schedule'));
+      await waitFor(() => {
+        expect(mockAPI.schedule.build).toHaveBeenCalled();
+      });
+      expect(screen.getByTestId('schedule-error')).toHaveTextContent('');
+      expect(screen.getByTestId('schedule-paycheck-count')).toHaveTextContent('0');
+    });
 
     it('creates income and marks income domain dirty', async () => {
       renderProvider();
@@ -909,8 +928,6 @@ describe('DraftContext', () => {
       });
     });
 
-
-
     it('clears all bill assignments in draft mode', async () => {
       renderProvider();
 
@@ -931,6 +948,7 @@ describe('DraftContext', () => {
       // Clearing back to the committed empty list re-syncs dirty domains.
       expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
     });
+
     it('clears only stale bill assignments in draft mode', async () => {
       renderProvider();
 
@@ -950,6 +968,7 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
       });
     });
+
     it('ignores duplicate skip entries in draft mode', async () => {
       renderProvider();
       await waitFor(() => {

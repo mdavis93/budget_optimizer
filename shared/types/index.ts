@@ -433,6 +433,8 @@ export interface ApiResult<T = void> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Soft/hard failure classification for schedule utilityProcess (e.g. superseded). */
+  errorCode?: string;
 }
 
 // ---------------------------------------------------------------------------

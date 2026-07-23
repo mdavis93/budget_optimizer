@@ -233,7 +233,8 @@ export function generateGoalSuggestions(
 export function calculateGoalProjections(
   goals: SavingsGoal[],
   paychecks: PaycheckEntry[],
-  scheduleEndDate: string
+  scheduleEndDate: string,
+  now: Date = new Date()
 ): GoalProjection[] {
   const projections: GoalProjection[] = [];
   const scheduleEnd = parseISO(scheduleEndDate);
@@ -335,7 +336,7 @@ export function calculateGoalProjections(
     } else {
       // Goal is beyond 12-month schedule AND not fully funded
       // Project based on monthly goal allocation rate
-      const monthsToGoal = Math.ceil(differenceInDays(goalDate, new Date()) / 30);
+      const monthsToGoal = Math.ceil(differenceInDays(goalDate, now) / 30);
       const projectedGoalPool = monthlyGoalRate * monthsToGoal;
 
       // For projection, estimate this goal's share based on priority
@@ -424,7 +425,8 @@ export function generateGoalProjections(
   minSavingsPerPaycheck: number = 0,
   debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
   incomeOverrides: Map<string, number> = new Map(),
-  leaves: Leave[] = []
+  leaves: Leave[] = [],
+  now: Date = new Date()
 ): GoalProjection[] {
   if (goals.length === 0) {
     return [];
@@ -510,6 +512,7 @@ export function generateGoalProjections(
   return calculateGoalProjections(
     goals,
     paychecks,
-    format(endDate, 'yyyy-MM-dd')
+    format(endDate, 'yyyy-MM-dd'),
+    now
   );
 }

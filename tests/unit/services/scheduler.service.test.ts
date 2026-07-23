@@ -238,7 +238,6 @@ describe('SchedulerService', () => {
         3,
         1000
       );
-      
       expect(schedule.paychecks.length).toBeGreaterThan(0);
       expect(schedule.startDate).toBe('2026-01-01');
     });
@@ -2432,6 +2431,7 @@ describe('SchedulerService', () => {
         canBeFullyResolved: true,
         totalDeficit: 0,
         estimatedResolution: 0,
+        minCashOnHand: 100,
       });
     });
 
