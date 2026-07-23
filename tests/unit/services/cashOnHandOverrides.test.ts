@@ -107,5 +107,18 @@ describe('cashOnHandOverrides', () => {
       expect(result.targetByDate.get('2026-02-12')).toBe(50);
       expect(result.minByDate.get('2026-02-12')).toBe(50);
     });
+
+    it('applies unpaid leave with only minCashOnHand and keeps budget target', () => {
+      const unpaid = createMockLeave({
+        type: 'unpaid',
+        startDate: '2026-02-01',
+        endDate: '2026-02-28',
+        minCashOnHand: 35,
+      });
+      const result = resolvePaycheckCashOnHand(dates, [unpaid], 250, 100);
+      expect(result.targetByDate.get('2026-02-12')).toBe(250);
+      expect(result.minByDate.get('2026-02-12')).toBe(35);
+      expect(result.minByDate.get('2026-01-29')).toBe(100);
+    });
   });
 });

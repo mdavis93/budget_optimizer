@@ -86,6 +86,65 @@ describe('draftPersist', () => {
       expect(computeDirtyDomains(committed, draft)).toEqual(new Set(['income']));
     });
 
+    it('marks income dirty when unpaid leave temporary cash fields change', () => {
+      const committed = makeDraftState({
+        leaves: [
+          {
+            id: 'leave-1',
+            budgetId: 'budget-1',
+            incomeId: 'income-1',
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+            targetCashOnHand: 100,
+            minCashOnHand: 40,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+      const draft = makeDraftState({
+        leaves: [
+          {
+            ...committed.leaves[0],
+            targetCashOnHand: 80,
+            minCashOnHand: 25,
+          },
+        ],
+      });
+
+      expect(computeDirtyDomains(committed, draft)).toEqual(new Set(['income']));
+    });
+
+    it('marks income dirty when leave name changes without other field edits', () => {
+      const committed = makeDraftState({
+        leaves: [
+          {
+            id: 'leave-1',
+            budgetId: 'budget-1',
+            incomeId: 'income-1',
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+      const draft = makeDraftState({
+        leaves: [
+          {
+            ...committed.leaves[0],
+            name: 'Surgery Recovery',
+          },
+        ],
+      });
+
+      expect(computeDirtyDomains(committed, draft)).toEqual(new Set(['income']));
+    });
+
     it('persists leaves after income domain save and remaps draft income ids', async () => {
       const draftIncomeId = 'draft-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
       const committed = makeDraftState({ incomes: [], leaves: [] });
@@ -132,6 +191,57 @@ describe('draftPersist', () => {
       );
       expect(result.nextDraft.leaves[0].id).toBe('leave-real');
       expect(result.nextDraft.leaves[0].incomeId).toBe('income-real');
+    });
+
+    it('persists unpaid leave temporary cash floors in the leaves.create IPC payload', async () => {
+      const committed = makeDraftState({ leaves: [] });
+      const draft = makeDraftState({
+        leaves: [
+          {
+            id: 'draft-llllllll-mmmm-nnnn-oooo-pppppppppppp',
+            budgetId: 'budget-1',
+            incomeId: 'income-1',
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-03-01',
+            endDate: '2026-03-14',
+            targetCashOnHand: 120,
+            minCashOnHand: 40,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+
+      vi.mocked(window.electronAPI.leaves.create).mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'leave-real',
+          budgetId: 'budget-1',
+          incomeId: 'income-1',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-03-01',
+          endDate: '2026-03-14',
+          targetCashOnHand: 120,
+          minCashOnHand: 40,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      });
+
+      const result = await persistDomains(committed, draft, ['income'], 'budget-1');
+      expect(result.success).toBe(true);
+      expect(window.electronAPI.leaves.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incomeId: 'income-1',
+          type: 'unpaid',
+          targetCashOnHand: 120,
+          minCashOnHand: 40,
+        })
+      );
+      expect(result.nextDraft.leaves[0].targetCashOnHand).toBe(120);
+      expect(result.nextDraft.leaves[0].minCashOnHand).toBe(40);
     });
 
     it('reports leave create failure when persisting income domain', async () => {

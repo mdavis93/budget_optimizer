@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   ScheduleComputeHost,
   createMockUtilityProcess,
+  runScheduleWorkerSmoke,
 } from '../../../electron/services/schedule-compute-host';
 import { ScheduleComputeError } from '@shared/scheduleComputeProtocol';
 import type { ScheduleComputeInputPayload } from '@shared/scheduleComputeProtocol';
@@ -302,5 +303,245 @@ describe('ScheduleComputeHost', () => {
 
     await expect(pending).rejects.toMatchObject({ code: 'invalid_result' });
     host.dispose();
+  });
+
+  it('rejects with worker_unavailable when the worker file is missing', async () => {
+    const host = new ScheduleComputeHost({
+      workerPath: '/missing/schedule-worker.js',
+      skipWorkerExistsCheck: false,
+      forkFn: () => {
+        throw new Error('fork should not run');
+      },
+      timeoutMs: 5_000,
+    });
+
+    await expect(
+      host.runJob({
+        op: 'schedule',
+        inputHash: 'hash-missing',
+        input: minimalInput(),
+        jobId: 'job-missing',
+      })
+    ).rejects.toMatchObject({
+      code: 'worker_unavailable',
+      message: expect.stringContaining('/missing/schedule-worker.js'),
+    });
+    host.dispose();
+  });
+
+  it('surfaces worker error messages to callers', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+
+    const pending = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-err',
+      input: minimalInput(),
+      jobId: 'job-err',
+    });
+
+    child.__emitSpawn();
+    child.emit('message', {
+      type: 'error',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-err',
+      inputHash: 'hash-err',
+      error: 'compute exploded',
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'worker_error',
+      message: 'compute exploded',
+    });
+    host.dispose();
+  });
+
+  it('settles in-flight work when the schedule compute child process is gone', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+
+    const pending = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-gone',
+      input: minimalInput(),
+      jobId: 'job-gone',
+    });
+
+    child.__emitSpawn();
+    host.notifyChildProcessGone('other-service');
+    host.notifyChildProcessGone('budget-optimizer-schedule');
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'crashed',
+      message: expect.stringContaining('gone unexpectedly'),
+    });
+    host.dispose();
+  });
+
+  it('rejects when forking the utility process fails', async () => {
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => {
+        throw new Error('fork denied');
+      },
+      timeoutMs: 5_000,
+    });
+
+    await expect(
+      host.runJob({
+        op: 'schedule',
+        inputHash: 'hash-fork',
+        input: minimalInput(),
+        jobId: 'job-fork',
+      })
+    ).rejects.toMatchObject({
+      code: 'worker_unavailable',
+      message: 'fork denied',
+    });
+    host.dispose();
+  });
+
+  it('ignores worker errors for other jobs and defaults empty error text', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+
+    const pending = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-empty',
+      input: minimalInput(),
+      jobId: 'job-empty',
+    });
+
+    child.__emitSpawn();
+    child.emit('message', {
+      type: 'error',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'other-job',
+      inputHash: 'hash-empty',
+      error: 'should ignore',
+    });
+    child.emit('message', {
+      type: 'error',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-empty',
+      inputHash: 'hash-empty',
+      error: '',
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'worker_error',
+      message: 'Worker error',
+    });
+    host.dispose();
+  });
+
+  it('rejects malformed worker messages', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+
+    const pending = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-malformed',
+      input: minimalInput(),
+      jobId: 'job-malformed',
+    });
+
+    child.__emitSpawn();
+    child.emit('message', 'not-an-object');
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'invalid_result',
+      message: 'Malformed worker message',
+    });
+    host.dispose();
+  });
+
+  it('rejects when forking throws a non-Error value', async () => {
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => {
+        throw 'fork-string';
+      },
+      timeoutMs: 5_000,
+    });
+
+    await expect(
+      host.runJob({
+        op: 'schedule',
+        inputHash: 'hash-fork-str',
+        input: minimalInput(),
+        jobId: 'job-fork-str',
+      })
+    ).rejects.toMatchObject({
+      code: 'worker_unavailable',
+      message: 'Failed to fork schedule worker',
+    });
+    host.dispose();
+  });
+});
+
+describe('runScheduleWorkerSmoke', () => {
+  const originalSmoke = process.env.SCHEDULE_WORKER_SMOKE;
+
+  afterEach(() => {
+    if (originalSmoke === undefined) {
+      delete process.env.SCHEDULE_WORKER_SMOKE;
+    } else {
+      process.env.SCHEDULE_WORKER_SMOKE = originalSmoke;
+    }
+  });
+
+  it('no-ops unless SCHEDULE_WORKER_SMOKE=1', async () => {
+    delete process.env.SCHEDULE_WORKER_SMOKE;
+    const forkFn = vi.fn();
+    await runScheduleWorkerSmoke({
+      workerPath: '/fake/schedule-worker.js',
+      forkFn,
+    });
+    expect(forkFn).not.toHaveBeenCalled();
+  });
+
+  it('pings the worker and resolves after pong', async () => {
+    process.env.SCHEDULE_WORKER_SMOKE = '1';
+    vi.useRealTimers();
+    const child = createMockUtilityProcess();
+    const forkFn = vi.fn(() => child);
+
+    const pending = runScheduleWorkerSmoke({
+      workerPath: '/fake/schedule-worker.js',
+      forkFn,
+    });
+
+    child.__emitSpawn();
+    child.emit('message', { type: 'pong', jobId: 'smoke' });
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(forkFn).toHaveBeenCalledWith(
+      '/fake/schedule-worker.js',
+      [],
+      expect.objectContaining({ serviceName: 'budget-optimizer-schedule' })
+    );
   });
 });

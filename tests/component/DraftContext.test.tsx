@@ -36,6 +36,11 @@ function DraftHarness() {
       <div data-testid="dirty-bills">{String(draft.isDomainDirty('bills'))}</div>
       <div data-testid="debt-count">{draft.debts.length}</div>
       <div data-testid="leave-count">{draft.leaves.length}</div>
+      <div data-testid="leave-target">
+        {draft.leaves[0]?.targetCashOnHand ?? 'none'}
+      </div>
+      <div data-testid="leave-min">{draft.leaves[0]?.minCashOnHand ?? 'none'}</div>
+      <div data-testid="leave-type">{draft.leaves[0]?.type ?? ''}</div>
       <div data-testid="goal-count">{draft.goals.length}</div>
       <div data-testid="skipped-count">{draft.skippedBills.length}</div>
       <div data-testid="assignment-count">{draft.billAssignments.length}</div>
@@ -242,6 +247,36 @@ function DraftHarness() {
       </button>
       <button
         onClick={() => {
+          const incomeId = draft.incomes[0]?.id;
+          if (!incomeId) return;
+          draft.createLeave({
+            incomeId,
+            name: 'Medical Leave',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+            targetCashOnHand: 120,
+            minCashOnHand: 40,
+          });
+        }}
+      >
+        create-leave-with-cash
+      </button>
+      <button
+        onClick={() => {
+          draft.createLeave({
+            incomeId: 'missing-income',
+            name: 'Orphan Leave',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+          });
+        }}
+      >
+        create-leave-bad-income
+      </button>
+      <button
+        onClick={() => {
           const leave = draft.leaves[0];
           if (!leave) return;
           draft.updateLeave(leave.id, {
@@ -257,6 +292,40 @@ function DraftHarness() {
       </button>
       <button
         onClick={() => {
+          const leave = draft.leaves[0];
+          if (!leave) return;
+          draft.updateLeave(leave.id, {
+            incomeId: leave.incomeId,
+            name: leave.name,
+            type: 'unpaid',
+            startDate: leave.startDate,
+            endDate: leave.endDate,
+            targetCashOnHand: 90,
+            minCashOnHand: 30,
+          });
+        }}
+      >
+        update-leave-cash
+      </button>
+      <button
+        onClick={() => {
+          const leave = draft.leaves[0];
+          if (!leave) return;
+          draft.updateLeave(leave.id, {
+            incomeId: 'missing-income',
+            name: leave.name,
+            type: leave.type,
+            startDate: leave.startDate,
+            endDate: leave.endDate,
+            targetCashOnHand: leave.targetCashOnHand,
+            minCashOnHand: leave.minCashOnHand,
+          });
+        }}
+      >
+        update-leave-bad-income
+      </button>
+      <button
+        onClick={() => {
           const id = draft.leaves[0]?.id;
           if (id) {
             draft.deleteLeave(id);
@@ -264,6 +333,26 @@ function DraftHarness() {
         }}
       >
         delete-leave
+      </button>
+      <button
+        onClick={() => {
+          draft.updateLeave('leave-force', {
+            incomeId: 'income-1',
+            name: 'Forced',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+          });
+        }}
+      >
+        update-leave-force
+      </button>
+      <button
+        onClick={() => {
+          draft.deleteLeave('leave-force');
+        }}
+      >
+        delete-leave-force
       </button>
       <button
         onClick={() =>
@@ -589,6 +678,41 @@ describe('DraftContext', () => {
       await waitFor(() => {
         expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
       });
+    });
+
+    it('stores temporary cash floors on unpaid leave create and update', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-leave-with-cash'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('1');
+        expect(screen.getByTestId('leave-type')).toHaveTextContent('unpaid');
+        expect(screen.getByTestId('leave-target')).toHaveTextContent('120');
+        expect(screen.getByTestId('leave-min')).toHaveTextContent('40');
+      });
+      expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+
+      fireEvent.click(screen.getByText('update-leave-cash'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-target')).toHaveTextContent('90');
+        expect(screen.getByTestId('leave-min')).toHaveTextContent('30');
+      });
+    });
+
+    it('rejects leave create when incomeId is unknown', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-leave-bad-income'));
+      expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('dirty-income')).toHaveTextContent('false');
     });
 
     it('cascades leaves when deleting income from draft', async () => {
@@ -1191,7 +1315,49 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('income-count')).toHaveTextContent('1');
       });
       fireEvent.click(screen.getByText('create-leave'));
+      fireEvent.click(screen.getByText('create-leave-with-cash'));
+      fireEvent.click(screen.getByText('update-leave-cash'));
+      fireEvent.click(screen.getByText('delete-leave'));
       expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('dirty-income')).toHaveTextContent('false');
+    });
+
+    it('blocks updateLeave and deleteLeave in quick budget mode when leave already exists', async () => {
+      mockUseBudget.mockReturnValue({
+        currentBudget: null,
+        isQuickBudget: true,
+        hasBudgetSelected: true,
+        refreshCurrentBudget: vi.fn().mockResolvedValue(undefined),
+        loadBudgets: vi.fn().mockResolvedValue(undefined),
+      });
+
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      // Quick-budget snapshots strip leaves, but mutation APIs must still no-op.
+      fireEvent.click(screen.getByText('update-leave-force'));
+      fireEvent.click(screen.getByText('delete-leave-force'));
+      expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('dirty-income')).toHaveTextContent('false');
+    });
+
+    it('rejects leave updates that point at an unknown income source', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-leave-with-cash'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('update-leave-bad-income'));
+      expect(screen.getByTestId('leave-target')).toHaveTextContent('120');
+      expect(screen.getByTestId('leave-type')).toHaveTextContent('unpaid');
+      expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
     });
 
     it('blocks createDebt in quick budget mode', async () => {
@@ -1280,30 +1446,34 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('income-count')).toHaveTextContent('1');
       });
 
-      fireEvent.click(screen.getByText('create-income'));
-      fireEvent.click(screen.getByText('update-income'));
-      fireEvent.click(screen.getByText('delete-income'));
-      fireEvent.click(screen.getByText('create-bill'));
-      fireEvent.click(screen.getByText('update-bill'));
-      fireEvent.click(screen.getByText('create-goal'));
-      fireEvent.click(screen.getByText('skip-bill'));
-      fireEvent.click(screen.getByText('assign-bill'));
-      fireEvent.click(screen.getByText('set-override'));
-      fireEvent.click(screen.getByText('update-debt'));
-      fireEvent.click(screen.getByText('delete-debt'));
-      fireEvent.click(screen.getByText('update-goal'));
-      fireEvent.click(screen.getByText('delete-goal'));
-      fireEvent.click(screen.getByText('unskip-bill'));
-      fireEvent.click(screen.getByText('remove-assignment'));
-      fireEvent.click(screen.getByText('remove-override'));
-      fireEvent.click(screen.getByText('save-bills'));
-      fireEvent.click(screen.getByText('discard-bills'));
+      await act(async () => {
+        fireEvent.click(screen.getByText('create-income'));
+        fireEvent.click(screen.getByText('update-income'));
+        fireEvent.click(screen.getByText('delete-income'));
+        fireEvent.click(screen.getByText('create-bill'));
+        fireEvent.click(screen.getByText('update-bill'));
+        fireEvent.click(screen.getByText('create-goal'));
+        fireEvent.click(screen.getByText('skip-bill'));
+        fireEvent.click(screen.getByText('assign-bill'));
+        fireEvent.click(screen.getByText('set-override'));
+        fireEvent.click(screen.getByText('update-debt'));
+        fireEvent.click(screen.getByText('delete-debt'));
+        fireEvent.click(screen.getByText('update-goal'));
+        fireEvent.click(screen.getByText('delete-goal'));
+        fireEvent.click(screen.getByText('unskip-bill'));
+        fireEvent.click(screen.getByText('remove-assignment'));
+        fireEvent.click(screen.getByText('remove-override'));
+        fireEvent.click(screen.getByText('save-bills'));
+        fireEvent.click(screen.getByText('discard-bills'));
+      });
 
-      expect(screen.getByTestId('income-count')).toHaveTextContent('1');
-      expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
-      expect(screen.getByTestId('goal-count')).toHaveTextContent('0');
-      expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
-      expect(screen.getByTestId('override-count')).toHaveTextContent('0');
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+        expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
+        expect(screen.getByTestId('goal-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('override-count')).toHaveTextContent('0');
+      });
       expect(mockPersistDomains).not.toHaveBeenCalled();
     });
   });

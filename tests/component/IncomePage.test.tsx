@@ -30,6 +30,12 @@ describe('IncomePage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createIncome.mockResolvedValue(true);
+    updateIncome.mockResolvedValue(true);
+    deleteIncome.mockResolvedValue(true);
+    createLeave.mockReturnValue(true);
+    updateLeave.mockReturnValue(true);
+    deleteLeave.mockReturnValue(true);
     mockUseBudget.mockReturnValue({
       currentBudget: {
         id: 'budget-1',
@@ -294,6 +300,98 @@ describe('IncomePage', () => {
       render(<IncomePage />);
       expect(screen.getByText(/Target \$100\.00/)).toBeInTheDocument();
       expect(screen.getByText(/Min \$50\.00/)).toBeInTheDocument();
+    });
+
+    it('shows only the set temporary cash value on unpaid leave cards', () => {
+      mockUseData.mockReturnValue({
+        incomes: [createMockIncome({ sourceName: 'Primary Job', amount: 2500, startDate: '2026-01-01' })],
+        leaves: [
+          createMockLeave({
+            id: 'leave-target-only',
+            name: 'Target Only',
+            type: 'unpaid',
+            targetCashOnHand: 80,
+          }),
+          createMockLeave({
+            id: 'leave-min-only',
+            name: 'Min Only',
+            type: 'unpaid',
+            minCashOnHand: 35,
+          }),
+        ],
+        budgetFields: null,
+        createIncome,
+        updateIncome,
+        deleteIncome,
+        createLeave,
+        updateLeave,
+        deleteLeave,
+      });
+      render(<IncomePage />);
+      expect(screen.getByText(/Target \$80\.00/)).toBeInTheDocument();
+      expect(screen.queryByText(/Target \$80\.00 ·/)).not.toBeInTheDocument();
+      expect(screen.getByText(/Min \$35\.00/)).toBeInTheDocument();
+      expect(screen.queryByText(/· Min \$35\.00/)).not.toBeInTheDocument();
+    });
+
+    it('prefills temporary cash fields when editing unpaid leave', async () => {
+      const user = userEvent.setup();
+      mockUseData.mockReturnValue({
+        incomes: [createMockIncome({ sourceName: 'Primary Job', amount: 2500, startDate: '2026-01-01' })],
+        leaves: [
+          createMockLeave({
+            name: 'Medical Leave',
+            type: 'unpaid',
+            targetCashOnHand: 110,
+            minCashOnHand: 45,
+          }),
+        ],
+        createIncome,
+        updateIncome,
+        deleteIncome,
+        createLeave,
+        updateLeave,
+        deleteLeave,
+      });
+      render(<IncomePage />);
+
+      await user.click(screen.getByRole('button', { name: /Edit Medical Leave/i }));
+      expect(screen.getByRole('dialog', { name: 'Edit Leave' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Target Cash On-Hand')).toHaveValue(110);
+      expect(screen.getByLabelText('Min Cash On-Hand')).toHaveValue(45);
+    });
+
+    it('keeps leave modal open when create or update returns false', async () => {
+      const user = userEvent.setup();
+      createLeave.mockReturnValueOnce(false);
+      render(<IncomePage />);
+      await user.click(screen.getAllByRole('button', { name: /Add Leave/i })[0]);
+      const addDialog = screen.getByRole('dialog', { name: 'Add Leave' });
+      fireEvent.change(screen.getByLabelText('Leave Name'), { target: { value: 'Blocked' } });
+      fireEvent.change(screen.getByLabelText('Start Date'), { target: { value: '2026-02-01' } });
+      fireEvent.change(screen.getByLabelText('End Date'), { target: { value: '2026-02-14' } });
+      await user.click(addDialog.querySelector('button[type="submit"]')!);
+      expect(screen.getByRole('dialog', { name: 'Add Leave' })).toBeInTheDocument();
+    });
+
+    it('keeps edit leave modal open when updateLeave returns false', async () => {
+      const user = userEvent.setup();
+      updateLeave.mockReturnValueOnce(false);
+      mockUseData.mockReturnValue({
+        incomes: [createMockIncome({ sourceName: 'Primary Job', amount: 2500, startDate: '2026-01-01' })],
+        leaves: [createMockLeave({ name: 'Vacation', type: 'paid' })],
+        createIncome,
+        updateIncome,
+        deleteIncome,
+        createLeave,
+        updateLeave,
+        deleteLeave,
+      });
+      render(<IncomePage />);
+      await user.click(screen.getByRole('button', { name: /Edit Vacation/i }));
+      await user.click(screen.getByRole('button', { name: 'Update Leave' }));
+      expect(updateLeave).toHaveBeenCalled();
+      expect(screen.getByRole('dialog', { name: 'Edit Leave' })).toBeInTheDocument();
     });
 
     it('edits and deletes an existing leave', async () => {

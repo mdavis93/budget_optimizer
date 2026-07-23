@@ -20,7 +20,8 @@ function reply(message: unknown): void {
   parentPort?.postMessage(message);
 }
 
-function handleMessage(data: unknown): void {
+/** Exported for unit tests of the worker protocol contract. */
+export function handleMessage(data: unknown): void {
   if (!data || typeof data !== 'object') {
     reply({
       type: 'error',
@@ -59,9 +60,11 @@ function handleMessage(data: unknown): void {
 }
 
 if (!parentPort) {
-  // eslint-disable-next-line no-console
-  console.error('schedule-worker: process.parentPort is unavailable');
-  process.exit(1);
+  if (process.env.VITEST !== 'true') {
+    // eslint-disable-next-line no-console
+    console.error('schedule-worker: process.parentPort is unavailable');
+    process.exit(1);
+  }
 } else {
   parentPort.on('message', (e) => {
     handleMessage(e.data);

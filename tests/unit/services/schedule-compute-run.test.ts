@@ -192,4 +192,71 @@ describe('runScheduleCompute', () => {
       expect((result.schedule as { paychecks: unknown[] }).paychecks.length).toBeGreaterThan(0);
     }
   });
+
+  it('produces goal projections for the goals compute path', () => {
+    const income: Income = {
+      id: 'inc-1',
+      sourceName: 'Job',
+      amount: 2500,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const bill: Bill = {
+      id: 'bill-1',
+      creditorName: 'Rent',
+      budgetedAmount: 800,
+      dueDay: 5,
+      isRecurring: true,
+      priority: 'critical',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const goal = {
+      id: 'goal-1',
+      name: 'Emergency',
+      targetAmount: 3000,
+      targetDate: '2026-12-01',
+      priority: 1,
+      alreadySaved: 500,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const input = serializeScheduleComputeInput({
+      incomes: [income],
+      bills: [bill],
+      startDate: '2026-01-01',
+      months: 6,
+      startingBalance: 1000,
+      skippedBills: new Set(),
+      manualAssignments: new Map(),
+      targetCashOnHand: 250,
+      goals: [goal],
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      debtPayoffs: new Map(),
+      incomeOverrides: new Map(),
+      leaves: [],
+      nowIso: '2026-01-01T00:00:00.000Z',
+    });
+
+    const result = runScheduleCompute({
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'goals-1',
+      inputHash: computeScheduleInputHash('goals', input),
+      op: 'goals',
+      input,
+    });
+
+    expect(result.op).toBe('goals');
+    if (result.op === 'goals') {
+      expect(result.goalProjections.length).toBeGreaterThan(0);
+      expect(result.goalProjections[0]).toMatchObject({
+        goalId: 'goal-1',
+      });
+    }
+  });
 });

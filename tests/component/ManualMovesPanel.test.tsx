@@ -178,4 +178,34 @@ describe('ManualMovesPanel', () => {
     expect(dates.has('2026-01-15')).toBe(true);
     expect(dates.has('2026-03-01')).toBe(false);
   });
+
+  it('uses singular copy for one active lock and shows busy labels while restoring', () => {
+    renderPanel({
+      assignments: [assignments[0]],
+      paycheckDates: ['2026-01-15'],
+      isRestoringAll: true,
+    });
+
+    expect(screen.getByTestId('manual-moves-summary')).toHaveTextContent('1 lock');
+    expect(screen.getByTestId('manual-moves-summary')).toHaveTextContent('across 1 bill');
+    expect(screen.getByTestId('manual-moves-summary')).not.toHaveTextContent('outside the schedule');
+    expect(screen.getByTestId('manual-moves-restore-all')).toHaveTextContent('Restoring…');
+    expect(screen.getByTestId('manual-moves-restore-all')).toBeDisabled();
+    expect(screen.getByTestId('manual-moves-review')).toBeDisabled();
+  });
+
+  it('notes remaining active locks when some assignments are stale', () => {
+    renderPanel({
+      assignments: [assignments[0], assignments[1]],
+      paycheckDates: ['2026-01-15'],
+    });
+
+    expect(screen.getByText(/1 active lock still force paycheck placement/i)).toBeInTheDocument();
+  });
+
+  it('shows clearing label while stale locks are being removed', () => {
+    renderPanel({ isClearingStale: true });
+    expect(screen.getByTestId('manual-moves-clear-stale')).toHaveTextContent('Clearing…');
+    expect(screen.getByTestId('manual-moves-clear-stale')).toBeDisabled();
+  });
 });
