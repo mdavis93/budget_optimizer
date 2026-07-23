@@ -17,6 +17,8 @@ import type {
   Income,
   IncomeInput,
   IncomeOverride,
+  Leave,
+  LeaveInput,
   SavingsGoal,
   SavingsGoalInput,
   ScheduleData,
@@ -129,6 +131,13 @@ interface ElectronAPI {
     delete: (id: string) => Promise<ApiResult>;
     getAmortization: (debtId: string) => Promise<ApiResult<AmortizationSchedule>>;
     getAllWithAmortization: (overlay?: DraftOverlay) => Promise<ApiResult<DebtWithAmortization[]>>;
+  };
+
+  leaves: {
+    getAll: () => Promise<ApiResult<Leave[]>>;
+    create: (input: LeaveInput) => Promise<ApiResult<Leave>>;
+    update: (id: string, input: LeaveInput) => Promise<ApiResult<Leave>>;
+    delete: (id: string) => Promise<ApiResult>;
   };
 
   schedule: {

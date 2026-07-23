@@ -16,6 +16,7 @@ export function rebuildReconciliationForViewport(
   const viewportShortfalls = viewportShortfallPaychecks.map((paycheck) => ({
     paycheckDate: paycheck.date,
     deficit: Math.abs(paycheck.budgetRemaining),
+    budgetRemaining: paycheck.budgetRemaining,
     bills: [...paycheck.bills],
   }));
   const recalculatedTotalDeficit = viewportShortfalls.reduce(

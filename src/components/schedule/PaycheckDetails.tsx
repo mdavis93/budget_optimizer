@@ -21,6 +21,7 @@ interface PaycheckDetailsProps {
   onDragEnd: () => void;
   draggedBill: DraggedBill | null;
   billAssignments: BillAssignment[];
+  validPaycheckDates?: ReadonlySet<string>;
   isAssigning: boolean;
   incomeOverrides: IncomeOverride[];
   onSaveIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => Promise<void>;
@@ -53,6 +54,7 @@ export default function PaycheckDetails({
   onDragEnd,
   draggedBill,
   billAssignments,
+  validPaycheckDates,
   isAssigning,
   incomeOverrides,
   onSaveIncomeOverride,
@@ -61,7 +63,12 @@ export default function PaycheckDetails({
 }: PaycheckDetailsProps) {
   const [editingIncomeKey, setEditingIncomeKey] = useState<string | null>(null);
   const [draftIncomeAmount, setDraftIncomeAmount] = useState('');
-  const visibleBills = filterPaycheckBills(paycheck.bills, billAssignments, paycheck.date);
+  const visibleBills = filterPaycheckBills(
+    paycheck.bills,
+    billAssignments,
+    paycheck.date,
+    validPaycheckDates
+  );
   const visibleTotalBills = visibleBills
     .filter(bill => !bill.isUnpayable && !bill.isSkipped)
     .reduce((sum, bill) => sum + bill.amount, 0);
@@ -214,7 +221,11 @@ export default function PaycheckDetails({
           <span className="font-semibold">Budget Remaining</span>
           <span className={clsx(
             'text-2xl font-mono font-bold',
-            paycheck.budgetRemaining >= 0 ? 'text-success-500' : 'text-danger-500'
+            paycheck.budgetRemaining < 0 || paycheck.hasUnpayableBills
+              ? 'text-danger-500'
+              : paycheck.isShortfall
+                ? 'text-warning-600 dark:text-warning-500'
+                : 'text-success-500'
           )}>
             {formatCurrency(paycheck.budgetRemaining)}
           </span>

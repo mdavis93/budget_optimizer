@@ -333,6 +333,38 @@ describe('rebalancePaycheckAssignments', () => {
     expect(assignments[0].bills).toHaveLength(0);
   });
 
+  it('funds unpayable in place when income covers it but remaining sits below min', () => {
+    // Mirrors Aug 28: $2650 income, $2470 funded, $175 unpayable → $5 left if funded.
+    // Min reserve ($100) blocks break-glass spare, but income still covers the bill.
+    const assignments = buildAssignments([
+      {
+        date: '2026-08-28',
+        income: 2650,
+        bills: [
+          { id: 'bill-pets', amount: 200, dueDate: '2026-08-28', priority: 'critical' },
+          { id: 'bill-grocery', amount: 300, dueDate: '2026-08-28', priority: 'critical' },
+          { id: 'bill-avast', amount: 820, dueDate: '2026-08-28', priority: 'high' },
+          { id: 'bill-rav4', amount: 225, dueDate: '2026-08-28', priority: 'critical' },
+          { id: 'bill-caps', amount: 25, dueDate: '2026-08-28' },
+          { id: 'bill-jeep', amount: 425, dueDate: '2026-08-28', priority: 'critical' },
+          { id: 'bill-apple', amount: 350, dueDate: '2026-08-30' },
+          { id: 'bill-navy', amount: 175, dueDate: '2026-09-03', priority: 'low' },
+          { id: 'bill-auto', amount: 125, dueDate: '2026-08-28' },
+        ],
+      },
+    ]);
+    assignments[0].bills[7].isUnpayable = true;
+    assignments[0].bills[7].unfundableReason = 'insufficient_income_in_window';
+
+    rebalancePaycheckAssignments(assignments, 0, REBALANCE_OPTS);
+
+    const navy = assignments[0].bills.find((b) => b.billId === 'bill-navy');
+    expect(navy?.isUnpayable).toBe(false);
+    expect(assignments[0].bills.reduce((sum, b) => sum + (b.isUnpayable ? 0 : b.amount), 0)).toBe(
+      2645
+    );
+  });
+
   it('rescues unpayable bills onto earlier paychecks using break-glass spare', () => {
     const assignments = buildAssignments([
       { date: '2027-02-12', income: 2650, bills: [] },

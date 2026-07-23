@@ -12,6 +12,7 @@ const baseReport = {
     {
       paycheckDate: '2026-02-15',
       deficit: 500,
+      budgetRemaining: -500,
       bills: [
         {
           billId: 'bill-1',
@@ -52,6 +53,39 @@ describe('ReconciliationPage', () => {
       expect(screen.queryByText(/Skip "/i)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Apply 1 Fix/i }));
       await waitFor(() => expect(onApplyFixes).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ id: 'fix-1' })])));
+    });
+
+    it('explains below-min cash without saying bills exceed income', () => {
+      render(
+        <ReconciliationPage
+          report={{
+            ...baseReport,
+            minCashOnHand: 100,
+            shortfalls: [
+              {
+                paycheckDate: '2026-09-18',
+                deficit: 0,
+                budgetRemaining: 0,
+                bills: [],
+              },
+            ],
+            proposedFixes: [],
+            canBeFullyResolved: false,
+            totalDeficit: 0,
+            estimatedResolution: 0,
+          }}
+          onApplyFixes={vi.fn(async () => {})}
+          onSkip={vi.fn()}
+          isApplying={false}
+        />
+      );
+
+      expect(
+        screen.getByText(
+          'Bills on Sep 18 reduce cash on-hand to $0.00, which is below the $100.00 minimum.'
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/exceed this paycheck's income/i)).not.toBeInTheDocument();
     });
   });
 

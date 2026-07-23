@@ -68,6 +68,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
     crypto: {},
     database: {
       getDebts: vi.fn(() => []),
+      getLeaves: vi.fn(() => []),
       getSettings: vi.fn(() => ({ autoLockMinutes: 5 })),
       close: vi.fn(),
     },
@@ -118,6 +119,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
         billAssignments: [],
         incomeOverrides: [],
         debts: [],
+        leaves: [],
         budget: { id: 'budget-1', name: 'Test' },
       })),
     },
@@ -151,6 +153,48 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       })),
       proposeBreakGlassPlans: vi.fn(() => ({ plans: [] })),
       applyViewportFilter: vi.fn((data) => data),
+    },
+    scheduleCompute: {
+      isDisposed: false,
+      runJob: vi.fn(async (request: { op: string; inputHash: string; input: { startingBalance: number; startDate: string; months: number } }) => {
+        if (request.op === 'goals') {
+          return {
+            type: 'result',
+            protocolVersion: 1,
+            jobId: 'test-job',
+            inputHash: request.inputHash,
+            op: 'goals',
+            goalProjections: [],
+          };
+        }
+        return {
+          type: 'result',
+          protocolVersion: 1,
+          jobId: 'test-job',
+          inputHash: request.inputHash,
+          op: 'schedule',
+          schedule: {
+            startDate: request.input.startDate,
+            endDate: '2026-01-31',
+            paychecks: [],
+            fullPaychecks: [],
+            viewportMonths: request.input.months,
+            entries: [],
+            summary: {
+              totalIncome: 0,
+              totalExpenses: 0,
+              netBalance: 0,
+              finalSavingsBalance: 0,
+              shortfallCount: 0,
+            },
+            recommendations: [],
+            maxBudgetRemaining: 0,
+            minCashOnHand: 100,
+          },
+        };
+      }),
+      dispose: vi.fn(),
+      notifyChildProcessGone: vi.fn(),
     },
     pdf: {
       generatePdf: vi.fn(async () => ({ success: true })),
@@ -239,6 +283,7 @@ describe('ipc handlers', () => {
       const services = createServices({
         database: {
           getDebts: vi.fn(() => []),
+      getLeaves: vi.fn(() => []),
           getSettings: vi.fn(() => ({ autoLockMinutes: 5 })),
           close: vi.fn(),
           getDebtById: vi.fn(() => ({
@@ -267,28 +312,24 @@ describe('ipc handlers', () => {
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(1000, 12, 100, 50, 'monthly');
     });
 
-    it('invokes schedule:build and returns schedule payload', async () => {
+    it('invokes schedule:build via scheduleCompute host and returns schedule payload', async () => {
       const services = createServices();
       registerIpcHandlers(ipcMain as never, services as never);
 
       const result = await ipcMain.invoke('schedule:build', '2026-01-01', 2, 500);
 
       expect(result).toMatchObject({ success: true });
-      expect(services.scheduler.generateSchedule).toHaveBeenCalledWith(
-        [],
-        [],
-        '2026-01-01',
-        2,
-        1234,
-        expect.any(Set),
-        expect.any(Map),
-        250,
-        [],
-        100,
-        50,
-        expect.any(Map),
-        expect.any(Map)
+      expect(services.scheduleCompute.runJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          op: 'schedule',
+          input: expect.objectContaining({
+            startDate: '2026-01-01',
+            months: 2,
+            startingBalance: 1234,
+          }),
+        })
       );
+      expect(services.scheduler.generateSchedule).not.toHaveBeenCalled();
     });
 
     it('routes income CRUD handlers through budget manager', async () => {
@@ -452,6 +493,10 @@ describe('ipc handlers', () => {
           createDebt: vi.fn(() => ({ id: 'debt-1' })),
           updateDebt: vi.fn(() => ({ id: 'debt-1', apr: 10 })),
           deleteDebt: vi.fn(() => true),
+          getLeaves: vi.fn(() => [{ id: 'leave-1' }]),
+          createLeave: vi.fn(() => ({ id: 'leave-1' })),
+          updateLeave: vi.fn(() => ({ id: 'leave-1', type: 'unpaid' })),
+          deleteLeave: vi.fn(() => true),
           getDebtById: vi.fn(() => ({
             id: 'debt-1',
             billId: 'bill-0001',
@@ -504,36 +549,47 @@ describe('ipc handlers', () => {
         },
         scheduler: {
           ...createServices().scheduler,
-          generateSchedule: vi.fn(() => ({
-            startDate: '2026-01-01',
-            endDate: '2026-01-31',
-            paychecks: [],
-            fullPaychecks: [],
-            viewportMonths: 1,
-            entries: [],
-            summary: {
-              totalIncome: 0,
-              totalExpenses: 0,
-              netBalance: 0,
-              finalSavingsBalance: 0,
-              shortfallCount: 0,
-            },
-            recommendations: [],
-            maxBudgetRemaining: 0,
-        minCashOnHand: 100,
-            goalProjections: [{ id: 'gp-1' }],
-          })),
-          generateGoalProjections: vi.fn(() => [{ id: 'gp-1' }]),
-          analyzeAndProposeFixes: vi.fn(() => ({
-            needsReconciliation: true,
-            shortfalls: [],
-            proposedFixes: [],
-            canBeFullyResolved: false,
-            totalDeficit: 0,
-            estimatedResolution: 0,
-          })),
-          proposeBreakGlassPlans: vi.fn(() => ({ plans: [] })),
-          applyViewportFilter: vi.fn((data) => data),
+        },
+        scheduleCompute: {
+          ...createServices().scheduleCompute,
+          runJob: vi.fn(async (request: { op: string; inputHash: string; input: { startDate: string; months: number } }) => {
+            if (request.op === 'goals') {
+              return {
+                type: 'result',
+                protocolVersion: 1,
+                jobId: 'test-job',
+                inputHash: request.inputHash,
+                op: 'goals',
+                goalProjections: [{ id: 'gp-1' }],
+              };
+            }
+            return {
+              type: 'result',
+              protocolVersion: 1,
+              jobId: 'test-job',
+              inputHash: request.inputHash,
+              op: 'schedule',
+              schedule: {
+                startDate: request.input.startDate,
+                endDate: '2026-01-31',
+                paychecks: [],
+                fullPaychecks: [],
+                viewportMonths: request.input.months,
+                entries: [],
+                summary: {
+                  totalIncome: 0,
+                  totalExpenses: 0,
+                  netBalance: 0,
+                  finalSavingsBalance: 0,
+                  shortfallCount: 0,
+                },
+                recommendations: [],
+                maxBudgetRemaining: 0,
+                minCashOnHand: 100,
+                goalProjections: [{ id: 'gp-1' }],
+              },
+            };
+          }),
         },
       });
       registerIpcHandlers(ipcMain as never, services as never);
@@ -583,6 +639,7 @@ describe('ipc handlers', () => {
           billAssignments: [],
           incomeOverrides: [],
           debts: [],
+          leaves: [],
           budget: { id: 'budget-1', name: 'Test' },
         },
       });
@@ -686,6 +743,30 @@ describe('ipc handlers', () => {
         data: expect.objectContaining({ monthsToPayoff: 0 }),
       });
       await expect(ipcMain.invoke('debts:get-all-with-amortization')).resolves.toEqual({ success: true, data: [] });
+
+      await expect(ipcMain.invoke('leaves:get-all')).resolves.toEqual({
+        success: true,
+        data: [{ id: 'leave-1' }],
+      });
+      await expect(
+        ipcMain.invoke('leaves:create', {
+          incomeId: 'income-0001',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+        })
+      ).resolves.toEqual({ success: true, data: { id: 'leave-1' } });
+      await expect(
+        ipcMain.invoke('leaves:update', 'leave-1', {
+          incomeId: 'income-0001',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+        })
+      ).resolves.toEqual({ success: true, data: { id: 'leave-1', type: 'unpaid' } });
+      await expect(ipcMain.invoke('leaves:delete', 'leave-1')).resolves.toEqual({ success: true });
     });
 
     it('returns database init error when biometric unlock succeeds but initialization fails', async () => {
@@ -735,21 +816,17 @@ describe('ipc handlers', () => {
 
       await ipcMain.invoke('schedule:build', '2026-02-01', 3, 750, { startingBalance: 750 });
 
-      expect(services.scheduler.generateSchedule).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        '2026-02-01',
-        3,
-        750,
-        expect.any(Set),
-        expect.any(Map),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.any(Map),
-        expect.any(Map)
+      expect(services.scheduleCompute.runJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          op: 'schedule',
+          input: expect.objectContaining({
+            startDate: '2026-02-01',
+            months: 3,
+            startingBalance: 750,
+          }),
+        })
       );
+      expect(services.scheduler.generateSchedule).not.toHaveBeenCalled();
     });
 
     it('builds debt payoffs for schedule generation when debts link to bills', async () => {
@@ -784,7 +861,10 @@ describe('ipc handlers', () => {
 
       await ipcMain.invoke('goals:get-projections');
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
-      expect(services.scheduler.generateGoalProjections).toHaveBeenCalled();
+      expect(services.scheduleCompute.runJob).toHaveBeenCalledWith(
+        expect.objectContaining({ op: 'goals' })
+      );
+      expect(services.scheduler.generateGoalProjections).not.toHaveBeenCalled();
     });
 
     it('returns empty goal projections when no goals are configured', async () => {
@@ -855,6 +935,8 @@ describe('ipc handlers', () => {
           updateDebt: vi.fn(() => null),
           deleteDebt: vi.fn(() => false),
           getDebtById: vi.fn(() => null),
+          updateLeave: vi.fn(() => null),
+          deleteLeave: vi.fn(() => false),
         },
       });
       registerIpcHandlers(ipcMain as never, services as never);
@@ -874,6 +956,22 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('debts:get-amortization', 'missing')).resolves.toEqual({
         success: false,
         error: 'Debt not found',
+      });
+      await expect(
+        ipcMain.invoke('leaves:update', 'missing', {
+          incomeId: 'income-0001',
+          name: 'x',
+          type: 'paid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'Leave not found',
+      });
+      await expect(ipcMain.invoke('leaves:delete', 'missing')).resolves.toEqual({
+        success: false,
+        error: 'Leave not found',
       });
     });
 
@@ -1002,6 +1100,38 @@ describe('ipc handlers', () => {
         error: 'No budget selected',
       });
       await expect(ipcMain.invoke('debts:get-all-with-amortization')).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(ipcMain.invoke('leaves:get-all')).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(
+        ipcMain.invoke('leaves:create', {
+          incomeId: 'income-1',
+          name: 'x',
+          type: 'unpaid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(
+        ipcMain.invoke('leaves:update', 'leave-1', {
+          incomeId: 'income-1',
+          name: 'x',
+          type: 'paid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(ipcMain.invoke('leaves:delete', 'leave-1')).resolves.toEqual({
         success: false,
         error: 'No budget selected',
       });

@@ -27,7 +27,7 @@ describe('ScheduleSummaryCards', () => {
     expect(screen.getByText('Total Expenses')).toBeInTheDocument();
     expect(screen.getByText('Net Balance')).toBeInTheDocument();
     expect(screen.getByText('Goals Total')).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: 'Goals at risk' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/goals may not be funded/i)).not.toBeInTheDocument();
     expect(screen.getByText('0')).toBeInTheDocument();
   });
 
@@ -40,7 +40,7 @@ describe('ScheduleSummaryCards', () => {
       />
     );
 
-    expect(screen.getByRole('img', { name: 'Goals at risk' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/goals may not be funded/i)).toBeInTheDocument();
     expect(screen.getByText('-$120.00')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
   });

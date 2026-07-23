@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useDraftActions, useSchedule } from '../context/DraftContext';
+import { useDraftActions, useDraftData, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import type { BreakGlassPlan, ProposedFix } from '../types';
 
 export function useScheduleMutations() {
   const { isQuickBudget } = useBudget();
+  const { billAssignments } = useDraftData();
   const {
     applyBreakGlassPlan,
     applyReconciliationFixes,
+    clearBillAssignments,
+    clearStaleBillAssignments,
     reloadSnapshot,
     removeBillAssignment,
     removeIncomeOverride,
@@ -25,6 +28,8 @@ export function useScheduleMutations() {
   const [skippingBill, setSkippingBill] = useState<string | null>(null);
   const [unskippingBill, setUnskippingBill] = useState<string | null>(null);
   const [restoringBill, setRestoringBill] = useState<string | null>(null);
+  const [isRestoringAllBills, setIsRestoringAllBills] = useState(false);
+  const [isClearingStaleBills, setIsClearingStaleBills] = useState(false);
   const [savingIncomeKey, setSavingIncomeKey] = useState<string | null>(null);
   const [showReconciliation, setShowReconciliation] = useState(false);
   const [dismissedReconciliation, setDismissedReconciliation] = useState(false);
@@ -211,6 +216,51 @@ export function useScheduleMutations() {
     }
   }, [isQuickBudget, reloadSnapshot, removeBillAssignment]);
 
+  const handleRestoreAllBills = useCallback(async () => {
+    if (billAssignments.length === 0) return;
+    setIsRestoringAllBills(true);
+    try {
+      if (isQuickBudget) {
+        for (const assignment of billAssignments) {
+          await window.electronAPI.billAssignments.remove(
+            assignment.billId,
+            assignment.billDueDate
+          );
+        }
+        await reloadSnapshot();
+      } else {
+        clearBillAssignments();
+      }
+    } catch {
+      // Error handling is reflected through the page's existing UI state.
+    } finally {
+      setIsRestoringAllBills(false);
+    }
+  }, [billAssignments, clearBillAssignments, isQuickBudget, reloadSnapshot]);
+
+  const handleClearStaleBills = useCallback(async (validPaycheckDates: ReadonlySet<string>) => {
+    const stale = billAssignments.filter((a) => !validPaycheckDates.has(a.paycheckDate));
+    if (stale.length === 0) return;
+    setIsClearingStaleBills(true);
+    try {
+      if (isQuickBudget) {
+        for (const assignment of stale) {
+          await window.electronAPI.billAssignments.remove(
+            assignment.billId,
+            assignment.billDueDate
+          );
+        }
+        await reloadSnapshot();
+      } else {
+        clearStaleBillAssignments(validPaycheckDates);
+      }
+    } catch {
+      // Error handling is reflected through the page's existing UI state.
+    } finally {
+      setIsClearingStaleBills(false);
+    }
+  }, [billAssignments, clearStaleBillAssignments, isQuickBudget, reloadSnapshot]);
+
   const handleSaveIncomeOverride = useCallback(async (
     incomeId: string,
     paycheckDate: string,
@@ -271,6 +321,8 @@ export function useScheduleMutations() {
     skippingBill,
     unskippingBill,
     restoringBill,
+    isRestoringAllBills,
+    isClearingStaleBills,
     savingIncomeKey,
     showReconciliation,
     dismissedReconciliation,
@@ -286,6 +338,8 @@ export function useScheduleMutations() {
     handleSkipBill,
     handleUnskipBill,
     handleRestoreBill,
+    handleRestoreAllBills,
+    handleClearStaleBills,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,
   };

@@ -145,6 +145,32 @@ export interface DebtInput {
   monthlyPayment: number;
 }
 
+export interface Leave {
+  id: string;
+  budgetId: string;
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  /** Temporary target cash-on-hand during unpaid leave (budget default when omitted). */
+  targetCashOnHand?: number;
+  /** Temporary min cash-on-hand during unpaid leave (budget default when omitted). */
+  minCashOnHand?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeaveInput {
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   autoLockMinutes: number;
@@ -162,6 +188,7 @@ export interface BudgetSnapshot {
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
   debts: Debt[];
+  leaves: Leave[];
   budget: Budget | null;
 }
 
@@ -248,6 +275,10 @@ export interface PaycheckEntry {
   savingsDeposit: number;
   totalSavings: number;
   isShortfall: boolean;
+  /** Effective target cash-on-hand for this paycheck (may be lowered by unpaid leave). */
+  targetCashOnHand?: number;
+  /** Effective min cash-on-hand for this paycheck (may be lowered by unpaid leave). */
+  minCashOnHand?: number;
   /** True when goals consumed surplus that pushed this paycheck's savings below the fallback target. */
   savingsSqueezed?: boolean;
   /** Number of bills in this paycheck that could not be funded (triaged to unpayable). */
@@ -313,6 +344,8 @@ export interface ProposedFix {
 export interface ShortfallDetail {
   paycheckDate: string;
   deficit: number;
+  /** Remaining after bills; >= 0 means bills were covered but cash is below min. */
+  budgetRemaining: number;
   bills: PaycheckBill[];
 }
 
@@ -323,6 +356,7 @@ export interface ReconciliationReport {
   canBeFullyResolved: boolean;
   totalDeficit: number;
   estimatedResolution: number;
+  minCashOnHand?: number;
 }
 
 /** One bill move in a Break-Glass advisor cascade (may exceed auto MAX_PREPAY_DAYS). */
@@ -399,6 +433,8 @@ export interface ApiResult<T = void> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Soft/hard failure classification for schedule utilityProcess (e.g. superseded). */
+  errorCode?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +456,7 @@ export interface DraftState {
   incomes: Income[];
   bills: Bill[];
   debts: Debt[];
+  leaves: Leave[];
   goals: SavingsGoal[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
@@ -432,6 +469,7 @@ export interface DraftOverlay {
   bills?: Bill[];
   goals?: SavingsGoal[];
   debts?: Debt[];
+  leaves?: Leave[];
   skippedBills?: SkippedBill[];
   billAssignments?: BillAssignment[];
   incomeOverrides?: IncomeOverride[];

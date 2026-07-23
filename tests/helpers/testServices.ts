@@ -7,6 +7,7 @@ import { AuthService } from '../../electron/services/auth.service';
 import { CryptoService } from '../../electron/services/crypto.service';
 import { BudgetManager } from '../../electron/services/budget-manager.service';
 import { DatabaseService } from '../../electron/services/database.service';
+import { ScheduleComputeHost } from '../../electron/services/schedule-compute-host';
 
 export interface TestServices {
   auth: AuthService;
@@ -14,6 +15,7 @@ export interface TestServices {
   database: DatabaseService | null;
   budgetManager: BudgetManager | null;
   scheduler: SchedulerService;
+  scheduleCompute: ScheduleComputeHost;
   pdf: PdfService;
   spreadsheet: SpreadsheetService;
   debt: DebtService;
@@ -24,6 +26,14 @@ export function createTestServices(overrides: Partial<TestServices> = {}): TestS
   const crypto = overrides.crypto ?? new CryptoService();
   const auth = overrides.auth ?? new AuthService();
   const scheduler = overrides.scheduler ?? new SchedulerService();
+  const scheduleCompute =
+    overrides.scheduleCompute ??
+    new ScheduleComputeHost({
+      skipWorkerExistsCheck: true,
+      forkFn: () => {
+        throw new Error('scheduleCompute fork not mocked in this test');
+      },
+    });
   const pdf = overrides.pdf ?? new PdfService();
   const spreadsheet = overrides.spreadsheet ?? new SpreadsheetService();
   const debt = overrides.debt ?? new DebtService();
@@ -35,6 +45,7 @@ export function createTestServices(overrides: Partial<TestServices> = {}): TestS
     database: overrides.database ?? null,
     budgetManager: overrides.budgetManager ?? null,
     scheduler,
+    scheduleCompute,
     pdf,
     spreadsheet,
     debt,

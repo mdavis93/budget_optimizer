@@ -10,6 +10,7 @@ import {
   startOfDay,
 } from 'date-fns';
 import { Income, Bill, SavingsGoal } from '../database.service';
+import type { Leave } from '../database.service';
 import { formatCurrency, roundCurrency } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
@@ -23,7 +24,9 @@ import {
   billOccurrenceKey,
 } from './types';
 import { projectIncome, projectBills } from './projection';
-import { getUniquePaycheckDates } from './assignment';
+import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
+import { resolvePaycheckCashOnHand } from './cashOnHandOverrides';
+import { getUniquePaycheckDates, pruneManualAssignmentsToPaychecks } from './assignment';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
 
@@ -230,7 +233,8 @@ export function generateGoalSuggestions(
 export function calculateGoalProjections(
   goals: SavingsGoal[],
   paychecks: PaycheckEntry[],
-  scheduleEndDate: string
+  scheduleEndDate: string,
+  now: Date = new Date()
 ): GoalProjection[] {
   const projections: GoalProjection[] = [];
   const scheduleEnd = parseISO(scheduleEndDate);
@@ -332,7 +336,7 @@ export function calculateGoalProjections(
     } else {
       // Goal is beyond 12-month schedule AND not fully funded
       // Project based on monthly goal allocation rate
-      const monthsToGoal = Math.ceil(differenceInDays(goalDate, new Date()) / 30);
+      const monthsToGoal = Math.ceil(differenceInDays(goalDate, now) / 30);
       const projectedGoalPool = monthlyGoalRate * monthsToGoal;
 
       // For projection, estimate this goal's share based on priority
@@ -420,7 +424,9 @@ export function generateGoalProjections(
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
   minSavingsPerPaycheck: number = 0,
   debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
-  incomeOverrides: Map<string, number> = new Map()
+  incomeOverrides: Map<string, number> = new Map(),
+  leaves: Leave[] = [],
+  now: Date = new Date()
 ): GoalProjection[] {
   if (goals.length === 0) {
     return [];
@@ -437,12 +443,7 @@ export function generateGoalProjections(
     allIncomes.push(...projectIncome(income, startDate, endDate));
   }
 
-  for (const projected of allIncomes) {
-    const key = `${projected.sourceId}-${format(projected.date, 'yyyy-MM-dd')}`;
-    if (incomeOverrides.has(key)) {
-      projected.amount = incomeOverrides.get(key)!;
-    }
-  }
+  applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
 
   const incomeAttachedBillsRaw = bills.filter(b => b.isIncomeAttached && b.preferredIncomeSourceId);
   const regularBills = bills.filter(b => !b.isIncomeAttached);
@@ -472,6 +473,16 @@ export function generateGoalProjections(
   });
 
   const paycheckDates = getUniquePaycheckDates(allIncomes);
+  const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
+    manualAssignments,
+    paycheckDates
+  );
+  const cashOnHandByDate = resolvePaycheckCashOnHand(
+    paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
+    leaves,
+    maxBudgetRemaining,
+    minCashOnHand
+  );
 
   const assignments = assignBillsExact(
     paycheckDates,
@@ -480,8 +491,11 @@ export function generateGoalProjections(
     startingBalance,
     {
       skippedBills,
-      manualAssignments,
+      manualAssignments: effectiveManualAssignments,
       incomeAttachedBillsRaw,
+      targetCashOnHand: maxBudgetRemaining,
+      minCashOnHand,
+      cashOnHandByDate,
     }
   );
 
@@ -491,12 +505,14 @@ export function generateGoalProjections(
     maxBudgetRemaining,
     goals,
     minCashOnHand,
-    minSavingsPerPaycheck
+    minSavingsPerPaycheck,
+    cashOnHandByDate
   );
 
   return calculateGoalProjections(
     goals,
     paychecks,
-    format(endDate, 'yyyy-MM-dd')
+    format(endDate, 'yyyy-MM-dd'),
+    now
   );
 }

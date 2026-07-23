@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import electron from 'vite-plugin-electron/simple';
+import electronMulti from 'vite-plugin-electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -97,6 +98,30 @@ export default defineConfig(async ({ mode }) => {
       },
       renderer: {},
     })),
+    // Separate utilityProcess bundle — must NOT share chunks with main.js
+    // (shared chunks caused the worker to require("./main.js")).
+    electronMulti({
+      entry: 'electron/workers/scheduleCompute.worker.ts',
+      vite: {
+        resolve: { alias: aliases },
+        build: {
+          outDir: 'dist-electron',
+          emptyOutDir: false,
+          lib: {
+            entry: path.resolve(__dirname, 'electron/workers/scheduleCompute.worker.ts'),
+            formats: ['cjs'],
+            fileName: () => 'schedule-worker.js',
+          },
+          rolldownOptions: {
+            external: mainExternals,
+            output: {
+              format: 'cjs',
+              codeSplitting: false,
+            },
+          },
+        },
+      },
+    }),
   ],
   resolve: {
     alias: aliases,

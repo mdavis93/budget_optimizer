@@ -3,8 +3,12 @@ import { Bill } from '../database.service';
 import { toCents } from './money';
 import { buildEligibleBills } from './eligibility';
 import { clusterEligibleBills } from './clusters';
-import { solveCluster, SolveBillInput, SolvePaycheck, solveClusterBounded } from './solve';
+import { SolveBillInput, SolvePaycheck, solveClusterBounded } from './solve';
 import { rebalancePaycheckAssignments } from './rebalance';
+import {
+  cashTargetForDate,
+  type CashOnHandByDate,
+} from './cashOnHandOverrides';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
@@ -22,6 +26,7 @@ export interface ExactAssignmentOptions {
   lockedBillKeys?: Set<string>;
   targetCashOnHand?: number;
   minCashOnHand?: number;
+  cashOnHandByDate?: CashOnHandByDate;
 }
 
 function buildPaycheckSkeleton(
@@ -115,12 +120,12 @@ function applyManualAssignments(
 function buildSolvePaychecks(
   assignments: PaycheckAssignment[],
   startingBalanceCents: number,
-  targetCashOnHand: number
+  targetReserves: number[]
 ): SolvePaycheck[] {
-  const reserveCents = toCents(targetCashOnHand);
   return assignments.map((assignment, index) => {
     const incomeCents = assignment.incomes.reduce((sum, inc) => sum + toCents(inc.amount), 0);
     const ledgerBoost = index === 0 ? startingBalanceCents : 0;
+    const reserveCents = toCents(targetReserves[index]);
     const capacityCents = Math.max(0, incomeCents + ledgerBoost - reserveCents);
     return {
       index,
@@ -146,6 +151,7 @@ export function assignBillsExact(
   const incomeAttachedBillsRaw = options.incomeAttachedBillsRaw ?? [];
   const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
+  const cashOnHandByDate = options.cashOnHandByDate;
   const lockedKeys = new Set(options.lockedBillKeys ?? []);
 
   const assignments = buildPaycheckSkeleton(paycheckDates, allIncomes);
@@ -167,10 +173,17 @@ export function assignBillsExact(
 
   const eligible = buildEligibleBills(solverBills, assignments, skippedBills);
   const clusters = clusterEligibleBills(eligible);
+  const targetReserves = assignments.map((assignment) =>
+    cashTargetForDate(
+      cashOnHandByDate,
+      format(assignment.date, 'yyyy-MM-dd'),
+      targetCashOnHand
+    )
+  );
   const solvePaychecks = buildSolvePaychecks(
     assignments,
     toCents(startingBalance),
-    targetCashOnHand
+    targetReserves
   );
 
   for (const cluster of clusters) {
@@ -247,6 +260,7 @@ export function assignBillsExact(
     lockedBillKeys: lockedKeys,
     targetCashOnHand,
     minCashOnHand,
+    cashOnHandByDate,
   });
 
   return assignments;

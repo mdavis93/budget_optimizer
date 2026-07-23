@@ -10,6 +10,7 @@ import {
   ProjectedBill,
   billOccurrenceKey,
 } from './types';
+import type { CashOnHandByDate } from './cashOnHandOverrides';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
 
@@ -26,6 +27,21 @@ export function getUniquePaycheckDates(incomes: ProjectedIncome[]): Date[] {
   }
 
   return dates.sort((a, b) => a.getTime() - b.getTime());
+}
+
+/** Drop locks aimed at paycheck dates that are not in the current schedule. */
+export function pruneManualAssignmentsToPaychecks(
+  manualAssignments: Map<string, string>,
+  paycheckDates: Date[]
+): Map<string, string> {
+  const validDates = new Set(paycheckDates.map((d) => format(d, 'yyyy-MM-dd')));
+  const pruned = new Map<string, string>();
+  for (const [key, target] of manualAssignments) {
+    if (validDates.has(target)) {
+      pruned.set(key, target);
+    }
+  }
+  return pruned;
 }
 
 export function findPreferredPaycheck(
@@ -112,7 +128,8 @@ export function assignBillsToPaychecks(
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
   minSavingsPerPaycheck: number = 0,
-  skippedForDisplay: ProjectedBill[] = []
+  skippedForDisplay: ProjectedBill[] = [],
+  cashOnHandByDate?: CashOnHandByDate
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
@@ -125,6 +142,7 @@ export function assignBillsToPaychecks(
       incomeAttachedBillsRaw,
       targetCashOnHand: maxBudgetRemaining,
       minCashOnHand,
+      cashOnHandByDate,
     }
   );
 
@@ -137,6 +155,7 @@ export function assignBillsToPaychecks(
     maxBudgetRemaining,
     goals,
     minCashOnHand,
-    minSavingsPerPaycheck
+    minSavingsPerPaycheck,
+    cashOnHandByDate
   );
 }

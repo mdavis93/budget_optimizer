@@ -424,6 +424,7 @@ export class BudgetManager {
         billAssignments: this.quickBudgetService.getBillAssignments(),
         incomeOverrides: this.quickBudgetService.getIncomeOverrides(),
         debts: [],
+        leaves: [],
         budget: null,
       };
     }
@@ -437,6 +438,7 @@ export class BudgetManager {
         billAssignments: [],
         incomeOverrides: [],
         debts: [],
+        leaves: [],
         budget: null,
       };
     }

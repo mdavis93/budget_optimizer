@@ -15,6 +15,7 @@ import {
   ReconciliationBanner,
   ScheduleRecommendations,
   BreakGlassAdvisorPanel,
+  ManualMovesPanel,
 } from '../components/schedule';
 import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
@@ -48,6 +49,8 @@ export default function SchedulePage() {
     skippingBill,
     unskippingBill,
     restoringBill,
+    isRestoringAllBills,
+    isClearingStaleBills,
     savingIncomeKey,
     showReconciliation,
     dismissedReconciliation,
@@ -63,6 +66,8 @@ export default function SchedulePage() {
     handleSkipBill,
     handleUnskipBill,
     handleRestoreBill,
+    handleRestoreAllBills,
+    handleClearStaleBills,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,
   } = useScheduleMutations();
@@ -286,9 +291,25 @@ export default function SchedulePage() {
         />
       ) : null}
 
+      {billAssignments.length > 0 && (
+        <ManualMovesPanel
+          assignments={billAssignments}
+          bills={bills}
+          paycheckDates={(schedule?.fullPaychecks ?? schedule?.paychecks ?? EMPTY_PAYCHECKS).map(
+            (p) => p.date
+          )}
+          onRestoreBill={handleRestoreBill}
+          onRestoreAll={handleRestoreAllBills}
+          onClearStale={handleClearStaleBills}
+          restoringBill={restoringBill}
+          isRestoringAll={isRestoringAllBills}
+          isClearingStale={isClearingStaleBills}
+        />
+      )}
+
       {(isLoading || isApplyingBreakGlass) && (
         <div
-          className="fixed top-14 bottom-0 left-64 right-0 z-40 flex items-center justify-center bg-black/20 dark:bg-black/40"
+          className="fixed top-14 bottom-0 left-64 right-0 z-40 flex items-center justify-center bg-black/20 dark:bg-black/40 backdrop-blur-xs"
           role="status"
           aria-live="polite"
           data-testid="schedule-busy-overlay"
@@ -297,7 +318,7 @@ export default function SchedulePage() {
             <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
             <div>
               <p className="font-medium text-(--color-text-primary)">
-                {isApplyingBreakGlass ? 'Applying adjustments…' : 'Building schedule…'}
+                {isApplyingBreakGlass ? 'Applying adjustments…' : 'Rebuilding schedule…'}
               </p>
               <p className="text-sm text-(--color-text-secondary)">
                 This can take a few seconds for a full-year projection.

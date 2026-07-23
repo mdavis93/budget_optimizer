@@ -4,6 +4,7 @@ import {
   Debt,
   Income,
   IncomeOverride,
+  Leave,
   SavingsGoal,
   SkippedBill,
 } from './database.service';
@@ -16,6 +17,7 @@ export interface DraftOverlayInput {
   bills?: Bill[];
   goals?: SavingsGoal[];
   debts?: Debt[];
+  leaves?: Leave[];
   skippedBills?: SkippedBill[];
   billAssignments?: BillAssignment[];
   incomeOverrides?: IncomeOverride[];
@@ -31,6 +33,7 @@ export interface ResolvedScheduleInputs {
   bills: Bill[];
   goals: SavingsGoal[];
   debts: Debt[];
+  leaves: Leave[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
@@ -47,7 +50,8 @@ export function resolveScheduleInputs(
   overlay?: DraftOverlayInput | null
 ): ResolvedScheduleInputs {
   if (overlay) {
-    assertValid(validateDraftOverlay(overlay as Parameters<typeof validateDraftOverlay>[0]), 'Invalid draft overlay');
+    const overlayValidation = validateDraftOverlay(overlay as Parameters<typeof validateDraftOverlay>[0]);
+    assertValid(overlayValidation, 'Invalid draft overlay');
   }
 
   const state = budgetManager.getCurrentState();
@@ -65,6 +69,13 @@ export function resolveScheduleInputs(
     debts = database.getDebts(state.budgetId);
   }
 
+  let leaves: Leave[] = [];
+  if (overlay?.leaves) {
+    leaves = overlay.leaves;
+  } else if (state.budgetId) {
+    leaves = database.getLeaves(state.budgetId);
+  }
+
   const startingBalance = overlay?.startingBalance ?? budgetManager.getStartingBalance();
   const targetCashOnHand = overlay?.targetCashOnHand ?? budgetManager.getTargetCashOnHand();
   const minCashOnHand = overlay?.minCashOnHand ?? budgetManager.getMinCashOnHand();
@@ -77,6 +88,7 @@ export function resolveScheduleInputs(
     bills,
     goals,
     debts,
+    leaves,
     skippedBills,
     billAssignments,
     incomeOverrides,

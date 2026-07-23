@@ -19,6 +19,8 @@ import {
   Income,
   IncomeInput,
   IncomeOverride,
+  Leave,
+  LeaveInput,
   ProposedFix,
   BreakGlassPlan,
   SavingsGoal,
@@ -60,6 +62,7 @@ interface DraftDataContextValue {
   incomes: Income[];
   bills: Bill[];
   debts: Debt[];
+  leaves: Leave[];
   goals: SavingsGoal[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
@@ -93,6 +96,9 @@ interface DraftActionsContextValue {
   createDebt: (input: DebtInput) => boolean;
   updateDebt: (id: string, input: Partial<DebtInput>) => boolean;
   deleteDebt: (id: string) => boolean;
+  createLeave: (input: LeaveInput) => boolean;
+  updateLeave: (id: string, input: LeaveInput) => boolean;
+  deleteLeave: (id: string) => boolean;
   createGoal: (input: SavingsGoalInput) => boolean;
   updateGoal: (id: string, input: Partial<SavingsGoalInput>) => boolean;
   deleteGoal: (id: string) => boolean;
@@ -100,6 +106,8 @@ interface DraftActionsContextValue {
   unskipBill: (billId: string, skipDate: string) => boolean;
   assignBill: (billId: string, billDueDate: string, paycheckDate: string) => boolean;
   removeBillAssignment: (billId: string, billDueDate: string) => boolean;
+  clearBillAssignments: () => boolean;
+  clearStaleBillAssignments: (validPaycheckDates: ReadonlySet<string>) => boolean;
   setIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => boolean;
   removeIncomeOverride: (incomeId: string, paycheckDate: string) => boolean;
   applyReconciliationFixes: (fixes: ProposedFix[]) => boolean;
@@ -163,6 +171,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const scheduleCacheRef = useRef<ScheduleCacheEntry | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  /** Monotonic generation so stale/superseded schedule IPC replies are ignored. */
+  const scheduleRequestGenRef = useRef(0);
 
   const isDraftMode = !isQuickBudget && hasBudgetSelected;
 
@@ -256,13 +266,14 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, budget } =
+      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, leaves, budget } =
         result.data;
 
       const snapshot: DraftState = {
         incomes: incomes ?? [],
         bills: bills ?? [],
         debts: isQuickBudget ? [] : (debts ?? []),
+        leaves: isQuickBudget ? [] : (leaves ?? []),
         goals: goals ?? [],
         skippedBills: skippedBills ?? [],
         billAssignments: billAssignments ?? [],
@@ -337,6 +348,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       bills: currentDraft.bills,
       goals: currentDraft.goals,
       debts: currentDraft.debts,
+      leaves: currentDraft.leaves,
       skippedBills: currentDraft.skippedBills,
       billAssignments: currentDraft.billAssignments,
       incomeOverrides: currentDraft.incomeOverrides,
@@ -419,7 +431,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
     setDraft((prev) => {
       const next = { ...prev };
-      if (domain === 'income') next.incomes = structuredClone(saved.incomes);
+      if (domain === 'income') {
+        next.incomes = structuredClone(saved.incomes);
+        next.leaves = structuredClone(saved.leaves);
+      }
       if (domain === 'bills') next.bills = structuredClone(saved.bills);
       if (domain === 'debts') next.debts = structuredClone(saved.debts);
       if (domain === 'goals') next.goals = structuredClone(saved.goals);
@@ -522,6 +537,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       updateDraft((prev) => ({
         ...prev,
         incomes: prev.incomes.filter((income) => income.id !== id),
+        leaves: prev.leaves.filter((leave) => leave.incomeId !== id),
       }));
       markDirty('income');
       return true;
@@ -654,6 +670,87 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         debts: prev.debts.filter((debt) => debt.id !== id),
       }));
       markDirty('debts');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
+  const createLeave = useCallback((input: LeaveInput): boolean => {
+    if (isQuickBudget || !currentBudget) return false;
+    if (!stateRef.current.draft.incomes.some((income) => income.id === input.incomeId)) {
+      return false;
+    }
+    const newLeave: Leave = {
+      id: createDraftId(),
+      budgetId: currentBudget.id,
+      incomeId: input.incomeId,
+      name: input.name.trim(),
+      type: input.type,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      ...(input.type === 'unpaid' && input.targetCashOnHand !== undefined
+        ? { targetCashOnHand: input.targetCashOnHand }
+        : {}),
+      ...(input.type === 'unpaid' && input.minCashOnHand !== undefined
+        ? { minCashOnHand: input.minCashOnHand }
+        : {}),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    if (isDraftMode) {
+      updateDraft((prev) => ({ ...prev, leaves: [...prev.leaves, newLeave] }));
+      markDirty('income');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, currentBudget, updateDraft, markDirty]);
+
+  const updateLeave = useCallback((id: string, input: LeaveInput): boolean => {
+    if (isQuickBudget) return false;
+    if (!stateRef.current.draft.incomes.some((income) => income.id === input.incomeId)) {
+      return false;
+    }
+    if (isDraftMode) {
+      updateDraft((prev) => ({
+        ...prev,
+        leaves: prev.leaves.map((leave) => {
+          if (leave.id !== id) return leave;
+          const next: Leave = {
+            ...leave,
+            incomeId: input.incomeId,
+            name: input.name.trim(),
+            type: input.type,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            updatedAt: nowIso(),
+          };
+          delete next.targetCashOnHand;
+          delete next.minCashOnHand;
+          if (input.type === 'unpaid') {
+            if (input.targetCashOnHand !== undefined) {
+              next.targetCashOnHand = input.targetCashOnHand;
+            }
+            if (input.minCashOnHand !== undefined) {
+              next.minCashOnHand = input.minCashOnHand;
+            }
+          }
+          return next;
+        }),
+      }));
+      markDirty('income');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
+  const deleteLeave = useCallback((id: string): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      updateDraft((prev) => ({
+        ...prev,
+        leaves: prev.leaves.filter((leave) => leave.id !== id),
+      }));
+      markDirty('income');
       return true;
     }
     return false;
@@ -798,6 +895,30 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return false;
   }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
 
+  const clearBillAssignments = useCallback((): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      if (stateRef.current.draft.billAssignments.length === 0) return false;
+      updateDraft((prev) => ({ ...prev, billAssignments: [] }));
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
+  const clearStaleBillAssignments = useCallback((validPaycheckDates: ReadonlySet<string>): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      const current = stateRef.current.draft.billAssignments;
+      const next = current.filter((a) => validPaycheckDates.has(a.paycheckDate));
+      if (next.length === current.length) return false;
+      updateDraft((prev) => ({ ...prev, billAssignments: next }));
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
   const setIncomeOverride = useCallback((incomeId: string, paycheckDate: string, amount: number): boolean => {
     if (isQuickBudget) return false;
     if (isDraftMode) {
@@ -927,6 +1048,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const getGoalProjections = useCallback(async (): Promise<GoalProjection[]> => {
     const overlay = buildDraftOverlay();
     const result = await window.electronAPI.goals.getProjections(overlay);
+    if (result.errorCode === 'superseded') {
+      return [];
+    }
     if (result.success && result.data) {
       return result.data as GoalProjection[];
     }
@@ -945,6 +1069,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         skippedBills: draft.skippedBills,
         billAssignments: draft.billAssignments,
         incomeOverrides: draft.incomeOverrides,
+        leaves: draft.leaves,
         budgetFields: draft.budget,
       }),
     [draft]
@@ -1013,10 +1138,19 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return applyScheduleResult(scheduleCacheRef.current.data, months);
     }
 
+    const requestGen = ++scheduleRequestGenRef.current;
     setIsScheduleLoading(true);
     try {
       const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
       if (!mountedRef.current) {
+        return null;
+      }
+      // Stale reply: a newer request was issued while this one was in flight.
+      if (requestGen !== scheduleRequestGenRef.current) {
+        return null;
+      }
+      // Soft-cancel from single-flight host — keep prior UI state, no error toast.
+      if (result.errorCode === 'superseded') {
         return null;
       }
 
@@ -1034,11 +1168,16 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       }
       setScheduleError(result.error || 'Failed to generate schedule');
       return null;
-    } catch {
-      if (mountedRef.current) setScheduleError('Failed to generate schedule');
+    } catch (error) {
+      const throwMsg = error instanceof Error ? error.message : String(error);
+      if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
+        setScheduleError(throwMsg || 'Failed to generate schedule');
+      }
       return null;
     } finally {
-      if (mountedRef.current) setIsScheduleLoading(false);
+      if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
+        setIsScheduleLoading(false);
+      }
     }
   }, [buildDraftOverlay, applyScheduleResult]);
 
@@ -1082,6 +1221,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       incomes: draft.incomes,
       bills: draft.bills,
       debts: draft.debts,
+      leaves: draft.leaves,
       goals: draft.goals,
       skippedBills: draft.skippedBills,
       billAssignments: draft.billAssignments,
@@ -1121,6 +1261,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       createDebt,
       updateDebt,
       deleteDebt,
+      createLeave,
+      updateLeave,
+      deleteLeave,
       createGoal,
       updateGoal,
       deleteGoal,
@@ -1128,6 +1271,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       unskipBill,
       assignBill,
       removeBillAssignment,
+      clearBillAssignments,
+      clearStaleBillAssignments,
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,
@@ -1154,6 +1299,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       createDebt,
       updateDebt,
       deleteDebt,
+      createLeave,
+      updateLeave,
+      deleteLeave,
       createGoal,
       updateGoal,
       deleteGoal,
@@ -1161,6 +1309,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       unskipBill,
       assignBill,
       removeBillAssignment,
+      clearBillAssignments,
+      clearStaleBillAssignments,
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,

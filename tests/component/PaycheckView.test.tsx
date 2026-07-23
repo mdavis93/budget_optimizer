@@ -153,6 +153,40 @@ describe('PaycheckView', () => {
       );
       expect(screen.queryByText('Break-Glass')).not.toBeInTheDocument();
     });
+
+    it('styles funded-but-below-min as warning with tooltip, not danger/unpayable', () => {
+      const props = baseProps();
+      const { container } = renderWithRouter(
+        <PaycheckView
+          {...props}
+          paychecks={[
+            createMockPaycheck({
+              date: '2026-08-28',
+              budgetRemaining: 5,
+              isShortfall: true,
+              minCashOnHand: 100,
+              hasUnpayableBills: false,
+            }),
+          ]}
+          maxBudgetRemaining={250}
+          minCashOnHand={100}
+        />
+      );
+
+      expect(screen.getByText('Below minimum')).toBeInTheDocument();
+      expect(screen.queryByText(/unpayable/i)).not.toBeInTheDocument();
+      const card = container.querySelector('.card');
+      expect(card?.className).toMatch(/border-warning/);
+      expect(card?.className).not.toMatch(/border-danger/);
+      expect(
+        screen.getByLabelText(/Cash on hand \(\$5\.00\) is below your minimum floor of \$100\.00/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('tooltip', {
+          name: /Cash on hand \(\$5\.00\) is below your minimum floor of \$100\.00/i,
+        })
+      ).toBeInTheDocument();
+    });
   });
 
   describe('sad', () => {

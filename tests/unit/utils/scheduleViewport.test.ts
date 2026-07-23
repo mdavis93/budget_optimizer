@@ -45,6 +45,7 @@ function buildSchedule(overrides: Partial<ScheduleData> = {}): ScheduleData {
         {
           paycheckDate: '2026-08-01',
           deficit: 40,
+          budgetRemaining: -40,
           bills: [],
         },
       ],

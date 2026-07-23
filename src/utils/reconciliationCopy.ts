@@ -118,7 +118,10 @@ export function formatProposedFixCopy(
   };
 }
 
-export function formatShortfallCopy(shortfall: ShortfallDetail): {
+export function formatShortfallCopy(
+  shortfall: ShortfallDetail,
+  options?: { minCashOnHand?: number }
+): {
   headline: string;
   explanation: string;
   ariaMessage: string;
@@ -126,6 +129,8 @@ export function formatShortfallCopy(shortfall: ShortfallDetail): {
   const paycheckDate = formatPaycheckDate(shortfall.paycheckDate);
   const deficit = formatMoney(shortfall.deficit);
   const unfundableBills = shortfall.bills.filter((b) => b.isUnpayable && b.unfundableReason);
+  const minCashOnHand = options?.minCashOnHand ?? 100;
+  const cashOnHand = shortfall.budgetRemaining;
 
   if (unfundableBills.length > 0) {
     const dominant = unfundableBills[0]!;
@@ -137,6 +142,17 @@ export function formatShortfallCopy(shortfall: ShortfallDetail): {
       headline: `${paycheckDate} shortfall: ${deficit}`,
       explanation: reasonCopy.explanation,
       ariaMessage: `${paycheckDate} paycheck short by ${deficit}. ${reasonCopy.ariaMessage}`,
+    };
+  }
+
+  // Covered bills but ended below the min cash floor — not "income exceeded."
+  if (cashOnHand >= 0) {
+    const cashLabel = formatMoney(cashOnHand);
+    const minLabel = formatMoney(minCashOnHand);
+    return {
+      headline: `${paycheckDate} shortfall: ${deficit}`,
+      explanation: `Bills on ${paycheckDate} reduce cash on-hand to ${cashLabel}, which is below the ${minLabel} minimum.`,
+      ariaMessage: `${paycheckDate} paycheck ends at ${cashLabel}, below the ${minLabel} minimum cash on hand.`,
     };
   }
 

@@ -6,6 +6,7 @@ import {
   assertValid,
   validateGoal,
   validateDebt,
+  validateLeave,
   validateBudget,
   validateDraftOverlay,
   validateReconciliationFix,
@@ -299,7 +300,93 @@ describe('validation.service', () => {
         monthlyPayment: 150,
       }).valid).toBe(true);
 
+      expect(validateLeave({
+        incomeId: 'draft-12345678-abcd',
+        name: 'Medical Leave',
+        type: 'unpaid',
+        startDate: '2026-02-01',
+        endDate: '2026-02-14',
+      }).valid).toBe(true);
+
       expect(validateBudget({ name: 'Personal' }).valid).toBe(true);
+    });
+
+    it('rejects invalid leave ranges and types', () => {
+      const result = validateLeave({
+        incomeId: 'bad',
+        name: '',
+        type: 'partial' as 'paid',
+        startDate: '2026-02-14',
+        endDate: '2026-02-01',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          'Income ID is invalid',
+          'Leave name is required',
+          'Leave type must be paid or unpaid',
+          'End date must be on or after start date',
+        ])
+      );
+
+      expect(
+        validateLeave({
+          incomeId: 'draft-12345678-abcd',
+          name: 'x'.repeat(101),
+          type: 'paid',
+          startDate: 'bad-date',
+          endDate: 'also-bad',
+        }).errors
+      ).toEqual(
+        expect.arrayContaining([
+          'Leave name must be 100 characters or less',
+          'Start date must be YYYY-MM-DD',
+          'End date must be YYYY-MM-DD',
+        ])
+      );
+    });
+
+    it('validates unpaid leave cash-on-hand overrides', () => {
+      expect(
+        validateLeave({
+          incomeId: 'draft-12345678-abcd',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+          targetCashOnHand: 100,
+          minCashOnHand: 40,
+        }).valid
+      ).toBe(true);
+
+      expect(
+        validateLeave({
+          incomeId: 'draft-12345678-abcd',
+          name: 'Vacation',
+          type: 'paid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+          targetCashOnHand: 100,
+        }).errors
+      ).toEqual(
+        expect.arrayContaining(['Cash-on-hand overrides are only allowed on unpaid leave'])
+      );
+
+      expect(
+        validateLeave({
+          incomeId: 'draft-12345678-abcd',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+          targetCashOnHand: 40,
+          minCashOnHand: 100,
+        }).errors
+      ).toEqual(
+        expect.arrayContaining([
+          'minCashOnHand must be less than or equal to targetCashOnHand',
+        ])
+      );
     });
 
     it('rejects assertValid failures for invalid bill payloads', () => {
@@ -357,6 +444,13 @@ describe('validation.service', () => {
         skippedBills: [{ billId: 'bad', skipDate: '2026/01/01' }],
         billAssignments: [{ billId: 'bad', billDueDate: 'oops', paycheckDate: 'still-bad' }],
         incomeOverrides: [{ incomeId: 'bad', paycheckDate: 'nope', amount: -1 }],
+        leaves: [{
+          incomeId: 'bad',
+          name: '',
+          type: 'partial' as 'paid',
+          startDate: '2026-02-10',
+          endDate: '2026-02-01',
+        }],
         startingBalance: Number.NaN,
         targetCashOnHand: -1,
         minCashOnHand: -1,
