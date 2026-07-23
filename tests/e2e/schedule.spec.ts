@@ -115,7 +115,7 @@ test.describe('Schedule', () => {
     await pinScheduleStart(window);
 
     await expect(window.getByRole('heading', { name: 'Payment Schedule' })).toBeVisible();
-    await expect(window.getByRole('img', { name: 'Goals at risk' })).toBeVisible();
+    await expect(window.getByLabelText(/goals may not be funded/i)).toBeVisible();
     await expectNoSpinner(window);
   });
 
