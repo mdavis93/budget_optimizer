@@ -145,6 +145,32 @@ export interface DebtInput {
   monthlyPayment: number;
 }
 
+export interface Leave {
+  id: string;
+  budgetId: string;
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  /** Temporary target cash-on-hand during unpaid leave (budget default when omitted). */
+  targetCashOnHand?: number;
+  /** Temporary min cash-on-hand during unpaid leave (budget default when omitted). */
+  minCashOnHand?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeaveInput {
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   autoLockMinutes: number;
@@ -162,6 +188,7 @@ export interface BudgetSnapshot {
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
   debts: Debt[];
+  leaves: Leave[];
   budget: Budget | null;
 }
 
@@ -420,6 +447,7 @@ export interface DraftState {
   incomes: Income[];
   bills: Bill[];
   debts: Debt[];
+  leaves: Leave[];
   goals: SavingsGoal[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
@@ -432,6 +460,7 @@ export interface DraftOverlay {
   bills?: Bill[];
   goals?: SavingsGoal[];
   debts?: Debt[];
+  leaves?: Leave[];
   skippedBills?: SkippedBill[];
   billAssignments?: BillAssignment[];
   incomeOverrides?: IncomeOverride[];

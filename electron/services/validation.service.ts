@@ -286,6 +286,89 @@ export function validateDebt(debt: {
   return { valid: errors.length === 0, errors };
 }
 
+export function validateLeave(leave: {
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  if (!leave.incomeId || !ID_REGEX.test(leave.incomeId)) {
+    errors.push('Income ID is invalid');
+  }
+
+  if (!leave.name || leave.name.trim().length === 0) {
+    errors.push('Leave name is required');
+  } else if (leave.name.length > 100) {
+    errors.push('Leave name must be 100 characters or less');
+  }
+
+  if (leave.type !== 'paid' && leave.type !== 'unpaid') {
+    errors.push('Leave type must be paid or unpaid');
+  }
+
+  if (!leave.startDate || !DATE_REGEX.test(leave.startDate)) {
+    errors.push('Start date must be YYYY-MM-DD');
+  }
+
+  if (!leave.endDate || !DATE_REGEX.test(leave.endDate)) {
+    errors.push('End date must be YYYY-MM-DD');
+  }
+
+  if (
+    leave.startDate &&
+    leave.endDate &&
+    DATE_REGEX.test(leave.startDate) &&
+    DATE_REGEX.test(leave.endDate) &&
+    leave.endDate < leave.startDate
+  ) {
+    errors.push('End date must be on or after start date');
+  }
+
+  const hasTargetOverride = leave.targetCashOnHand !== undefined;
+  const hasMinOverride = leave.minCashOnHand !== undefined;
+
+  if (leave.type === 'paid' && (hasTargetOverride || hasMinOverride)) {
+    errors.push('Cash-on-hand overrides are only allowed on unpaid leave');
+  }
+
+  if (
+    hasTargetOverride &&
+    (typeof leave.targetCashOnHand !== 'number' ||
+      isNaN(leave.targetCashOnHand) ||
+      leave.targetCashOnHand < 0)
+  ) {
+    errors.push('targetCashOnHand must be a non-negative number');
+  }
+
+  if (
+    hasMinOverride &&
+    (typeof leave.minCashOnHand !== 'number' ||
+      isNaN(leave.minCashOnHand) ||
+      leave.minCashOnHand < 0)
+  ) {
+    errors.push('minCashOnHand must be a non-negative number');
+  }
+
+  if (
+    hasTargetOverride &&
+    hasMinOverride &&
+    typeof leave.targetCashOnHand === 'number' &&
+    typeof leave.minCashOnHand === 'number' &&
+    !isNaN(leave.targetCashOnHand) &&
+    !isNaN(leave.minCashOnHand) &&
+    leave.minCashOnHand > leave.targetCashOnHand
+  ) {
+    errors.push('minCashOnHand must be less than or equal to targetCashOnHand');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 export function validateBudget(budget: {
   name: string;
   startingBalance?: number;
@@ -429,6 +512,7 @@ export function validateDraftOverlay(overlay: {
   bills?: Array<Parameters<typeof validateBill>[0] & { id?: string }>;
   goals?: Array<Parameters<typeof validateGoal>[0] & { id?: string; budgetId?: string }>;
   debts?: Array<Parameters<typeof validateDebt>[0] & { id?: string; budgetId?: string }>;
+  leaves?: Array<Parameters<typeof validateLeave>[0] & { id?: string; budgetId?: string }>;
   skippedBills?: Array<{ billId: string; skipDate: string }>;
   billAssignments?: Array<{ billId: string; billDueDate: string; paycheckDate: string }>;
   incomeOverrides?: Array<{ incomeId: string; paycheckDate: string; amount: number }>;
@@ -464,6 +548,13 @@ export function validateDraftOverlay(overlay: {
     const result = validateDebt(debt);
     if (!result.valid) {
       errors.push(`Debt[${index}]: ${result.errors.join(', ')}`);
+    }
+  });
+
+  overlay.leaves?.forEach((leave, index) => {
+    const result = validateLeave(leave);
+    if (!result.valid) {
+      errors.push(`Leave[${index}]: ${result.errors.join(', ')}`);
     }
   });
 

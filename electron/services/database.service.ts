@@ -3,7 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { CryptoService } from './crypto.service';
-import { validateBill, validateIncome, validateGoal, validateDebt, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid } from './validation.service';
+import { validateBill, validateIncome, validateGoal, validateDebt, validateLeave, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
 import type {
   AppSettings,
@@ -16,6 +16,8 @@ import type {
   DebtInput,
   Income,
   IncomeOverride,
+  Leave,
+  LeaveInput,
   SavingsGoal,
   SavingsGoalInput,
   SkippedBill,
@@ -34,6 +36,8 @@ export type {
   DebtInput,
   Income,
   IncomeOverride,
+  Leave,
+  LeaveInput,
   SavingsGoal,
   SavingsGoalInput,
   SkippedBill,
@@ -126,6 +130,24 @@ interface DebtRow {
   data: string;
   created_at: string;
   updated_at: string;
+}
+
+interface LeaveRow {
+  id: string;
+  budget_id: string;
+  data: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LeavePayload {
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -283,13 +305,20 @@ export class DatabaseService {
       logger.info('Migration to schema version 10 complete (encrypted schedule junctions)');
     }
 
+    // Schema version 11: Paid/unpaid leave periods
+    if (currentVersion < 11) {
+      this.migrateToVersion11();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (11)').run();
+      logger.info('Migration to schema version 11 complete (leaves)');
+    }
+
     try {
       fs.chmodSync(this.dbPath, 0o600);
     } catch (error) {
       logger.warn('Failed to set database file permissions:', error);
     }
     
-    logger.info('Database initialized', { version: Math.max(currentVersion, 10) });
+    logger.info('Database initialized', { version: Math.max(currentVersion, 11) });
   }
 
   private migrateToVersion5(): void {
@@ -648,6 +677,23 @@ export class DatabaseService {
     }
   }
 
+  private migrateToVersion11(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS leaves (
+        id TEXT PRIMARY KEY,
+        budget_id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_leaves_budget ON leaves(budget_id);
+    `);
+    logger.info('Created leaves table');
+  }
+
   private migrateToVersion4(): void {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -805,6 +851,46 @@ export class DatabaseService {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  private mapLeaveRow(row: LeaveRow): Leave {
+    const decrypted = this.crypto.decryptObject<LeavePayload>(row.data);
+    return {
+      id: row.id,
+      budgetId: row.budget_id,
+      incomeId: decrypted.incomeId,
+      name: decrypted.name,
+      type: decrypted.type,
+      startDate: decrypted.startDate,
+      endDate: decrypted.endDate,
+      ...(decrypted.targetCashOnHand !== undefined
+        ? { targetCashOnHand: decrypted.targetCashOnHand }
+        : {}),
+      ...(decrypted.minCashOnHand !== undefined
+        ? { minCashOnHand: decrypted.minCashOnHand }
+        : {}),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private toLeavePayload(input: LeaveInput): LeavePayload {
+    const payload: LeavePayload = {
+      incomeId: input.incomeId,
+      name: input.name.trim(),
+      type: input.type,
+      startDate: input.startDate,
+      endDate: input.endDate,
+    };
+    if (input.type === 'unpaid') {
+      if (input.targetCashOnHand !== undefined) {
+        payload.targetCashOnHand = input.targetCashOnHand;
+      }
+      if (input.minCashOnHand !== undefined) {
+        payload.minCashOnHand = input.minCashOnHand;
+      }
+    }
+    return payload;
   }
 
   private mapSkippedBillRow(row: SkippedBillRow): SkippedBill {
@@ -996,6 +1082,7 @@ export class DatabaseService {
     // Use transaction for atomic deletion of budget and all associated data
     const deleteBudgetTransaction = this.db.transaction(() => {
       // Delete all associated data first (cascade)
+      this.db!.prepare('DELETE FROM leaves WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM debts WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM goals WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM bill_assignments WHERE budget_id = ?').run(id);
@@ -1142,6 +1229,17 @@ export class DatabaseService {
       const mapped = this.mapIncomeOverrideRow(row);
       if (mapped.incomeId === id) {
         deleteOverride.run(row.id);
+      }
+    }
+
+    const leaveRows = this.db.prepare(
+      'SELECT * FROM leaves WHERE budget_id = ?'
+    ).all(budgetId) as LeaveRow[];
+    const deleteLeave = this.db.prepare('DELETE FROM leaves WHERE id = ?');
+    for (const row of leaveRows) {
+      const mapped = this.mapLeaveRow(row);
+      if (mapped.incomeId === id) {
+        deleteLeave.run(row.id);
       }
     }
 
@@ -1635,6 +1733,7 @@ export class DatabaseService {
       billAssignments: this.getBillAssignments(budgetId),
       incomeOverrides: this.getIncomeOverrides(budgetId),
       debts: this.getDebts(budgetId),
+      leaves: this.getLeaves(budgetId),
       budget: this.getBudgetById(budgetId),
     }));
 
@@ -1741,6 +1840,105 @@ export class DatabaseService {
       logger.info('Debt deleted', { id, budgetId });
     }
     
+    return result.changes > 0;
+  }
+
+  // Leave methods
+  getLeaves(budgetId: string): Leave[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = this.db.prepare(
+      'SELECT * FROM leaves WHERE budget_id = ?'
+    ).all(budgetId) as LeaveRow[];
+
+    return rows
+      .map(row => this.mapLeaveRow(row))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt));
+  }
+
+  getLeaveById(id: string, budgetId: string): Leave | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = this.db.prepare(
+      'SELECT * FROM leaves WHERE id = ? AND budget_id = ?'
+    ).get(id, budgetId) as LeaveRow | undefined;
+
+    if (!row) return null;
+    return this.mapLeaveRow(row);
+  }
+
+  createLeave(budgetId: string, input: LeaveInput): Leave {
+    if (!this.db) throw new Error('Database not initialized');
+
+    assertValid(validateLeave(input), 'Invalid leave data');
+
+    if (!this.getIncomeById(input.incomeId, budgetId)) {
+      throw new Error('Income source not found for leave');
+    }
+
+    const id = this.crypto.generateId();
+    const now = new Date().toISOString();
+    const payload = this.toLeavePayload(input);
+    const encryptedData = this.crypto.encryptObject(payload);
+
+    this.db.prepare(`
+      INSERT INTO leaves (id, budget_id, data, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, budgetId, encryptedData, now, now);
+
+    logger.info('Leave created', { id, budgetId, incomeId: input.incomeId, type: input.type });
+
+    return {
+      id,
+      budgetId,
+      ...payload,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  updateLeave(id: string, budgetId: string, input: LeaveInput): Leave | null {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existing = this.getLeaveById(id, budgetId);
+    if (!existing) return null;
+
+    assertValid(validateLeave(input), 'Invalid leave data');
+
+    if (!this.getIncomeById(input.incomeId, budgetId)) {
+      throw new Error('Income source not found for leave');
+    }
+
+    const now = new Date().toISOString();
+    const payload = this.toLeavePayload(input);
+    const encryptedData = this.crypto.encryptObject(payload);
+
+    this.db.prepare(`
+      UPDATE leaves SET data = ?, updated_at = ? WHERE id = ? AND budget_id = ?
+    `).run(encryptedData, now, id, budgetId);
+
+    logger.info('Leave updated', { id, budgetId });
+
+    return {
+      id,
+      budgetId,
+      ...payload,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    };
+  }
+
+  deleteLeave(id: string, budgetId: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.prepare(
+      'DELETE FROM leaves WHERE id = ? AND budget_id = ?'
+    ).run(id, budgetId);
+
+    if (result.changes > 0) {
+      logger.info('Leave deleted', { id, budgetId });
+    }
+
     return result.changes > 0;
   }
 }

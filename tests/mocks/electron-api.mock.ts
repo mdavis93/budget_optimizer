@@ -51,6 +51,19 @@ export const createMockGoal = (overrides = {}) => ({
   ...overrides,
 });
 
+export const createMockLeave = (overrides = {}) => ({
+  id: 'leave-1',
+  budgetId: 'budget-1',
+  incomeId: 'income-1',
+  name: 'Medical Leave',
+  type: 'unpaid' as const,
+  startDate: '2026-02-01',
+  endDate: '2026-02-14',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
+
 export const createMockPaycheck = (overrides = {}) => ({
   date: '2026-01-15',
   incomeSources: [{ id: 'income-1', name: 'Salary', amount: 2000 }],
@@ -162,6 +175,7 @@ export const createMockElectronAPI = () => {
           billAssignments: [],
           incomeOverrides: [],
           debts: [],
+          leaves: [],
           budget: createMockBudget(),
         },
       }),
@@ -271,6 +285,13 @@ export const createMockElectronAPI = () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       }),
+      delete: vi.fn().mockResolvedValue({ success: true }),
+    },
+
+    leaves: {
+      getAll: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      create: vi.fn().mockResolvedValue({ success: true, data: createMockLeave() }),
+      update: vi.fn().mockResolvedValue({ success: true, data: createMockLeave() }),
       delete: vi.fn().mockResolvedValue({ success: true }),
     },
 

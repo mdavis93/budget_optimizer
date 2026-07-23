@@ -115,6 +115,13 @@ const api = {
       ipcRenderer.invoke('debts:get-all-with-amortization', overlay),
   },
 
+  leaves: {
+    getAll: () => ipcRenderer.invoke('leaves:get-all'),
+    create: (input: LeaveInput) => ipcRenderer.invoke('leaves:create', input),
+    update: (id: string, input: LeaveInput) => ipcRenderer.invoke('leaves:update', id, input),
+    delete: (id: string) => ipcRenderer.invoke('leaves:delete', id),
+  },
+
   schedule: {
     /** Full schedule: project incomes/bills, exact assignment, allocate goals, attach reconciliation analysis. */
     build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
@@ -205,6 +212,16 @@ interface DebtInput {
   monthlyPayment: number;
 }
 
+interface LeaveInput {
+  incomeId: string;
+  name: string;
+  type: 'paid' | 'unpaid';
+  startDate: string;
+  endDate: string;
+  targetCashOnHand?: number;
+  minCashOnHand?: number;
+}
+
 interface ScheduleData {
   startDate: string;
   endDate: string;
@@ -229,6 +246,7 @@ interface DraftOverlayInput {
   bills?: unknown[];
   goals?: unknown[];
   debts?: unknown[];
+  leaves?: unknown[];
   skippedBills?: unknown[];
   billAssignments?: unknown[];
   incomeOverrides?: unknown[];

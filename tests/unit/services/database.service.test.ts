@@ -265,6 +265,13 @@ describe('DatabaseService', () => {
       db.skipBill(budget.id, bill.id, '2026-03-20');
       db.assignBillToPaycheck(budget.id, bill.id, '2026-03-20', '2026-03-15');
       db.setIncomeOverride(budget.id, income.id, '2026-03-15', 2800);
+      db.createLeave(budget.id, {
+        incomeId: income.id,
+        name: 'Medical',
+        type: 'unpaid',
+        startDate: '2026-03-01',
+        endDate: '2026-03-15',
+      });
 
       expect(db.deleteBudget(budget.id)).toBe(true);
       expect(db.getBudgetById(budget.id)).toBeNull();
@@ -272,9 +279,106 @@ describe('DatabaseService', () => {
       expect(db.getAllBills(budget.id)).toEqual([]);
       expect(db.getAllGoals(budget.id)).toEqual([]);
       expect(db.getDebts(budget.id)).toEqual([]);
+      expect(db.getLeaves(budget.id)).toEqual([]);
       expect(db.getSkippedBills(budget.id)).toEqual([]);
       expect(db.getBillAssignments(budget.id)).toEqual([]);
       expect(db.getIncomeOverrides(budget.id)).toEqual([]);
+    });
+
+    it('creates updates and cascades leaves with income delete', () => {
+      const budget = db.createBudget({ name: 'Leave Budget' });
+      const income = db.createIncome(budget.id, {
+        sourceName: 'Salary',
+        amount: 3000,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+
+      const leave = db.createLeave(budget.id, {
+        incomeId: income.id,
+        name: 'Vacation',
+        type: 'paid',
+        startDate: '2026-06-01',
+        endDate: '2026-06-14',
+      });
+      expect(db.getLeaves(budget.id)).toHaveLength(1);
+      expect(db.getLeaveById(leave.id, budget.id)?.name).toBe('Vacation');
+
+      const updated = db.updateLeave(leave.id, budget.id, {
+        incomeId: income.id,
+        name: 'Medical Leave',
+        type: 'unpaid',
+        startDate: '2026-06-01',
+        endDate: '2026-06-21',
+        targetCashOnHand: 90,
+        minCashOnHand: 35,
+      });
+      expect(updated?.type).toBe('unpaid');
+      expect(updated?.name).toBe('Medical Leave');
+      expect(updated?.targetCashOnHand).toBe(90);
+      expect(updated?.minCashOnHand).toBe(35);
+      expect(db.getLeaveById(leave.id, budget.id)?.targetCashOnHand).toBe(90);
+
+      expect(() =>
+        db.createLeave(budget.id, {
+          incomeId: 'missing-income-id-xx',
+          name: 'Orphan',
+          type: 'unpaid',
+          startDate: '2026-07-01',
+          endDate: '2026-07-02',
+        })
+      ).toThrow(/Income source not found/);
+
+      expect(db.updateLeave('missing-leave', budget.id, {
+        incomeId: income.id,
+        name: 'Nope',
+        type: 'paid',
+        startDate: '2026-01-01',
+        endDate: '2026-01-02',
+      })).toBeNull();
+
+      expect(db.deleteLeave(leave.id, budget.id)).toBe(true);
+      expect(db.deleteLeave(leave.id, budget.id)).toBe(false);
+
+      const leave2 = db.createLeave(budget.id, {
+        incomeId: income.id,
+        name: 'Cascade',
+        type: 'unpaid',
+        startDate: '2026-08-01',
+        endDate: '2026-08-07',
+      });
+      expect(leave2.id).toBeTruthy();
+      expect(db.deleteIncome(income.id, budget.id)).toBe(true);
+      expect(db.getLeaves(budget.id)).toEqual([]);
+    });
+
+    it('rejects leave update when income source is missing', () => {
+      const budget = db.createBudget({ name: 'Leave Orphan Update' });
+      const income = db.createIncome(budget.id, {
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      const leave = db.createLeave(budget.id, {
+        incomeId: income.id,
+        name: 'PTO',
+        type: 'paid',
+        startDate: '2026-05-01',
+        endDate: '2026-05-05',
+      });
+
+      expect(() =>
+        db.updateLeave(leave.id, budget.id, {
+          incomeId: 'missing-income-id-yy',
+          name: 'PTO',
+          type: 'paid',
+          startDate: '2026-05-01',
+          endDate: '2026-05-05',
+        })
+      ).toThrow(/Income source not found/);
     });
   });
 
@@ -685,6 +789,23 @@ describe('DatabaseService', () => {
         () => uninitialized.createDebt(budgetId, debtInput),
         () => uninitialized.updateDebt('x', budgetId, { apr: 5 }),
         () => uninitialized.deleteDebt('x', budgetId),
+        () => uninitialized.getLeaves(budgetId),
+        () => uninitialized.getLeaveById('x', budgetId),
+        () => uninitialized.createLeave(budgetId, {
+          incomeId: 'inc-1',
+          name: 'Leave',
+          type: 'unpaid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        }),
+        () => uninitialized.updateLeave('x', budgetId, {
+          incomeId: 'inc-1',
+          name: 'Leave',
+          type: 'paid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        }),
+        () => uninitialized.deleteLeave('x', budgetId),
       ];
 
       for (const call of calls) {

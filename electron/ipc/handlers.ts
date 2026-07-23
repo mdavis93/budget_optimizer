@@ -1,7 +1,7 @@
 import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
-import { DatabaseService, DebtInput } from '../services/database.service';
+import { DatabaseService, DebtInput, LeaveInput } from '../services/database.service';
 import { SchedulerService } from '../services/scheduler.service';
 import type { DebtPayoffInfo } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
@@ -750,6 +750,52 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         );
         return { debt, bill: linkedBill || null, amortization };
       });
+    });
+  }));
+
+  // Leave Management
+  ipcMain.handle('leaves:get-all', withBudgetGuard(services, async (): Promise<ApiResult<import('@shared/types').Leave[]>> => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
+    }
+    return ipcData('leaves:get-all', () => database.getLeaves(state.budgetId!));
+  }));
+
+  ipcMain.handle('leaves:create', withBudgetGuard(services, async (_, input: LeaveInput): Promise<ApiResult<import('@shared/types').Leave>> => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
+    }
+    return ipcData('leaves:create', () => database.createLeave(state.budgetId!, input));
+  }));
+
+  ipcMain.handle('leaves:update', withBudgetGuard(services, async (_, id: string, input: LeaveInput) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
+    }
+    const result = await ipcData('leaves:update', () => database.updateLeave(id, state.budgetId!, input));
+    if (result.success && !result.data) {
+      return { success: false, error: 'Leave not found' };
+    }
+    return result;
+  }));
+
+  ipcMain.handle('leaves:delete', withBudgetGuard(services, async (_, id: string) => {
+    const { budgetManager, database } = ready();
+    const state = budgetManager.getCurrentState();
+    if (!state.budgetId) {
+      return { success: false, error: 'No budget selected' };
+    }
+    return ipcVoid('leaves:delete', () => {
+      const deleted = database.deleteLeave(id, state.budgetId!);
+      if (!deleted) {
+        throw new Error('Leave not found');
+      }
     });
   }));
 }

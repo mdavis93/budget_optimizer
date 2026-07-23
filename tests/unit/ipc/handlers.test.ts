@@ -68,6 +68,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
     crypto: {},
     database: {
       getDebts: vi.fn(() => []),
+      getLeaves: vi.fn(() => []),
       getSettings: vi.fn(() => ({ autoLockMinutes: 5 })),
       close: vi.fn(),
     },
@@ -118,6 +119,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
         billAssignments: [],
         incomeOverrides: [],
         debts: [],
+        leaves: [],
         budget: { id: 'budget-1', name: 'Test' },
       })),
     },
@@ -452,6 +454,10 @@ describe('ipc handlers', () => {
           createDebt: vi.fn(() => ({ id: 'debt-1' })),
           updateDebt: vi.fn(() => ({ id: 'debt-1', apr: 10 })),
           deleteDebt: vi.fn(() => true),
+          getLeaves: vi.fn(() => [{ id: 'leave-1' }]),
+          createLeave: vi.fn(() => ({ id: 'leave-1' })),
+          updateLeave: vi.fn(() => ({ id: 'leave-1', type: 'unpaid' })),
+          deleteLeave: vi.fn(() => true),
           getDebtById: vi.fn(() => ({
             id: 'debt-1',
             billId: 'bill-0001',
@@ -583,6 +589,7 @@ describe('ipc handlers', () => {
           billAssignments: [],
           incomeOverrides: [],
           debts: [],
+          leaves: [],
           budget: { id: 'budget-1', name: 'Test' },
         },
       });
@@ -686,6 +693,30 @@ describe('ipc handlers', () => {
         data: expect.objectContaining({ monthsToPayoff: 0 }),
       });
       await expect(ipcMain.invoke('debts:get-all-with-amortization')).resolves.toEqual({ success: true, data: [] });
+
+      await expect(ipcMain.invoke('leaves:get-all')).resolves.toEqual({
+        success: true,
+        data: [{ id: 'leave-1' }],
+      });
+      await expect(
+        ipcMain.invoke('leaves:create', {
+          incomeId: 'income-0001',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+        })
+      ).resolves.toEqual({ success: true, data: { id: 'leave-1' } });
+      await expect(
+        ipcMain.invoke('leaves:update', 'leave-1', {
+          incomeId: 'income-0001',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+        })
+      ).resolves.toEqual({ success: true, data: { id: 'leave-1', type: 'unpaid' } });
+      await expect(ipcMain.invoke('leaves:delete', 'leave-1')).resolves.toEqual({ success: true });
     });
 
     it('returns database init error when biometric unlock succeeds but initialization fails', async () => {
@@ -855,6 +886,8 @@ describe('ipc handlers', () => {
           updateDebt: vi.fn(() => null),
           deleteDebt: vi.fn(() => false),
           getDebtById: vi.fn(() => null),
+          updateLeave: vi.fn(() => null),
+          deleteLeave: vi.fn(() => false),
         },
       });
       registerIpcHandlers(ipcMain as never, services as never);
@@ -874,6 +907,23 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('debts:get-amortization', 'missing')).resolves.toEqual({
         success: false,
         error: 'Debt not found',
+      });
+
+      await expect(
+        ipcMain.invoke('leaves:update', 'missing', {
+          incomeId: 'income-0001',
+          name: 'x',
+          type: 'paid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'Leave not found',
+      });
+      await expect(ipcMain.invoke('leaves:delete', 'missing')).resolves.toEqual({
+        success: false,
+        error: 'Leave not found',
       });
     });
 
@@ -1002,6 +1052,39 @@ describe('ipc handlers', () => {
         error: 'No budget selected',
       });
       await expect(ipcMain.invoke('debts:get-all-with-amortization')).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+
+      await expect(ipcMain.invoke('leaves:get-all')).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(
+        ipcMain.invoke('leaves:create', {
+          incomeId: 'income-1',
+          name: 'x',
+          type: 'unpaid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(
+        ipcMain.invoke('leaves:update', 'leave-1', {
+          incomeId: 'income-1',
+          name: 'x',
+          type: 'paid',
+          startDate: '2026-01-01',
+          endDate: '2026-01-02',
+        })
+      ).resolves.toEqual({
+        success: false,
+        error: 'No budget selected',
+      });
+      await expect(ipcMain.invoke('leaves:delete', 'leave-1')).resolves.toEqual({
         success: false,
         error: 'No budget selected',
       });
