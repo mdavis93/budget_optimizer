@@ -10,6 +10,7 @@ import {
   startOfDay,
 } from 'date-fns';
 import { Income, Bill, SavingsGoal } from '../database.service';
+import type { Leave } from '../database.service';
 import { formatCurrency, roundCurrency } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
@@ -23,6 +24,7 @@ import {
   billOccurrenceKey,
 } from './types';
 import { projectIncome, projectBills } from './projection';
+import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
 import { getUniquePaycheckDates } from './assignment';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
@@ -420,7 +422,8 @@ export function generateGoalProjections(
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
   minSavingsPerPaycheck: number = 0,
   debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
-  incomeOverrides: Map<string, number> = new Map()
+  incomeOverrides: Map<string, number> = new Map(),
+  leaves: Leave[] = []
 ): GoalProjection[] {
   if (goals.length === 0) {
     return [];
@@ -437,12 +440,7 @@ export function generateGoalProjections(
     allIncomes.push(...projectIncome(income, startDate, endDate));
   }
 
-  for (const projected of allIncomes) {
-    const key = `${projected.sourceId}-${format(projected.date, 'yyyy-MM-dd')}`;
-    if (incomeOverrides.has(key)) {
-      projected.amount = incomeOverrides.get(key)!;
-    }
-  }
+  applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
 
   const incomeAttachedBillsRaw = bills.filter(b => b.isIncomeAttached && b.preferredIncomeSourceId);
   const regularBills = bills.filter(b => !b.isIncomeAttached);

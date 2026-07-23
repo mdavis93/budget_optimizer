@@ -3,6 +3,7 @@ import {
   BillAssignment,
   Income,
   IncomeOverride,
+  Leave,
   SkippedBill,
 } from '../types';
 import { DraftBudgetFields } from '../types/draft';
@@ -27,7 +28,11 @@ export function buildScheduleOverlayHash(params: {
   return `${skipped}::${assignments}::${overrides}`;
 }
 
-export function buildScheduleEntityHash(incomes: Income[], bills: Bill[]): string {
+export function buildScheduleEntityHash(
+  incomes: Income[],
+  bills: Bill[],
+  leaves: Leave[] = []
+): string {
   const incomeData = incomes
     .map((i) => `${i.id}-${i.amount}-${i.sourceName}-${i.cadence}-${i.startDate}-${i.isActive}`)
     .sort()
@@ -36,7 +41,14 @@ export function buildScheduleEntityHash(incomes: Income[], bills: Bill[]): strin
     .map((b) => `${b.id}-${b.budgetedAmount}-${b.creditorName}-${b.dueDay}-${b.priority}`)
     .sort()
     .join('|');
-  return `${incomeData}::${billData}`;
+  const leaveData = leaves
+    .map(
+      (l) =>
+        `${l.id}-${l.incomeId}-${l.type}-${l.startDate}-${l.endDate}-${l.targetCashOnHand ?? ''}-${l.minCashOnHand ?? ''}`
+    )
+    .sort()
+    .join('|');
+  return `${incomeData}::${billData}::${leaveData}`;
 }
 
 export function buildBudgetFieldsHash(budgetFields: DraftBudgetFields | null | undefined): string {
@@ -58,9 +70,10 @@ export function buildScheduleInputHash(params: {
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
+  leaves?: Leave[];
   budgetFields?: DraftBudgetFields | null;
 }): string {
-  const entityHash = buildScheduleEntityHash(params.incomes, params.bills);
+  const entityHash = buildScheduleEntityHash(params.incomes, params.bills, params.leaves ?? []);
   const overlayHash = buildScheduleOverlayHash({
     skippedBills: params.skippedBills,
     billAssignments: params.billAssignments,

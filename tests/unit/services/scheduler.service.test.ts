@@ -243,6 +243,73 @@ describe('SchedulerService', () => {
       expect(schedule.startDate).toBe('2026-01-01');
     });
 
+    it('omits unpaid leave paychecks and keeps paid leave income', () => {
+      const unpaidSchedule = scheduler.generateSchedule(
+        [income],
+        [],
+        '2026-01-01',
+        2,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0,
+        new Map(),
+        new Map(),
+        [
+          {
+            id: 'leave-1',
+            budgetId: 'budget-1',
+            incomeId: income.id,
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-01-01',
+            endDate: '2026-01-31',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]
+      );
+
+      const januaryPaychecks = unpaidSchedule.paychecks.filter((p) => p.date.startsWith('2026-01'));
+      expect(januaryPaychecks.length).toBe(0);
+      expect(unpaidSchedule.paychecks.every((p) => p.totalIncome > 0)).toBe(true);
+
+      const paidSchedule = scheduler.generateSchedule(
+        [income],
+        [],
+        '2026-01-01',
+        2,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0,
+        new Map(),
+        new Map(),
+        [
+          {
+            id: 'leave-2',
+            budgetId: 'budget-1',
+            incomeId: income.id,
+            name: 'Vacation',
+            type: 'paid',
+            startDate: '2026-01-01',
+            endDate: '2026-01-31',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]
+      );
+      const paidJanuary = paidSchedule.paychecks.filter((p) => p.date.startsWith('2026-01'));
+      expect(paidJanuary.length).toBeGreaterThan(0);
+      expect(paidJanuary.every((p) => p.totalIncome === 2000)).toBe(true);
+    });
+
     it('calculates summary correctly', () => {
       const schedule = scheduler.generateSchedule(
         [income],

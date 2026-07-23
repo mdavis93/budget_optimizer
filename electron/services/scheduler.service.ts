@@ -6,7 +6,9 @@ import {
   isAfter,
 } from 'date-fns';
 import { Income, Bill, SavingsGoal } from './database.service';
+import type { Leave } from './database.service';
 import { projectIncome, projectBills } from './scheduler/projection';
+import { applyProjectedIncomeAdjustments } from './scheduler/incomeAdjustments';
 import { assignBillsToPaychecks, getUniquePaycheckDates, findPreferredPaycheck } from './scheduler/assignment';
 import {
   convertToLegacyEntries,
@@ -78,7 +80,8 @@ export class SchedulerService {
     minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
     minSavingsPerPaycheck: number = 0,
     debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
-    incomeOverrides: Map<string, number> = new Map()
+    incomeOverrides: Map<string, number> = new Map(),
+    leaves: Leave[] = []
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
     // Horizon spans the latest goal deadline (clamped to [12, 60] months) so
@@ -91,12 +94,7 @@ export class SchedulerService {
       allIncomes.push(...projectIncome(income, startDate, endDate));
     }
 
-    for (const projected of allIncomes) {
-      const key = `${projected.sourceId}-${format(projected.date, 'yyyy-MM-dd')}`;
-      if (incomeOverrides.has(key)) {
-        projected.amount = incomeOverrides.get(key)!;
-      }
-    }
+    applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
 
     // Separate income-attached bills from regular bills BEFORE projection
     // Income-attached bills don't use date-based projection - they attach to every matching paycheck
