@@ -149,6 +149,7 @@ function PaycheckView({
     );
   }
 
+  const validPaycheckDates = new Set(paychecks.map((p) => p.date));
 
   return (
     <div className="space-y-4">
@@ -175,6 +176,7 @@ function PaycheckView({
             paycheck.bills,
             billAssignments,
             paycheck.date,
+            validPaycheckDates
           );
           const unpayableCount = visibleBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
           const hasUnpayableBills = unpayableCount > 0;
@@ -331,6 +333,7 @@ function PaycheckView({
                   onDragEnd={onDragEnd}
                   draggedBill={draggedBill}
                   billAssignments={billAssignments}
+                  validPaycheckDates={validPaycheckDates}
                   isAssigning={isAssigning}
                   incomeOverrides={incomeOverrides}
                   onSaveIncomeOverride={onSaveIncomeOverride}

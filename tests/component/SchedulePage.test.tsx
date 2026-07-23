@@ -135,6 +135,26 @@ vi.mock('../../src/components/schedule', () => ({
       ))}
     </div>
   ),
+  ManualMovesPanel: ({
+    assignments,
+    onRestoreBill,
+    onRestoreAll,
+    onClearStale,
+  }: {
+    assignments: Array<{ billId: string; billDueDate: string }>;
+    onRestoreBill: (billId: string, billDueDate: string) => void;
+    onRestoreAll: () => void;
+    onClearStale: (dates: ReadonlySet<string>) => void;
+  }) => (
+    <div data-testid="mock-manual-moves-panel">
+      <div>Manual Moves ({assignments.length})</div>
+      <button onClick={() => onRestoreBill(assignments[0].billId, assignments[0].billDueDate)}>
+        mock-panel-restore
+      </button>
+      <button onClick={onRestoreAll}>mock-panel-restore-all</button>
+      <button onClick={() => onClearStale(new Set(['2026-01-15']))}>mock-panel-clear-stale</button>
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/ReconciliationPage', () => ({
@@ -160,6 +180,8 @@ describe('SchedulePage', () => {
   const skipBill = vi.fn(() => true);
   const unskipBill = vi.fn(() => true);
   const removeBillAssignment = vi.fn(() => true);
+  const clearBillAssignments = vi.fn(() => true);
+  const clearStaleBillAssignments = vi.fn(() => true);
   const assignBill = vi.fn(() => true);
   const setIncomeOverride = vi.fn(() => true);
   const removeIncomeOverride = vi.fn(() => true);
@@ -174,6 +196,8 @@ describe('SchedulePage', () => {
       skipBill,
       unskipBill,
       removeBillAssignment,
+      clearBillAssignments,
+      clearStaleBillAssignments,
       assignBill,
       setIncomeOverride,
       removeIncomeOverride,
@@ -208,6 +232,76 @@ describe('SchedulePage', () => {
       expect(screen.getAllByText('$2,000.00').length).toBeGreaterThan(0);
       expect(screen.getByText('Total Expenses')).toBeInTheDocument();
       expect(screen.getByText('Mock Paycheck View (1)')).toBeInTheDocument();
+    });
+
+    it('shows busy overlay with rebuilding copy when schedule is loading', () => {
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+        }),
+        generateSchedule,
+        isLoading: true,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      expect(screen.getByTestId('schedule-busy-overlay')).toBeInTheDocument();
+      expect(screen.getByText('Rebuilding schedule…')).toBeInTheDocument();
+    });
+
+    it('does not show busy overlay when schedule is not loading', () => {
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
+    });
+
+    it('renders Manual Moves panel and restores all assignments', async () => {
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1', creditorName: 'Rent' }],
+        billAssignments: [
+          {
+            id: 'a-1',
+            billId: 'bill-1',
+            billDueDate: '2026-01-15',
+            paycheckDate: '2026-01-29',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+        }),
+        generateSchedule,
+        isLoading: false,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      expect(screen.getByTestId('mock-manual-moves-panel')).toBeInTheDocument();
+      expect(screen.getByText('Manual Moves (1)')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('mock-panel-restore-all'));
+      await waitFor(() => {
+        expect(clearBillAssignments).toHaveBeenCalled();
+      });
     });
 
     it('renders Break Glass Advisor and declines to hide it', async () => {
@@ -413,6 +507,7 @@ describe('SchedulePage', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('schedule-busy-overlay')).toBeInTheDocument();
+        expect(screen.getByText('Applying adjustments…')).toBeInTheDocument();
         expect(screen.getByTestId('break-glass-applying')).toBeInTheDocument();
         expect(screen.queryByText('Clear Break-Glass on Jul 31')).not.toBeInTheDocument();
       });
@@ -611,12 +706,14 @@ describe('SchedulePage', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'inc-1' }],
         bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
           reconciliation: {
             needsReconciliation: true,
-            shortfalls: [{ paycheckDate: '2026-01-15', deficit: 100 }],
+            shortfalls: [{ paycheckDate: '2026-01-15', deficit: 100, budgetRemaining: -100, bills: [] }],
             totalDeficit: 100,
             proposedFixes: [{ id: 'fix-1' }],
           },
@@ -644,11 +741,13 @@ describe('SchedulePage', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'inc-1' }],
         bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
         schedule: createMockSchedule({
           recommendations: ['deficit shortfall detected'],
           reconciliation: {
             needsReconciliation: true,
-            shortfalls: [{ paycheckDate: '2026-01-15', deficit: 100 }],
+            shortfalls: [{ paycheckDate: '2026-01-15', deficit: 100, budgetRemaining: -100, bills: [] }],
             totalDeficit: 100,
             proposedFixes: [{ id: 'fix-1' }],
           },
@@ -705,7 +804,7 @@ describe('SchedulePage', () => {
           recommendations: [],
           reconciliation: {
             needsReconciliation: true,
-            shortfalls: [{ paycheckDate: '2026-01-15', deficit: 100 }],
+            shortfalls: [{ paycheckDate: '2026-01-15', deficit: 100, budgetRemaining: -100, bills: [] }],
             totalDeficit: 100,
             proposedFixes: [{ id: 'fix-1' }],
           },
@@ -781,6 +880,8 @@ describe('SchedulePage', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'inc-1' }],
         bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
         schedule: createMockSchedule({
           recommendations: ['Increase target cash buffer'],
           reconciliation: {

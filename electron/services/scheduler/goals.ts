@@ -26,7 +26,7 @@ import {
 import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
 import { resolvePaycheckCashOnHand } from './cashOnHandOverrides';
-import { getUniquePaycheckDates } from './assignment';
+import { getUniquePaycheckDates, pruneManualAssignmentsToPaychecks } from './assignment';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
 
@@ -471,6 +471,10 @@ export function generateGoalProjections(
   });
 
   const paycheckDates = getUniquePaycheckDates(allIncomes);
+  const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
+    manualAssignments,
+    paycheckDates
+  );
   const cashOnHandByDate = resolvePaycheckCashOnHand(
     paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
     leaves,
@@ -485,7 +489,7 @@ export function generateGoalProjections(
     startingBalance,
     {
       skippedBills,
-      manualAssignments,
+      manualAssignments: effectiveManualAssignments,
       incomeAttachedBillsRaw,
       targetCashOnHand: maxBudgetRemaining,
       minCashOnHand,

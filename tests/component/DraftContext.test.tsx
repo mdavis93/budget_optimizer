@@ -137,6 +137,12 @@ function DraftHarness() {
       <button onClick={() => draft.unskipBill('bill-1', '2026-01-15')}>unskip-bill</button>
       <button onClick={() => draft.assignBill('bill-1', '2026-01-15', '2026-01-29')}>assign-bill</button>
       <button onClick={() => draft.removeBillAssignment('bill-1', '2026-01-15')}>remove-assignment</button>
+      <button onClick={() => draft.clearBillAssignments()}>clear-assignments</button>
+      <button
+        onClick={() => draft.clearStaleBillAssignments(new Set(['2026-01-01']))}
+      >
+        clear-stale-assignments
+      </button>
       <button onClick={() => draft.setIncomeOverride('income-1', '2026-01-29', 1500)}>set-override</button>
       <button onClick={() => draft.removeIncomeOverride('income-1', '2026-01-29')}>remove-override</button>
       <button
@@ -905,6 +911,45 @@ describe('DraftContext', () => {
 
 
 
+    it('clears all bill assignments in draft mode', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('assign-bill'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('1');
+        expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('true');
+      });
+
+      fireEvent.click(screen.getByText('clear-assignments'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
+      });
+      // Clearing back to the committed empty list re-syncs dirty domains.
+      expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
+    });
+    it('clears only stale bill assignments in draft mode', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('assign-bill'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('1');
+        expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-01-29');
+      });
+
+      // Harness valid set is only 2026-01-01, so the 2026-01-29 lock is stale.
+      fireEvent.click(screen.getByText('clear-stale-assignments'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
+      });
+    });
     it('ignores duplicate skip entries in draft mode', async () => {
       renderProvider();
       await waitFor(() => {

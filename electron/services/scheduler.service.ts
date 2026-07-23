@@ -10,7 +10,7 @@ import type { Leave } from './database.service';
 import { projectIncome, projectBills } from './scheduler/projection';
 import { applyProjectedIncomeAdjustments } from './scheduler/incomeAdjustments';
 import { resolvePaycheckCashOnHand } from './scheduler/cashOnHandOverrides';
-import { assignBillsToPaychecks, getUniquePaycheckDates, findPreferredPaycheck } from './scheduler/assignment';
+import { assignBillsToPaychecks, getUniquePaycheckDates, findPreferredPaycheck, pruneManualAssignmentsToPaychecks } from './scheduler/assignment';
 import {
   convertToLegacyEntries,
   calculateSummary,
@@ -132,6 +132,10 @@ export class SchedulerService {
     });
 
     const paycheckDates = getUniquePaycheckDates(allIncomes);
+    const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
+      manualAssignments,
+      paycheckDates
+    );
     const cashOnHandByDate = resolvePaycheckCashOnHand(
       paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
       leaves,
@@ -145,7 +149,7 @@ export class SchedulerService {
       uniqueBills,
       startingBalance,
       skippedBills,
-      manualAssignments,
+      effectiveManualAssignments,
       incomeAttachedBillsRaw,
       maxBudgetRemaining,
       goals,

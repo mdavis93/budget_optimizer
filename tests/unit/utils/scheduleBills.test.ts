@@ -67,6 +67,33 @@ describe('scheduleBills', () => {
       const bills = filterPaycheckBills([affirmBill], [], '2026-06-12');
       expect(bills).toHaveLength(1);
     });
+
+    it('shows bills whose assignment targets a paycheck that no longer exists', () => {
+      const staleAssignments: BillAssignment[] = [
+        {
+          id: 'assign-stale',
+          billId: 'bill-rav4',
+          billDueDate: '2026-09-01',
+          paycheckDate: '2026-09-04', // leave-omitted paycheck
+          createdAt: '2026-06-09T00:00:00.000Z',
+        },
+      ];
+      const rav4: PaycheckBill = {
+        billId: 'bill-rav4',
+        creditorName: 'Car (RAV4)',
+        amount: 225,
+        dueDay: 1,
+        priority: 'critical',
+        billDate: '2026-09-01',
+      };
+      const visible = filterPaycheckBills(
+        [rav4, affirmBill],
+        staleAssignments,
+        '2026-08-28',
+        new Set(['2026-08-28', '2026-09-11'])
+      );
+      expect(visible.map((b) => b.billId)).toEqual(['bill-rav4', 'bill-affirm']);
+    });
   });
 
   describe('isBillMovedToPaycheck', () => {

@@ -106,6 +106,8 @@ interface DraftActionsContextValue {
   unskipBill: (billId: string, skipDate: string) => boolean;
   assignBill: (billId: string, billDueDate: string, paycheckDate: string) => boolean;
   removeBillAssignment: (billId: string, billDueDate: string) => boolean;
+  clearBillAssignments: () => boolean;
+  clearStaleBillAssignments: (validPaycheckDates: ReadonlySet<string>) => boolean;
   setIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => boolean;
   removeIncomeOverride: (incomeId: string, paycheckDate: string) => boolean;
   applyReconciliationFixes: (fixes: ProposedFix[]) => boolean;
@@ -891,6 +893,30 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return false;
   }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
 
+  const clearBillAssignments = useCallback((): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      if (stateRef.current.draft.billAssignments.length === 0) return false;
+      updateDraft((prev) => ({ ...prev, billAssignments: [] }));
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
+  const clearStaleBillAssignments = useCallback((validPaycheckDates: ReadonlySet<string>): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      const current = stateRef.current.draft.billAssignments;
+      const next = current.filter((a) => validPaycheckDates.has(a.paycheckDate));
+      if (next.length === current.length) return false;
+      updateDraft((prev) => ({ ...prev, billAssignments: next }));
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
   const setIncomeOverride = useCallback((incomeId: string, paycheckDate: string, amount: number): boolean => {
     if (isQuickBudget) return false;
     if (isDraftMode) {
@@ -1226,6 +1252,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       unskipBill,
       assignBill,
       removeBillAssignment,
+      clearBillAssignments,
+      clearStaleBillAssignments,
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,
@@ -1262,6 +1290,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       unskipBill,
       assignBill,
       removeBillAssignment,
+      clearBillAssignments,
+      clearStaleBillAssignments,
       setIncomeOverride,
       removeIncomeOverride,
       applyReconciliationFixes,

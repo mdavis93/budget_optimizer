@@ -29,6 +29,21 @@ export function getUniquePaycheckDates(incomes: ProjectedIncome[]): Date[] {
   return dates.sort((a, b) => a.getTime() - b.getTime());
 }
 
+/** Drop locks aimed at paycheck dates that are not in the current schedule. */
+export function pruneManualAssignmentsToPaychecks(
+  manualAssignments: Map<string, string>,
+  paycheckDates: Date[]
+): Map<string, string> {
+  const validDates = new Set(paycheckDates.map((d) => format(d, 'yyyy-MM-dd')));
+  const pruned = new Map<string, string>();
+  for (const [key, target] of manualAssignments) {
+    if (validDates.has(target)) {
+      pruned.set(key, target);
+    }
+  }
+  return pruned;
+}
+
 export function findPreferredPaycheck(
   bill: ProjectedBill,
   paycheckAssignments: PaycheckAssignment[],
