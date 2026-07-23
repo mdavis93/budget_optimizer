@@ -19,6 +19,8 @@ import {
   Income,
   IncomeInput,
   IncomeOverride,
+  Leave,
+  LeaveInput,
   ProposedFix,
   BreakGlassPlan,
   SavingsGoal,
@@ -60,6 +62,7 @@ interface DraftDataContextValue {
   incomes: Income[];
   bills: Bill[];
   debts: Debt[];
+  leaves: Leave[];
   goals: SavingsGoal[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
@@ -93,6 +96,9 @@ interface DraftActionsContextValue {
   createDebt: (input: DebtInput) => boolean;
   updateDebt: (id: string, input: Partial<DebtInput>) => boolean;
   deleteDebt: (id: string) => boolean;
+  createLeave: (input: LeaveInput) => boolean;
+  updateLeave: (id: string, input: LeaveInput) => boolean;
+  deleteLeave: (id: string) => boolean;
   createGoal: (input: SavingsGoalInput) => boolean;
   updateGoal: (id: string, input: Partial<SavingsGoalInput>) => boolean;
   deleteGoal: (id: string) => boolean;
@@ -256,13 +262,14 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, budget } =
+      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, leaves, budget } =
         result.data;
 
       const snapshot: DraftState = {
         incomes: incomes ?? [],
         bills: bills ?? [],
         debts: isQuickBudget ? [] : (debts ?? []),
+        leaves: isQuickBudget ? [] : (leaves ?? []),
         goals: goals ?? [],
         skippedBills: skippedBills ?? [],
         billAssignments: billAssignments ?? [],
@@ -337,6 +344,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       bills: currentDraft.bills,
       goals: currentDraft.goals,
       debts: currentDraft.debts,
+      leaves: currentDraft.leaves,
       skippedBills: currentDraft.skippedBills,
       billAssignments: currentDraft.billAssignments,
       incomeOverrides: currentDraft.incomeOverrides,
@@ -419,7 +427,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
     setDraft((prev) => {
       const next = { ...prev };
-      if (domain === 'income') next.incomes = structuredClone(saved.incomes);
+      if (domain === 'income') {
+        next.incomes = structuredClone(saved.incomes);
+        next.leaves = structuredClone(saved.leaves);
+      }
       if (domain === 'bills') next.bills = structuredClone(saved.bills);
       if (domain === 'debts') next.debts = structuredClone(saved.debts);
       if (domain === 'goals') next.goals = structuredClone(saved.goals);
@@ -522,6 +533,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       updateDraft((prev) => ({
         ...prev,
         incomes: prev.incomes.filter((income) => income.id !== id),
+        leaves: prev.leaves.filter((leave) => leave.incomeId !== id),
       }));
       markDirty('income');
       return true;
@@ -654,6 +666,87 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         debts: prev.debts.filter((debt) => debt.id !== id),
       }));
       markDirty('debts');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
+  const createLeave = useCallback((input: LeaveInput): boolean => {
+    if (isQuickBudget || !currentBudget) return false;
+    if (!stateRef.current.draft.incomes.some((income) => income.id === input.incomeId)) {
+      return false;
+    }
+    const newLeave: Leave = {
+      id: createDraftId(),
+      budgetId: currentBudget.id,
+      incomeId: input.incomeId,
+      name: input.name.trim(),
+      type: input.type,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      ...(input.type === 'unpaid' && input.targetCashOnHand !== undefined
+        ? { targetCashOnHand: input.targetCashOnHand }
+        : {}),
+      ...(input.type === 'unpaid' && input.minCashOnHand !== undefined
+        ? { minCashOnHand: input.minCashOnHand }
+        : {}),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    if (isDraftMode) {
+      updateDraft((prev) => ({ ...prev, leaves: [...prev.leaves, newLeave] }));
+      markDirty('income');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, currentBudget, updateDraft, markDirty]);
+
+  const updateLeave = useCallback((id: string, input: LeaveInput): boolean => {
+    if (isQuickBudget) return false;
+    if (!stateRef.current.draft.incomes.some((income) => income.id === input.incomeId)) {
+      return false;
+    }
+    if (isDraftMode) {
+      updateDraft((prev) => ({
+        ...prev,
+        leaves: prev.leaves.map((leave) => {
+          if (leave.id !== id) return leave;
+          const next: Leave = {
+            ...leave,
+            incomeId: input.incomeId,
+            name: input.name.trim(),
+            type: input.type,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            updatedAt: nowIso(),
+          };
+          delete next.targetCashOnHand;
+          delete next.minCashOnHand;
+          if (input.type === 'unpaid') {
+            if (input.targetCashOnHand !== undefined) {
+              next.targetCashOnHand = input.targetCashOnHand;
+            }
+            if (input.minCashOnHand !== undefined) {
+              next.minCashOnHand = input.minCashOnHand;
+            }
+          }
+          return next;
+        }),
+      }));
+      markDirty('income');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+
+  const deleteLeave = useCallback((id: string): boolean => {
+    if (isQuickBudget) return false;
+    if (isDraftMode) {
+      updateDraft((prev) => ({
+        ...prev,
+        leaves: prev.leaves.filter((leave) => leave.id !== id),
+      }));
+      markDirty('income');
       return true;
     }
     return false;
@@ -945,6 +1038,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         skippedBills: draft.skippedBills,
         billAssignments: draft.billAssignments,
         incomeOverrides: draft.incomeOverrides,
+        leaves: draft.leaves,
         budgetFields: draft.budget,
       }),
     [draft]
@@ -1082,6 +1176,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       incomes: draft.incomes,
       bills: draft.bills,
       debts: draft.debts,
+      leaves: draft.leaves,
       goals: draft.goals,
       skippedBills: draft.skippedBills,
       billAssignments: draft.billAssignments,
@@ -1121,6 +1216,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       createDebt,
       updateDebt,
       deleteDebt,
+      createLeave,
+      updateLeave,
+      deleteLeave,
       createGoal,
       updateGoal,
       deleteGoal,
@@ -1154,6 +1252,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       createDebt,
       updateDebt,
       deleteDebt,
+      createLeave,
+      updateLeave,
+      deleteLeave,
       createGoal,
       updateGoal,
       deleteGoal,

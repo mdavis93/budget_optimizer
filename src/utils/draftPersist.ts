@@ -7,6 +7,8 @@ import {
   Income,
   IncomeInput,
   IncomeOverride,
+  Leave,
+  LeaveInput,
   SavingsGoal,
   SavingsGoalInput,
   SkippedBill,
@@ -57,6 +59,18 @@ function debtEquals(a: Debt, b: Debt): boolean {
     a.principalBalance === b.principalBalance &&
     a.apr === b.apr &&
     a.monthlyPayment === b.monthlyPayment
+  );
+}
+
+function leaveEquals(a: Leave, b: Leave): boolean {
+  return (
+    a.incomeId === b.incomeId &&
+    a.name === b.name &&
+    a.type === b.type &&
+    a.startDate === b.startDate &&
+    a.endDate === b.endDate &&
+    a.targetCashOnHand === b.targetCashOnHand &&
+    a.minCashOnHand === b.minCashOnHand
   );
 }
 
@@ -118,6 +132,33 @@ function toDebtInput(debt: Debt): DebtInput {
     apr: debt.apr,
     monthlyPayment: debt.monthlyPayment,
   };
+}
+
+function toLeaveInput(leave: Leave): LeaveInput {
+  const input: LeaveInput = {
+    incomeId: leave.incomeId,
+    name: leave.name,
+    type: leave.type,
+    startDate: leave.startDate,
+    endDate: leave.endDate,
+  };
+  if (leave.type === 'unpaid') {
+    if (leave.targetCashOnHand !== undefined) {
+      input.targetCashOnHand = leave.targetCashOnHand;
+    }
+    if (leave.minCashOnHand !== undefined) {
+      input.minCashOnHand = leave.minCashOnHand;
+    }
+  }
+  return input;
+}
+
+function remapLeaveIncomeIds(leaves: Leave[], incomeIdMap: Map<string, string>): Leave[] {
+  if (incomeIdMap.size === 0) return leaves;
+  return leaves.map((leave) => ({
+    ...leave,
+    incomeId: incomeIdMap.get(leave.incomeId) ?? leave.incomeId,
+  }));
 }
 
 function toGoalInput(goal: SavingsGoal): SavingsGoalInput {
@@ -231,6 +272,34 @@ export async function persistDebtsDomain(
   const nextDebts = applyIdMap(debtsWithMappedBills, idMap);
   const nextDraft = { ...draft, debts: nextDebts };
   const nextCommitted = { ...committed, debts: structuredClone(nextDebts) };
+
+  return { success: true, nextDraft, nextCommitted };
+}
+
+export async function persistLeavesDomain(
+  committed: DraftState,
+  draft: DraftState,
+  incomeIdMap: Map<string, string>
+): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+  const leavesWithMappedIncomes = remapLeaveIncomeIds(draft.leaves, incomeIdMap);
+  const diff = computeEntityDiff(committed.leaves, leavesWithMappedIncomes, leaveEquals);
+  const result = await persistEntityDiff(diff, {
+    isDraftId,
+    toCreateInput: toLeaveInput,
+    toUpdateInput: toLeaveInput,
+    create: (input) => window.electronAPI.leaves.create(input),
+    update: (id, input) => window.electronAPI.leaves.update(id, input),
+    remove: (id) => window.electronAPI.leaves.delete(id),
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+  }
+
+  const idMap = result.idMap ?? new Map<string, string>();
+  const nextLeaves = applyIdMap(leavesWithMappedIncomes, idMap);
+  const nextDraft = { ...draft, leaves: nextLeaves };
+  const nextCommitted = { ...committed, leaves: structuredClone(nextLeaves) };
 
   return { success: true, nextDraft, nextCommitted };
 }
@@ -524,6 +593,11 @@ export async function persistDomains(
       nextDraft = result.nextDraft;
       nextCommitted = result.nextCommitted;
       result.idMap.forEach((value, key) => incomeIdMap.set(key, value));
+
+      const leaveResult = await persistLeavesDomain(nextCommitted, nextDraft, incomeIdMap);
+      if (!leaveResult.success) return leaveResult;
+      nextDraft = leaveResult.nextDraft;
+      nextCommitted = leaveResult.nextCommitted;
     } else if (domain === 'bills') {
       const result = await persistBillsDomain(nextCommitted, nextDraft, incomeIdMap);
       if (!result.success) return result;
@@ -570,7 +644,10 @@ export function computeDirtyDomains(committed: DraftState, draft: DraftState): S
 
   if (computeEntityDiff(committed.incomes, draft.incomes, incomeEquals).created.length > 0 ||
       computeEntityDiff(committed.incomes, draft.incomes, incomeEquals).updated.length > 0 ||
-      computeEntityDiff(committed.incomes, draft.incomes, incomeEquals).deleted.length > 0) {
+      computeEntityDiff(committed.incomes, draft.incomes, incomeEquals).deleted.length > 0 ||
+      computeEntityDiff(committed.leaves, draft.leaves, leaveEquals).created.length > 0 ||
+      computeEntityDiff(committed.leaves, draft.leaves, leaveEquals).updated.length > 0 ||
+      computeEntityDiff(committed.leaves, draft.leaves, leaveEquals).deleted.length > 0) {
     dirty.add('income');
   }
 

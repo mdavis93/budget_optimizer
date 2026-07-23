@@ -26,6 +26,7 @@ function makeDraftState(overrides: Partial<DraftState> = {}): DraftState {
     incomes: [createMockIncome()],
     bills: [createMockBill()],
     debts: [],
+    leaves: [],
     goals: [createMockGoal()],
     skippedBills: [],
     billAssignments: [],
@@ -64,6 +65,103 @@ describe('draftPersist', () => {
       expect(dirty.size).toBe(1);
     });
 
+    it('marks income dirty when leaves change', () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        leaves: [
+          {
+            id: 'leave-1',
+            budgetId: 'budget-1',
+            incomeId: 'income-1',
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+
+      expect(computeDirtyDomains(committed, draft)).toEqual(new Set(['income']));
+    });
+
+    it('persists leaves after income domain save and remaps draft income ids', async () => {
+      const draftIncomeId = 'draft-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const committed = makeDraftState({ incomes: [], leaves: [] });
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: draftIncomeId, sourceName: 'New Job' })],
+        leaves: [
+          {
+            id: 'draft-llllllll-mmmm-nnnn-oooo-pppppppppppp',
+            budgetId: 'budget-1',
+            incomeId: draftIncomeId,
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-03-01',
+            endDate: '2026-03-14',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+
+      vi.mocked(window.electronAPI.income.create).mockResolvedValueOnce({
+        success: true,
+        data: createMockIncome({ id: 'income-real', sourceName: 'New Job' }),
+      });
+      vi.mocked(window.electronAPI.leaves.create).mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'leave-real',
+          budgetId: 'budget-1',
+          incomeId: 'income-real',
+          name: 'Medical',
+          type: 'unpaid',
+          startDate: '2026-03-01',
+          endDate: '2026-03-14',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      });
+
+      const result = await persistDomains(committed, draft, ['income'], 'budget-1');
+      expect(result.success).toBe(true);
+      expect(window.electronAPI.leaves.create).toHaveBeenCalledWith(
+        expect.objectContaining({ incomeId: 'income-real', name: 'Medical', type: 'unpaid' })
+      );
+      expect(result.nextDraft.leaves[0].id).toBe('leave-real');
+      expect(result.nextDraft.leaves[0].incomeId).toBe('income-real');
+    });
+
+    it('reports leave create failure when persisting income domain', async () => {
+      const committed = makeDraftState({ leaves: [] });
+      const draft = makeDraftState({
+        leaves: [
+          {
+            id: 'draft-llllllll-mmmm-nnnn-oooo-pppppppppppp',
+            budgetId: 'budget-1',
+            incomeId: 'income-1',
+            name: 'Medical',
+            type: 'unpaid',
+            startDate: '2026-03-01',
+            endDate: '2026-03-14',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+
+      vi.mocked(window.electronAPI.leaves.create).mockResolvedValueOnce({
+        success: false,
+        error: 'leave create failed',
+      });
+
+      const result = await persistDomains(committed, draft, ['income'], 'budget-1');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('leave create failed');
+    });
+
     it('marks budget dirty when budget settings change without scheduleStartDate', () => {
       const committed = makeDraftState();
       const draft = makeDraftState({
@@ -81,6 +179,7 @@ describe('draftPersist', () => {
     it('marks all dirty domains when draft changes span entities and schedule', () => {
       const committed = makeDraftState({
         debts: [],
+        leaves: [],
         goals: [createMockGoal({ name: 'Vacation' })],
       });
       const draft = makeDraftState({
@@ -169,6 +268,7 @@ describe('draftPersist', () => {
         incomes: [],
         bills: [],
         debts: [],
+        leaves: [],
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],

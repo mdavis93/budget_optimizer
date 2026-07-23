@@ -35,6 +35,7 @@ function DraftHarness() {
       <div data-testid="dirty-income">{String(draft.isDomainDirty('income'))}</div>
       <div data-testid="dirty-bills">{String(draft.isDomainDirty('bills'))}</div>
       <div data-testid="debt-count">{draft.debts.length}</div>
+      <div data-testid="leave-count">{draft.leaves.length}</div>
       <div data-testid="goal-count">{draft.goals.length}</div>
       <div data-testid="skipped-count">{draft.skippedBills.length}</div>
       <div data-testid="assignment-count">{draft.billAssignments.length}</div>
@@ -219,6 +220,46 @@ function DraftHarness() {
         delete-debt
       </button>
       <button
+        onClick={() => {
+          const incomeId = draft.incomes[0]?.id;
+          if (!incomeId) return;
+          draft.createLeave({
+            incomeId,
+            name: 'Medical Leave',
+            type: 'unpaid',
+            startDate: '2026-02-01',
+            endDate: '2026-02-14',
+          });
+        }}
+      >
+        create-leave
+      </button>
+      <button
+        onClick={() => {
+          const leave = draft.leaves[0];
+          if (!leave) return;
+          draft.updateLeave(leave.id, {
+            incomeId: leave.incomeId,
+            name: 'Updated Leave',
+            type: 'paid',
+            startDate: leave.startDate,
+            endDate: leave.endDate,
+          });
+        }}
+      >
+        update-leave
+      </button>
+      <button
+        onClick={() => {
+          const id = draft.leaves[0]?.id;
+          if (id) {
+            draft.deleteLeave(id);
+          }
+        }}
+      >
+        delete-leave
+      </button>
+      <button
         onClick={() =>
           draft.createGoal({
             name: 'Emergency Fund',
@@ -284,12 +325,14 @@ function ScheduleHarness() {
     scheduleStartingBalance,
     generateSchedule,
     setScheduleMonths,
+    error: scheduleError,
   } = useSchedule();
 
   return (
     <div>
       <div data-testid="schedule-paycheck-count">{schedule?.paychecks.length ?? 0}</div>
       <div data-testid="schedule-months">{scheduleMonths}</div>
+      <div data-testid="schedule-error">{scheduleError ?? ''}</div>
       <button
         onClick={() =>
           void generateSchedule(scheduleStartDate, 12, scheduleStartingBalance, { force: true })
@@ -361,6 +404,7 @@ describe('DraftContext', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }],
         debts: [],
+        leaves: [],
         goals: [],
         skippedBills: [],
         billAssignments: [],
@@ -395,6 +439,7 @@ describe('DraftContext', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }],
         debts: [],
+        leaves: [],
         goals: [],
         skippedBills: [],
         billAssignments: [],
@@ -472,6 +517,7 @@ describe('DraftContext', () => {
       expect(mockAPI.schedule.build).toHaveBeenCalledTimes(2);
     });
 
+
     it('creates income and marks income domain dirty', async () => {
       renderProvider();
 
@@ -484,6 +530,59 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('income-count')).toHaveTextContent('2');
       });
       expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+    });
+
+    it('creates updates and deletes leave under the income domain', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-leave'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('1');
+      });
+      expect(screen.getByTestId('dirty-income')).toHaveTextContent('true');
+
+      fireEvent.click(screen.getByText('update-leave'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('discard-income'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('dirty-income')).toHaveTextContent('false');
+      });
+
+      fireEvent.click(screen.getByText('create-leave'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('1');
+      });
+      fireEvent.click(screen.getByText('delete-leave'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+      });
+    });
+
+    it('cascades leaves when deleting income from draft', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('create-leave'));
+      await waitFor(() => {
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('delete-income'));
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+      });
     });
 
     it('updates income and marks income domain dirty', async () => {
@@ -804,6 +903,8 @@ describe('DraftContext', () => {
       });
     });
 
+
+
     it('ignores duplicate skip entries in draft mode', async () => {
       renderProvider();
       await waitFor(() => {
@@ -862,6 +963,7 @@ describe('DraftContext', () => {
           billAssignments: [],
           incomeOverrides: [],
           debts: [],
+          leaves: [],
           budget: null,
         },
       });
@@ -1011,6 +1113,23 @@ describe('DraftContext', () => {
       expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
     });
 
+    it('blocks createLeave in quick budget mode', async () => {
+      mockUseBudget.mockReturnValue({
+        currentBudget: null,
+        isQuickBudget: true,
+        hasBudgetSelected: true,
+        refreshCurrentBudget: vi.fn().mockResolvedValue(undefined),
+        loadBudgets: vi.fn().mockResolvedValue(undefined),
+      });
+
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+      fireEvent.click(screen.getByText('create-leave'));
+      expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+    });
+
     it('blocks createDebt in quick budget mode', async () => {
       mockUseBudget.mockReturnValue({
         currentBudget: null,
@@ -1087,6 +1206,7 @@ describe('DraftContext', () => {
           billAssignments: [],
           incomeOverrides: [],
           debts: [],
+          leaves: [],
           budget: null,
         },
       });
