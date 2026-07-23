@@ -10,8 +10,19 @@ allowBuilds:
 
 # Patch known-vulnerable dev/build transitives to their fixed versions so the
 # full-tree audit gate stays green. Scoped by range to keep each consumer on a
-# compatible major (node-gyp -> undici 6.x, vitest/jsdom -> undici 7.x).
+# compatible major (node-gyp -> undici 6.x, vitest/jsdom -> undici 7.x;
+# brace-expansion lines stay on 1.x / 2.x / 5.x for minimatch consumers).
 overrides:
   'undici@<6.27.0': ^6.27.0
   'undici@>=7.0.0 <7.28.0': ^7.28.0
   'form-data@>=4.0.0 <4.0.6': ^4.0.6
+  'brace-expansion@<1.1.16': ^1.1.16
+  'brace-expansion@>=2.0.0 <2.1.2': ^2.1.2
+  'brace-expansion@>=3.0.0 <5.0.7': ^5.0.7
+  'js-yaml@>=4.0.0 <4.3.0': ^4.3.0
+  'tar@<=7.5.18': ^7.5.19
+  # concurrently@10 pins shell-quote@1.8.4 exactly; range overrides do not rewrite
+  # that edge — pin the patched 1.9.0 release unconditionally.
+  'shell-quote': 1.9.0
+  'axios@>=1.15.2 <1.18.0': ^1.18.0
+  'fast-uri@>=3.0.0 <3.1.4': ^3.1.4
