@@ -160,6 +160,11 @@ describe('assignBillsExact', () => {
     expect(paychecks[0].hasUnpayableBills).toBe(true);
     expect(paychecks[0].savingsDeposit).toBe(0);
     expect(paychecks[0].totalGoalDeposits).toBe(0);
-    expect(paychecks[0].budgetRemaining).toBeLessThan(0);
+    // Remaining is payable-only: unpayable rent is excluded from totalBills.
+    expect(paychecks[0].totalBills).toBe(0);
+    expect(paychecks[0].budgetRemaining).toBe(500);
+    expect(paychecks[0].budgetRemaining).toBe(
+      paychecks[0].totalIncome - paychecks[0].totalBills
+    );
   });
 });

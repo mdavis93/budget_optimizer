@@ -46,10 +46,7 @@ export function buildPaycheckEntries(
     const totalIncome = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
     const fundedBills = uniqueBills.filter(bill => !bill.isUnpayable && !bill.isSkipped);
     const totalBillsAmount = fundedBills.reduce((sum, bill) => sum + bill.amount, 0);
-    const unpayableBillsAmount = uniqueBills
-      .filter(bill => bill.isUnpayable && !bill.isSkipped)
-      .reduce((sum, bill) => sum + bill.amount, 0);
-    const hasUnpayableBills = unpayableBillsAmount > 0;
+    const hasUnpayableBills = uniqueBills.some(bill => bill.isUnpayable && !bill.isSkipped);
     const ledgerBoost = i === 0 ? startingBalance : 0;
     const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
     const effectiveTarget = cashTargetForDate(
@@ -59,9 +56,8 @@ export function buildPaycheckEntries(
     );
     const effectiveMin = cashMinForDate(cashOnHandByDate, paycheckDateStr, minCashOnHand);
 
-    const grossRemaining = hasUnpayableBills
-      ? totalIncome - totalBillsAmount - unpayableBillsAmount + ledgerBoost
-      : totalIncome - totalBillsAmount + ledgerBoost;
+    // Payable-only remaining so Income − Total Bills === Budget Remaining.
+    const grossRemaining = totalIncome - totalBillsAmount + ledgerBoost;
 
     const surplus = hasUnpayableBills
       ? 0
