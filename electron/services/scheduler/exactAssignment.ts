@@ -126,7 +126,14 @@ function buildSolvePaychecks(
     const incomeCents = assignment.incomes.reduce((sum, inc) => sum + toCents(inc.amount), 0);
     const ledgerBoost = index === 0 ? startingBalanceCents : 0;
     const reserveCents = toCents(targetReserves[index]);
-    const capacityCents = Math.max(0, incomeCents + ledgerBoost - reserveCents);
+    // Pre-placed income-attached / manual bills already consume capacity.
+    const lockedPayableCents = assignment.bills
+      .filter((bill) => !bill.isUnpayable && !bill.isSkipped)
+      .reduce((sum, bill) => sum + toCents(bill.amount), 0);
+    const capacityCents = Math.max(
+      0,
+      incomeCents + ledgerBoost - reserveCents - lockedPayableCents
+    );
     return {
       index,
       dateMs: assignment.date.getTime(),

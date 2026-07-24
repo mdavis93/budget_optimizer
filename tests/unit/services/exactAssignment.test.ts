@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { assignBillsExact } from '../../../electron/services/scheduler/exactAssignment';
 import { buildPaycheckEntries } from '../../../electron/services/scheduler/paychecks';
 import { ProjectedBill, ProjectedIncome } from '../../../electron/services/scheduler/types';
+import type { Bill } from '../../../shared/types';
 
 function income(dateStr: string, amount: number, id = 'job'): ProjectedIncome {
   const date = parseISO(dateStr);
@@ -72,6 +73,80 @@ describe('assignBillsExact', () => {
 
     expect(unpayable).toHaveLength(1);
     expect(unpayable[0].unfundableReason).toBe('insufficient_income_in_window');
+  });
+
+  it('reduces solver capacity by pre-placed income-attached load', () => {
+    const paycheckDates = [parseISO('2026-09-04')];
+    const allIncomes = [income('2026-09-04', 500, 'job')];
+    const attached: Bill = {
+      id: 'pets',
+      creditorName: 'Pets',
+      budgetedAmount: 400,
+      dueDay: 4,
+      isRecurring: true,
+      priority: 'critical',
+      isIncomeAttached: true,
+      preferredIncomeSourceId: 'job',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const unlocked = projectedBill('2026-09-05', 'cell', 200);
+
+    const assignments = assignBillsExact(paycheckDates, allIncomes, [unlocked], 0, {
+      incomeAttachedBillsRaw: [attached],
+      targetCashOnHand: 0,
+      minCashOnHand: 0,
+    });
+
+    const placed = assignments[0].bills;
+    const pets = placed.find((b) => b.billId === 'pets');
+    const cell = placed.find((b) => b.billId === 'cell');
+
+    expect(pets?.isIncomeAttached).toBe(true);
+    expect(pets?.isUnpayable).toBeFalsy();
+    expect(cell?.isUnpayable).toBe(true);
+    expect(cell?.unfundableReason).toBe('insufficient_income_in_window');
+
+    const payableLoad = placed
+      .filter((b) => !b.isUnpayable && !b.isSkipped)
+      .reduce((sum, b) => sum + b.amount, 0);
+    expect(payableLoad).toBeLessThanOrEqual(500);
+  });
+
+  it('reduces solver capacity by pre-placed manual assignment load', () => {
+    const paycheckDates = [parseISO('2026-09-04'), parseISO('2026-09-11')];
+    const allIncomes = [
+      income('2026-09-04', 500),
+      income('2026-09-11', 500),
+    ];
+    const locked = projectedBill('2026-09-10', 'rent', 400);
+    const unlocked = projectedBill('2026-09-05', 'water', 200);
+    const manualAssignments = new Map([['rent-2026-09-10', '2026-09-04']]);
+
+    const assignments = assignBillsExact(paycheckDates, allIncomes, [locked, unlocked], 0, {
+      manualAssignments,
+      targetCashOnHand: 0,
+      minCashOnHand: 0,
+    });
+
+    const sep4 = assignments.find((a) => format(a.date, 'yyyy-MM-dd') === '2026-09-04')!;
+    const rent = sep4.bills.find((b) => b.billId === 'rent');
+    const water = sep4.bills.find((b) => b.billId === 'water');
+
+    expect(rent).toBeDefined();
+    expect(rent?.isUnpayable).toBeFalsy();
+    // Water cannot also sit on Sep 4 once rent consumed $400 of $500 income.
+    if (water) {
+      expect(water.isUnpayable).toBe(true);
+    } else {
+      const sep11 = assignments.find((a) => format(a.date, 'yyyy-MM-dd') === '2026-09-11')!;
+      expect(sep11.bills.some((b) => b.billId === 'water' && !b.isUnpayable)).toBe(true);
+    }
+
+    const payableOnSep4 = sep4.bills
+      .filter((b) => !b.isUnpayable && !b.isSkipped)
+      .reduce((sum, b) => sum + b.amount, 0);
+    expect(payableOnSep4).toBeLessThanOrEqual(500);
   });
 
   it('buildPaycheckEntries zeros surplus when bills are unpayable', () => {
