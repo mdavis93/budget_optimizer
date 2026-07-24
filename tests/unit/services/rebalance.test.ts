@@ -391,4 +391,115 @@ describe('rebalancePaycheckAssignments', () => {
     expect(assignments[1].bills.some((b) => b.billId === 'bill-navy')).toBe(true);
     expect(assignments[2].bills.some((b) => b.billId === 'bill-navy')).toBe(false);
   });
+
+  it('demotes unlocked low-priority bills when payable load exceeds income', () => {
+    const assignments = buildAssignments([
+      {
+        date: '2027-03-01',
+        income: 1000,
+        bills: [
+          { id: 'bill-rent', amount: 800, dueDate: '2027-03-01', priority: 'critical' },
+          { id: 'bill-cell', amount: 150, dueDate: '2027-03-01', priority: 'normal' },
+          { id: 'bill-misc', amount: 200, dueDate: '2027-03-01', priority: 'low' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, { targetCashOnHand: 0, minCashOnHand: 0 });
+
+    const payable = assignments[0].bills.filter((b) => !b.isUnpayable);
+    const unpayable = assignments[0].bills.filter((b) => b.isUnpayable);
+    const payableLoad = payable.reduce((sum, b) => sum + b.amount, 0);
+
+    expect(payableLoad).toBeLessThanOrEqual(1000);
+    expect(unpayable.length).toBeGreaterThanOrEqual(1);
+    expect(unpayable.some((b) => b.billId === 'bill-misc')).toBe(true);
+    expect(unpayable.every((b) => b.unfundableReason === 'insufficient_income_in_window')).toBe(
+      true
+    );
+    expect(payable.some((b) => b.billId === 'bill-rent')).toBe(true);
+  });
+
+  it('demotes unlocked bills before income-attached when both oversubscribe', () => {
+    const assignments = buildAssignments([
+      {
+        date: '2027-03-01',
+        income: 500,
+        bills: [
+          {
+            id: 'bill-attached',
+            amount: 300,
+            dueDate: '2027-03-01',
+            priority: 'low',
+            isIncomeAttached: true,
+          },
+          { id: 'bill-unlocked', amount: 300, dueDate: '2027-03-01', priority: 'normal' },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, { targetCashOnHand: 0, minCashOnHand: 0 });
+
+    const attached = assignments[0].bills.find((b) => b.billId === 'bill-attached')!;
+    const unlocked = assignments[0].bills.find((b) => b.billId === 'bill-unlocked')!;
+
+    expect(unlocked.isUnpayable).toBe(true);
+    expect(attached.isUnpayable).toBeFalsy();
+    expect(assignments[0].bills.reduce((sum, b) => sum + (b.isUnpayable ? 0 : b.amount), 0)).toBe(
+      300
+    );
+  });
+
+  it('labels income-attached unpayable when attached load alone exceeds income', () => {
+    const assignments = buildAssignments([
+      {
+        date: '2027-03-01',
+        income: 400,
+        bills: [
+          {
+            id: 'bill-pets',
+            amount: 250,
+            dueDate: '2027-03-01',
+            priority: 'critical',
+            isIncomeAttached: true,
+          },
+          {
+            id: 'bill-grocery',
+            amount: 250,
+            dueDate: '2027-03-01',
+            priority: 'normal',
+            isIncomeAttached: true,
+          },
+        ],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, { targetCashOnHand: 0, minCashOnHand: 0 });
+
+    const payableLoad = assignments[0].bills
+      .filter((b) => !b.isUnpayable)
+      .reduce((sum, b) => sum + b.amount, 0);
+    const grocery = assignments[0].bills.find((b) => b.billId === 'bill-grocery')!;
+
+    expect(payableLoad).toBeLessThanOrEqual(400);
+    expect(grocery.isUnpayable).toBe(true);
+    // Still on the same paycheck — labeled, not relocated.
+    expect(assignments[0].bills.some((b) => b.billId === 'bill-grocery')).toBe(true);
+  });
+
+  it('demotion is idempotent when load already fits income', () => {
+    const assignments = buildAssignments([
+      {
+        date: '2027-03-01',
+        income: 1000,
+        bills: [{ id: 'bill-a', amount: 400, dueDate: '2027-03-01' }],
+      },
+    ]);
+
+    rebalancePaycheckAssignments(assignments, 0, { targetCashOnHand: 0, minCashOnHand: 0 });
+    rebalancePaycheckAssignments(assignments, 0, { targetCashOnHand: 0, minCashOnHand: 0 });
+
+    expect(assignments[0].bills).toHaveLength(1);
+    expect(assignments[0].bills[0].isUnpayable).toBeFalsy();
+  });
 });

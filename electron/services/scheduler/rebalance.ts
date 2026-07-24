@@ -42,7 +42,7 @@ function paycheckCapacity(
 function paycheckLoad(assignments: PaycheckAssignment[]): number[] {
   return assignments.map((assignment) =>
     assignment.bills
-      .filter((bill) => !bill.isUnpayable)
+      .filter((bill) => !bill.isUnpayable && !bill.isSkipped)
       .reduce((sum, bill) => sum + bill.amount, 0)
   );
 }
@@ -259,6 +259,54 @@ function rescueUnpayableBills(
   }
 
   return rescued;
+}
+
+function isLockedOrAttached(bill: ProjectedBill, lockedBillKeys: Set<string>): boolean {
+  if (bill.isIncomeAttached) return true;
+  return lockedBillKeys.has(billOccurrenceKey(bill.billId, bill.date));
+}
+
+/**
+ * Final one-shot pass: demote payable bills until load fits raw income capacity.
+ * Unlocked bills first (low → critical, larger amount); income-attached / locked
+ * only if still over. Idempotent when load ≤ incomeCapacity.
+ */
+function demoteOverIncomeCapacity(
+  assignments: PaycheckAssignment[],
+  load: number[],
+  incomeCapacity: number[],
+  lockedBillKeys: Set<string>
+): void {
+  for (let index = 0; index < assignments.length; index++) {
+    while (load[index] > incomeCapacity[index]) {
+      const candidates = assignments[index].bills.filter(
+        (bill) => !bill.isUnpayable && !bill.isSkipped
+      );
+      if (candidates.length === 0) break;
+
+      candidates.sort((a, b) => {
+        const aLocked = isLockedOrAttached(a, lockedBillKeys) ? 1 : 0;
+        const bLocked = isLockedOrAttached(b, lockedBillKeys) ? 1 : 0;
+        if (aLocked !== bLocked) return aLocked - bLocked;
+        const byPriority = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
+        if (byPriority !== 0) return byPriority;
+        return b.amount - a.amount;
+      });
+
+      const bill = candidates[0];
+      const key = billOccurrenceKey(bill.billId, bill.date);
+      assignments[index].bills = assignments[index].bills.map((candidate) =>
+        billOccurrenceKey(candidate.billId, candidate.date) === key
+          ? {
+              ...candidate,
+              isUnpayable: true,
+              unfundableReason: 'insufficient_income_in_window' as const,
+            }
+          : candidate
+      );
+      load[index] -= bill.amount;
+    }
+  }
 }
 
 function spareCapacity(load: number[], capacity: number[], index: number): number {
@@ -620,4 +668,6 @@ export function rebalancePaycheckAssignments(
     lockedBillKeys,
     maxCascadeDepth
   );
+
+  demoteOverIncomeCapacity(assignments, load, incomeCapacity, lockedBillKeys);
 }
