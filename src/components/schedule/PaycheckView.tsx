@@ -67,13 +67,13 @@ function isBreakGlassPaycheck(
   );
 }
 
-/** Hard failure: insolvency, or unfunded bills on a short paycheck — danger theme. */
+/** Hard failure: unfunded bills or negative remaining after obligations. */
 function isHardShortfallPaycheck(
   paycheck: PaycheckEntry,
   hasUnpayableBills: boolean
 ): boolean {
-  if (paycheck.budgetRemaining < 0) return true;
-  return Boolean(paycheck.isShortfall) && hasUnpayableBills;
+  if (hasUnpayableBills) return true;
+  return paycheck.budgetRemaining < 0;
 }
 
 /**

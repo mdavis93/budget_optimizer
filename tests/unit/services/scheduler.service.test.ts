@@ -1012,8 +1012,11 @@ describe('SchedulerService', () => {
       expect(criticalOnPaycheck?.isUnpayable).toBeFalsy();
       expect(lowOnPaycheck?.unfundableReason).toBe('insufficient_income_in_window');
       expect(junPaycheck!.totalBills).toBe(500);
+      const unpayableSum = junPaycheck!.bills
+        .filter((b) => b.isUnpayable)
+        .reduce((sum, b) => sum + b.amount, 0);
       expect(junPaycheck!.budgetRemaining).toBe(
-        junPaycheck!.totalIncome - junPaycheck!.totalBills
+        junPaycheck!.totalIncome - junPaycheck!.totalBills - unpayableSum
       );
       expect(junPaycheck!.savingsDeposit).toBe(0);
       expect(junPaycheck!.totalGoalDeposits).toBe(0);
@@ -1233,7 +1236,7 @@ describe('SchedulerService', () => {
         .reduce((sum, b) => sum + b.amount, 0);
       expect(unpayableTotal).toBeGreaterThanOrEqual(obligationGap);
       expect(paycheck!.totalBills).toBeLessThanOrEqual(paycheck!.totalIncome);
-      expect(paycheck!.budgetRemaining).toBe(paycheck!.totalIncome - paycheck!.totalBills);
+      expect(paycheck!.budgetRemaining).toBe(paycheck!.totalIncome - allBillTotal);
       expect(paycheck!.hasUnpayableBills).toBe(true);
       expect(paycheck!.unpayableCount).toBeGreaterThan(1);
     });
@@ -1967,11 +1970,19 @@ describe('SchedulerService', () => {
           0
         );
 
-        // Excess obligation is labeled unpayable; payable load fits income.
+        // Excess obligation is labeled unpayable; remaining is the obligation deficit.
         expect(schedule.paychecks.some((p) => p.hasUnpayableBills)).toBe(true);
         for (const paycheck of schedule.paychecks) {
           expect(paycheck.totalBills).toBeLessThanOrEqual(paycheck.totalIncome);
-          expect(paycheck.budgetRemaining).toBe(paycheck.totalIncome - paycheck.totalBills);
+          if (paycheck.hasUnpayableBills) {
+            const unpayableSum = paycheck.bills
+              .filter((b) => b.isUnpayable)
+              .reduce((sum, b) => sum + b.amount, 0);
+            expect(paycheck.budgetRemaining).toBe(
+              paycheck.totalIncome - paycheck.totalBills - unpayableSum
+            );
+            expect(paycheck.budgetRemaining).toBeLessThan(0);
+          }
         }
       });
     });
@@ -3381,9 +3392,13 @@ describe('SchedulerService', () => {
 
       const unpayablePaycheck = schedule.paychecks.find((p) => p.hasUnpayableBills);
       expect(unpayablePaycheck).toBeDefined();
+      const unpayableSum = unpayablePaycheck!.bills
+        .filter((b) => b.isUnpayable)
+        .reduce((sum, b) => sum + b.amount, 0);
       expect(unpayablePaycheck!.budgetRemaining).toBe(
-        unpayablePaycheck!.totalIncome - unpayablePaycheck!.totalBills
+        unpayablePaycheck!.totalIncome - unpayablePaycheck!.totalBills - unpayableSum
       );
+      expect(unpayablePaycheck!.budgetRemaining).toBeLessThan(0);
       expect(unpayablePaycheck!.bills.some((b) => b.isUnpayable)).toBe(true);
     });
   });
