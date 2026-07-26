@@ -896,4 +896,65 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
     });
   }));
+
+  // Diagnostics (unlock-free; hostile-hardened in diagnostics.service)
+  ipcMain.handle('diagnostics:report', (_event, input: unknown) => {
+    if (!input || typeof input !== 'object') {
+      return { success: false, error: 'Invalid diagnostics report' };
+    }
+    const body = input as Record<string, unknown>;
+    const reported = diagnostics.report({
+      source: typeof body.source === 'string' ? body.source : '',
+      level: body.level === 'warn' ? 'warn' : 'error',
+      message: typeof body.message === 'string' ? body.message : undefined,
+      stack: typeof body.stack === 'string' ? body.stack : body.stack === null ? null : undefined,
+      componentStack:
+        typeof body.componentStack === 'string'
+          ? body.componentStack
+          : body.componentStack === null
+            ? null
+            : undefined,
+      errorCode:
+        typeof body.errorCode === 'string'
+          ? body.errorCode
+          : body.errorCode === null
+            ? null
+            : undefined,
+      diagnostics:
+        body.diagnostics && typeof body.diagnostics === 'object' && !Array.isArray(body.diagnostics)
+          ? (body.diagnostics as Record<string, unknown>)
+          : undefined,
+    });
+    if (!reported.success) {
+      return { success: false, error: reported.error };
+    }
+    return { success: true, data: { id: reported.id } };
+  });
+
+  ipcMain.handle('diagnostics:get-event', (_event, eventId: unknown) => {
+    const result = diagnostics.getEventBundle(typeof eventId === 'string' ? eventId : '');
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error || 'Event not found' };
+    }
+    return { success: true, data: result.data };
+  });
+
+  ipcMain.handle('diagnostics:get-bundle', (_event, limit?: unknown) => {
+    const result = diagnostics.getBundle(limit);
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error || 'Failed to get bundle' };
+    }
+    return { success: true, data: result.data };
+  });
+
+  ipcMain.handle('diagnostics:export', (_event, filePath: unknown, limit?: unknown) => {
+    if (typeof filePath !== 'string' || !validateExportPath(filePath)) {
+      return { success: false, error: 'Invalid export path' };
+    }
+    const result = diagnostics.exportBundle(filePath, limit);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return { success: true };
+  });
 }

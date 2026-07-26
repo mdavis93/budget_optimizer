@@ -334,6 +334,29 @@ export const createMockElectronAPI = () => {
       has: vi.fn().mockResolvedValue(false),
       offerSave: vi.fn().mockResolvedValue({ success: true, saved: false }),
     },
+
+    diagnostics: {
+      report: vi.fn().mockResolvedValue({ success: true, data: { id: 'diag-mock' } }),
+      getEvent: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          exportedAt: '2026-01-01T00:00:00.000Z',
+          app: { version: '0.0.0', electron: '0', platform: 'darwin', arch: 'arm64' },
+          session: { uptimeMs: 0, budgetUnlocked: false },
+          errors: [],
+        },
+      }),
+      getBundle: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          exportedAt: '2026-01-01T00:00:00.000Z',
+          app: { version: '0.0.0', electron: '0', platform: 'darwin', arch: 'arm64' },
+          session: { uptimeMs: 0, budgetUnlocked: false },
+          errors: [],
+        },
+      }),
+      export: vi.fn().mockResolvedValue({ success: true }),
+    },
   };
 
   return mockAPI;

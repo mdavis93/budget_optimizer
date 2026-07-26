@@ -24,6 +24,7 @@ import type {
   ScheduleData,
   SkippedBill,
 } from '@shared/types';
+import type { DiagnosticBundle, DiagnosticReportInput } from '@shared/diagnostics';
 
 interface BudgetStats {
   incomeCount: number;
@@ -181,6 +182,13 @@ interface ElectronAPI {
     delete: () => Promise<ApiResult>;
     has: () => Promise<boolean>;
     offerSave: (password: string) => Promise<ApiResult & { saved?: boolean }>;
+  };
+
+  diagnostics: {
+    report: (input: DiagnosticReportInput) => Promise<ApiResult<{ id: string }>>;
+    getEvent: (eventId: string) => Promise<ApiResult<DiagnosticBundle>>;
+    getBundle: (limit?: number) => Promise<ApiResult<DiagnosticBundle>>;
+    export: (filePath: string, limit?: number) => Promise<ApiResult>;
   };
 }
 

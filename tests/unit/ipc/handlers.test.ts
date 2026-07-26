@@ -29,12 +29,56 @@ vi.mock('../../../electron/services/logger.service', () => ({
 vi.mock('../../../electron/services/diagnostics.service', () => ({
   diagnostics: {
     report: vi.fn(() => ({ success: true, id: 'diag-test' })),
-    getEventBundle: vi.fn(),
-    getBundle: vi.fn(),
-    exportBundle: vi.fn(),
+    getEventBundle: vi.fn(() => ({
+      success: true,
+      id: 'diag-test',
+      data: {
+        exportedAt: '2026-01-01T00:00:00.000Z',
+        app: { version: '1.0.0', electron: '0', platform: 'darwin', arch: 'arm64' },
+        session: { uptimeMs: 1, budgetUnlocked: false },
+        errors: [
+          {
+            id: 'diag-test',
+            ts: '2026-01-01T00:00:00.000Z',
+            level: 'error',
+            source: 'test',
+            message: 'boom',
+            stack: null,
+            componentStack: null,
+            errorCode: null,
+            diagnostics: {},
+          },
+        ],
+      },
+    })),
+    getBundle: vi.fn(() => ({
+      success: true,
+      id: 'diag-test',
+      data: {
+        exportedAt: '2026-01-01T00:00:00.000Z',
+        app: { version: '1.0.0', electron: '0', platform: 'darwin', arch: 'arm64' },
+        session: { uptimeMs: 1, budgetUnlocked: true },
+        errors: [
+          {
+            id: 'diag-test',
+            ts: '2026-01-01T00:00:00.000Z',
+            level: 'error',
+            source: 'test',
+            message: 'boom',
+            stack: null,
+            componentStack: null,
+            errorCode: null,
+            diagnostics: {},
+          },
+        ],
+      },
+    })),
+    exportBundle: vi.fn(() => ({ success: true, id: 'diag-test' })),
     setSessionHooks: vi.fn(),
   },
 }));
+
+import { diagnostics } from '../../../electron/services/diagnostics.service';
 
 type HandlerFn = (event: unknown, ...args: unknown[]) => Promise<unknown> | unknown;
 
@@ -1302,6 +1346,87 @@ describe('ipc handlers', () => {
       expect(result).toHaveProperty('diagnosticId', 'diag-test');
       expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('diagnostics', () => {
+    describe('happy', () => {
+      it('reports, gets event bundle, and exports after path approval while locked', async () => {
+        const services = createServices({
+          auth: {
+            ...createServices().auth,
+            getIsUnlocked: vi.fn(() => false),
+          },
+        });
+        registerIpcHandlers(ipcMain as never, services as never);
+
+        await expect(
+          ipcMain.invoke('diagnostics:report', {
+            source: 'renderer:test',
+            message: 'ui boom',
+          })
+        ).resolves.toEqual({ success: true, data: { id: 'diag-test' } });
+
+        await expect(ipcMain.invoke('diagnostics:get-event', 'diag-test')).resolves.toMatchObject({
+          success: true,
+          data: { errors: [expect.objectContaining({ id: 'diag-test' })] },
+        });
+
+        approveExportPath('/Users/tester/diagnostics.json');
+        await expect(
+          ipcMain.invoke('diagnostics:export', '/Users/tester/diagnostics.json', 10)
+        ).resolves.toEqual({ success: true });
+        expect(diagnostics.exportBundle).toHaveBeenCalledWith(
+          '/Users/tester/diagnostics.json',
+          10
+        );
+
+        await expect(ipcMain.invoke('budget:get-all')).resolves.toEqual({
+          success: false,
+          error: 'App is locked',
+        });
+      });
+    });
+
+    describe('sad', () => {
+      it('rejects malformed report and unapproved export path', async () => {
+        vi.mocked(diagnostics.exportBundle).mockClear();
+        const services = createServices();
+        registerIpcHandlers(ipcMain as never, services as never);
+
+        await expect(ipcMain.invoke('diagnostics:report', null)).resolves.toEqual({
+          success: false,
+          error: 'Invalid diagnostics report',
+        });
+
+        await expect(ipcMain.invoke('diagnostics:export', '/etc/passwd')).resolves.toEqual({
+          success: false,
+          error: 'Invalid export path',
+        });
+        expect(diagnostics.exportBundle).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('hostile', () => {
+      it('forwards oversized bag rejection from service', async () => {
+        vi.mocked(diagnostics.report).mockReturnValueOnce({
+          success: false,
+          error: 'Diagnostics bag exceeds max depth',
+        });
+        const services = createServices();
+        registerIpcHandlers(ipcMain as never, services as never);
+
+        await expect(
+          ipcMain.invoke('diagnostics:report', {
+            source: 'renderer:hostile',
+            message: 'x',
+            diagnostics: { nested: {} },
+          })
+        ).resolves.toEqual({
+          success: false,
+          error: 'Diagnostics bag exceeds max depth',
+        });
+      });
     });
   });
 });
