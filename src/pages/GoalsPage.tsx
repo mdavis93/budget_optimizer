@@ -8,6 +8,7 @@ import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
 import { useDraftData, useDraftStatus, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
+import { reportError } from '../utils/reportError';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
   name: '',
@@ -41,8 +42,8 @@ export default function GoalsPage() {
     try {
       const data = await getGoalProjections();
       setProjections(data);
-    } catch {
-      // Projections will remain empty on error
+    } catch (error) {
+      void reportError('renderer:GoalsPage.loadProjections', error);
     }
   }, [getGoalProjections]);
 
