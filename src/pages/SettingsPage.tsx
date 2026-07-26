@@ -14,6 +14,7 @@ import {
   RegionalSection,
   SavingsSection,
   BudgetAllocationSection,
+  DiagnosticsSection,
   ChangePasswordModal,
 } from '../components/settings';
 import clsx from 'clsx';
@@ -232,6 +233,15 @@ export default function SettingsPage() {
           />
         </section>
       )}
+
+      <DiagnosticsSection
+        onStatus={(next) => {
+          setStatus(next);
+          if (next.type) {
+            setTimeout(() => setStatus({ type: null, message: '' }), 5000);
+          }
+        }}
+      />
 
       <div className="card bg-(--color-bg-tertiary)">
         <h3 className="font-semibold mb-2">About Budget Optimizer</h3>

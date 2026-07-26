@@ -72,6 +72,7 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('heading', { name: 'Appearance' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Security' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Savings' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: /Dark/i }));
       expect(setTheme).toHaveBeenCalledWith('dark');
@@ -241,6 +242,46 @@ describe('SettingsPage', () => {
         expect(updateBudgetFields).toHaveBeenCalledWith({ minSavingsPerPaycheck: 75 });
       });
       expect(updateBudget).not.toHaveBeenCalled();
+    });
+
+    it('exports diagnostics via save dialog', async () => {
+      const user = userEvent.setup();
+      mockAPI.showSaveDialog.mockResolvedValue({
+        canceled: false,
+        filePath: '/Users/tester/diagnostics.json',
+      });
+      mockAPI.diagnostics.export.mockResolvedValue({ success: true });
+      renderWithRouter(<SettingsPage />, { mockAPI });
+
+      await user.click(screen.getByRole('button', { name: /Export diagnostics/i }));
+      await waitFor(() => {
+        expect(mockAPI.showSaveDialog).toHaveBeenCalled();
+        expect(mockAPI.diagnostics.export).toHaveBeenCalledWith(
+          '/Users/tester/diagnostics.json',
+          100
+        );
+      });
+      expect(screen.getByText('Diagnostics exported')).toBeInTheDocument();
+    });
+  });
+
+  describe('sad', () => {
+    it('shows error when diagnostics export fails', async () => {
+      const user = userEvent.setup();
+      mockAPI.showSaveDialog.mockResolvedValue({
+        canceled: false,
+        filePath: '/Users/tester/diagnostics.json',
+      });
+      mockAPI.diagnostics.export.mockResolvedValue({
+        success: false,
+        error: 'No diagnostics to export',
+      });
+      renderWithRouter(<SettingsPage />, { mockAPI });
+
+      await user.click(screen.getByRole('button', { name: /Export diagnostics/i }));
+      await waitFor(() => {
+        expect(screen.getByText('No diagnostics to export')).toBeInTheDocument();
+      });
     });
   });
 });
