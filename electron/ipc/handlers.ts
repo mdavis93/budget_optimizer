@@ -49,6 +49,7 @@ function getErrorMessage(error: unknown): string {
 interface ScheduleMaps {
   skippedSet: Set<string>;
   manualAssignments: Map<string, string>;
+  preferredAssignments: Map<string, string>;
   incomeOverridesMap: Map<string, number>;
   debtPayoffs: Map<string, DebtPayoffInfo>;
 }
@@ -64,6 +65,7 @@ function buildScheduleMaps(
     manualAssignments: new Map(
       resolved.billAssignments.map((a) => [`${a.billId}-${a.billDueDate}`, a.paycheckDate])
     ),
+    preferredAssignments: resolved.preferredAssignments,
     incomeOverridesMap: new Map(
       resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
     ),
@@ -558,7 +560,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return { success: true, data: [] as GoalProjection[] };
     }
 
-    const { skippedSet, manualAssignments, incomeOverridesMap, debtPayoffs } = buildScheduleMaps(
+    const { skippedSet, manualAssignments, preferredAssignments, incomeOverridesMap, debtPayoffs } = buildScheduleMaps(
       resolved,
       services.debt
     );
@@ -574,6 +576,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         startingBalance: resolved.startingBalance,
         skippedBills: skippedSet,
         manualAssignments,
+        preferredAssignments,
         targetCashOnHand: resolved.targetCashOnHand,
         goals: resolved.goals,
         minCashOnHand: resolved.minCashOnHand,
@@ -597,7 +600,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     const resolved = resolveScheduleInputs(budgetManager, database, overlay);
     const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
 
-    const { skippedSet, manualAssignments, incomeOverridesMap: incomeOverridesMapOpt, debtPayoffs } =
+    const { skippedSet, manualAssignments, preferredAssignments, incomeOverridesMap: incomeOverridesMapOpt, debtPayoffs } =
       buildScheduleMaps(resolved, services.debt);
 
     return runOffloadedCompute(
@@ -611,6 +614,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
         startingBalance: effectiveStartingBalance,
         skippedBills: skippedSet,
         manualAssignments,
+        preferredAssignments,
         targetCashOnHand: resolved.targetCashOnHand,
         goals: resolved.goals,
         minCashOnHand: resolved.minCashOnHand,
@@ -628,7 +632,6 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
     );
   }));
-
   ipcMain.handle('export:to-pdf', withBudgetGuard(services, async (_, schedule, filePath: string) => {
     if (!validateExportPath(filePath)) {
       return { success: false, error: 'Invalid export path' };
@@ -665,16 +668,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   }));
 
-  // Reconciliation handlers
+  // Reconciliation / Break-Glass Accept: validate only — do not persist locks.
+  // Soft preferred placements are passed via schedule:build overlay for one generate.
   ipcMain.handle('reconciliation:apply-fixes', withBudgetGuard(services, (_, fixes: ReconciliationFixInput[]) =>
     ipcVoid('reconciliation:apply-fixes', async () => {
     assertValid(validateReconciliationFixes(fixes), 'Invalid reconciliation fixes');
-    const { budgetManager } = ready();
-    for (const fix of fixes) {
-      if (fix.type === 'move_bill' && fix.toPaycheckDate) {
-        budgetManager.assignBillToPaycheck(fix.billId, fix.billDueDate, fix.toPaycheckDate);
-      }
-    }
   })));
 
   ipcMain.handle(
@@ -682,10 +680,6 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     withBudgetGuard(services, (_, steps: BreakGlassApplyStepInput[]) =>
       ipcVoid('breakGlassAdvisor:apply', async () => {
         assertValid(validateBreakGlassApplySteps(steps), 'Invalid break-glass advisor steps');
-        const { budgetManager } = ready();
-        for (const step of steps) {
-          budgetManager.assignBillToPaycheck(step.billId, step.billDueDate, step.toPaycheckDate);
-        }
       })
     )
   );

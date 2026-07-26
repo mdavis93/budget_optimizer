@@ -48,18 +48,20 @@ export default function PaycheckBillRow({
   const isNextMonth = getMonth(billDate) !== getMonth(paycheckDateValue) || getYear(billDate) !== getYear(paycheckDateValue);
   const monthName = isNextMonth ? format(billDate, 'MMM') + ' ' : '';
   const isSkipped = Boolean(bill.isSkipped);
+  // Unpayable bills must remain draggable so users can move them onto a paycheck with capacity.
+  const canDrag = !isSkipped;
 
   return (
     <div
-      draggable={!bill.isUnpayable && !isSkipped}
-      onDragStart={() => !bill.isUnpayable && !isSkipped && onDragStart(bill, paycheckDate)}
+      draggable={canDrag}
+      onDragStart={() => canDrag && onDragStart(bill, paycheckDate)}
       onDragEnd={onDragEnd}
       className={clsx(
         'relative flex items-center justify-between py-2 px-3 rounded-lg group overflow-hidden',
         isSkipped
           ? 'bg-slate-200/70 dark:bg-slate-500/20 border border-dashed border-slate-400 dark:border-slate-500 opacity-90'
           : bill.isUnpayable
-            ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-700/50'
+            ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-700/50 cursor-move'
             : isManuallyAssigned
               ? 'bg-primary-50 dark:bg-primary-500/10 border-2 border-primary-300 dark:border-primary-700 cursor-move'
               : 'bg-danger-50 dark:bg-danger-500/10 cursor-move',
@@ -92,7 +94,7 @@ export default function PaycheckBillRow({
         </>
       )}
       <div className="relative flex items-center gap-3">
-        {!bill.isUnpayable && !isSkipped && (
+        {canDrag && (
           <GripVertical className="w-4 h-4 text-(--color-text-muted) opacity-0 group-hover:opacity-100 transition-opacity" />
         )}
         <span className={clsx(

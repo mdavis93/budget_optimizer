@@ -22,6 +22,7 @@ describe('schedule compute serialize', () => {
       startingBalance: 500,
       skippedBills: new Set(['bill-1-2026-01-15']),
       manualAssignments: new Map([['bill-1-2026-02-01', '2026-01-31']]),
+      preferredAssignments: new Map([['bill-2-2026-03-01', '2026-02-28']]),
       targetCashOnHand: 250,
       goals: [],
       minCashOnHand: 100,
@@ -54,6 +55,7 @@ describe('schedule compute serialize', () => {
 
     expect(restored.skippedBills.has('bill-1-2026-01-15')).toBe(true);
     expect(restored.manualAssignments.get('bill-1-2026-02-01')).toBe('2026-01-31');
+    expect(restored.preferredAssignments.get('bill-2-2026-03-01')).toBe('2026-02-28');
     expect(restored.incomeOverrides.get('inc-1-2026-01-15')).toBe(0);
     expect(restored.debtPayoffs.get('bill-1')?.payoffDate.toISOString()).toBe(
       '2026-06-01T00:00:00.000Z'
@@ -164,6 +166,7 @@ describe('runScheduleCompute', () => {
       startingBalance: 1000,
       skippedBills: new Set(),
       manualAssignments: new Map(),
+      preferredAssignments: new Map(),
       targetCashOnHand: 250,
       goals: [],
       minCashOnHand: 100,
@@ -233,6 +236,7 @@ describe('runScheduleCompute', () => {
       startingBalance: 1000,
       skippedBills: new Set(),
       manualAssignments: new Map(),
+      preferredAssignments: new Map(),
       targetCashOnHand: 250,
       goals: [goal],
       minCashOnHand: 100,

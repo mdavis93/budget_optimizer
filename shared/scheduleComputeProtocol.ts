@@ -42,6 +42,8 @@ export interface ScheduleComputeInputPayload {
   startingBalance: number;
   skippedBills: string[];
   manualAssignments: Array<[string, string]>;
+  /** Soft placement seeds for this compute only (not locks). */
+  preferredAssignments?: Array<[string, string]>;
   targetCashOnHand: number;
   goals: unknown[];
   minCashOnHand: number;

@@ -21,7 +21,13 @@ import {
 export interface ExactAssignmentOptions {
   startingBalanceCents?: number;
   skippedBills?: Set<string>;
+  /** Hard locks (user drag). Pre-placed and excluded from rebalance moves. */
   manualAssignments?: Map<string, string>;
+  /**
+   * Soft seeds (Advisor / reconciliation Accept). Pre-placed for this run only;
+   * not added to lockedKeys so rebalance may still move them.
+   */
+  preferredAssignments?: Map<string, string>;
   incomeAttachedBillsRaw?: Bill[];
   lockedBillKeys?: Set<string>;
   targetCashOnHand?: number;
@@ -91,17 +97,21 @@ function applyIncomeAttachedBills(
   return keys;
 }
 
-function applyManualAssignments(
+function applyFixedAssignments(
   assignments: PaycheckAssignment[],
   allBills: ProjectedBill[],
-  manualAssignments: Map<string, string>,
+  placementMap: Map<string, string>,
   skippedBills: Set<string>,
-  lockedKeys: Set<string>
+  alreadyPlaced: Set<string>,
+  options: { lock: boolean; lockedKeys: Set<string> }
 ): void {
   for (const bill of allBills) {
     const billDateStr = format(bill.date, 'yyyy-MM-dd');
+    const occurrence = billOccurrenceKey(bill.billId, bill.date);
+    if (alreadyPlaced.has(occurrence)) continue;
+
     const assignmentKey = `${bill.billId}-${billDateStr}`;
-    const targetPaycheckDate = manualAssignments.get(assignmentKey);
+    const targetPaycheckDate = placementMap.get(assignmentKey);
     if (!targetPaycheckDate) continue;
 
     const skipKey = `${bill.billId}-${billDateStr}`;
@@ -113,7 +123,10 @@ function applyManualAssignments(
     if (paycheckIdx === -1) continue;
 
     assignments[paycheckIdx].bills.push(bill);
-    lockedKeys.add(billOccurrenceKey(bill.billId, bill.date));
+    alreadyPlaced.add(occurrence);
+    if (options.lock) {
+      options.lockedKeys.add(occurrence);
+    }
   }
 }
 
@@ -126,7 +139,14 @@ function buildSolvePaychecks(
     const incomeCents = assignment.incomes.reduce((sum, inc) => sum + toCents(inc.amount), 0);
     const ledgerBoost = index === 0 ? startingBalanceCents : 0;
     const reserveCents = toCents(targetReserves[index]);
-    const capacityCents = Math.max(0, incomeCents + ledgerBoost - reserveCents);
+    // Pre-placed income-attached / manual bills already consume capacity.
+    const lockedPayableCents = assignment.bills
+      .filter((bill) => !bill.isUnpayable && !bill.isSkipped)
+      .reduce((sum, bill) => sum + toCents(bill.amount), 0);
+    const capacityCents = Math.max(
+      0,
+      incomeCents + ledgerBoost - reserveCents - lockedPayableCents
+    );
     return {
       index,
       dateMs: assignment.date.getTime(),
@@ -148,15 +168,25 @@ export function assignBillsExact(
 ): PaycheckAssignment[] {
   const skippedBills = options.skippedBills ?? new Set();
   const manualAssignments = options.manualAssignments ?? new Map();
+  const preferredAssignments = options.preferredAssignments ?? new Map();
   const incomeAttachedBillsRaw = options.incomeAttachedBillsRaw ?? [];
   const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   const cashOnHandByDate = options.cashOnHandByDate;
   const lockedKeys = new Set(options.lockedBillKeys ?? []);
+  const alreadyPlaced = new Set<string>();
 
   const assignments = buildPaycheckSkeleton(paycheckDates, allIncomes);
 
-  applyManualAssignments(assignments, allBills, manualAssignments, skippedBills, lockedKeys);
+  // User drag locks first — win over soft preferences for the same occurrence.
+  applyFixedAssignments(
+    assignments,
+    allBills,
+    manualAssignments,
+    skippedBills,
+    alreadyPlaced,
+    { lock: true, lockedKeys }
+  );
 
   const incomeAttachedKeys = applyIncomeAttachedBills(
     assignments,
@@ -165,10 +195,21 @@ export function assignBillsExact(
   );
   for (const key of incomeAttachedKeys) {
     lockedKeys.add(key);
+    alreadyPlaced.add(key);
   }
 
+  // Advisor / reconciliation Accept: seed placement without locking.
+  applyFixedAssignments(
+    assignments,
+    allBills,
+    preferredAssignments,
+    skippedBills,
+    alreadyPlaced,
+    { lock: false, lockedKeys }
+  );
+
   const solverBills = allBills.filter(
-    (b) => !lockedKeys.has(billOccurrenceKey(b.billId, b.date))
+    (b) => !alreadyPlaced.has(billOccurrenceKey(b.billId, b.date))
   );
 
   const eligible = buildEligibleBills(solverBills, assignments, skippedBills);

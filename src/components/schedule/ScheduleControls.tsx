@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   buildViewportOptions,
   type GoalViewportSource,
@@ -27,6 +27,10 @@ export default function ScheduleControls({
   onMonthsChange,
   onStartingBalanceChange,
 }: ScheduleControlsProps) {
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const onStartDateChangeRef = useRef(onStartDateChange);
+  onStartDateChangeRef.current = onStartDateChange;
+
   const viewportOptions = useMemo(
     () => buildViewportOptions(calculationMonths, startDate, goals),
     [calculationMonths, startDate, goals]
@@ -41,16 +45,38 @@ export default function ScheduleControls({
     }
   }, [selectionIsValid, months, onMonthsChange]);
 
+  // Keep the uncontrolled input in sync when startDate changes externally,
+  // but never while focused — that would close Chromium's month picker.
+  useEffect(() => {
+    const el = dateInputRef.current;
+    if (!el || document.activeElement === el) return;
+    if (el.value !== startDate) {
+      el.value = startDate;
+    }
+  }, [startDate]);
+
+  // Chromium fires DOM `input` (React onChange) while navigating months with
+  // ↑/↓. Commit only on native `change`, which fires for day/Clear/Today.
+  useEffect(() => {
+    const el = dateInputRef.current;
+    if (!el) return;
+    const onNativeChange = (e: Event) => {
+      onStartDateChangeRef.current((e.target as HTMLInputElement).value);
+    };
+    el.addEventListener('change', onNativeChange);
+    return () => el.removeEventListener('change', onNativeChange);
+  }, []);
+
   return (
     <div className="card">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label htmlFor="schedule-start-date" className="label">Start Date</label>
           <input
+            ref={dateInputRef}
             id="schedule-start-date"
             type="date"
-            value={startDate}
-            onChange={(e) => onStartDateChange(e.target.value)}
+            defaultValue={startDate}
             className="input"
           />
         </div>

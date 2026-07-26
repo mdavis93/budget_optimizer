@@ -446,7 +446,10 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
       await waitFor(() => {
         expect(mockAPI.breakGlassAdvisor.apply).toHaveBeenCalled();
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [['rent-2026-08-08', '2026-07-24']],
+        });
       });
     });
 
@@ -824,7 +827,10 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'apply-fixes' }));
       await waitFor(() => {
         expect(mockAPI.reconciliation.applyFixes).toHaveBeenCalled();
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [],
+        });
       });
     });
 

@@ -195,6 +195,28 @@ describe('SchedulerService', () => {
       expect(format(result[1].date, 'yyyy-MM-dd')).toBe('2026-02-15');
     });
 
+    it('includes final payment month when dueDay falls after amortization payoff day', () => {
+      // Mirrors CC: Apple: due the 30th, debt amortization payoffDate mid-month.
+      const appleLike = { ...baseBill, creditorName: 'CC: Apple', budgetedAmount: 350, dueDay: 30 };
+      const result = scheduler.projectBills(
+        appleLike,
+        parseISO('2026-08-01'),
+        parseISO('2026-11-30'),
+        {
+          billId: 'bill-1',
+          payoffDate: parseISO('2026-09-23'),
+          finalPaymentAmount: 142.15,
+        }
+      );
+
+      expect(result.map((r) => format(r.date, 'yyyy-MM-dd'))).toEqual([
+        '2026-08-30',
+        '2026-09-30',
+      ]);
+      expect(result[0].amount).toBe(350);
+      expect(result[1].amount).toBe(142.15);
+    });
+
     it('projects only one occurrence for non-recurring bills', () => {
       const oneTime = { ...baseBill, isRecurring: false };
       const result = scheduler.projectBills(
@@ -406,7 +428,9 @@ describe('SchedulerService', () => {
       };
       const noStart = scheduler.generateSchedule([income], [tightBill], '2026-01-01', 1, 0);
       const withStart = scheduler.generateSchedule([income], [tightBill], '2026-01-01', 1, 500);
-      expect(noStart.paychecks[0].isShortfall).toBe(true);
+      // Without ledger boost the bill cannot fit income and is labeled unpayable.
+      expect(noStart.paychecks[0].hasUnpayableBills).toBe(true);
+      expect(withStart.paychecks[0].hasUnpayableBills).toBe(false);
       expect(withStart.paychecks[0].isShortfall).toBe(false);
     });
 
@@ -1010,6 +1034,12 @@ describe('SchedulerService', () => {
       expect(criticalOnPaycheck?.isUnpayable).toBeFalsy();
       expect(lowOnPaycheck?.unfundableReason).toBe('insufficient_income_in_window');
       expect(junPaycheck!.totalBills).toBe(500);
+      const unpayableSum = junPaycheck!.bills
+        .filter((b) => b.isUnpayable)
+        .reduce((sum, b) => sum + b.amount, 0);
+      expect(junPaycheck!.budgetRemaining).toBe(
+        junPaycheck!.totalIncome - junPaycheck!.totalBills - unpayableSum
+      );
       expect(junPaycheck!.savingsDeposit).toBe(0);
       expect(junPaycheck!.totalGoalDeposits).toBe(0);
     });
@@ -1070,6 +1100,167 @@ describe('SchedulerService', () => {
       expect(highOnPaycheck?.unfundableReason).toBe('insufficient_income_in_window');
       expect(junPaycheck!.totalBills).toBe(400);
       expect(junPaycheck!.savingsDeposit).toBe(0);
+    });
+
+    it('demotes multiple bills so unpayable total covers the income gap', () => {
+      const monthlyIncome: Income = {
+        ...weeklyIncome,
+        cadence: 'monthly',
+        startDate: '2026-11-01',
+        amount: 2650,
+      };
+
+      const bills: Bill[] = [
+        {
+          id: 'bill-rent',
+          creditorName: 'Rent',
+          budgetedAmount: 800,
+          dueDay: 1,
+          isRecurring: false,
+          priority: 'critical',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-apple',
+          creditorName: 'CC Apple',
+          budgetedAmount: 350,
+          dueDay: 2,
+          isRecurring: false,
+          priority: 'critical',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-grocery',
+          creditorName: 'Grocery',
+          budgetedAmount: 300,
+          dueDay: 3,
+          isRecurring: false,
+          priority: 'critical',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-electric',
+          creditorName: 'Electric',
+          budgetedAmount: 250,
+          dueDay: 4,
+          isRecurring: false,
+          priority: 'high',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-cell',
+          creditorName: 'Cell',
+          budgetedAmount: 450,
+          dueDay: 5,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-navy',
+          creditorName: 'CC Navy',
+          budgetedAmount: 175,
+          dueDay: 6,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-water',
+          creditorName: 'Water',
+          budgetedAmount: 100,
+          dueDay: 7,
+          isRecurring: false,
+          priority: 'high',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-life',
+          creditorName: 'Life Ins',
+          budgetedAmount: 100,
+          dueDay: 8,
+          isRecurring: false,
+          priority: 'high',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-cap',
+          creditorName: 'Cap L',
+          budgetedAmount: 110,
+          dueDay: 9,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-sw-a',
+          creditorName: 'SW A',
+          budgetedAmount: 125,
+          dueDay: 10,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-sw-m',
+          creditorName: 'SW M',
+          budgetedAmount: 170,
+          dueDay: 11,
+          isRecurring: false,
+          priority: 'normal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'bill-pets',
+          creditorName: 'Pets',
+          budgetedAmount: 200,
+          dueDay: 12,
+          isRecurring: false,
+          priority: 'critical',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
+
+      const schedule = scheduler.generateSchedule(
+        [monthlyIncome],
+        bills,
+        '2026-11-01',
+        1,
+        0,
+        new Set(),
+        new Map(),
+        0,
+        [],
+        0
+      );
+
+      const paycheck = schedule.paychecks.find((p) => p.date === '2026-11-01');
+      expect(paycheck).toBeDefined();
+
+      const allBillTotal = bills.reduce((sum, b) => sum + b.budgetedAmount, 0);
+      const obligationGap = allBillTotal - monthlyIncome.amount;
+      expect(obligationGap).toBe(480);
+
+      const unpayableTotal = paycheck!.bills
+        .filter((b) => b.isUnpayable)
+        .reduce((sum, b) => sum + b.amount, 0);
+      expect(unpayableTotal).toBeGreaterThanOrEqual(obligationGap);
+      expect(paycheck!.totalBills).toBeLessThanOrEqual(paycheck!.totalIncome);
+      expect(paycheck!.budgetRemaining).toBe(paycheck!.totalIncome - allBillTotal);
+      expect(paycheck!.hasUnpayableBills).toBe(true);
+      expect(paycheck!.unpayableCount).toBeGreaterThan(1);
     });
   });
 
@@ -1801,8 +1992,20 @@ describe('SchedulerService', () => {
           0
         );
 
-        // Should have shortfalls
-        expect(schedule.summary.shortfallCount).toBeGreaterThan(0);
+        // Excess obligation is labeled unpayable; remaining is the obligation deficit.
+        expect(schedule.paychecks.some((p) => p.hasUnpayableBills)).toBe(true);
+        for (const paycheck of schedule.paychecks) {
+          expect(paycheck.totalBills).toBeLessThanOrEqual(paycheck.totalIncome);
+          if (paycheck.hasUnpayableBills) {
+            const unpayableSum = paycheck.bills
+              .filter((b) => b.isUnpayable)
+              .reduce((sum, b) => sum + b.amount, 0);
+            expect(paycheck.budgetRemaining).toBe(
+              paycheck.totalIncome - paycheck.totalBills - unpayableSum
+            );
+            expect(paycheck.budgetRemaining).toBeLessThan(0);
+          }
+        }
       });
     });
 
@@ -3209,14 +3412,16 @@ describe('SchedulerService', () => {
         0
       );
 
-      const shortfallPaycheck = schedule.paychecks.find((p) => p.isShortfall);
-      expect(shortfallPaycheck).toBeDefined();
-
-      const shortfallRec = schedule.recommendations.find((rec) =>
-        rec.includes('Budget shortfall')
+      const unpayablePaycheck = schedule.paychecks.find((p) => p.hasUnpayableBills);
+      expect(unpayablePaycheck).toBeDefined();
+      const unpayableSum = unpayablePaycheck!.bills
+        .filter((b) => b.isUnpayable)
+        .reduce((sum, b) => sum + b.amount, 0);
+      expect(unpayablePaycheck!.budgetRemaining).toBe(
+        unpayablePaycheck!.totalIncome - unpayablePaycheck!.totalBills - unpayableSum
       );
-      expect(shortfallRec).toBeDefined();
-      expect(shortfallRec).toContain('Jan');
+      expect(unpayablePaycheck!.budgetRemaining).toBeLessThan(0);
+      expect(unpayablePaycheck!.bills.some((b) => b.isUnpayable)).toBe(true);
     });
   });
 

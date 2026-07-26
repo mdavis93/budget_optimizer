@@ -55,6 +55,13 @@ export function useScheduleMutations() {
   const handleApplyFixes = useCallback(async (fixes: ProposedFix[]) => {
     setIsApplyingFixes(true);
     try {
+      const preferred = fixes
+        .filter((fix) => fix.type === 'move_bill' && fix.toPaycheckDate)
+        .map(
+          (fix) =>
+            [`${fix.billId}-${fix.billDueDate}`, fix.toPaycheckDate!] as [string, string]
+        );
+
       if (isQuickBudget) {
         const result = await window.electronAPI.reconciliation.applyFixes(
           fixes.map((fix) => ({
@@ -69,7 +76,10 @@ export function useScheduleMutations() {
         if (result.success) {
           setShowReconciliation(false);
           setDismissedReconciliation(false);
-          generateSchedule(startDate, months, startingBalance, { force: true });
+          generateSchedule(startDate, months, startingBalance, {
+            force: true,
+            preferredAssignments: preferred,
+          });
         }
       } else if (applyReconciliationFixes(fixes)) {
         setShowReconciliation(false);
@@ -112,6 +122,11 @@ export function useScheduleMutations() {
     setIsApplyingBreakGlass(true);
     setApplyingBreakGlassPlanId(plan.id);
     try {
+      const preferred = plan.steps.map(
+        (step) =>
+          [`${step.billId}-${step.billDueDate}`, step.toPaycheckDate] as [string, string]
+      );
+
       if (isQuickBudget) {
         const result = await window.electronAPI.breakGlassAdvisor.apply(
           plan.steps.map((step) => ({
@@ -122,7 +137,10 @@ export function useScheduleMutations() {
           }))
         );
         if (result.success) {
-          await generateSchedule(startDate, months, startingBalance, { force: true });
+          await generateSchedule(startDate, months, startingBalance, {
+            force: true,
+            preferredAssignments: preferred,
+          });
         }
       } else if (applyBreakGlassPlan(plan)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });

@@ -129,7 +129,8 @@ export function assignBillsToPaychecks(
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
   minSavingsPerPaycheck: number = 0,
   skippedForDisplay: ProjectedBill[] = [],
-  cashOnHandByDate?: CashOnHandByDate
+  cashOnHandByDate?: CashOnHandByDate,
+  preferredAssignments: Map<string, string> = new Map()
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
@@ -139,6 +140,7 @@ export function assignBillsToPaychecks(
     {
       skippedBills,
       manualAssignments,
+      preferredAssignments,
       incomeAttachedBillsRaw,
       targetCashOnHand: maxBudgetRemaining,
       minCashOnHand,

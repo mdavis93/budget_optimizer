@@ -95,7 +95,7 @@ describe('PaycheckView', () => {
       expect(card?.className).not.toMatch(/border-danger/);
     });
 
-    it('keeps Break-Glass warning theme when unpayable bills remain above min', () => {
+    it('uses danger theme when unpayable bills remain on a Break-Glass paycheck', () => {
       const props = baseProps();
       const { container } = renderWithRouter(
         <PaycheckView
@@ -103,6 +103,7 @@ describe('PaycheckView', () => {
           paychecks={[
             createMockPaycheck({
               date: '2026-03-05',
+              // Remaining can still sit in the BG band; unpayables force hard-failure styling.
               budgetRemaining: 235,
               isShortfall: false,
               bills: [
@@ -126,9 +127,8 @@ describe('PaycheckView', () => {
       expect(screen.getByText('Break-Glass')).toBeInTheDocument();
       expect(screen.getByText(/1 unpayable/)).toBeInTheDocument();
       const card = container.querySelector('.card');
-      expect(card?.className).toMatch(/border-warning/);
-      expect(card?.className).toMatch(/break-glass-tape/);
-      expect(card?.className).not.toMatch(/border-danger/);
+      expect(card?.className).toMatch(/border-danger/);
+      expect(card?.className).not.toMatch(/border-warning/);
     });
 
     it('does not show Break-Glass badge at target or shortfall', () => {

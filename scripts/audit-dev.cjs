@@ -20,7 +20,16 @@ const SEVERITY_RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 // Allowlist for advisories deferred to a tracked major migration. Empty after
 // the Electron 33 → 42 upgrade; add GHSA ids here (never silently widen the
 // severity threshold) when an advisory is genuinely blocked on planned work.
-const IGNORED_GHSAS = new Set([]);
+// GHSA-mh99-v99m-4gvg (brace-expansion): advisory range covers 1.x/2.x but
+// no patched 1.x/2.x exists; electron-builder → minimatch 3/5/9 cannot take 5.0.8.
+// Revisit when electron-builder upgrades those minimatch majors.
+// GHSA-qwww-vcr4-c8h2 (react-router): RSC-mode CSRF; this Electron HashRouter SPA
+// does not use RSC. Blocked until react-router-dom publishes a matching 8.x and we
+// migrate in a dedicated PR.
+const IGNORED_GHSAS = new Set([
+  'GHSA-mh99-v99m-4gvg',
+  'GHSA-qwww-vcr4-c8h2',
+]);
 
 function getAuditReport() {
   try {

@@ -35,6 +35,7 @@ describe('draft-overlay.resolveScheduleInputs', () => {
       expect(resolved.debts).toEqual([{ id: 'debt-1', billId: 'bill-1', principalBalance: 1000 }]);
       expect(resolved.leaves).toEqual([{ id: 'leave-1', incomeId: 'income-1', type: 'unpaid' }]);
       expect(resolved.scheduleStartDate).toBe('2026-01-01');
+      expect(resolved.preferredAssignments.size).toBe(0);
     });
 
     it('uses overlay values when provided', () => {

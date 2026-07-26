@@ -59,6 +59,9 @@ export function buildPaycheckEntries(
     );
     const effectiveMin = cashMinForDate(cashOnHandByDate, paycheckDateStr, minCashOnHand);
 
+    // Payable-only when fully funded; with unpayables, remaining is the obligation
+    // deficit (income − all non-skipped bills) so a surplus is never shown while
+    // bills remain unpaid.
     const grossRemaining = hasUnpayableBills
       ? totalIncome - totalBillsAmount - unpayableBillsAmount + ledgerBoost
       : totalIncome - totalBillsAmount + ledgerBoost;

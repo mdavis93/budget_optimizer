@@ -1043,12 +1043,15 @@ describe('DraftContext', () => {
       fireEvent.click(screen.getByText('set-override'));
       fireEvent.click(screen.getByText('remove-override'));
       fireEvent.click(screen.getByText('apply-fixes'));
+      // Reconciliation Accept uses soft preferred — does not create locks or dirtiness.
+      expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
       fireEvent.click(screen.getByText('delete-bill'));
       fireEvent.click(screen.getByText('discard-bills'));
       fireEvent.click(screen.getByText('unskip-bill'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('true');
+        expect(screen.getByTestId('skipped-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
       });
     });
 
@@ -1251,7 +1254,7 @@ describe('DraftContext', () => {
       });
     });
 
-    it('applyReconciliationFixes move_bill replaces existing assignment', async () => {
+    it('applyReconciliationFixes does not lock bills (soft preferred only)', async () => {
       renderProvider();
       await waitFor(() => {
         expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
@@ -1264,8 +1267,9 @@ describe('DraftContext', () => {
 
       fireEvent.click(screen.getByText('apply-move-only'));
       await waitFor(() => {
+        // User drag lock unchanged — Advisor/reconciliation Accept must not write locks.
         expect(screen.getByTestId('assignment-count')).toHaveTextContent('1');
-        expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-02-12');
+        expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-01-29');
         expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('true');
       });
     });

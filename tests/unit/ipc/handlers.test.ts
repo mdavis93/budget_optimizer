@@ -427,15 +427,12 @@ describe('ipc handlers', () => {
 
       expect(switched).toEqual({ success: true, data: { id: 'budget-2' } });
       expect(reconcile).toEqual({ success: true });
-      expect(services.budgetManager.assignBillToPaycheck).toHaveBeenCalledWith(
-        'bill-0001',
-        '2026-02-01',
-        '2026-01-31'
-      );
+      // Accept must not persist locks — soft preferred is passed via schedule:build.
+      expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });
 
-    it('applies break-glass advisor steps as bill assignments', async () => {
+    it('applies break-glass advisor steps without locking bill assignments', async () => {
       const services = createServices({
         budgetManager: {
           ...createServices().budgetManager,
@@ -454,11 +451,7 @@ describe('ipc handlers', () => {
       ]);
 
       expect(result).toEqual({ success: true });
-      expect(services.budgetManager.assignBillToPaycheck).toHaveBeenCalledWith(
-        'bill-0001',
-        '2026-08-08',
-        '2026-07-24'
-      );
+      expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
     });
 
     it('locks auth and clears active budget/database services', async () => {
