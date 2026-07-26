@@ -60,8 +60,14 @@ export function projectBills(
     const dueDay = Math.min(bill.dueDay, daysInMonth);
     const dueDate = setDate(currentMonth, dueDay);
 
-    // If this bill has debt payoff info, stop projecting after payoff date
-    if (debtPayoffInfo && isAfter(dueDate, debtPayoffInfo.payoffDate)) {
+    // Stop after the payoff *month*. Amortization payoffDate is often mid-month
+    // (addMonths from today) while the bill is due later (e.g. dueDay 30 vs
+    // payoff on the 23rd). Comparing calendar days dropped that final due date
+    // entirely; finalPaymentAmount already keys off startOfMonth equality.
+    if (
+      debtPayoffInfo &&
+      isAfter(startOfMonth(dueDate), startOfMonth(debtPayoffInfo.payoffDate))
+    ) {
       break;
     }
 

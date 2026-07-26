@@ -195,6 +195,28 @@ describe('SchedulerService', () => {
       expect(format(result[1].date, 'yyyy-MM-dd')).toBe('2026-02-15');
     });
 
+    it('includes final payment month when dueDay falls after amortization payoff day', () => {
+      // Mirrors CC: Apple: due the 30th, debt amortization payoffDate mid-month.
+      const appleLike = { ...baseBill, creditorName: 'CC: Apple', budgetedAmount: 350, dueDay: 30 };
+      const result = scheduler.projectBills(
+        appleLike,
+        parseISO('2026-08-01'),
+        parseISO('2026-11-30'),
+        {
+          billId: 'bill-1',
+          payoffDate: parseISO('2026-09-23'),
+          finalPaymentAmount: 142.15,
+        }
+      );
+
+      expect(result.map((r) => format(r.date, 'yyyy-MM-dd'))).toEqual([
+        '2026-08-30',
+        '2026-09-30',
+      ]);
+      expect(result[0].amount).toBe(350);
+      expect(result[1].amount).toBe(142.15);
+    });
+
     it('projects only one occurrence for non-recurring bills', () => {
       const oneTime = { ...baseBill, isRecurring: false };
       const result = scheduler.projectBills(
