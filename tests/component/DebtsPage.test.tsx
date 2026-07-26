@@ -19,6 +19,10 @@ vi.mock('../../src/context/BudgetContext', () => ({
   useBudget: () => mockUseBudget(),
 }));
 
+vi.mock('../../src/components/Toast', () => ({
+  useToast: () => ({ showToast: vi.fn(), dismissToast: vi.fn() }),
+}));
+
 vi.mock('recharts', () => {
   const Mock = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
   return {
