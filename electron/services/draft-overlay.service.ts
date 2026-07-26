@@ -20,6 +20,7 @@ export interface DraftOverlayInput {
   leaves?: Leave[];
   skippedBills?: SkippedBill[];
   billAssignments?: BillAssignment[];
+  preferredAssignments?: Array<[string, string]>;
   incomeOverrides?: IncomeOverride[];
   startingBalance?: number;
   targetCashOnHand?: number;
@@ -36,6 +37,7 @@ export interface ResolvedScheduleInputs {
   leaves: Leave[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
+  preferredAssignments: Map<string, string>;
   incomeOverrides: IncomeOverride[];
   startingBalance: number;
   targetCashOnHand: number;
@@ -60,6 +62,7 @@ export function resolveScheduleInputs(
   const goals = overlay?.goals ?? budgetManager.getAllGoals();
   const skippedBills = overlay?.skippedBills ?? budgetManager.getSkippedBills();
   const billAssignments = overlay?.billAssignments ?? budgetManager.getBillAssignments();
+  const preferredAssignments = new Map(overlay?.preferredAssignments ?? []);
   const incomeOverrides = overlay?.incomeOverrides ?? budgetManager.getIncomeOverrides();
 
   let debts: Debt[] = [];
@@ -91,6 +94,7 @@ export function resolveScheduleInputs(
     leaves,
     skippedBills,
     billAssignments,
+    preferredAssignments,
     incomeOverrides,
     startingBalance,
     targetCashOnHand,

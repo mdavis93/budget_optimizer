@@ -15,6 +15,7 @@ export interface ScheduleComputeNativeInputs {
   startingBalance: number;
   skippedBills: Set<string>;
   manualAssignments: Map<string, string>;
+  preferredAssignments: Map<string, string>;
   targetCashOnHand: number;
   goals: unknown[];
   minCashOnHand: number;
@@ -63,6 +64,7 @@ export function serializeScheduleComputeInput(
     startingBalance: native.startingBalance,
     skippedBills: Array.from(native.skippedBills),
     manualAssignments: Array.from(native.manualAssignments.entries()),
+    preferredAssignments: Array.from(native.preferredAssignments.entries()),
     targetCashOnHand: native.targetCashOnHand,
     goals: native.goals,
     minCashOnHand: native.minCashOnHand,
@@ -87,6 +89,7 @@ export function deserializeScheduleComputeInput(
     startingBalance: payload.startingBalance,
     skippedBills: new Set(payload.skippedBills),
     manualAssignments: new Map(payload.manualAssignments),
+    preferredAssignments: new Map(payload.preferredAssignments ?? []),
     targetCashOnHand: payload.targetCashOnHand,
     goals: payload.goals,
     minCashOnHand: payload.minCashOnHand,

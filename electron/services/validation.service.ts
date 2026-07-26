@@ -515,6 +515,7 @@ export function validateDraftOverlay(overlay: {
   leaves?: Array<Parameters<typeof validateLeave>[0] & { id?: string; budgetId?: string }>;
   skippedBills?: Array<{ billId: string; skipDate: string }>;
   billAssignments?: Array<{ billId: string; billDueDate: string; paycheckDate: string }>;
+  preferredAssignments?: Array<[string, string]>;
   incomeOverrides?: Array<{ incomeId: string; paycheckDate: string; amount: number }>;
   startingBalance?: number;
   targetCashOnHand?: number;
@@ -571,6 +572,18 @@ export function validateDraftOverlay(overlay: {
       !DATE_REGEX.test(assignment.paycheckDate)
     ) {
       errors.push(`BillAssignment[${index}] has invalid identifiers or dates`);
+    }
+  });
+
+  overlay.preferredAssignments?.forEach((entry, index) => {
+    if (
+      !Array.isArray(entry) ||
+      entry.length !== 2 ||
+      typeof entry[0] !== 'string' ||
+      typeof entry[1] !== 'string' ||
+      !DATE_REGEX.test(entry[1])
+    ) {
+      errors.push(`PreferredAssignment[${index}] is invalid`);
     }
   });
 

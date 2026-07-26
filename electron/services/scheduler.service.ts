@@ -82,7 +82,8 @@ export class SchedulerService {
     minSavingsPerPaycheck: number = 0,
     debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
     incomeOverrides: Map<string, number> = new Map(),
-    leaves: Leave[] = []
+    leaves: Leave[] = [],
+    preferredAssignments: Map<string, string> = new Map()
   ): ScheduleData {
     const startDate = startOfDay(parseISO(startDateStr));
     // Horizon spans the latest goal deadline (clamped to [12, 60] months) so
@@ -136,6 +137,10 @@ export class SchedulerService {
       manualAssignments,
       paycheckDates
     );
+    const effectivePreferredAssignments = pruneManualAssignmentsToPaychecks(
+      preferredAssignments,
+      paycheckDates
+    );
     const cashOnHandByDate = resolvePaycheckCashOnHand(
       paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
       leaves,
@@ -156,7 +161,8 @@ export class SchedulerService {
       minCashOnHand,
       minSavingsPerPaycheck,
       skippedForDisplay,
-      cashOnHandByDate
+      cashOnHandByDate,
+      effectivePreferredAssignments
     );
 
     const goalProjections = calculateGoalProjections(

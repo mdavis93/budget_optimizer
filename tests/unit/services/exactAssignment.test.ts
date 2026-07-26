@@ -149,6 +149,38 @@ describe('assignBillsExact', () => {
     expect(payableOnSep4).toBeLessThanOrEqual(500);
   });
 
+  it('places preferred assignments without locking them from rebalance', () => {
+    const paycheckDates = [parseISO('2026-08-07'), parseISO('2026-08-14'), parseISO('2026-08-21')];
+    const allIncomes = [
+      income('2026-08-07', 1000),
+      income('2026-08-14', 1000),
+      income('2026-08-21', 1000),
+    ];
+    const sw = projectedBill('2026-08-21', 'sw', 125);
+    const preferredAssignments = new Map([['sw-2026-08-21', '2026-08-07']]);
+
+    const assignments = assignBillsExact(paycheckDates, allIncomes, [sw], 0, {
+      preferredAssignments,
+      targetCashOnHand: 250,
+      minCashOnHand: 100,
+    });
+
+    const aug7 = assignments.find((a) => format(a.date, 'yyyy-MM-dd') === '2026-08-07')!;
+    // Preferred seeds the bill onto Aug 7 for this run.
+    expect(aug7.bills.some((b) => b.billId === 'sw')).toBe(true);
+
+    // A later regenerate without preferred may place freely — and with room on
+    // later paychecks, rebalance is allowed to move unlocked preferred bills.
+    const withoutPreferred = assignBillsExact(paycheckDates, allIncomes, [sw], 0, {
+      targetCashOnHand: 250,
+      minCashOnHand: 100,
+    });
+    const unlockedPlacement = withoutPreferred.flatMap((a) =>
+      a.bills.filter((b) => b.billId === 'sw').map((b) => format(a.date, 'yyyy-MM-dd'))
+    );
+    expect(unlockedPlacement.length).toBe(1);
+  });
+
   it('buildPaycheckEntries zeros surplus when bills are unpayable', () => {
     const paycheckDates = [parseISO('2026-09-04')];
     const allIncomes = [income('2026-09-04', 500)];

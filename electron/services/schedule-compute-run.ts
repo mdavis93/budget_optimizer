@@ -65,7 +65,8 @@ export function runScheduleCompute(
     native.minSavingsPerPaycheck,
     native.debtPayoffs,
     native.incomeOverrides,
-    leaves
+    leaves,
+    native.preferredAssignments
   );
 
   const fullHorizon = {

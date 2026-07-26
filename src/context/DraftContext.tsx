@@ -132,7 +132,7 @@ interface ScheduleContextValue {
     startDate: string,
     months: number,
     startingBalance: number,
-    options?: { force?: boolean }
+    options?: { force?: boolean; preferredAssignments?: Array<[string, string]> }
   ) => Promise<ScheduleData | null>;
   clearError: () => void;
 }
@@ -173,6 +173,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const mountedRef = useRef(true);
   /** Monotonic generation so stale/superseded schedule IPC replies are ignored. */
   const scheduleRequestGenRef = useRef(0);
+  /** One-shot soft placements for the next schedule build (Advisor / reconciliation). */
+  const pendingPreferredAssignmentsRef = useRef<Array<[string, string]>>([]);
 
   const isDraftMode = !isQuickBudget && hasBudgetSelected;
 
@@ -341,7 +343,16 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
   const buildDraftOverlay = useCallback((): DraftOverlay | undefined => {
     const { draft: currentDraft, dirtyDomains: domains, isDraftMode: draftMode } = stateRef.current;
-    if (!draftMode || domains.size === 0) return undefined;
+    const preferred = pendingPreferredAssignmentsRef.current;
+    const hasPreferred = preferred.length > 0;
+
+    if (!draftMode || (domains.size === 0 && !hasPreferred)) {
+      // Quick budget / clean draft: still allow a preferred-only overlay.
+      if (hasPreferred) {
+        return { preferredAssignments: preferred };
+      }
+      return undefined;
+    }
 
     return {
       incomes: currentDraft.incomes,
@@ -357,6 +368,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       minCashOnHand: currentDraft.budget?.minCashOnHand,
       minSavingsPerPaycheck: currentDraft.budget?.minSavingsPerPaycheck,
       scheduleStartDate: currentDraft.budget?.scheduleStartDate,
+      ...(hasPreferred ? { preferredAssignments: preferred } : {}),
     };
   }, []);
 
@@ -958,67 +970,25 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
   const applyReconciliationFixes = useCallback((fixes: ProposedFix[]): boolean => {
     if (isQuickBudget) return false;
-    if (isDraftMode) {
-      updateDraft((prev) => {
-        const next = { ...prev };
-        for (const fix of fixes) {
-          if (fix.type === 'move_bill' && fix.toPaycheckDate) {
-            next.billAssignments = [
-              ...next.billAssignments.filter(
-                (a) => !(a.billId === fix.billId && a.billDueDate === fix.billDueDate)
-              ),
-              {
-                id: createDraftId(),
-                billId: fix.billId,
-                billDueDate: fix.billDueDate,
-                paycheckDate: fix.toPaycheckDate,
-                createdAt: nowIso(),
-              },
-            ];
-          }
-        }
-        return next;
-      });
-      markDirty('schedule');
-      return true;
+    const preferred: Array<[string, string]> = [];
+    for (const fix of fixes) {
+      if (fix.type === 'move_bill' && fix.toPaycheckDate) {
+        preferred.push([`${fix.billId}-${fix.billDueDate}`, fix.toPaycheckDate]);
+      }
     }
-    return false;
-  }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
+    if (preferred.length === 0) return false;
+    pendingPreferredAssignmentsRef.current = preferred;
+    return true;
+  }, [isQuickBudget]);
 
   const applyBreakGlassPlan = useCallback((plan: BreakGlassPlan): boolean => {
     if (isQuickBudget) return false;
-    if (isDraftMode) {
-      // Sync stateRef before returning so an immediate force generateSchedule
-      // sees the new assignments (setDraft alone is async until the next render).
-      const prev = stateRef.current.draft;
-      let nextAssignments = [...prev.billAssignments];
-      for (const step of plan.steps) {
-        nextAssignments = [
-          ...nextAssignments.filter(
-            (a) => !(a.billId === step.billId && a.billDueDate === step.billDueDate)
-          ),
-          {
-            id: createDraftId(),
-            billId: step.billId,
-            billDueDate: step.billDueDate,
-            paycheckDate: step.toPaycheckDate,
-            createdAt: nowIso(),
-          },
-        ];
-      }
-      const nextDraft = { ...prev, billAssignments: nextAssignments };
-      const nextDirty = new Set(stateRef.current.dirtyDomains).add('schedule' as DraftDomain);
-      stateRef.current = {
-        ...stateRef.current,
-        draft: nextDraft,
-        dirtyDomains: nextDirty,
-      };
-      setDraft(nextDraft);
-      setDirtyDomains(nextDirty);
-      return true;
-    }
-    return false;
-  }, [isDraftMode, isQuickBudget]);
+    if (plan.steps.length === 0) return false;
+    pendingPreferredAssignmentsRef.current = plan.steps.map(
+      (step) => [`${step.billId}-${step.billDueDate}`, step.toPaycheckDate] as [string, string]
+    );
+    return true;
+  }, [isQuickBudget]);
 
   const updateBudgetFields = useCallback((updates: Partial<DraftBudgetFields>): boolean => {
     if (isQuickBudget || !draft.budget) return false;
@@ -1132,6 +1102,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     }
 
     const overlay = buildDraftOverlay();
+    // Consume one-shot preferred seeds after overlay snapshot so Accept sticks
+    // for this build only.
+    pendingPreferredAssignmentsRef.current = [];
     const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
     if (scheduleCacheRef.current?.hash === cacheKey) {
       // Cache hit: apply viewport only — do not flash the schedule busy state.
@@ -1185,8 +1158,11 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     startDate: string,
     months: number,
     startingBalance: number,
-    options?: { force?: boolean }
+    options?: { force?: boolean; preferredAssignments?: Array<[string, string]> }
   ): Promise<ScheduleData | null> => {
+    if (options?.preferredAssignments?.length) {
+      pendingPreferredAssignmentsRef.current = options.preferredAssignments;
+    }
     if (options?.force) {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

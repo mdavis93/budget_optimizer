@@ -472,6 +472,8 @@ export interface DraftOverlay {
   leaves?: Leave[];
   skippedBills?: SkippedBill[];
   billAssignments?: BillAssignment[];
+  /** Soft seeds for one schedule build (Advisor / reconciliation); not persisted locks. */
+  preferredAssignments?: Array<[string, string]>;
   incomeOverrides?: IncomeOverride[];
   startingBalance?: number;
   targetCashOnHand?: number;
