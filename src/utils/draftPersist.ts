@@ -192,7 +192,7 @@ export async function persistIncomeDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -237,7 +237,7 @@ export async function persistBillsDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -265,7 +265,7 @@ export async function persistDebtsDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -293,7 +293,7 @@ export async function persistLeavesDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -319,7 +319,7 @@ export async function persistGoalsDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -374,14 +374,14 @@ export async function persistScheduleDomain(
   for (const item of skippedDiff.removed) {
     const result = await window.electronAPI.skippedBills.unskip(item.billId, item.skipDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to unskip bill', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to unskip bill', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
   for (const item of skippedDiff.added) {
     const result = await window.electronAPI.skippedBills.skip(item.billId, item.skipDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to skip bill', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to skip bill', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -395,7 +395,7 @@ export async function persistScheduleDomain(
   for (const item of assignmentDiff.removed) {
     const result = await window.electronAPI.billAssignments.remove(item.billId, item.billDueDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to remove assignment', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to remove assignment', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -406,7 +406,7 @@ export async function persistScheduleDomain(
       item.paycheckDate
     );
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to assign bill', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to assign bill', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -420,7 +420,7 @@ export async function persistScheduleDomain(
   for (const item of overrideDiff.removed) {
     const result = await window.electronAPI.incomeOverrides.remove(item.incomeId, item.paycheckDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to remove income override', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to remove income override', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -431,7 +431,7 @@ export async function persistScheduleDomain(
       item.amount
     );
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to set income override', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to set income override', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -463,6 +463,7 @@ export async function persistScheduleDomain(
       return {
         success: false,
         error: result.error || 'Failed to update schedule start date',
+        diagnosticId: result.diagnosticId,
         nextDraft: draft,
         nextCommitted: committed,
       };
@@ -499,7 +500,7 @@ export async function persistBudgetDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error || 'Failed to update budget', nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error || 'Failed to update budget', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const nextCommitted = { ...committed, budget: structuredClone(draft.budget) };
@@ -578,7 +579,13 @@ export async function persistDomains(
   draft: DraftState,
   domains: DraftDomain[],
   budgetId: string | null
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   let nextDraft = draft;
   let nextCommitted = committed;
   const incomeIdMap = new Map<string, string>();

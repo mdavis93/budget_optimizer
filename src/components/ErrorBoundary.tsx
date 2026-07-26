@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Home, Copy } from 'lucide-react';
+import { copyDiagnosticReport, reportError } from '../utils/reportError';
 
 interface Props {
   children: ReactNode;
@@ -9,6 +10,8 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  diagnosticId: string | null;
+  copyStatus: 'idle' | 'copied' | 'failed';
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -16,15 +19,24 @@ export class ErrorBoundary extends Component<Props, State> {
     hasError: false,
     error: null,
     errorInfo: null,
+    diagnosticId: null,
+    copyStatus: 'idle',
   };
 
   public static getDerivedStateFromError(error: Error): Partial<State> {
-    return { hasError: true, error };
+    return { hasError: true, error, diagnosticId: null, copyStatus: 'idle' };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({ errorInfo });
+    void reportError('renderer:ErrorBoundary', error, {
+      componentStack: errorInfo.componentStack ?? null,
+    }).then((id) => {
+      if (id) {
+        this.setState({ diagnosticId: id });
+      }
+    });
   }
 
   private handleReload = (): void => {
@@ -34,6 +46,14 @@ export class ErrorBoundary extends Component<Props, State> {
   private handleGoHome = (): void => {
     window.location.hash = '#/';
     window.location.reload();
+  };
+
+  private handleCopyReport = (): void => {
+    const { diagnosticId } = this.state;
+    if (!diagnosticId) return;
+    void copyDiagnosticReport(diagnosticId).then((ok) => {
+      this.setState({ copyStatus: ok ? 'copied' : 'failed' });
+    });
   };
 
   public render(): ReactNode {
@@ -77,6 +97,26 @@ export class ErrorBoundary extends Component<Props, State> {
                 Reload App
               </button>
             </div>
+
+            {this.state.diagnosticId && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={this.handleCopyReport}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-sm transition-colors text-sm"
+                >
+                  <Copy className="w-4 h-4" />
+                  {this.state.copyStatus === 'copied'
+                    ? 'Copied!'
+                    : this.state.copyStatus === 'failed'
+                      ? 'Copy failed'
+                      : 'Copy report'}
+                </button>
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Contains error messages and stacks; review before sharing.
+                </p>
+              </div>
+            )}
 
             {this.state.errorInfo && (
               <details className="mt-6">

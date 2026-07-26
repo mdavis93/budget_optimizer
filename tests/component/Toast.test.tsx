@@ -10,6 +10,16 @@ function ToastHarness() {
     <div>
       <button onClick={() => showToast('success', 'Saved successfully', 1000)}>show-success</button>
       <button onClick={() => showToast('error', 'Danger alert', 0)}>show-error-persist</button>
+      <button
+        onClick={() =>
+          showToast('error', 'With action', {
+            duration: 0,
+            action: { label: 'Copy report', onClick: () => undefined },
+          })
+        }
+      >
+        show-error-action
+      </button>
     </div>
   );
 }
@@ -49,6 +59,20 @@ describe('Toast', () => {
       fireEvent.click(screen.getByRole('button', { name: 'show-error-persist' }));
       fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
       expect(screen.queryByText('Danger alert')).not.toBeInTheDocument();
+    });
+
+    it('renders action button when provided and omits it otherwise', () => {
+      renderWithRouter(
+        <ToastProvider>
+          <ToastHarness />
+        </ToastProvider>,
+        { mockAPI }
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'show-error-persist' }));
+      expect(screen.queryByRole('button', { name: 'Copy report' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+      fireEvent.click(screen.getByRole('button', { name: 'show-error-action' }));
+      expect(screen.getByRole('button', { name: 'Copy report' })).toBeInTheDocument();
     });
   });
 

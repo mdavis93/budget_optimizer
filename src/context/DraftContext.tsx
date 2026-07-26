@@ -42,6 +42,7 @@ import {
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
 import { useToast } from '../components/Toast';
+import { copyDiagnosticReport, reportError } from '../utils/reportError';
 import {
   computeDirtyDomains,
   getRequiredSaveDomains,
@@ -121,6 +122,9 @@ interface ScheduleContextValue {
   schedule: ScheduleData | null;
   isLoading: boolean;
   error: string | null;
+  diagnosticId: string | null;
+  /** Sync read of last failure id (avoids toast race with React state). */
+  peekScheduleDiagnosticId: () => string | null;
   scheduleStartDate: string;
   scheduleMonths: number;
   scheduleStartingBalance: number;
@@ -163,6 +167,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [isScheduleLoading, setIsScheduleLoading] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleDiagnosticId, setScheduleDiagnosticId] = useState<string | null>(null);
+  const scheduleDiagnosticIdRef = useRef<string | null>(null);
+
   const [scheduleMonths, setScheduleMonthsState] = useState(3);
   const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
   const [quickBudgetStartDate, setQuickBudgetStartDate] = useState(defaultScheduleStartDate);
@@ -384,7 +391,17 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     try {
       const result = await persistDomains(saved, currentDraft, domainsToSave, currentBudgetId);
       if (!result.success) {
-        showToast('error', result.error || 'Failed to save changes');
+        const diagnosticId = result.diagnosticId;
+        showToast('error', result.error || 'Failed to save changes', {
+          action: diagnosticId
+            ? {
+                label: 'Copy report',
+                onClick: () => {
+                  void copyDiagnosticReport(diagnosticId);
+                },
+              }
+            : undefined,
+        });
         return false;
       }
 
@@ -425,7 +442,17 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         currentBudgetId
       );
       if (!result.success) {
-        showToast('error', result.error || 'Failed to save changes');
+        const diagnosticId = result.diagnosticId;
+        showToast('error', result.error || 'Failed to save changes', {
+          action: diagnosticId
+            ? {
+                label: 'Copy report',
+                onClick: () => {
+                  void copyDiagnosticReport(diagnosticId);
+                },
+              }
+            : undefined,
+        });
         return false;
       }
 
@@ -1137,14 +1164,24 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         };
         scheduleCacheRef.current = { hash: cacheKey, data: canonical };
         fullScheduleRef.current = canonical;
+        scheduleDiagnosticIdRef.current = null;
+        setScheduleDiagnosticId(null);
         return applyScheduleResult(canonical, months);
       }
       setScheduleError(result.error || 'Failed to generate schedule');
+      scheduleDiagnosticIdRef.current = result.diagnosticId ?? null;
+      setScheduleDiagnosticId(result.diagnosticId ?? null);
       return null;
     } catch (error) {
       const throwMsg = error instanceof Error ? error.message : String(error);
       if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
         setScheduleError(throwMsg || 'Failed to generate schedule');
+        void reportError('renderer:DraftContext.generateSchedule', error).then((id) => {
+          if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
+            scheduleDiagnosticIdRef.current = id ?? null;
+            setScheduleDiagnosticId(id ?? null);
+          }
+        });
       }
       return null;
     } finally {
@@ -1183,7 +1220,16 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     });
   }, [generateScheduleImmediate]);
 
-  const clearScheduleError = useCallback(() => setScheduleError(null), []);
+  const clearScheduleError = useCallback(() => {
+    setScheduleError(null);
+    scheduleDiagnosticIdRef.current = null;
+    setScheduleDiagnosticId(null);
+  }, []);
+
+  const peekScheduleDiagnosticId = useCallback(
+    () => scheduleDiagnosticIdRef.current,
+    []
+  );
 
   const isDomainDirty = useCallback(
     (domain: DraftDomain) => stateRef.current.dirtyDomains.has(domain),
@@ -1302,6 +1348,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       schedule,
       isLoading: isScheduleLoading || isLoading,
       error: scheduleError,
+      diagnosticId: scheduleDiagnosticId,
+      peekScheduleDiagnosticId,
       scheduleStartDate,
       scheduleMonths,
       scheduleStartingBalance,
@@ -1317,6 +1365,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       isScheduleLoading,
       isLoading,
       scheduleError,
+      scheduleDiagnosticId,
+      peekScheduleDiagnosticId,
       scheduleStartDate,
       scheduleMonths,
       scheduleStartingBalance,
