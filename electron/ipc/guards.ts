@@ -1,8 +1,11 @@
 import { IpcMainInvokeEvent } from 'electron';
+import type { ApiFailure, ApiResult, ApiSuccess } from '@shared/types';
 import { AuthService } from '../services/auth.service';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DatabaseService } from '../services/database.service';
 import { ipcLogger } from '../services/logger.service';
+
+export type { ApiFailure, ApiResult, ApiSuccess };
 
 export interface GuardedServices {
   auth: AuthService;
@@ -10,11 +13,7 @@ export interface GuardedServices {
   budgetManager: BudgetManager | null;
 }
 
-export type GuardError = { success: false; error: string; errorCode?: string };
-
-export type ApiSuccess<T> = { success: true; data: T };
-export type ApiFailure = { success: false; error: string; errorCode?: string };
-export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
+export type GuardError = ApiFailure;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {

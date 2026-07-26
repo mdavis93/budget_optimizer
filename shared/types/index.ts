@@ -435,7 +435,17 @@ export interface ApiResult<T = void> {
   error?: string;
   /** Soft/hard failure classification for schedule utilityProcess (e.g. superseded). */
   errorCode?: string;
+  /** Id of a scrubbed diagnostics event when main reported this failure. */
+  diagnosticId?: string;
 }
+
+export type ApiSuccess<T> = { success: true; data: T };
+export type ApiFailure = {
+  success: false;
+  error: string;
+  errorCode?: string;
+  diagnosticId?: string;
+};
 
 // ---------------------------------------------------------------------------
 // Draft overlay model
