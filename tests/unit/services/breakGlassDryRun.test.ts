@@ -159,6 +159,99 @@ describe('breakGlassDryRun', () => {
     expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(true);
   });
 
+  it('rejects when the target paycheck stays in the Break-Glass band', () => {
+    const baseline = scheduleOf([
+      paycheck({ date: '2026-08-07', budgetRemaining: 400 }),
+      paycheck({ date: '2026-08-21', budgetRemaining: 150 }),
+    ]);
+    const trial = scheduleOf([
+      paycheck({ date: '2026-08-07', budgetRemaining: 350 }),
+      paycheck({ date: '2026-08-21', budgetRemaining: 180 }),
+    ]);
+
+    expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(false);
+  });
+
+  it('rejects when a previously clean paycheck becomes shortfall without raising totals', () => {
+    // Shortfall moves Aug 21 → Aug 7: aggregate shortfallCount stays 1.
+    const baseline = scheduleOf([
+      paycheck({ date: '2026-08-07', budgetRemaining: 400 }),
+      paycheck({
+        date: '2026-08-21',
+        budgetRemaining: 50,
+        isShortfall: true,
+      }),
+    ]);
+    const trial = scheduleOf([
+      paycheck({
+        date: '2026-08-07',
+        budgetRemaining: 50,
+        isShortfall: true,
+      }),
+      paycheck({ date: '2026-08-21', budgetRemaining: 250 }),
+    ]);
+
+    expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(false);
+  });
+
+  it('rejects when the target paycheck is missing from the trial', () => {
+    const baseline = scheduleOf([
+      paycheck({ date: '2026-08-07', budgetRemaining: 400 }),
+      paycheck({ date: '2026-08-21', budgetRemaining: 150 }),
+    ]);
+    const trial = scheduleOf([paycheck({ date: '2026-08-07', budgetRemaining: 400 })]);
+
+    expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(false);
+  });
+
+  it('reads metrics from paychecks when fullPaychecks is empty', () => {
+    const baseline: ScheduleData = {
+      ...scheduleOf([paycheck({ date: '2026-08-21', budgetRemaining: 150 })]),
+      fullPaychecks: [],
+    };
+    const trial: ScheduleData = {
+      ...scheduleOf([paycheck({ date: '2026-08-21', budgetRemaining: 250 })]),
+      fullPaychecks: [],
+    };
+
+    expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(true);
+  });
+
+  it('ignores skipped unpayable bills when totaling unpayable cents', () => {
+    const baseline = scheduleOf([
+      paycheck({
+        date: '2026-08-07',
+        budgetRemaining: 250,
+        bills: [
+          {
+            billId: 'skip-me',
+            creditorName: 'Skipped',
+            amount: 999,
+            dueDay: 7,
+            priority: 'normal',
+            billDate: '2026-08-07',
+            isUnpayable: true,
+            isSkipped: true,
+          },
+        ],
+      }),
+      paycheck({ date: '2026-08-21', budgetRemaining: 150 }),
+    ]);
+    const trial = scheduleOf([
+      paycheck({ date: '2026-08-07', budgetRemaining: 250 }),
+      paycheck({ date: '2026-08-21', budgetRemaining: 250 }),
+    ]);
+
+    expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(true);
+  });
+
+  it('merges plan steps into an existing preferred map', () => {
+    const into = new Map([['prior-2026-08-01', '2026-07-15']]);
+    const map = preferredMapFromPlanSteps(plan().steps, into);
+    expect(map.get('prior-2026-08-01')).toBe('2026-07-15');
+    expect(map.get('sw-2026-08-21')).toBe('2026-08-07');
+  });
+
   it('filters out unsafe plans via dry-run callback', () => {
     const baseline = scheduleOf([
       paycheck({ date: '2026-08-07', budgetRemaining: 250 }),
