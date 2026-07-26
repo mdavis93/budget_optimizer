@@ -74,4 +74,19 @@ describe('logger.service', () => {
       expect.stringMatching(/\[INFO\] \[ROOT:CHILD\] nested message/)
     );
   });
+
+  it('serializes Error args with name message and stack', () => {
+    const err = new Error('boom');
+    logger.error('failed', err);
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringMatching(/\[ERROR\].*failed/),
+      expect.objectContaining({
+        name: 'Error',
+        message: 'boom',
+        stack: expect.stringContaining('boom'),
+      })
+    );
+  });
 });
+

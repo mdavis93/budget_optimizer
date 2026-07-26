@@ -66,6 +66,13 @@ class Logger {
 
   private sanitizeArgs(args: unknown[]): unknown[] {
     return args.map(arg => {
+      if (arg instanceof Error) {
+        return sanitizeObject({
+          name: arg.name,
+          message: arg.message,
+          stack: arg.stack,
+        });
+      }
       if (typeof arg === 'object' && arg !== null) {
         return sanitizeObject(arg);
       }
