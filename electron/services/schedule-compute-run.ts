@@ -6,6 +6,7 @@ import type {
 } from '@shared/scheduleComputeProtocol';
 import { SCHEDULE_COMPUTE_PROTOCOL_VERSION } from '@shared/scheduleComputeProtocol';
 import { deserializeScheduleComputeInput } from './schedule-compute-serialize';
+import { filterBreakGlassPlansByDryRun } from './scheduler/breakGlassDryRun';
 
 /**
  * Pure schedule/goal compute used by the utilityProcess worker and unit tests.
@@ -74,12 +75,39 @@ export function runScheduleCompute(
     paychecks: data.fullPaychecks ?? data.paychecks,
   };
   data.reconciliation = scheduler.analyzeAndProposeFixes(fullHorizon);
-  data.breakGlassAdvisor = scheduler.proposeBreakGlassPlans(fullHorizon, {
+  const proposed = scheduler.proposeBreakGlassPlans(fullHorizon, {
     scheduleStartDate: native.startDate,
     targetCashOnHand: native.targetCashOnHand,
     minCashOnHand: native.minCashOnHand,
     lockedBillKeys: new Set(native.manualAssignments.keys()),
   });
+  data.breakGlassAdvisor = filterBreakGlassPlansByDryRun(
+    proposed,
+    fullHorizon,
+    (preferredAssignments) => {
+      const trial = scheduler.generateSchedule(
+        incomes,
+        bills,
+        native.startDate,
+        native.months,
+        native.startingBalance,
+        native.skippedBills,
+        native.manualAssignments,
+        native.targetCashOnHand,
+        goals,
+        native.minCashOnHand,
+        native.minSavingsPerPaycheck,
+        native.debtPayoffs,
+        native.incomeOverrides,
+        leaves,
+        preferredAssignments
+      );
+      return {
+        ...trial,
+        paychecks: trial.fullPaychecks ?? trial.paychecks,
+      };
+    }
+  );
 
   const viewported = scheduler.applyViewportFilter(
     data,
