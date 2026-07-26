@@ -26,6 +26,16 @@ vi.mock('../../../electron/services/logger.service', () => ({
   },
 }));
 
+vi.mock('../../../electron/services/diagnostics.service', () => ({
+  diagnostics: {
+    report: vi.fn(() => ({ success: true, id: 'diag-test' })),
+    getEventBundle: vi.fn(),
+    getBundle: vi.fn(),
+    exportBundle: vi.fn(),
+    setSessionHooks: vi.fn(),
+  },
+}));
+
 type HandlerFn = (event: unknown, ...args: unknown[]) => Promise<unknown> | unknown;
 
 class MockIpcMain {
@@ -934,19 +944,19 @@ describe('ipc handlers', () => {
       });
       registerIpcHandlers(ipcMain as never, services as never);
 
-      await expect(ipcMain.invoke('budget:update', 'missing', { name: 'x' })).resolves.toEqual({
+      await expect(ipcMain.invoke('budget:update', 'missing', { name: 'x' })).resolves.toMatchObject({
         success: false,
         error: 'Budget not found',
       });
-      await expect(ipcMain.invoke('debts:update', 'missing', { apr: 12 })).resolves.toEqual({
+      await expect(ipcMain.invoke('debts:update', 'missing', { apr: 12 })).resolves.toMatchObject({
         success: false,
         error: 'Debt not found',
       });
-      await expect(ipcMain.invoke('debts:delete', 'missing')).resolves.toEqual({
+      await expect(ipcMain.invoke('debts:delete', 'missing')).resolves.toMatchObject({
         success: false,
         error: 'Debt not found',
       });
-      await expect(ipcMain.invoke('debts:get-amortization', 'missing')).resolves.toEqual({
+      await expect(ipcMain.invoke('debts:get-amortization', 'missing')).resolves.toMatchObject({
         success: false,
         error: 'Debt not found',
       });
@@ -958,11 +968,11 @@ describe('ipc handlers', () => {
           startDate: '2026-01-01',
           endDate: '2026-01-02',
         })
-      ).resolves.toEqual({
+      ).resolves.toMatchObject({
         success: false,
         error: 'Leave not found',
       });
-      await expect(ipcMain.invoke('leaves:delete', 'missing')).resolves.toEqual({
+      await expect(ipcMain.invoke('leaves:delete', 'missing')).resolves.toMatchObject({
         success: false,
         error: 'Leave not found',
       });
@@ -1005,15 +1015,15 @@ describe('ipc handlers', () => {
       });
       registerIpcHandlers(ipcMain as never, services as never);
 
-      await expect(ipcMain.invoke('income:update', 'missing', { sourceName: 'x' })).resolves.toEqual({
+      await expect(ipcMain.invoke('income:update', 'missing', { sourceName: 'x' })).resolves.toMatchObject({
         success: false,
         error: 'Income not found',
       });
-      await expect(ipcMain.invoke('bills:delete', 'missing')).resolves.toEqual({
+      await expect(ipcMain.invoke('bills:delete', 'missing')).resolves.toMatchObject({
         success: false,
         error: 'Bill not found',
       });
-      await expect(ipcMain.invoke('income:delete', 'missing')).resolves.toEqual({
+      await expect(ipcMain.invoke('income:delete', 'missing')).resolves.toMatchObject({
         success: false,
         error: 'Income not found',
       });
@@ -1021,11 +1031,11 @@ describe('ipc handlers', () => {
         success: true,
         data: [{ id: 'bill-1' }],
       });
-      await expect(ipcMain.invoke('bills:update', 'missing', { creditorName: 'x' })).resolves.toEqual({
+      await expect(ipcMain.invoke('bills:update', 'missing', { creditorName: 'x' })).resolves.toMatchObject({
         success: false,
         error: 'Bill not found',
       });
-      await expect(ipcMain.invoke('goals:update', 'missing', { name: 'x' })).resolves.toEqual({
+      await expect(ipcMain.invoke('goals:update', 'missing', { name: 'x' })).resolves.toMatchObject({
         success: false,
         error: 'Goal not found',
       });
@@ -1145,15 +1155,15 @@ describe('ipc handlers', () => {
       });
       registerIpcHandlers(ipcMain as never, services as never);
 
-      await expect(ipcMain.invoke('skipped-bills:unskip', 'bill-1', '2026-01-01')).resolves.toEqual({
+      await expect(ipcMain.invoke('skipped-bills:unskip', 'bill-1', '2026-01-01')).resolves.toMatchObject({
         success: false,
         error: 'unskip exploded',
       });
-      await expect(ipcMain.invoke('bill-assignments:remove', 'bill-1', '2026-01-01')).resolves.toEqual({
+      await expect(ipcMain.invoke('bill-assignments:remove', 'bill-1', '2026-01-01')).resolves.toMatchObject({
         success: false,
         error: 'remove exploded',
       });
-      await expect(ipcMain.invoke('goals:delete', 'goal-1')).resolves.toEqual({
+      await expect(ipcMain.invoke('goals:delete', 'goal-1')).resolves.toMatchObject({
         success: false,
         error: 'Goal not found',
       });
@@ -1168,7 +1178,7 @@ describe('ipc handlers', () => {
       });
       registerIpcHandlers(ipcMain as never, services as never);
 
-      await expect(ipcMain.invoke('budget:update', 'missing-budget', { name: 'X' })).resolves.toEqual({
+      await expect(ipcMain.invoke('budget:update', 'missing-budget', { name: 'X' })).resolves.toMatchObject({
         success: false,
         error: 'Budget not found',
       });
@@ -1183,7 +1193,7 @@ describe('ipc handlers', () => {
       });
       registerIpcHandlers(ipcMain as never, services as never);
 
-      await expect(ipcMain.invoke('budget:delete', 'budget-1')).resolves.toEqual({
+      await expect(ipcMain.invoke('budget:delete', 'budget-1')).resolves.toMatchObject({
         success: false,
         error: 'Cannot delete budget (may be current budget)',
       });
@@ -1285,10 +1295,11 @@ describe('ipc handlers', () => {
         { type: 'move_bill', billId: 'bill-1' },
       ]);
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         success: false,
         error: expect.stringContaining('Invalid reconciliation fixes'),
       });
+      expect(result).toHaveProperty('diagnosticId', 'diag-test');
       expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });

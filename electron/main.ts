@@ -12,19 +12,36 @@ import { DebtService } from './services/debt.service';
 import { CredentialsService } from './services/credentials.service';
 import { registerIpcHandlers } from './ipc/handlers';
 import { ScheduleComputeHost, runScheduleWorkerSmoke } from './services/schedule-compute-host';
+import { diagnostics } from './services/diagnostics.service';
 import { logger } from './services/logger.service';
 import { approveExportPath } from './utils/exportPaths';
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
+  try {
+    logger.error('Uncaught Exception:', error);
+    diagnostics.report({
+      source: 'main:uncaughtException',
+      error,
+    });
+  } catch {
+    /* never recurse */
+  }
   if (typeof dialog?.showErrorBox === 'function') {
     dialog.showErrorBox('Application Error', `An unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`);
   }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  try {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    diagnostics.report({
+      source: 'main:unhandledRejection',
+      error: reason,
+    });
+  } catch {
+    /* never recurse */
+  }
 });
 
 let mainWindow: BrowserWindow | null = null;
@@ -91,8 +108,26 @@ function createWindow() {
     mainWindow?.focus();
   });
 
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     logger.error('Failed to load:', errorCode, errorDescription);
+    diagnostics.report({
+      source: 'main:did-fail-load',
+      message: String(errorDescription),
+      errorCode: String(errorCode),
+      diagnostics: { errorCode, errorDescription: String(errorDescription) },
+    });
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    diagnostics.report({
+      source: 'main:render-process-gone',
+      message: details.reason,
+      errorCode: details.reason,
+      diagnostics: {
+        reason: details.reason,
+        exitCode: details.exitCode,
+      },
+    });
   });
 
   mainWindow.webContents.on('did-finish-load', () => {
@@ -160,6 +195,11 @@ app.whenReady().then(async () => {
     debt: new DebtService(),
     credentials: new CredentialsService(),
   };
+
+  diagnostics.setSessionHooks({
+    getBudgetUnlocked: () => services.auth.getIsUnlocked(),
+    startedAtMs: Date.now(),
+  });
 
   createWindow();
   

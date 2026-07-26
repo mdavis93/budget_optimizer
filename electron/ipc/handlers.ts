@@ -9,6 +9,7 @@ import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DebtService } from '../services/debt.service';
 import { ipcLogger } from '../services/logger.service';
+import { diagnostics } from '../services/diagnostics.service';
 import { DraftOverlayInput, resolveScheduleInputs } from '../services/draft-overlay.service';
 import { CredentialsService } from '../services/credentials.service';
 import { ScheduleComputeHost } from '../services/schedule-compute-host';
@@ -28,6 +29,7 @@ import {
   ipcData,
   ipcVoid,
   asReadyServices,
+  getSafeErrorMessage,
   type ApiResult,
 } from './guards';
 import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
@@ -44,6 +46,24 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function reportScheduleFailure(
+  op: ScheduleComputeOp,
+  error: unknown,
+  errorCode: string
+): string | undefined {
+  if (errorCode === 'superseded') {
+    return undefined;
+  }
+  const reported = diagnostics.report({
+    source: `ipc:schedule:${op}`,
+    message: getSafeErrorMessage(error),
+    stack: error instanceof Error ? error.stack ?? null : null,
+    errorCode,
+    diagnostics: { op, channel: `schedule:${op}` },
+  });
+  return reported.success ? reported.id : undefined;
 }
 
 interface ScheduleMaps {
@@ -128,10 +148,16 @@ async function runOffloadedCompute<T>(
   ) => T
 ): Promise<ApiResult<T>> {
   if (services.scheduleCompute.isDisposed) {
+    const diagnosticId = reportScheduleFailure(
+      op,
+      new Error('Schedule compute host is disposed'),
+      'disposed'
+    );
     return {
       success: false,
       error: 'Schedule compute host is disposed',
       errorCode: 'disposed',
+      ...(diagnosticId ? { diagnosticId } : {}),
     };
   }
 
@@ -146,18 +172,24 @@ async function runOffloadedCompute<T>(
     return { success: true, data: extract(message) };
   } catch (error) {
     if (isScheduleComputeError(error)) {
-      ipcLogger.error(`schedule compute ${op} failed:`, error.code, error.message);
+      if (error.code !== 'superseded') {
+        ipcLogger.error(`schedule compute ${op} failed:`, error.code, error.message);
+      }
+      const diagnosticId = reportScheduleFailure(op, error, error.code);
       return {
         success: false,
         error: error.message,
         errorCode: error.code,
+        ...(diagnosticId ? { diagnosticId } : {}),
       };
     }
     ipcLogger.error(`schedule compute ${op} failed:`, error);
+    const diagnosticId = reportScheduleFailure(op, error, 'worker_error');
     return {
       success: false,
       error: getErrorMessage(error),
       errorCode: 'worker_error',
+      ...(diagnosticId ? { diagnosticId } : {}),
     };
   }
 }
@@ -172,6 +204,12 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
     return { success: true };
   } catch (error) {
     ipcLogger.error('database init failed:', error);
+    diagnostics.report({
+      source: 'main:database-init',
+      message: getSafeErrorMessage(error),
+      stack: error instanceof Error ? error.stack ?? null : null,
+      diagnostics: { phase: 'initializeDatabaseServices' },
+    });
     services.auth.lock();
     services.database = null;
     services.budgetManager = null;
@@ -197,6 +235,12 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
           services.budgetManager = new BudgetManager(services.database);
         } catch (error) {
           ipcLogger.error('auth:create-master-password database init failed:', error);
+          diagnostics.report({
+            source: 'main:database-init',
+            message: getSafeErrorMessage(error),
+            stack: error instanceof Error ? error.stack ?? null : null,
+            diagnostics: { phase: 'create-master-password' },
+          });
           services.auth.revertFirstTimeSetup();
           services.database = null;
           services.budgetManager = null;
@@ -209,6 +253,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return result;
     } catch (error) {
       ipcLogger.error('auth:create-master-password failed:', error);
+      diagnostics.report({
+        source: 'ipc:auth:create-master-password',
+        message: getSafeErrorMessage(error),
+        stack: error instanceof Error ? error.stack ?? null : null,
+      });
       return { success: false, error: getErrorMessage(error) };
     }
   });
@@ -249,6 +298,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return { success: true };
     } catch (error) {
       ipcLogger.error('auth:lock failed:', error);
+      diagnostics.report({
+        source: 'ipc:auth:lock',
+        message: getSafeErrorMessage(error),
+        stack: error instanceof Error ? error.stack ?? null : null,
+      });
       return { success: false, error: getErrorMessage(error) };
     }
   });
