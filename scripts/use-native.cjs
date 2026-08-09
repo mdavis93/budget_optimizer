@@ -11,7 +11,8 @@ const {
   getElectronAbi,
   getElectronBinaryPath,
   getBetterSqlite3Version,
-  loadsUnderNode,
+  probeUnderNode,
+  probeUnderElectron,
   loadsUnderElectron,
   assertSafeCacheIdentity,
   resolveUnderNativeCache,
@@ -61,8 +62,12 @@ function assertElectronBinaryPresent() {
   );
 }
 
-function loadsUnderTarget(target) {
-  return target === 'node' ? loadsUnderNode() : loadsUnderElectron();
+function probeUnderTarget(target) {
+  return target === 'node' ? probeUnderNode() : probeUnderElectron();
+}
+
+function formatProbeFailure(prefix, detail) {
+  return detail ? `${prefix} — ${detail}` : prefix;
 }
 
 function buildIdentity(bs3Version, targetAbi) {
@@ -166,9 +171,13 @@ function compileForTarget(target) {
     compileForElectron();
   }
 
-  if (!loadsUnderTarget(target)) {
+  const probe = probeUnderTarget(target);
+  if (!probe.ok) {
     fail(
-      `use-native: ${target} binary still does not load after compile; refusing to write marker/cache`
+      formatProbeFailure(
+        `use-native: ${target} binary still does not load after compile; refusing to write marker/cache`,
+        probe.detail
+      )
     );
   }
 }
@@ -195,21 +204,29 @@ function main() {
   // Always probe under the target runtime. The marker is refreshed after a
   // successful probe/cache/compile for debugging, but is never trusted alone —
   // postinstall/rebuild can overwrite the binary while leaving a stale marker.
-  if (loadsUnderTarget(target)) {
+  if (probeUnderTarget(target).ok) {
     writeMarker(identity);
     status(`use-native: noop-probe (${target})`);
     return;
   }
 
+  status(`use-native: probe miss (${target}); trying cache or compile`);
+
   // Cache hit → install → post-copy probe
   if (fs.existsSync(cachePath)) {
     status(`use-native: cache-hit (${target})`);
     installBinaryFrom(cachePath);
-    if (loadsUnderTarget(target)) {
+    const postCopy = probeUnderTarget(target);
+    if (postCopy.ok) {
       writeMarker(identity);
       return;
     }
-    status('use-native: post-copy probe failed; purging bad cache entry and recompiling');
+    status(
+      formatProbeFailure(
+        'use-native: post-copy probe failed; purging bad cache entry and recompiling',
+        postCopy.detail
+      )
+    );
     purgeCacheEntry(cachePath);
   }
 
