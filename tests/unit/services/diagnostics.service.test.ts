@@ -126,6 +126,37 @@ describe('diagnostics.service', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Invalid export path');
     });
+
+    it('rejects empty-string source and invalid diagnostics bag shapes', () => {
+      expect(diagnostics.report({ source: '   ', message: 'x' })).toEqual({
+        success: false,
+        error: 'Invalid diagnostics report',
+      });
+      expect(
+        diagnostics.report({
+          source: 'test:bag',
+          message: 'x',
+          diagnostics: null as never,
+        })
+      ).toEqual({ success: false, error: 'Invalid diagnostics bag' });
+      expect(
+        diagnostics.report({
+          source: 'test:bag-array',
+          message: 'x',
+          diagnostics: [] as never,
+        })
+      ).toEqual({ success: false, error: 'Invalid diagnostics bag' });
+    });
+
+    it('rejects oversized diagnostics bag JSON', () => {
+      const result = diagnostics.report({
+        source: 'test:bag-size',
+        message: 'x',
+        diagnostics: { payload: 'word '.repeat(900) },
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Diagnostics bag too large');
+    });
   });
 
   describe('sad', () => {
@@ -158,6 +189,76 @@ describe('diagnostics.service', () => {
         success: false,
         error: 'Event not found',
       });
+      expect(diagnostics.getEventBundle('')).toEqual({
+        success: false,
+        error: 'Event not found',
+      });
+    });
+
+    it('rejects export when getBundle fails', () => {
+      const out = path.join(tempRoot, 'fail.json');
+      approved.add(path.resolve(out));
+      const spy = vi.spyOn(diagnostics, 'getBundle').mockReturnValueOnce({
+        success: false,
+        error: 'hydrate failed',
+      });
+      expect(diagnostics.exportBundle(out)).toEqual({
+        success: false,
+        error: 'hydrate failed',
+      });
+      spy.mockRestore();
+    });
+
+    it('rejects export when there are no diagnostics', () => {
+      const out = path.join(tempRoot, 'empty.json');
+      approved.add(path.resolve(out));
+      expect(diagnostics.exportBundle(out)).toEqual({
+        success: false,
+        error: 'No diagnostics to export',
+      });
+    });
+
+    it('reports warn-level events and error-derived messages', async () => {
+      const fromError = diagnostics.report({
+        source: 'test:err',
+        error: new Error('from-error'),
+        level: 'warn',
+        errorCode: 'e1',
+        componentStack: 'Comp\n  at Foo',
+      });
+      expect(fromError.success).toBe(true);
+      if (!fromError.success) return;
+      const event = diagnostics.getEventBundle(fromError.id).data!.errors[0];
+      expect(event.level).toBe('warn');
+      expect(event.message).toBe('from-error');
+      expect(event.errorCode).toBe('e1');
+      expect(event.componentStack).toContain('Comp');
+    });
+
+    it('sanitizes arrays, primitives, and null free text without throwing', async () => {
+      const reported = diagnostics.report({
+        source: 'test:sanitize',
+        message: 'ok',
+        diagnostics: {
+          list: [1, 'plain', null, { nested: true }],
+          flag: false,
+          empty: '',
+        },
+      });
+      expect(reported.success).toBe(true);
+      if (!reported.success) return;
+      const bag = diagnostics.getEventBundle(reported.id).data!.errors[0].diagnostics;
+      expect(Array.isArray(bag.list)).toBe(true);
+      expect(bag.flag).toBe(false);
+    });
+
+    it('bumps coalesce count when the same report arrives again', async () => {
+      const a = diagnostics.report({ source: 'coalesce-count', message: 'same', errorCode: 'c1' });
+      const b = diagnostics.report({ source: 'coalesce-count', message: 'same', errorCode: 'c1' });
+      const c = diagnostics.report({ source: 'coalesce-count', message: 'same', errorCode: 'c1' });
+      expect(a.success && b.success && c.success).toBe(true);
+      if (!a.success) return;
+      expect(diagnostics.getEventBundle(a.id).data!.errors[0].diagnostics.count).toBe(3);
     });
 
     it('rejects invalid report shape without throwing', () => {

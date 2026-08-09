@@ -1378,6 +1378,11 @@ describe('ipc handlers', () => {
           data: { errors: [expect.objectContaining({ id: 'diag-test' })] },
         });
 
+        await expect(ipcMain.invoke('diagnostics:get-bundle', 5)).resolves.toMatchObject({
+          success: true,
+          data: { errors: expect.any(Array) },
+        });
+
         approveExportPath('/Users/tester/diagnostics.json');
         await expect(
           ipcMain.invoke('diagnostics:export', '/Users/tester/diagnostics.json', 10)

@@ -61,6 +61,11 @@ describe('ErrorBoundary', () => {
           expect.stringContaining('diag-boundary')
         );
       });
+      expect(mockAPI.diagnostics.report).toHaveBeenCalledWith(
+        expect.objectContaining({
+          componentStack: expect.any(String),
+        })
+      );
     });
   });
 
@@ -79,6 +84,27 @@ describe('ErrorBoundary', () => {
         await Promise.resolve();
       });
       expect(screen.queryByRole('button', { name: /Copy report/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps Copy report idle when clipboard copy fails', async () => {
+      mockAPI.diagnostics.getEvent.mockResolvedValue({ success: false, error: 'missing' });
+      renderWithRouter(
+        <ErrorBoundary>
+          <Boom />
+        </ErrorBoundary>,
+        { mockAPI }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Copy report/i })).toBeInTheDocument();
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Copy report/i }));
+      });
+      await waitFor(() => {
+        expect(mockAPI.diagnostics.getEvent).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: /Copy failed/i })).toBeInTheDocument();
+      });
     });
   });
 
