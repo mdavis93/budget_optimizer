@@ -177,6 +177,7 @@ export async function persistIncomeDomain(
 ): Promise<{
   success: boolean;
   error?: string;
+  diagnosticId?: string;
   nextDraft: DraftState;
   nextCommitted: DraftState;
   idMap: Map<string, string>;
@@ -221,6 +222,7 @@ export async function persistBillsDomain(
 ): Promise<{
   success: boolean;
   error?: string;
+  diagnosticId?: string;
   nextDraft: DraftState;
   nextCommitted: DraftState;
   idMap: Map<string, string>;
@@ -252,7 +254,13 @@ export async function persistDebtsDomain(
   committed: DraftState,
   draft: DraftState,
   billIdMap: Map<string, string>
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const debtsWithMappedBills = remapDebtBillIds(draft.debts, billIdMap) as Debt[];
   const diff = computeEntityDiff(committed.debts, debtsWithMappedBills, debtEquals);
   const result = await persistEntityDiff(diff, {
@@ -280,7 +288,13 @@ export async function persistLeavesDomain(
   committed: DraftState,
   draft: DraftState,
   incomeIdMap: Map<string, string>
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const leavesWithMappedIncomes = remapLeaveIncomeIds(draft.leaves, incomeIdMap);
   const diff = computeEntityDiff(committed.leaves, leavesWithMappedIncomes, leaveEquals);
   const result = await persistEntityDiff(diff, {
@@ -307,7 +321,13 @@ export async function persistLeavesDomain(
 export async function persistGoalsDomain(
   committed: DraftState,
   draft: DraftState
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const diff = computeEntityDiff(committed.goals, draft.goals, goalEquals);
   const result = await persistEntityDiff(diff, {
     isDraftId,
@@ -335,7 +355,13 @@ export async function persistScheduleDomain(
   draft: DraftState,
   idMaps: { income: Map<string, string>; bill: Map<string, string> },
   budgetId: string | null = null
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const mapIncomeId = (id: string) => idMaps.income.get(id) ?? id;
   const mapBillId = (id: string) => idMaps.bill.get(id) ?? id;
 
@@ -481,7 +507,13 @@ export async function persistBudgetDomain(
   committed: DraftState,
   draft: DraftState,
   budgetId: string
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   if (!draft.budget || !committed.budget) {
     return { success: true, nextDraft: draft, nextCommitted: committed };
   }
