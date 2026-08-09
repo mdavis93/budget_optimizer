@@ -930,16 +930,16 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
 
   ipcMain.handle('diagnostics:get-event', (_event, eventId: unknown) => {
     const result = diagnostics.getEventBundle(typeof eventId === 'string' ? eventId : '');
-    if (!result.success || !result.data) {
-      return { success: false, error: result.error || 'Event not found' };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
     return { success: true, data: result.data };
   });
 
   ipcMain.handle('diagnostics:get-bundle', (_event, limit?: unknown) => {
     const result = diagnostics.getBundle(limit);
-    if (!result.success || !result.data) {
-      return { success: false, error: result.error || 'Failed to get bundle' };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
     return { success: true, data: result.data };
   });

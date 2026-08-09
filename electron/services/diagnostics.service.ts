@@ -27,6 +27,10 @@ export type DiagnosticReportResult =
   | { success: true; id: string }
   | { success: false; error: string };
 
+export type DiagnosticBundleResult =
+  | { success: true; id: string; data: DiagnosticBundle }
+  | { success: false; error: string };
+
 type SessionHooks = {
   getBudgetUnlocked: () => boolean;
   startedAtMs: number;
@@ -351,7 +355,7 @@ class DiagnosticsService {
     };
   }
 
-  getEventBundle(eventId: string): DiagnosticReportResult & { data?: DiagnosticBundle } {
+  getEventBundle(eventId: string): DiagnosticBundleResult {
     try {
       this.hydrate();
       if (typeof eventId !== 'string' || !eventId.trim()) {
@@ -368,7 +372,7 @@ class DiagnosticsService {
     }
   }
 
-  getBundle(limit?: unknown): DiagnosticReportResult & { data?: DiagnosticBundle } {
+  getBundle(limit?: unknown): DiagnosticBundleResult {
     try {
       this.hydrate();
       const n = clampDiagnosticsLimit(limit, DIAGNOSTICS_EXPORT_DEFAULT_LIMIT);
@@ -393,8 +397,8 @@ class DiagnosticsService {
         return { success: false, error: 'Invalid export path' };
       }
       const bundleResult = this.getBundle(limit);
-      if (!bundleResult.success || !bundleResult.data) {
-        return { success: false, error: bundleResult.error || 'No diagnostics to export' };
+      if (!bundleResult.success) {
+        return { success: false, error: bundleResult.error };
       }
       if (bundleResult.data.errors.length === 0) {
         return { success: false, error: 'No diagnostics to export' };
