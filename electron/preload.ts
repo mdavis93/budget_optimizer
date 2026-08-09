@@ -50,6 +50,11 @@ const api = {
     setAutoLock: (minutes: number) =>
       ipcRenderer.invoke('auth:set-auto-lock', minutes),
     activityPing: () => ipcRenderer.invoke('auth:activity-ping'),
+    onLocked: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('auth:locked', handler);
+      return () => ipcRenderer.removeListener('auth:locked', handler);
+    },
   },
 
   income: {

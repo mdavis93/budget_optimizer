@@ -370,6 +370,8 @@ describe('AuthService lock and password paths', () => {
       vi.useFakeTimers();
       try {
         const auth = new AuthService();
+        const onLock = vi.fn();
+        auth.setOnLock(onLock);
         await auth.createMasterPassword('testpassword123');
         auth.setAutoLock(1);
 
@@ -377,9 +379,11 @@ describe('AuthService lock and password paths', () => {
         auth.recordActivity();
         vi.advanceTimersByTime(40_000);
         expect(auth.getIsUnlocked()).toBe(true);
+        expect(onLock).not.toHaveBeenCalled();
 
         vi.advanceTimersByTime(21_000);
         expect(auth.getIsUnlocked()).toBe(false);
+        expect(onLock).toHaveBeenCalledTimes(1);
       } finally {
         vi.useRealTimers();
       }

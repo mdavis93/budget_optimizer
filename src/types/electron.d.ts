@@ -81,6 +81,7 @@ interface ElectronAPI {
     resetPasswordWithRecovery: (recoveryKey: string, newPassword: string) => Promise<ApiResult & { newRecoveryKey?: string }>;
     setAutoLock: (minutes: number) => Promise<ApiResult>;
     activityPing: () => Promise<ApiResult>;
+    onLocked: (callback: () => void) => () => void;
   };
 
   income: {

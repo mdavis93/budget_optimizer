@@ -23,6 +23,7 @@ import {
 } from '@shared/scheduleComputeProtocol';
 import type { GoalProjection, ScheduleData } from '@shared/types';
 import { resolveAppBrowserWindow } from '../utils/dialog';
+import { applyLockSideEffects } from './appLock';
 import {
   withUnlockGuard,
   withBudgetGuard,
@@ -32,7 +33,7 @@ import {
   getSafeErrorMessage,
   type ApiResult,
 } from './guards';
-import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
+import { validateExportPath } from '../utils/exportPaths';
 import {
   assertValid,
   validateBreakGlassApplySteps,
@@ -221,6 +222,10 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
 }
 
 export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void {
+  services.auth.setOnLock(() => {
+    applyLockSideEffects(services);
+  });
+
   ipcMain.handle('auth:is-first-time-setup', () => {
     return services.auth.isFirstTimeSetup();
   });
@@ -287,14 +292,6 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   ipcMain.handle('auth:lock', () => {
     try {
       services.auth.lock();
-      clearApprovedExportPaths();
-      if (services.budgetManager) {
-        services.budgetManager = null;
-      }
-      if (services.database) {
-        services.database.close();
-        services.database = null;
-      }
       return { success: true };
     } catch (error) {
       ipcLogger.error('auth:lock failed:', error);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
 
 interface AuthContextType {
   isUnlocked: boolean;
@@ -26,6 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initialStatusResolvedRef = useRef(false);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.auth.onLocked?.(() => {
+      setIsUnlocked(false);
+    });
+    return unsubscribe;
+  }, []);
 
   const checkAuthStatus = useCallback(async () => {
     // Only the first status probe may flash the full-app loading screen.

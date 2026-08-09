@@ -99,14 +99,19 @@ class MockIpcMain {
 }
 
 function createServices(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    auth: {
+  let onLockListener: (() => void) | null = null;
+  const baseAuth = {
       getIsUnlocked: vi.fn(() => true),
       isFirstTimeSetup: vi.fn(() => false),
       createMasterPassword: vi.fn(async () => ({ success: true })),
       unlock: vi.fn(async () => ({ success: true })),
       unlockWithBiometric: vi.fn(async () => ({ success: true })),
-      lock: vi.fn(),
+      lock: vi.fn(() => {
+        onLockListener?.();
+      }),
+      setOnLock: vi.fn((listener: (() => void) | null) => {
+        onLockListener = listener;
+      }),
       enableBiometric: vi.fn(async () => ({ success: true })),
       isBiometricEnabled: vi.fn(() => false),
       changePassword: vi.fn(async () => ({ success: true })),
@@ -118,6 +123,12 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       recordActivity: vi.fn(),
       getCryptoService: vi.fn(() => ({})),
       revertFirstTimeSetup: vi.fn(),
+  };
+
+  return {
+    auth: {
+      ...baseAuth,
+      ...(overrides.auth as object | undefined),
     },
     crypto: {},
     database: {
@@ -509,13 +520,8 @@ describe('ipc handlers', () => {
     });
 
     it('locks auth and clears active budget/database services', async () => {
-      const lock = vi.fn();
       const close = vi.fn();
       const services = createServices({
-        auth: {
-          ...createServices().auth,
-          lock,
-        },
         database: {
           ...createServices().database,
           close,
@@ -525,7 +531,7 @@ describe('ipc handlers', () => {
 
       const result = await ipcMain.invoke('auth:lock');
       expect(result).toEqual({ success: true });
-      expect(lock).toHaveBeenCalled();
+      expect(services.auth.lock).toHaveBeenCalled();
       expect(close).toHaveBeenCalled();
       expect(services.database).toBeNull();
       expect(services.budgetManager).toBeNull();

@@ -204,6 +204,7 @@ export const createMockElectronAPI = () => {
       resetPasswordWithRecovery: vi.fn().mockResolvedValue({ success: true, newRecoveryKey: 'new-key' }),
       setAutoLock: vi.fn().mockResolvedValue({ success: true }),
       activityPing: vi.fn().mockResolvedValue({ success: true }),
+      onLocked: vi.fn(() => () => {}),
     },
 
     income: {
