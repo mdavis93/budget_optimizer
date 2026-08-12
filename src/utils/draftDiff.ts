@@ -91,6 +91,12 @@ export async function persistEntityDiff<T extends { id: string }, CreateInput, U
     if (options.isDraftId(id)) continue;
     const result = await options.remove(id);
     if (!result.success) {
+      // Idempotent delete: stale committed snapshots (e.g. after lock/unlock or
+      // a prior partial save) may list IDs already absent from SQLite.
+      const err = result.error || '';
+      if (/not found/i.test(err)) {
+        continue;
+      }
       return {
         success: false,
         error: result.error || 'Failed to delete item',

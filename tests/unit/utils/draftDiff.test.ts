@@ -168,9 +168,9 @@ describe('draftDiff', () => {
       await expect(
         persistEntityDiff(
           { created: [], updated: [], deleted: ['real-1'] },
-          { ...baseOptions, remove: async () => ({ success: false }) }
+          { ...baseOptions, remove: async () => ({ success: false, error: 'disk full' }) }
         )
-      ).resolves.toEqual({ success: false, error: 'Failed to delete item' });
+      ).resolves.toEqual({ success: false, error: 'disk full' });
 
       await expect(
         persistEntityDiff(
@@ -185,6 +185,16 @@ describe('draftDiff', () => {
           { ...baseOptions, create: async () => ({ success: true }) }
         )
       ).resolves.toEqual({ success: false, error: 'Failed to create item' });
+    });
+
+    it('treats not-found deletes as success for stale committed snapshots', async () => {
+      const remove = vi.fn(async () => ({ success: false, error: 'Bill not found' }));
+      const result = await persistEntityDiff(
+        { created: [], updated: [], deleted: ['ghost-1', 'ghost-2'] },
+        { ...baseOptions, remove }
+      );
+      expect(result).toEqual({ success: true, idMap: new Map() });
+      expect(remove).toHaveBeenCalledTimes(2);
     });
 
     it('maps created draft ids to persisted ids', async () => {

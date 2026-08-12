@@ -228,8 +228,21 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  // Kill schedule utility process before closing the database.
+app.on('before-quit', (event) => {
+  // Native Quit (Cmd+Q / Dock) emits before-quit BEFORE window close.
+  // If we dispose here while the unsaved-changes guard still cancels the
+  // window close, the app stays open with a dead DB + disposed schedule host.
+  if (!allowWindowClose) {
+    event.preventDefault();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('app:close-requested');
+    }
+    return;
+  }
+
+  // Confirmed quit path — tear down compute + DB.
   if (services?.scheduleCompute) {
     services.scheduleCompute.dispose();
   }

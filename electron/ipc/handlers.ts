@@ -149,17 +149,8 @@ async function runOffloadedCompute<T>(
   ) => T
 ): Promise<ApiResult<T>> {
   if (services.scheduleCompute.isDisposed) {
-    const diagnosticId = reportScheduleFailure(
-      op,
-      new Error('Schedule compute host is disposed'),
-      'disposed'
-    );
-    return {
-      success: false,
-      error: 'Schedule compute host is disposed',
-      errorCode: 'disposed',
-      ...(diagnosticId ? { diagnosticId } : {}),
-    };
+    // Recover from a cancelled Quit that disposed the host while the window stayed open.
+    services.scheduleCompute = new ScheduleComputeHost();
   }
 
   try {
@@ -202,6 +193,10 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
     services.budgetManager = new BudgetManager(services.database);
     const settings = services.database.getSettings();
     services.auth.setAutoLock(settings.autoLockMinutes);
+    // Lock clears BudgetManager; restore last selection so parked drafts can save.
+    if (settings.lastBudgetId) {
+      services.budgetManager.setCurrentBudget(settings.lastBudgetId);
+    }
     return { success: true };
   } catch (error) {
     ipcLogger.error('database init failed:', error);

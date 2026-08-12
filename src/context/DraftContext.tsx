@@ -261,6 +261,11 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       parked.budgetId === (currentBudget?.id ?? null)
     ) {
       parkedDraftRef.current = null;
+      // Main-process BudgetManager is recreated on unlock with no selection;
+      // rebind so subsequent persist IPC is not "No budget selected".
+      if (parked.budgetId) {
+        void window.electronAPI.budget.switch(parked.budgetId);
+      }
       setCommitted(parked.committed);
       setDraft(parked.draft);
       setDirtyDomains(new Set(parked.dirtyDomains));
