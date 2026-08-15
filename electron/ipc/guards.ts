@@ -1,8 +1,13 @@
 import { IpcMainInvokeEvent } from 'electron';
+import type { ApiFailure, ApiResult, ApiSuccess } from '@shared/types';
 import { AuthService } from '../services/auth.service';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DatabaseService } from '../services/database.service';
+import { diagnostics } from '../services/diagnostics.service';
 import { ipcLogger } from '../services/logger.service';
+import { ValidationError } from '../services/validation.service';
+
+export type { ApiFailure, ApiResult, ApiSuccess };
 
 export interface GuardedServices {
   auth: AuthService;
@@ -10,17 +15,39 @@ export interface GuardedServices {
   budgetManager: BudgetManager | null;
 }
 
-export type GuardError = { success: false; error: string; errorCode?: string };
-
-export type ApiSuccess<T> = { success: true; data: T };
-export type ApiFailure = { success: false; error: string; errorCode?: string };
-export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
+export type GuardError = ApiFailure;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
   return String(error);
+}
+
+/** Safe user-facing + log message; ValidationError omits embedded values. */
+export function getSafeErrorMessage(error: unknown): string {
+  if (error instanceof ValidationError) {
+    return error.field ? `Invalid ${error.field}` : 'Validation failed';
+  }
+  return getErrorMessage(error);
+}
+
+export function reportIpcFailure(
+  channel: string,
+  error: unknown
+): string | undefined {
+  const isValidation = error instanceof ValidationError;
+  const reported = diagnostics.report({
+    source: `ipc:${channel}`,
+    message: getSafeErrorMessage(error),
+    stack: error instanceof Error ? error.stack ?? null : null,
+    errorCode: isValidation ? 'validation' : null,
+    diagnostics: {
+      channel,
+      ...(isValidation && error.field ? { field: error.field } : {}),
+    },
+  });
+  return reported.success ? reported.id : undefined;
 }
 
 export function requireUnlocked(services: GuardedServices): GuardError | null {
@@ -89,7 +116,12 @@ export async function ipcData<T>(
     return { success: true, data: await fn() };
   } catch (error) {
     ipcLogger.error(`${channel} failed:`, error);
-    return { success: false, error: getErrorMessage(error) };
+    const diagnosticId = reportIpcFailure(channel, error);
+    return {
+      success: false,
+      error: getErrorMessage(error),
+      ...(diagnosticId ? { diagnosticId } : {}),
+    };
   }
 }
 
@@ -102,6 +134,11 @@ export async function ipcVoid(
     return { success: true };
   } catch (error) {
     ipcLogger.error(`${channel} failed:`, error);
-    return { success: false, error: getErrorMessage(error) };
+    const diagnosticId = reportIpcFailure(channel, error);
+    return {
+      success: false,
+      error: getErrorMessage(error),
+      ...(diagnosticId ? { diagnosticId } : {}),
+    };
   }
 }

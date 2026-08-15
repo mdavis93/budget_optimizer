@@ -1,11 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDraftActions, useDraftData, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
+import { useToast } from '../components/Toast';
+import { copyDiagnosticReport, reportError } from '../utils/reportError';
 import type { BreakGlassPlan, ProposedFix } from '../types';
+
+function toastIpcFailure(
+  showToast: ReturnType<typeof useToast>['showToast'],
+  message: string,
+  diagnosticId?: string
+) {
+  showToast('error', message, {
+    action: diagnosticId
+      ? {
+          label: 'Copy report',
+          onClick: () => {
+            void copyDiagnosticReport(diagnosticId);
+          },
+        }
+      : undefined,
+  });
+}
 
 export function useScheduleMutations() {
   const { isQuickBudget } = useBudget();
   const { billAssignments } = useDraftData();
+  const { showToast } = useToast();
   const {
     applyBreakGlassPlan,
     applyReconciliationFixes,
@@ -80,14 +100,20 @@ export function useScheduleMutations() {
             force: true,
             preferredAssignments: preferred,
           });
+        } else {
+          toastIpcFailure(
+            showToast,
+            result.error || 'Failed to apply reconciliation fixes',
+            result.diagnosticId
+          );
         }
       } else if (applyReconciliationFixes(fixes)) {
         setShowReconciliation(false);
         setDismissedReconciliation(false);
         generateSchedule(startDate, months, startingBalance, { force: true });
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useScheduleMutations.handleApplyFixes', error);
     } finally {
       setIsApplyingFixes(false);
     }
@@ -96,6 +122,7 @@ export function useScheduleMutations() {
     generateSchedule,
     isQuickBudget,
     months,
+    showToast,
     startDate,
     startingBalance,
   ]);
@@ -141,12 +168,18 @@ export function useScheduleMutations() {
             force: true,
             preferredAssignments: preferred,
           });
+        } else {
+          toastIpcFailure(
+            showToast,
+            result.error || 'Failed to apply break-glass plan',
+            result.diagnosticId
+          );
         }
       } else if (applyBreakGlassPlan(plan)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useScheduleMutations.handleAcceptBreakGlassPlan', error);
     } finally {
       setIsApplyingBreakGlass(false);
       setApplyingBreakGlassPlanId(null);
@@ -156,6 +189,7 @@ export function useScheduleMutations() {
     generateSchedule,
     isQuickBudget,
     months,
+    showToast,
     startDate,
     startingBalance,
   ]);
@@ -176,8 +210,8 @@ export function useScheduleMutations() {
       } else if (skipBill(billId, billDate)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useScheduleMutations.handleSkipBill', error);
     } finally {
       setSkippingBill(null);
     }
@@ -227,8 +261,8 @@ export function useScheduleMutations() {
       } else {
         removeBillAssignment(billId, billDueDate);
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useScheduleMutations.handleUnskipBill', error);
     } finally {
       setRestoringBill(null);
     }
@@ -249,8 +283,8 @@ export function useScheduleMutations() {
       } else {
         clearBillAssignments();
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useScheduleMutations.handleRestoreBill', error);
     } finally {
       setIsRestoringAllBills(false);
     }
@@ -272,8 +306,8 @@ export function useScheduleMutations() {
       } else {
         clearStaleBillAssignments(validPaycheckDates);
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useScheduleMutations.handleRestoreAllBills', error);
     } finally {
       setIsClearingStaleBills(false);
     }

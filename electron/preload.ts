@@ -50,6 +50,11 @@ const api = {
     setAutoLock: (minutes: number) =>
       ipcRenderer.invoke('auth:set-auto-lock', minutes),
     activityPing: () => ipcRenderer.invoke('auth:activity-ping'),
+    onLocked: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('auth:locked', handler);
+      return () => ipcRenderer.removeListener('auth:locked', handler);
+    },
   },
 
   income: {
@@ -168,6 +173,22 @@ const api = {
     delete: () => ipcRenderer.invoke('credentials:delete'),
     has: () => ipcRenderer.invoke('credentials:has'),
     offerSave: (password: string) => ipcRenderer.invoke('credentials:offer-save', password),
+  },
+
+  diagnostics: {
+    report: (input: {
+      source: string;
+      level?: 'error' | 'warn';
+      message?: string;
+      stack?: string | null;
+      componentStack?: string | null;
+      errorCode?: string | null;
+      diagnostics?: Record<string, unknown>;
+    }) => ipcRenderer.invoke('diagnostics:report', input),
+    getEvent: (eventId: string) => ipcRenderer.invoke('diagnostics:get-event', eventId),
+    getBundle: (limit?: number) => ipcRenderer.invoke('diagnostics:get-bundle', limit),
+    export: (filePath: string, limit?: number) =>
+      ipcRenderer.invoke('diagnostics:export', filePath, limit),
   },
 };
 

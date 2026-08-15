@@ -41,7 +41,7 @@ Run manually anytime: `pnpm prepush`.
 
 ### Native ABI auto-swap (`better-sqlite3`)
 
-Node unit tests and Electron (`electron:dev` / `test:e2e`) need different `better-sqlite3` ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and always load-probes under the *target* runtime (Node or Electron). On success it refreshes a marker under `.cache/native/`; on failure it copies from a version-keyed cache or recompiles. The marker is for debugging only — it is never trusted alone to skip the probe (rebuilds can overwrite the binary while leaving a stale marker).
+Node unit tests and Electron (`electron:dev` / `test:e2e`) need different `better-sqlite3` ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and always load-probes under the *target* runtime (Node or Electron). On success it refreshes a marker under `.cache/native/`; on failure it copies from a version-keyed cache or recompiles. The marker is for debugging only — it is never trusted alone to skip the probe (rebuilds can overwrite the binary while leaving a stale marker). Expected probe misses stay quiet (a short status line only); probe stderr is printed only when cache/compile recovery fails.
 
 - Prefer `pnpm test`, `pnpm test:run`, `pnpm electron:dev`, and `pnpm test:e2e` — bare `vitest` / `playwright test` bypass the helper.
 - If the ABI looks stuck, delete `.cache/native/` and re-run the script you need.

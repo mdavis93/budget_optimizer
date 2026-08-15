@@ -177,6 +177,7 @@ export async function persistIncomeDomain(
 ): Promise<{
   success: boolean;
   error?: string;
+  diagnosticId?: string;
   nextDraft: DraftState;
   nextCommitted: DraftState;
   idMap: Map<string, string>;
@@ -192,7 +193,7 @@ export async function persistIncomeDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -221,6 +222,7 @@ export async function persistBillsDomain(
 ): Promise<{
   success: boolean;
   error?: string;
+  diagnosticId?: string;
   nextDraft: DraftState;
   nextCommitted: DraftState;
   idMap: Map<string, string>;
@@ -237,7 +239,7 @@ export async function persistBillsDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed, idMap: new Map() };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -252,7 +254,13 @@ export async function persistDebtsDomain(
   committed: DraftState,
   draft: DraftState,
   billIdMap: Map<string, string>
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const debtsWithMappedBills = remapDebtBillIds(draft.debts, billIdMap) as Debt[];
   const diff = computeEntityDiff(committed.debts, debtsWithMappedBills, debtEquals);
   const result = await persistEntityDiff(diff, {
@@ -265,7 +273,7 @@ export async function persistDebtsDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -280,7 +288,13 @@ export async function persistLeavesDomain(
   committed: DraftState,
   draft: DraftState,
   incomeIdMap: Map<string, string>
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const leavesWithMappedIncomes = remapLeaveIncomeIds(draft.leaves, incomeIdMap);
   const diff = computeEntityDiff(committed.leaves, leavesWithMappedIncomes, leaveEquals);
   const result = await persistEntityDiff(diff, {
@@ -293,7 +307,7 @@ export async function persistLeavesDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -307,7 +321,13 @@ export async function persistLeavesDomain(
 export async function persistGoalsDomain(
   committed: DraftState,
   draft: DraftState
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const diff = computeEntityDiff(committed.goals, draft.goals, goalEquals);
   const result = await persistEntityDiff(diff, {
     isDraftId,
@@ -319,7 +339,7 @@ export async function persistGoalsDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error, nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error, diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const idMap = result.idMap ?? new Map<string, string>();
@@ -335,7 +355,13 @@ export async function persistScheduleDomain(
   draft: DraftState,
   idMaps: { income: Map<string, string>; bill: Map<string, string> },
   budgetId: string | null = null
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   const mapIncomeId = (id: string) => idMaps.income.get(id) ?? id;
   const mapBillId = (id: string) => idMaps.bill.get(id) ?? id;
 
@@ -374,14 +400,14 @@ export async function persistScheduleDomain(
   for (const item of skippedDiff.removed) {
     const result = await window.electronAPI.skippedBills.unskip(item.billId, item.skipDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to unskip bill', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to unskip bill', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
   for (const item of skippedDiff.added) {
     const result = await window.electronAPI.skippedBills.skip(item.billId, item.skipDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to skip bill', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to skip bill', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -395,7 +421,7 @@ export async function persistScheduleDomain(
   for (const item of assignmentDiff.removed) {
     const result = await window.electronAPI.billAssignments.remove(item.billId, item.billDueDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to remove assignment', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to remove assignment', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -406,7 +432,7 @@ export async function persistScheduleDomain(
       item.paycheckDate
     );
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to assign bill', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to assign bill', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -420,7 +446,7 @@ export async function persistScheduleDomain(
   for (const item of overrideDiff.removed) {
     const result = await window.electronAPI.incomeOverrides.remove(item.incomeId, item.paycheckDate);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to remove income override', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to remove income override', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -431,7 +457,7 @@ export async function persistScheduleDomain(
       item.amount
     );
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to set income override', nextDraft: draft, nextCommitted: committed };
+      return { success: false, error: result.error || 'Failed to set income override', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
     }
   }
 
@@ -463,6 +489,7 @@ export async function persistScheduleDomain(
       return {
         success: false,
         error: result.error || 'Failed to update schedule start date',
+        diagnosticId: result.diagnosticId,
         nextDraft: draft,
         nextCommitted: committed,
       };
@@ -480,7 +507,13 @@ export async function persistBudgetDomain(
   committed: DraftState,
   draft: DraftState,
   budgetId: string
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   if (!draft.budget || !committed.budget) {
     return { success: true, nextDraft: draft, nextCommitted: committed };
   }
@@ -499,7 +532,7 @@ export async function persistBudgetDomain(
   });
 
   if (!result.success) {
-    return { success: false, error: result.error || 'Failed to update budget', nextDraft: draft, nextCommitted: committed };
+    return { success: false, error: result.error || 'Failed to update budget', diagnosticId: result.diagnosticId, nextDraft: draft, nextCommitted: committed };
   }
 
   const nextCommitted = { ...committed, budget: structuredClone(draft.budget) };
@@ -578,7 +611,13 @@ export async function persistDomains(
   draft: DraftState,
   domains: DraftDomain[],
   budgetId: string | null
-): Promise<{ success: boolean; error?: string; nextDraft: DraftState; nextCommitted: DraftState }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  diagnosticId?: string;
+  nextDraft: DraftState;
+  nextCommitted: DraftState;
+}> {
   let nextDraft = draft;
   let nextCommitted = committed;
   const incomeIdMap = new Map<string, string>();

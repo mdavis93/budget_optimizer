@@ -9,6 +9,7 @@ const mockUseData = vi.fn();
 const mockUseDraftData = vi.fn();
 const mockUseDraftActions = vi.fn();
 const mockUseBudget = vi.fn();
+const mockShowToast = vi.fn();
 
 vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => ({ ...mockUseDraftData(), ...mockUseDraftActions() }),
@@ -17,6 +18,10 @@ vi.mock('../../src/context/DraftContext', () => ({
 }));
 vi.mock('../../src/context/BudgetContext', () => ({
   useBudget: () => mockUseBudget(),
+}));
+
+vi.mock('../../src/components/Toast', () => ({
+  useToast: () => ({ showToast: mockShowToast, dismissToast: vi.fn() }),
 }));
 
 vi.mock('recharts', () => {
@@ -428,6 +433,80 @@ describe('DebtsPage', () => {
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('Never')).toBeInTheDocument();
       expect(screen.getByText('—')).toBeInTheDocument();
+    });
+
+    it('toasts quick-budget create/update/delete failures with optional Copy report', async () => {
+      mockUseBudget.mockReturnValue({ isQuickBudget: true });
+      mockAPI.debts.create.mockResolvedValueOnce({
+        success: false,
+        error: 'create failed',
+        diagnosticId: 'diag-debt',
+      });
+      mockAPI.debts.update.mockResolvedValueOnce({ success: false });
+      mockAPI.debts.delete.mockResolvedValueOnce({
+        success: false,
+        error: 'delete failed',
+        diagnosticId: 'diag-del',
+      });
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+      mockAPI.diagnostics.getEvent.mockResolvedValue({
+        success: true,
+        data: { errors: [{ id: 'diag-debt' }] },
+      });
+
+      renderWithRouter(<DebtsPage />, { mockAPI });
+      expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[0]);
+      fireEvent.change(screen.getByLabelText('Linked Bill'), { target: { value: 'bill-2' } });
+      fireEvent.change(screen.getByLabelText('Remaining Balance (Principal)'), {
+        target: { value: '900' },
+      });
+      fireEvent.change(screen.getByLabelText('Annual Percentage Rate (APR)'), {
+        target: { value: '19' },
+      });
+      fireEvent.change(screen.getByLabelText('Monthly Payment'), { target: { value: '120' } });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[1]);
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'error',
+          'create failed',
+          expect.objectContaining({
+            action: expect.objectContaining({ label: 'Copy report' }),
+          })
+        );
+      });
+      const createAction = mockShowToast.mock.calls.at(-1)?.[2] as {
+        action: { onClick: () => void };
+      };
+      createAction.action.onClick();
+      expect(mockAPI.diagnostics.getEvent).toHaveBeenCalledWith('diag-debt');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      fireEvent.click(await screen.findByRole('button', { name: /Edit debt/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Update Debt' }));
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'error',
+          'Failed to update debt',
+          expect.objectContaining({ action: undefined })
+        );
+      });
+
+      fireEvent.click(await screen.findByRole('button', { name: /Delete debt/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'error',
+          'delete failed',
+          expect.objectContaining({
+            action: expect.objectContaining({ label: 'Copy report' }),
+          })
+        );
+      });
     });
 
     it('renders chart data for 6-month view window', async () => {

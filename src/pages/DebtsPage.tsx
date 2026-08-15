@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CreditCard, Plus, ChevronDown } from 'lucide-react';
 import { useDraftData, useDraftActions } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
+import { useToast } from '../components/Toast';
+import { copyDiagnosticReport, reportError } from '../utils/reportError';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -29,6 +31,7 @@ export default function DebtsPage() {
     deleteDebt: removeDebt,
   } = useDraftActions();
   const { isQuickBudget } = useBudget();
+  const { showToast } = useToast();
   const [debtsWithAmortization, setDebtsWithAmortization] = useState<DebtWithAmortization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(12);
@@ -44,8 +47,8 @@ export default function DebtsPage() {
     try {
       const data = await getDebtsWithAmortization();
       setDebtsWithAmortization(data);
-    } catch {
-      // Error loading debts
+    } catch (error) {
+      void reportError('renderer:DebtsPage.loadDebts', error);
     } finally {
       setIsLoading(false);
     }
@@ -105,14 +108,25 @@ export default function DebtsPage() {
           await loadDebts();
           setIsModalOpen(false);
           setPreselectedBill(null);
+        } else {
+          showToast('error', result.error || 'Failed to create debt', {
+            action: result.diagnosticId
+              ? {
+                  label: 'Copy report',
+                  onClick: () => {
+                    void copyDiagnosticReport(result.diagnosticId!);
+                  },
+                }
+              : undefined,
+          });
         }
       } else if (createDebt(data)) {
         await loadDebts();
         setIsModalOpen(false);
         setPreselectedBill(null);
       }
-    } catch {
-      // Error creating debt
+    } catch (error) {
+      void reportError('renderer:DebtsPage.handleCreateDebt', error);
     }
   };
 
@@ -136,13 +150,24 @@ export default function DebtsPage() {
           await reloadSnapshot();
           await loadDebts();
           setEditingDebt(null);
+        } else {
+          showToast('error', result.error || 'Failed to update debt', {
+            action: result.diagnosticId
+              ? {
+                  label: 'Copy report',
+                  onClick: () => {
+                    void copyDiagnosticReport(result.diagnosticId!);
+                  },
+                }
+              : undefined,
+          });
         }
       } else if (updateDebt(editingDebt.debt.id, data)) {
         await loadDebts();
         setEditingDebt(null);
       }
-    } catch {
-      // Error updating debt
+    } catch (error) {
+      void reportError('renderer:DebtsPage.handleUpdateDebt', error);
     }
   };
 
@@ -156,13 +181,24 @@ export default function DebtsPage() {
           await reloadSnapshot();
           await loadDebts();
           setDeleteDebt(null);
+        } else {
+          showToast('error', result.error || 'Failed to delete debt', {
+            action: result.diagnosticId
+              ? {
+                  label: 'Copy report',
+                  onClick: () => {
+                    void copyDiagnosticReport(result.diagnosticId!);
+                  },
+                }
+              : undefined,
+          });
         }
       } else if (removeDebt(deleteDebt.debt.id)) {
         await loadDebts();
         setDeleteDebt(null);
       }
-    } catch {
-      // Error deleting debt
+    } catch (error) {
+      void reportError('renderer:DebtsPage.handleDeleteDebt', error);
     }
   };
 

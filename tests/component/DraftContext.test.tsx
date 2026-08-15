@@ -964,7 +964,18 @@ describe('DraftContext', () => {
     });
 
     it('keeps dirty state when saveAll fails', async () => {
-      mockPersistDomains.mockResolvedValueOnce({ success: false, error: 'save all failed' });
+      mockPersistDomains.mockResolvedValueOnce({
+        success: false,
+        error: 'save all failed',
+        diagnosticId: 'diag-save',
+      });
+      mockAPI.diagnostics.getEvent.mockResolvedValue({
+        success: true,
+        data: { errors: [{ id: 'diag-save' }] },
+      });
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
       renderProvider();
 
       await waitFor(() => {
@@ -976,8 +987,46 @@ describe('DraftContext', () => {
 
       await waitFor(() => {
         expect(mockPersistDomains).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: /Copy report/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Copy report/i }));
+      await waitFor(() => {
+        expect(mockAPI.diagnostics.getEvent).toHaveBeenCalledWith('diag-save');
       });
       expect(screen.getByTestId('dirty-bills')).toHaveTextContent('true');
+    });
+
+    it('shows save failure toast without Copy report when no diagnostic id', async () => {
+      mockPersistDomains.mockResolvedValueOnce({ success: false, error: 'save bills failed' });
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('update-bill'));
+      fireEvent.click(screen.getByText('save-bills'));
+
+      await waitFor(() => {
+        expect(screen.getByText('save bills failed')).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /Copy report/i })).not.toBeInTheDocument();
+    });
+
+    it('uses default save failure message when error is omitted', async () => {
+      mockPersistDomains.mockResolvedValueOnce({ success: false });
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('update-bill'));
+      fireEvent.click(screen.getByText('save-all'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to save changes')).toBeInTheDocument();
+      });
     });
   });
 

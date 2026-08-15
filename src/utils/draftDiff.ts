@@ -7,6 +7,7 @@ export interface EntityDiff<T> {
 export interface PersistResult {
   success: boolean;
   error?: string;
+  diagnosticId?: string;
   idMap?: Map<string, string>;
 }
 
@@ -79,9 +80,9 @@ export async function persistEntityDiff<T extends { id: string }, CreateInput, U
     isDraftId: (id: string) => boolean;
     toCreateInput: (item: T) => CreateInput;
     toUpdateInput: (item: T) => UpdateInput;
-    create: (input: CreateInput) => Promise<{ success: boolean; data?: T; error?: string }>;
-    update: (id: string, input: UpdateInput) => Promise<{ success: boolean; data?: T; error?: string }>;
-    remove: (id: string) => Promise<{ success: boolean; error?: string }>;
+    create: (input: CreateInput) => Promise<{ success: boolean; data?: T; error?: string; diagnosticId?: string }>;
+    update: (id: string, input: UpdateInput) => Promise<{ success: boolean; data?: T; error?: string; diagnosticId?: string }>;
+    remove: (id: string) => Promise<{ success: boolean; error?: string; diagnosticId?: string }>;
   }
 ): Promise<PersistResult> {
   const idMap = new Map<string, string>();
@@ -90,7 +91,17 @@ export async function persistEntityDiff<T extends { id: string }, CreateInput, U
     if (options.isDraftId(id)) continue;
     const result = await options.remove(id);
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to delete item' };
+      // Idempotent delete: stale committed snapshots (e.g. after lock/unlock or
+      // a prior partial save) may list IDs already absent from SQLite.
+      const err = result.error || '';
+      if (/not found/i.test(err)) {
+        continue;
+      }
+      return {
+        success: false,
+        error: result.error || 'Failed to delete item',
+        diagnosticId: result.diagnosticId,
+      };
     }
   }
 
@@ -98,14 +109,22 @@ export async function persistEntityDiff<T extends { id: string }, CreateInput, U
     if (options.isDraftId(item.id)) continue;
     const result = await options.update(item.id, options.toUpdateInput(item));
     if (!result.success) {
-      return { success: false, error: result.error || 'Failed to update item' };
+      return {
+        success: false,
+        error: result.error || 'Failed to update item',
+        diagnosticId: result.diagnosticId,
+      };
     }
   }
 
   for (const item of diff.created) {
     const result = await options.create(options.toCreateInput(item));
     if (!result.success || !result.data) {
-      return { success: false, error: result.error || 'Failed to create item' };
+      return {
+        success: false,
+        error: result.error || 'Failed to create item',
+        diagnosticId: result.diagnosticId,
+      };
     }
     idMap.set(item.id, result.data.id);
   }
