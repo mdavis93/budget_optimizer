@@ -9,6 +9,7 @@ import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DebtService } from '../services/debt.service';
 import { ipcLogger } from '../services/logger.service';
+import { diagnostics } from '../services/diagnostics.service';
 import { DraftOverlayInput, resolveScheduleInputs } from '../services/draft-overlay.service';
 import { CredentialsService } from '../services/credentials.service';
 import { ScheduleComputeHost } from '../services/schedule-compute-host';
@@ -22,15 +23,17 @@ import {
 } from '@shared/scheduleComputeProtocol';
 import type { GoalProjection, ScheduleData } from '@shared/types';
 import { resolveAppBrowserWindow } from '../utils/dialog';
+import { applyLockSideEffects } from './appLock';
 import {
   withUnlockGuard,
   withBudgetGuard,
   ipcData,
   ipcVoid,
   asReadyServices,
+  getSafeErrorMessage,
   type ApiResult,
 } from './guards';
-import { clearApprovedExportPaths, validateExportPath } from '../utils/exportPaths';
+import { validateExportPath } from '../utils/exportPaths';
 import {
   assertValid,
   validateBreakGlassApplySteps,
@@ -44,6 +47,24 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function reportScheduleFailure(
+  op: ScheduleComputeOp,
+  error: unknown,
+  errorCode: string
+): string | undefined {
+  if (errorCode === 'superseded') {
+    return undefined;
+  }
+  const reported = diagnostics.report({
+    source: `ipc:schedule:${op}`,
+    message: getSafeErrorMessage(error),
+    stack: error instanceof Error ? error.stack ?? null : null,
+    errorCode,
+    diagnostics: { op, channel: `schedule:${op}` },
+  });
+  return reported.success ? reported.id : undefined;
 }
 
 interface ScheduleMaps {
@@ -128,11 +149,8 @@ async function runOffloadedCompute<T>(
   ) => T
 ): Promise<ApiResult<T>> {
   if (services.scheduleCompute.isDisposed) {
-    return {
-      success: false,
-      error: 'Schedule compute host is disposed',
-      errorCode: 'disposed',
-    };
+    // Recover from a cancelled Quit that disposed the host while the window stayed open.
+    services.scheduleCompute = new ScheduleComputeHost();
   }
 
   try {
@@ -146,18 +164,24 @@ async function runOffloadedCompute<T>(
     return { success: true, data: extract(message) };
   } catch (error) {
     if (isScheduleComputeError(error)) {
-      ipcLogger.error(`schedule compute ${op} failed:`, error.code, error.message);
+      if (error.code !== 'superseded') {
+        ipcLogger.error(`schedule compute ${op} failed:`, error.code, error.message);
+      }
+      const diagnosticId = reportScheduleFailure(op, error, error.code);
       return {
         success: false,
         error: error.message,
         errorCode: error.code,
+        ...(diagnosticId ? { diagnosticId } : {}),
       };
     }
     ipcLogger.error(`schedule compute ${op} failed:`, error);
+    const diagnosticId = reportScheduleFailure(op, error, 'worker_error');
     return {
       success: false,
       error: getErrorMessage(error),
       errorCode: 'worker_error',
+      ...(diagnosticId ? { diagnosticId } : {}),
     };
   }
 }
@@ -169,9 +193,19 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
     services.budgetManager = new BudgetManager(services.database);
     const settings = services.database.getSettings();
     services.auth.setAutoLock(settings.autoLockMinutes);
+    // Lock clears BudgetManager; restore last selection so parked drafts can save.
+    if (settings.lastBudgetId) {
+      services.budgetManager.setCurrentBudget(settings.lastBudgetId);
+    }
     return { success: true };
   } catch (error) {
     ipcLogger.error('database init failed:', error);
+    diagnostics.report({
+      source: 'main:database-init',
+      message: getSafeErrorMessage(error),
+      stack: error instanceof Error ? error.stack ?? null : null,
+      diagnostics: { phase: 'initializeDatabaseServices' },
+    });
     services.auth.lock();
     services.database = null;
     services.budgetManager = null;
@@ -183,6 +217,10 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
 }
 
 export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void {
+  services.auth.setOnLock(() => {
+    applyLockSideEffects(services);
+  });
+
   ipcMain.handle('auth:is-first-time-setup', () => {
     return services.auth.isFirstTimeSetup();
   });
@@ -197,6 +235,12 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
           services.budgetManager = new BudgetManager(services.database);
         } catch (error) {
           ipcLogger.error('auth:create-master-password database init failed:', error);
+          diagnostics.report({
+            source: 'main:database-init',
+            message: getSafeErrorMessage(error),
+            stack: error instanceof Error ? error.stack ?? null : null,
+            diagnostics: { phase: 'create-master-password' },
+          });
           services.auth.revertFirstTimeSetup();
           services.database = null;
           services.budgetManager = null;
@@ -209,6 +253,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return result;
     } catch (error) {
       ipcLogger.error('auth:create-master-password failed:', error);
+      diagnostics.report({
+        source: 'ipc:auth:create-master-password',
+        message: getSafeErrorMessage(error),
+        stack: error instanceof Error ? error.stack ?? null : null,
+      });
       return { success: false, error: getErrorMessage(error) };
     }
   });
@@ -238,17 +287,14 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   ipcMain.handle('auth:lock', () => {
     try {
       services.auth.lock();
-      clearApprovedExportPaths();
-      if (services.budgetManager) {
-        services.budgetManager = null;
-      }
-      if (services.database) {
-        services.database.close();
-        services.database = null;
-      }
       return { success: true };
     } catch (error) {
       ipcLogger.error('auth:lock failed:', error);
+      diagnostics.report({
+        source: 'ipc:auth:lock',
+        message: getSafeErrorMessage(error),
+        stack: error instanceof Error ? error.stack ?? null : null,
+      });
       return { success: false, error: getErrorMessage(error) };
     }
   });
@@ -842,4 +888,65 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       }
     });
   }));
+
+  // Diagnostics (unlock-free; hostile-hardened in diagnostics.service)
+  ipcMain.handle('diagnostics:report', (_event, input: unknown) => {
+    if (!input || typeof input !== 'object') {
+      return { success: false, error: 'Invalid diagnostics report' };
+    }
+    const body = input as Record<string, unknown>;
+    const reported = diagnostics.report({
+      source: typeof body.source === 'string' ? body.source : '',
+      level: body.level === 'warn' ? 'warn' : 'error',
+      message: typeof body.message === 'string' ? body.message : undefined,
+      stack: typeof body.stack === 'string' ? body.stack : body.stack === null ? null : undefined,
+      componentStack:
+        typeof body.componentStack === 'string'
+          ? body.componentStack
+          : body.componentStack === null
+            ? null
+            : undefined,
+      errorCode:
+        typeof body.errorCode === 'string'
+          ? body.errorCode
+          : body.errorCode === null
+            ? null
+            : undefined,
+      diagnostics:
+        body.diagnostics && typeof body.diagnostics === 'object' && !Array.isArray(body.diagnostics)
+          ? (body.diagnostics as Record<string, unknown>)
+          : undefined,
+    });
+    if (!reported.success) {
+      return { success: false, error: reported.error };
+    }
+    return { success: true, data: { id: reported.id } };
+  });
+
+  ipcMain.handle('diagnostics:get-event', (_event, eventId: unknown) => {
+    const result = diagnostics.getEventBundle(typeof eventId === 'string' ? eventId : '');
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: result.data };
+  });
+
+  ipcMain.handle('diagnostics:get-bundle', (_event, limit?: unknown) => {
+    const result = diagnostics.getBundle(limit);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: result.data };
+  });
+
+  ipcMain.handle('diagnostics:export', (_event, filePath: unknown, limit?: unknown) => {
+    if (typeof filePath !== 'string' || !validateExportPath(filePath)) {
+      return { success: false, error: 'Invalid export path' };
+    }
+    const result = diagnostics.exportBundle(filePath, limit);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return { success: true };
+  });
 }

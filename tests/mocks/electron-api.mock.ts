@@ -204,6 +204,7 @@ export const createMockElectronAPI = () => {
       resetPasswordWithRecovery: vi.fn().mockResolvedValue({ success: true, newRecoveryKey: 'new-key' }),
       setAutoLock: vi.fn().mockResolvedValue({ success: true }),
       activityPing: vi.fn().mockResolvedValue({ success: true }),
+      onLocked: vi.fn(() => () => {}),
     },
 
     income: {
@@ -333,6 +334,29 @@ export const createMockElectronAPI = () => {
       delete: vi.fn().mockResolvedValue({ success: true }),
       has: vi.fn().mockResolvedValue(false),
       offerSave: vi.fn().mockResolvedValue({ success: true, saved: false }),
+    },
+
+    diagnostics: {
+      report: vi.fn().mockResolvedValue({ success: true, data: { id: 'diag-mock' } }),
+      getEvent: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          exportedAt: '2026-01-01T00:00:00.000Z',
+          app: { version: '0.0.0', electron: '0', platform: 'darwin', arch: 'arm64' },
+          session: { uptimeMs: 0, budgetUnlocked: false },
+          errors: [],
+        },
+      }),
+      getBundle: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          exportedAt: '2026-01-01T00:00:00.000Z',
+          app: { version: '0.0.0', electron: '0', platform: 'darwin', arch: 'arm64' },
+          session: { uptimeMs: 0, budgetUnlocked: false },
+          errors: [],
+        },
+      }),
+      export: vi.fn().mockResolvedValue({ success: true }),
     },
   };
 

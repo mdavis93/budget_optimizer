@@ -21,6 +21,7 @@ import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
 import { useScheduleMutations } from '../hooks/useScheduleMutations';
 import { useToast } from '../components/Toast';
+import { copyDiagnosticReport } from '../utils/reportError';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -38,6 +39,7 @@ export default function SchedulePage() {
     setScheduleStartDate: setStartDate,
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
+    peekScheduleDiagnosticId,
   } = useSchedule();
   const { currentBudget } = useBudget();
   const { incomes, bills, billAssignments, incomeOverrides } = useDraftData();
@@ -138,7 +140,17 @@ export default function SchedulePage() {
     if (result) {
       showToast('success', 'Schedule refreshed');
     } else {
-      showToast('error', 'Failed to refresh schedule');
+      const diagnosticId = peekScheduleDiagnosticId();
+      showToast('error', 'Failed to refresh schedule', {
+        action: diagnosticId
+          ? {
+              label: 'Copy report',
+              onClick: () => {
+                void copyDiagnosticReport(diagnosticId);
+              },
+            }
+          : undefined,
+      });
     }
   };
 

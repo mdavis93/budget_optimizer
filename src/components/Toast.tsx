@@ -4,15 +4,30 @@ import clsx from 'clsx';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+interface ToastOptions {
+  duration?: number;
+  action?: ToastAction;
+}
+
 interface Toast {
   id: string;
   type: ToastType;
   message: string;
   duration?: number;
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
-  showToast: (type: ToastType, message: string, duration?: number) => void;
+  showToast: (
+    type: ToastType,
+    message: string,
+    durationOrOptions?: number | ToastOptions
+  ) => void;
   dismissToast: (id: string) => void;
 }
 
@@ -61,7 +76,20 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       role="alert"
     >
       <Icon className={clsx('w-5 h-5 shrink-0 mt-0.5', iconStyles[toast.type])} />
-      <p className="flex-1 text-sm">{toast.message}</p>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm">{toast.message}</p>
+        {toast.action && (
+          <button
+            type="button"
+            onClick={() => {
+              toast.action?.onClick();
+            }}
+            className="mt-2 text-sm font-medium underline underline-offset-2 hover:opacity-80"
+          >
+            {toast.action.label}
+          </button>
+        )}
+      </div>
       <button
         onClick={onDismiss}
         className="shrink-0 p-1 rounded-sm hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
@@ -73,12 +101,33 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
   );
 }
 
+function normalizeOptions(
+  durationOrOptions?: number | ToastOptions
+): ToastOptions {
+  if (typeof durationOrOptions === 'number') {
+    return { duration: durationOrOptions };
+  }
+  return durationOrOptions ?? {};
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((type: ToastType, message: string, duration = 5000) => {
+  const showToast = useCallback((
+    type: ToastType,
+    message: string,
+    durationOrOptions?: number | ToastOptions
+  ) => {
+    const options = normalizeOptions(durationOrOptions);
+    const duration = options.duration ?? (options.action ? 10000 : 5000);
     const id = Math.random().toString(36).substring(2, 9);
-    const toast: Toast = { id, type, message, duration };
+    const toast: Toast = {
+      id,
+      type,
+      message,
+      duration,
+      action: options.action,
+    };
     
     setToasts(prev => [...prev, toast]);
     

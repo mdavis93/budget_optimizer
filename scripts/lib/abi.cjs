@@ -187,65 +187,80 @@ function getBetterSqlite3Version() {
   return JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;
 }
 
-function loadsUnderNode() {
+const BS3_PROBE_SCRIPT =
+  "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.close();";
+
+const PROBE_DETAIL_MAX = 2000;
+
+function truncateProbeDetail(detail) {
+  const text = String(detail || '').trim();
+  if (text.length <= PROBE_DETAIL_MAX) {
+    return text;
+  }
+  return `${text.slice(0, PROBE_DETAIL_MAX)}…`;
+}
+
+function probeDetailFromResult(result) {
+  if (result.error) {
+    return truncateProbeDetail(result.error.message);
+  }
+  if (result.status === 0) {
+    return '';
+  }
+  return truncateProbeDetail(result.stderr || result.stdout || `exit ${result.status}`);
+}
+
+function probeUnderNode() {
   try {
-    const result = spawnSync(
-      process.execPath,
-      [
-        '-e',
-        "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.close();",
-      ],
-      {
-        cwd: root,
-        encoding: 'utf8',
-        timeout: PROBE_TIMEOUT_MS,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-    return result.status === 0;
-  } catch {
-    return false;
+    const result = spawnSync(process.execPath, ['-e', BS3_PROBE_SCRIPT], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: PROBE_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return {
+      ok: result.status === 0 && !result.error,
+      detail: probeDetailFromResult(result),
+    };
+  } catch (error) {
+    return { ok: false, detail: truncateProbeDetail(error.message || error) };
   }
 }
 
-function loadsUnderElectron() {
+function probeUnderElectron() {
   const binary = getElectronBinaryPath();
   if (!fs.existsSync(binary)) {
     console.warn(`Electron binary missing at ${binary}; cannot probe better-sqlite3 under Electron`);
-    return false;
+    return {
+      ok: false,
+      detail: truncateProbeDetail(`Electron binary missing at ${binary}`),
+    };
   }
 
   try {
-    const result = spawnSync(
-      binary,
-      [
-        '-e',
-        "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.close();",
-      ],
-      {
-        cwd: root,
-        encoding: 'utf8',
-        timeout: PROBE_TIMEOUT_MS,
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-    if (result.error) {
-      console.warn(`Electron probe failed (${binary}): ${result.error.message}`);
-      return false;
-    }
-    if (result.status !== 0) {
-      const detail = String(result.stderr || result.stdout || '').trim();
-      console.warn(
-        `Electron probe failed (${binary}): exit ${result.status}` +
-          (detail ? ` — ${detail}` : '')
-      );
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
+    const result = spawnSync(binary, ['-e', BS3_PROBE_SCRIPT], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: PROBE_TIMEOUT_MS,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    // Expected ABI misses return quietly — callers surface detail only on hard failure.
+    return {
+      ok: result.status === 0 && !result.error,
+      detail: probeDetailFromResult(result),
+    };
+  } catch (error) {
+    return { ok: false, detail: truncateProbeDetail(error.message || error) };
   }
+}
+
+function loadsUnderNode() {
+  return probeUnderNode().ok;
+}
+
+function loadsUnderElectron() {
+  return probeUnderElectron().ok;
 }
 
 function assertSafeCacheIdentity(part, label) {
@@ -280,6 +295,8 @@ module.exports = {
   getElectronModulesAbiFromRegistry,
   findAbiRegistry,
   getBetterSqlite3Version,
+  probeUnderNode,
+  probeUnderElectron,
   loadsUnderNode,
   loadsUnderElectron,
   assertSafeCacheIdentity,

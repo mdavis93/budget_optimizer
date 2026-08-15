@@ -21,6 +21,7 @@ export class AuthService {
   private configPath: string;
   private autoLockTimer: NodeJS.Timeout | null = null;
   private autoLockMinutes = 0;
+  private onLockListener: (() => void) | null = null;
   private pendingRecoveryKey: string | null = null;
   private failedAttempts = new Map<string, { count: number; lockedUntil: number }>();
 
@@ -393,6 +394,7 @@ export class AuthService {
   }
 
   lock(): void {
+    const wasUnlocked = this.isUnlocked;
     this.crypto.clearKey();
     this.isUnlocked = false;
     this.clearFailedAttempts();
@@ -400,6 +402,13 @@ export class AuthService {
       clearTimeout(this.autoLockTimer);
       this.autoLockTimer = null;
     }
+    if (wasUnlocked) {
+      this.onLockListener?.();
+    }
+  }
+
+  setOnLock(listener: (() => void) | null): void {
+    this.onLockListener = listener;
   }
 
   getIsUnlocked(): boolean {

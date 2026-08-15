@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   requireUnlocked,
   requireBudgetReady,
@@ -7,6 +7,9 @@ import {
   ipcData,
   ipcVoid,
 } from '../../../electron/ipc/guards';
+import { ValidationError } from '../../../electron/services/validation.service';
+
+const report = vi.fn();
 
 vi.mock('../../../electron/services/logger.service', () => ({
   ipcLogger: {
@@ -14,6 +17,12 @@ vi.mock('../../../electron/services/logger.service', () => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+  },
+}));
+
+vi.mock('../../../electron/services/diagnostics.service', () => ({
+  diagnostics: {
+    report: (...args: unknown[]) => report(...args),
   },
 }));
 
@@ -38,6 +47,11 @@ function createServices(overrides: {
 }
 
 describe('ipc guards', () => {
+  beforeEach(() => {
+    report.mockReset();
+    report.mockReturnValue({ success: true, id: 'diag-1' });
+  });
+
   describe('requireUnlocked', () => {
     it('returns null when app is unlocked', () => {
       expect(requireUnlocked(createServices())).toBeNull();
@@ -81,12 +95,13 @@ describe('ipc guards', () => {
       await expect(handler({} as never)).resolves.toBe('ok');
     });
 
-    it('returns guard error when locked', async () => {
+    it('returns guard error when locked without reporting', async () => {
       const handler = withUnlockGuard(createServices({ isUnlocked: false }), () => 'ok');
       await expect(handler({} as never)).resolves.toEqual({
         success: false,
         error: 'App is locked',
       });
+      expect(report).not.toHaveBeenCalled();
     });
   });
 
@@ -96,42 +111,91 @@ describe('ipc guards', () => {
       await expect(handler({} as never)).resolves.toEqual({ success: true, data: 1 });
     });
 
-    it('returns guard error when locked', async () => {
+    it('returns guard error when locked without reporting', async () => {
       const handler = withBudgetGuard(createServices({ isUnlocked: false }), () => 'ok');
       await expect(handler({} as never)).resolves.toEqual({
         success: false,
         error: 'App is locked',
       });
+      expect(report).not.toHaveBeenCalled();
     });
   });
 
   describe('ipcData', () => {
-    it('wraps successful results', async () => {
-      await expect(ipcData('test-channel', () => 42)).resolves.toEqual({
-        success: true,
-        data: 42,
+    describe('happy', () => {
+      it('wraps successful results', async () => {
+        await expect(ipcData('test-channel', () => 42)).resolves.toEqual({
+          success: true,
+          data: 42,
+        });
+        expect(report).not.toHaveBeenCalled();
       });
     });
 
-    it('wraps thrown errors', async () => {
-      await expect(
-        ipcData('test-channel', () => {
-          throw new Error('boom');
-        })
-      ).resolves.toEqual({
-        success: false,
-        error: 'boom',
+    describe('sad', () => {
+      it('wraps thrown errors with diagnosticId and stack report', async () => {
+        await expect(
+          ipcData('test-channel', () => {
+            throw new Error('boom');
+          })
+        ).resolves.toEqual({
+          success: false,
+          error: 'boom',
+          diagnosticId: 'diag-1',
+        });
+        expect(report).toHaveBeenCalledWith(
+          expect.objectContaining({
+            source: 'ipc:test-channel',
+            message: 'boom',
+            stack: expect.stringContaining('boom'),
+            diagnostics: { channel: 'test-channel' },
+          })
+        );
+      });
+
+      it('reports ValidationError with safe message while ApiResult keeps original', async () => {
+        await expect(
+          ipcData('bills:create', () => {
+            throw new ValidationError('amount must be >= 0 (got 99.5)', 'amount');
+          })
+        ).resolves.toEqual({
+          success: false,
+          error: 'amount must be >= 0 (got 99.5)',
+          diagnosticId: 'diag-1',
+        });
+        expect(report).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Invalid amount',
+            errorCode: 'validation',
+            diagnostics: { channel: 'bills:create', field: 'amount' },
+          })
+        );
+      });
+
+      it('wraps non-Error throws', async () => {
+        await expect(
+          ipcData('test-channel', () => {
+            throw 'plain string';
+          })
+        ).resolves.toEqual({
+          success: false,
+          error: 'plain string',
+          diagnosticId: 'diag-1',
+        });
       });
     });
 
-    it('wraps non-Error throws', async () => {
-      await expect(
-        ipcData('test-channel', () => {
-          throw 'plain string';
-        })
-      ).resolves.toEqual({
-        success: false,
-        error: 'plain string',
+    describe('hostile', () => {
+      it('omits diagnosticId when report fails', async () => {
+        report.mockReturnValue({ success: false, error: 'rate limit' });
+        await expect(
+          ipcData('test-channel', () => {
+            throw new Error('boom');
+          })
+        ).resolves.toEqual({
+          success: false,
+          error: 'boom',
+        });
       });
     });
   });
@@ -141,7 +205,7 @@ describe('ipc guards', () => {
       await expect(ipcVoid('test-channel', () => undefined)).resolves.toEqual({ success: true });
     });
 
-    it('wraps thrown errors', async () => {
+    it('wraps thrown errors with diagnosticId', async () => {
       await expect(
         ipcVoid('test-channel', () => {
           throw new Error('fail');
@@ -149,6 +213,7 @@ describe('ipc guards', () => {
       ).resolves.toEqual({
         success: false,
         error: 'fail',
+        diagnosticId: 'diag-1',
       });
     });
   });

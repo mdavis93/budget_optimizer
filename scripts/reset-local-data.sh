@@ -16,4 +16,5 @@ security delete-generic-password -s "Budget Optimizer" -a "master" 2>/dev/null |
 echo "Removed local Budget Optimizer data:"
 echo "  - ${DEV_DATA_DIR}"
 echo "  - ${PROD_DATA_DIR}"
+echo "  (includes encrypted DB, auth config, and logs/ diagnostics)"
 echo "Restart the app to create a new account."

@@ -109,6 +109,28 @@ describe('AuthContext', () => {
         expect(screen.getByTestId('unlocked')).toHaveTextContent('true');
       });
     });
+
+    it('locks the UI when main sends auth:locked', async () => {
+      let lockedHandler: (() => void) | undefined;
+      mockAPI.auth.onLocked.mockImplementation((callback: () => void) => {
+        lockedHandler = callback;
+        return () => {
+          lockedHandler = undefined;
+        };
+      });
+      mockAPI.auth.unlock.mockResolvedValue({ success: true });
+
+      renderProvider();
+      fireEvent.click(screen.getByText('unlock'));
+      await waitFor(() => {
+        expect(screen.getByTestId('unlocked')).toHaveTextContent('true');
+      });
+
+      lockedHandler?.();
+      await waitFor(() => {
+        expect(screen.getByTestId('unlocked')).toHaveTextContent('false');
+      });
+    });
   });
 
   describe('sad', () => {

@@ -352,6 +352,10 @@
     "credentials:save",
     "credentials:get",
     "credentials:delete",
-    "credentials:has"
+    "credentials:has",
+    "diagnostics:report",
+    "diagnostics:get-event",
+    "diagnostics:get-bundle",
+    "diagnostics:export"
   ]
 }

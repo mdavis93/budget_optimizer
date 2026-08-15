@@ -1,6 +1,8 @@
 import { useCallback, useState, type DragEvent } from 'react';
 import { useDraftActions, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
+import { useToast } from '../components/Toast';
+import { copyDiagnosticReport, reportError } from '../utils/reportError';
 import type { PaycheckBill } from '../types';
 import type { DraggedBill } from '../components/schedule';
 import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
@@ -14,6 +16,7 @@ interface PendingAssignment {
 export function useBillDragAssignment() {
   const { isQuickBudget } = useBudget();
   const { assignBill, reloadSnapshot } = useDraftActions();
+  const { showToast } = useToast();
   const {
     generateSchedule,
     scheduleStartDate: startDate,
@@ -41,12 +44,23 @@ export function useBillDragAssignment() {
         if (result.success) {
           await reloadSnapshot();
           generateSchedule(startDate, months, startingBalance, { force: true });
+        } else {
+          showToast('error', result.error || 'Failed to assign bill', {
+            action: result.diagnosticId
+              ? {
+                  label: 'Copy report',
+                  onClick: () => {
+                    void copyDiagnosticReport(result.diagnosticId!);
+                  },
+                }
+              : undefined,
+          });
         }
       } else {
         assignBill(billId, billDueDate, targetPaycheckDate);
       }
-    } catch {
-      // Error handling is reflected through the page's existing UI state.
+    } catch (error) {
+      void reportError('renderer:useBillDragAssignment.applyBillAssignment', error);
     } finally {
       setIsAssigning(false);
     }
@@ -56,6 +70,7 @@ export function useBillDragAssignment() {
     isQuickBudget,
     months,
     reloadSnapshot,
+    showToast,
     startDate,
     startingBalance,
   ]);
