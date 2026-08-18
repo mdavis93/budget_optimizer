@@ -353,6 +353,43 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     setDirtyDomains((prev) => (prev.has(domain) ? prev : new Set(prev).add(domain)));
   }, []);
 
+  /** Draft-only paycheck placements (Accept / drag). Never persists until Save. */
+  const applyDraftBillPlacements = useCallback(
+    (placements: Array<{ billId: string; billDueDate: string; paycheckDate: string }>): boolean => {
+      if (!isDraftMode || isQuickBudget || placements.length === 0) return false;
+      let nextAssignments: BillAssignment[] = stateRef.current.draft.billAssignments;
+      updateDraft((prev) => {
+        nextAssignments = [...prev.billAssignments];
+        for (const placement of placements) {
+          nextAssignments = nextAssignments.filter(
+            (assignment) =>
+              !(
+                assignment.billId === placement.billId &&
+                assignment.billDueDate === placement.billDueDate
+              )
+          );
+          nextAssignments.push({
+            id: createDraftId(),
+            billId: placement.billId,
+            billDueDate: placement.billDueDate,
+            paycheckDate: placement.paycheckDate,
+            createdAt: nowIso(),
+          });
+        }
+        return { ...prev, billAssignments: nextAssignments };
+      });
+      const nextDirty = new Set(stateRef.current.dirtyDomains).add('schedule');
+      stateRef.current = {
+        ...stateRef.current,
+        draft: { ...stateRef.current.draft, billAssignments: nextAssignments },
+        dirtyDomains: nextDirty,
+      };
+      markDirty('schedule');
+      return true;
+    },
+    [isDraftMode, isQuickBudget, updateDraft, markDirty]
+  );
+
   const buildDraftOverlay = useCallback((): DraftOverlay | undefined => {
     const { draft: currentDraft, dirtyDomains: domains, isDraftMode: draftMode } = stateRef.current;
     const preferred = pendingPreferredAssignmentsRef.current;
@@ -1001,26 +1038,26 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   }, [isDraftMode, isQuickBudget, updateDraft, markDirty]);
 
   const applyReconciliationFixes = useCallback((fixes: ProposedFix[]): boolean => {
-    if (isQuickBudget) return false;
-    const preferred: Array<[string, string]> = [];
-    for (const fix of fixes) {
-      if (fix.type === 'move_bill' && fix.toPaycheckDate) {
-        preferred.push([`${fix.billId}-${fix.billDueDate}`, fix.toPaycheckDate]);
-      }
-    }
-    if (preferred.length === 0) return false;
-    pendingPreferredAssignmentsRef.current = preferred;
-    return true;
-  }, [isQuickBudget]);
+    const placements = fixes
+      .filter((fix) => fix.type === 'move_bill' && fix.toPaycheckDate)
+      .map((fix) => ({
+        billId: fix.billId,
+        billDueDate: fix.billDueDate,
+        paycheckDate: fix.toPaycheckDate!,
+      }));
+    return applyDraftBillPlacements(placements);
+  }, [applyDraftBillPlacements]);
 
   const applyBreakGlassPlan = useCallback((plan: BreakGlassPlan): boolean => {
-    if (isQuickBudget) return false;
     if (plan.steps.length === 0) return false;
-    pendingPreferredAssignmentsRef.current = plan.steps.map(
-      (step) => [`${step.billId}-${step.billDueDate}`, step.toPaycheckDate] as [string, string]
+    return applyDraftBillPlacements(
+      plan.steps.map((step) => ({
+        billId: step.billId,
+        billDueDate: step.billDueDate,
+        paycheckDate: step.toPaycheckDate,
+      }))
     );
-    return true;
-  }, [isQuickBudget]);
+  }, [applyDraftBillPlacements]);
 
   const updateBudgetFields = useCallback((updates: Partial<DraftBudgetFields>): boolean => {
     if (isQuickBudget || !draft.budget) return false;
