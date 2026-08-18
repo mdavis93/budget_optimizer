@@ -32,16 +32,11 @@ import {
   ipcVoid,
   asReadyServices,
   getSafeErrorMessage,
+  assertAppSender,
+  setMainWindowGetter,
   type ApiResult,
 } from './guards';
 import { validateExportPath } from '../utils/exportPaths';
-import {
-  assertValid,
-  validateBreakGlassApplySteps,
-  validateReconciliationFixes,
-  BreakGlassApplyStepInput,
-  ReconciliationFixInput,
-} from '../services/validation.service';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -227,7 +222,15 @@ function initializeDatabaseServices(services: Services): { success: true } | { s
   }
 }
 
-export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void {
+export function registerIpcHandlers(
+  ipcMain: IpcMain,
+  services: Services,
+  options?: { getMainWindow?: () => { webContents: unknown; isDestroyed: () => boolean } | null }
+): void {
+  if (options?.getMainWindow) {
+    setMainWindowGetter(options.getMainWindow);
+  }
+
   services.auth.setOnLock(() => {
     applyLockSideEffects(services);
   });
@@ -236,7 +239,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return services.auth.isFirstTimeSetup();
   });
 
-  ipcMain.handle('auth:create-master-password', async (_, password: string) => {
+  ipcMain.handle('auth:create-master-password', async (event: IpcMainInvokeEvent, password: string) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     try {
       const result = await services.auth.createMasterPassword(password);
       if (result.success) {
@@ -260,6 +267,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
             error: `Failed to initialize database: ${getErrorMessage(error)}`,
           };
         }
+        const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
+        await services.credentials.offerSave(password, parentWindow);
       }
       return result;
     } catch (error) {
@@ -273,7 +282,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     }
   });
 
-  ipcMain.handle('auth:unlock', async (_, password: string) => {
+  ipcMain.handle('auth:unlock', async (event: IpcMainInvokeEvent, password: string) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     const result = await services.auth.unlock(password);
     if (result.success) {
       const dbResult = initializeDatabaseServices(services);
@@ -284,7 +297,35 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return result;
   });
 
-  ipcMain.handle('auth:unlock-with-biometric', async () => {
+  ipcMain.handle('auth:unlock-with-saved-credentials', async (event: IpcMainInvokeEvent) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
+    const stored = await services.credentials.getPassword();
+    if (!stored.success || !stored.password) {
+      return { success: false, error: stored.error || 'No saved password found' };
+    }
+    const passwordBuf = Buffer.from(stored.password, 'utf8');
+    try {
+      const result = await services.auth.unlock(passwordBuf.toString('utf8'));
+      if (result.success) {
+        const dbResult = initializeDatabaseServices(services);
+        if (!dbResult.success) {
+          return dbResult;
+        }
+      }
+      return { success: result.success, ...(result.error ? { error: result.error } : {}) };
+    } finally {
+      passwordBuf.fill(0);
+    }
+  });
+
+  ipcMain.handle('auth:unlock-with-biometric', async (event: IpcMainInvokeEvent) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     const result = await services.auth.unlockWithBiometric();
     if (result.success) {
       const dbResult = initializeDatabaseServices(services);
@@ -295,7 +336,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return result;
   });
 
-  ipcMain.handle('auth:lock', () => {
+  ipcMain.handle('auth:lock', (event: IpcMainInvokeEvent) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     try {
       services.auth.lock();
       return { success: true };
@@ -314,7 +359,11 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return services.auth.getIsUnlocked();
   });
 
-  ipcMain.handle('auth:enable-biometric', async () => {
+  ipcMain.handle('auth:enable-biometric', async (event: IpcMainInvokeEvent) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     return services.auth.enableBiometric();
   });
 
@@ -323,6 +372,10 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   });
 
   ipcMain.handle('auth:change-password', async (event: IpcMainInvokeEvent, oldPassword: string, newPassword: string) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     const result = await services.auth.changePassword(oldPassword, newPassword);
     if (result.success) {
       const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
@@ -343,23 +396,28 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     )
   );
 
-  ipcMain.handle('auth:verify-recovery-key', async (_, recoveryKey: string) => {
+  ipcMain.handle('auth:verify-recovery-key', async (event: IpcMainInvokeEvent, recoveryKey: string) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     return services.auth.verifyRecoveryKey(recoveryKey);
   });
 
-  ipcMain.handle('auth:reset-password-with-recovery', async (_, recoveryKey: string, newPassword: string) => {
+  ipcMain.handle('auth:reset-password-with-recovery', async (event: IpcMainInvokeEvent, recoveryKey: string, newPassword: string) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     const result = await services.auth.resetPasswordWithRecoveryKey(recoveryKey, newPassword);
     if (result.success) {
       services.database = new DatabaseService(services.auth.getCryptoService());
       services.database.initialize();
       services.budgetManager = new BudgetManager(services.database);
+      const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
+      await services.credentials.offerSave(newPassword, parentWindow);
     }
     return result;
-  });
-
-  ipcMain.handle('auth:set-auto-lock', (_, minutes: number) => {
-    services.auth.setAutoLock(minutes);
-    return { success: true };
   });
 
   ipcMain.handle('auth:activity-ping', () => {
@@ -368,30 +426,12 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   });
 
   ipcMain.handle(
-    'credentials:save',
-    withUnlockGuard(services, (_, password: string) => services.credentials.savePassword(password))
-  );
-
-  ipcMain.handle(
-    'credentials:get',
-    withUnlockGuard(services, () => services.credentials.getPassword())
-  );
-
-  ipcMain.handle(
     'credentials:delete',
     withUnlockGuard(services, () => services.credentials.deletePassword())
   );
 
   // Intentionally unguarded: pre-unlock login probe; returns boolean only, not the password.
   ipcMain.handle('credentials:has', async () => services.credentials.hasPassword());
-
-  ipcMain.handle(
-    'credentials:offer-save',
-    withUnlockGuard(services, async (event: IpcMainInvokeEvent, password: string) => {
-      const parentWindow = resolveAppBrowserWindow(BrowserWindow.fromWebContents(event.sender));
-      return services.credentials.offerSave(password, parentWindow);
-    })
-  );
 
   // Budget Management
   const ready = () => asReadyServices(services);
@@ -707,7 +747,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return { success: false, error: 'Invalid export path' };
     }
     try {
-      return await services.pdf.generatePdf(schedule, filePath);
+      const currency = ready().database.getSettings().currency || 'USD';
+      return await services.pdf.generatePdf(schedule, filePath, currency);
     } catch (error) {
       ipcLogger.error('export:to-pdf failed:', error);
       return { success: false, error: getErrorMessage(error) };
@@ -719,7 +760,8 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return { success: false, error: 'Invalid export path' };
     }
     try {
-      return await services.pdf.generateHtmlFile(schedule, filePath);
+      const currency = ready().database.getSettings().currency || 'USD';
+      return await services.pdf.generateHtmlFile(schedule, filePath, currency);
     } catch (error) {
       ipcLogger.error('export:to-html failed:', error);
       return { success: false, error: getErrorMessage(error) };
@@ -731,72 +773,63 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
       return { success: false, error: 'Invalid export path' };
     }
     try {
-      return await services.spreadsheet.generateXlsx(schedule, filePath);
+      const currency = ready().database.getSettings().currency || 'USD';
+      return await services.spreadsheet.generateXlsx(schedule, filePath, currency);
     } catch (error) {
       ipcLogger.error('export:to-spreadsheet failed:', error);
       return { success: false, error: getErrorMessage(error) };
     }
   }));
 
-  // Reconciliation / Break-Glass Accept: validate only — do not persist locks.
-  // Soft preferred placements are passed via schedule:build overlay for one generate.
-  ipcMain.handle('reconciliation:apply-fixes', withBudgetGuard(services, (_, fixes: ReconciliationFixInput[]) =>
-    ipcVoid('reconciliation:apply-fixes', async () => {
-    assertValid(validateReconciliationFixes(fixes), 'Invalid reconciliation fixes');
-  })));
-
-  ipcMain.handle(
-    'breakGlassAdvisor:apply',
-    withBudgetGuard(services, (_, steps: BreakGlassApplyStepInput[]) =>
-      ipcVoid('breakGlassAdvisor:apply', async () => {
-        assertValid(validateBreakGlassApplySteps(steps), 'Invalid break-glass advisor steps');
-      })
-    )
-  );
-
   ipcMain.handle('settings:get', withBudgetGuard(services, () =>
     ipcData('settings:get', () => ready().database.getSettings())
   ));
 
   ipcMain.handle('settings:update', withBudgetGuard(services, (_, settings) =>
-    ipcData('settings:update', () => ready().database.updateSettings(settings))
+    ipcData('settings:update', () => {
+      const updated = ready().database.updateSettings(settings);
+      if (settings && typeof settings === 'object' && 'autoLockMinutes' in settings && typeof settings.autoLockMinutes === 'number') {
+        services.auth.setAutoLock(settings.autoLockMinutes);
+      }
+      return updated;
+    })
   ));
 
   // Debt Management
   ipcMain.handle('debts:get-all', withBudgetGuard(services, async (): Promise<ApiResult<import('@shared/types').Debt[]>> => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    return ipcData('debts:get-all', () => database.getDebts(state.budgetId!));
+    return ipcData('debts:get-all', () => budgetManager.getDebts());
   }));
 
   ipcMain.handle('debts:get-by-bill', withBudgetGuard(services, async (_, billId: string): Promise<ApiResult<import('@shared/types').Debt | null>> => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    return ipcData('debts:get-by-bill', () => database.getDebtByBillId(billId, state.budgetId!));
+    return ipcData('debts:get-by-bill', () => budgetManager.getDebtByBillId(billId));
   }));
 
   ipcMain.handle('debts:create', withBudgetGuard(services, async (_, input: DebtInput): Promise<ApiResult<import('@shared/types').Debt>> => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    return ipcData('debts:create', () => database.createDebt(state.budgetId!, input));
+    return ipcData('debts:create', () => budgetManager.createDebt(input));
   }));
 
   ipcMain.handle('debts:update', withBudgetGuard(services, async (_, id: string, input: Partial<DebtInput>) => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    const result = await ipcData('debts:update', () => database.updateDebt(id, state.budgetId!, input));
+    const result = await ipcData('debts:update', () => budgetManager.updateDebt(id, input));
     if (result.success && !result.data) {
       return { success: false, error: 'Debt not found' };
     }
@@ -804,13 +837,13 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   }));
 
   ipcMain.handle('debts:delete', withBudgetGuard(services, async (_, id: string) => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
     return ipcVoid('debts:delete', () => {
-      const deleted = database.deleteDebt(id, state.budgetId!);
+      const deleted = budgetManager.deleteDebt(id);
       if (!deleted) {
         throw new Error('Debt not found');
       }
@@ -818,13 +851,13 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   }));
 
   ipcMain.handle('debts:get-amortization', withBudgetGuard(services, async (_, debtId: string) => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
 
-    const debt = database.getDebtById(debtId, state.budgetId);
+    const debt = budgetManager.getDebtById(debtId);
     if (!debt) {
       return { success: false, error: 'Debt not found' };
     }
@@ -869,30 +902,30 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
 
   // Leave Management
   ipcMain.handle('leaves:get-all', withBudgetGuard(services, async (): Promise<ApiResult<import('@shared/types').Leave[]>> => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    return ipcData('leaves:get-all', () => database.getLeaves(state.budgetId!));
+    return ipcData('leaves:get-all', () => budgetManager.getLeaves());
   }));
 
   ipcMain.handle('leaves:create', withBudgetGuard(services, async (_, input: LeaveInput): Promise<ApiResult<import('@shared/types').Leave>> => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    return ipcData('leaves:create', () => database.createLeave(state.budgetId!, input));
+    return ipcData('leaves:create', () => budgetManager.createLeave(input));
   }));
 
   ipcMain.handle('leaves:update', withBudgetGuard(services, async (_, id: string, input: LeaveInput) => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
-    const result = await ipcData('leaves:update', () => database.updateLeave(id, state.budgetId!, input));
+    const result = await ipcData('leaves:update', () => budgetManager.updateLeave(id, input));
     if (result.success && !result.data) {
       return { success: false, error: 'Leave not found' };
     }
@@ -900,13 +933,13 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
   }));
 
   ipcMain.handle('leaves:delete', withBudgetGuard(services, async (_, id: string) => {
-    const { budgetManager, database } = ready();
+    const { budgetManager } = ready();
     const state = budgetManager.getCurrentState();
     if (!state.budgetId) {
       return { success: false, error: 'No budget selected' };
     }
     return ipcVoid('leaves:delete', () => {
-      const deleted = database.deleteLeave(id, state.budgetId!);
+      const deleted = budgetManager.deleteLeave(id);
       if (!deleted) {
         throw new Error('Leave not found');
       }
@@ -947,30 +980,39 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     return { success: true, data: { id: reported.id } };
   });
 
-  ipcMain.handle('diagnostics:get-event', (_event, eventId: unknown) => {
-    const result = diagnostics.getEventBundle(typeof eventId === 'string' ? eventId : '');
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-    return { success: true, data: result.data };
-  });
+  ipcMain.handle(
+    'diagnostics:get-event',
+    withUnlockGuard(services, (_event, eventId: unknown) => {
+      const result = diagnostics.getEventBundle(typeof eventId === 'string' ? eventId : '');
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      return { success: true, data: result.data };
+    })
+  );
 
-  ipcMain.handle('diagnostics:get-bundle', (_event, limit?: unknown) => {
-    const result = diagnostics.getBundle(limit);
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-    return { success: true, data: result.data };
-  });
+  ipcMain.handle(
+    'diagnostics:get-bundle',
+    withUnlockGuard(services, (_event, limit?: unknown) => {
+      const result = diagnostics.getBundle(limit);
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      return { success: true, data: result.data };
+    })
+  );
 
-  ipcMain.handle('diagnostics:export', (_event, filePath: unknown, limit?: unknown) => {
-    if (typeof filePath !== 'string' || !validateExportPath(filePath)) {
-      return { success: false, error: 'Invalid export path' };
-    }
-    const result = diagnostics.exportBundle(filePath, limit);
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-    return { success: true };
-  });
+  ipcMain.handle(
+    'diagnostics:export',
+    withUnlockGuard(services, (_event, filePath: unknown, limit?: unknown) => {
+      if (typeof filePath !== 'string' || !validateExportPath(filePath)) {
+        return { success: false, error: 'Invalid export path' };
+      }
+      const result = diagnostics.exportBundle(filePath, limit);
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+      return { success: true };
+    })
+  );
 }

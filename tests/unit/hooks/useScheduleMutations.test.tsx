@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useScheduleMutations } from '../../../src/hooks/useScheduleMutations';
 import { createMockElectronAPI } from '../../mocks/electron-api.mock';
 
-const showToast = vi.fn();
 const applyBreakGlassPlan = vi.fn(() => true);
 const applyReconciliationFixes = vi.fn(() => true);
 const clearBillAssignments = vi.fn();
@@ -21,10 +20,6 @@ const draftDataState = {
     { billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-10' },
   ],
 };
-
-vi.mock('../../../src/components/Toast', () => ({
-  useToast: () => ({ showToast, dismissToast: vi.fn() }),
-}));
 
 vi.mock('../../../src/context/BudgetContext', () => ({
   useBudget: () => budgetState,
@@ -147,58 +142,26 @@ describe('useScheduleMutations', () => {
   });
 
   describe('sad', () => {
-    it('toasts IPC failures with and without diagnostic copy actions', async () => {
-      Object.assign(navigator, {
-        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
-      });
-      mockAPI.diagnostics.getEvent.mockResolvedValue({
-        success: true,
-        data: { errors: [{ id: 'diag-fix' }] },
-      });
-      mockAPI.reconciliation.applyFixes.mockResolvedValueOnce({
-        success: false,
-        error: 'fix failed',
-        diagnosticId: 'diag-fix',
-      });
-      mockAPI.breakGlassAdvisor.apply.mockResolvedValueOnce({
-        success: false,
-      });
-
+    it('applies reconciliation and break-glass via draft plus preferredAssignments', async () => {
       render(<Harness />);
       fireEvent.click(screen.getByText('apply-fixes'));
-      await waitFor(() => {
-        expect(showToast).toHaveBeenCalledWith(
-          'error',
-          'fix failed',
-          expect.objectContaining({
-            action: expect.objectContaining({ label: 'Copy report' }),
-          })
-        );
-      });
-      const withDiag = showToast.mock.calls.at(-1)?.[2] as {
-        action: { onClick: () => void };
-      };
-      await act(async () => {
-        withDiag.action.onClick();
-      });
-      expect(mockAPI.diagnostics.getEvent).toHaveBeenCalledWith('diag-fix');
-
       fireEvent.click(screen.getByText('accept-plan'));
+
       await waitFor(() => {
-        expect(showToast).toHaveBeenCalledWith(
-          'error',
-          'Failed to apply break-glass plan',
-          expect.objectContaining({ action: undefined })
-        );
+        expect(applyReconciliationFixes).toHaveBeenCalled();
+        expect(applyBreakGlassPlan).toHaveBeenCalled();
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [['bill-1-2026-01-15', '2026-01-10']],
+        });
       });
     });
 
-    it('covers quick-budget skip/unskip/restore success and no-op failure paths', async () => {
-      mockAPI.skippedBills.skip.mockResolvedValueOnce({ success: false });
-      mockAPI.skippedBills.unskip.mockResolvedValueOnce({ success: true });
-      mockAPI.billAssignments.remove.mockResolvedValue({ success: true });
-      mockAPI.incomeOverrides.set.mockResolvedValueOnce({ success: false });
-      mockAPI.incomeOverrides.remove.mockResolvedValueOnce({ success: false });
+    it('covers draft skip/unskip/restore success and no-op failure paths', async () => {
+      skipBill.mockReturnValueOnce(false);
+      unskipBill.mockReturnValueOnce(true);
+      setIncomeOverride.mockReturnValueOnce(false);
+      removeIncomeOverride.mockReturnValueOnce(false);
 
       render(<Harness />);
       fireEvent.click(screen.getByText('skip'));
@@ -210,18 +173,24 @@ describe('useScheduleMutations', () => {
       fireEvent.click(screen.getByText('remove-override'));
 
       await waitFor(() => {
-        expect(reloadSnapshot).toHaveBeenCalled();
-        expect(mockAPI.skippedBills.skip).toHaveBeenCalled();
-        expect(mockAPI.incomeOverrides.set).toHaveBeenCalled();
-        expect(mockAPI.incomeOverrides.remove).toHaveBeenCalled();
+        expect(unskipBill).toHaveBeenCalled();
+        expect(removeBillAssignment).toHaveBeenCalled();
+        expect(clearBillAssignments).toHaveBeenCalled();
+        expect(clearStaleBillAssignments).toHaveBeenCalled();
       });
+      expect(mockAPI.skippedBills.skip).not.toHaveBeenCalled();
+      expect(generateSchedule).toHaveBeenCalled();
     });
   });
 
   describe('hostile', () => {
     it('reports thrown errors from apply/skip handlers', async () => {
-      mockAPI.reconciliation.applyFixes.mockRejectedValueOnce(new Error('boom'));
-      mockAPI.skippedBills.skip.mockRejectedValueOnce(new Error('skip boom'));
+      applyReconciliationFixes.mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+      skipBill.mockImplementationOnce(() => {
+        throw new Error('skip boom');
+      });
       mockAPI.diagnostics.report.mockResolvedValue({ success: true, data: { id: 'diag-x' } });
 
       render(<Harness />);
@@ -277,19 +246,17 @@ describe('useScheduleMutations', () => {
       expect(clearBillAssignments).toHaveBeenCalledTimes(1);
     });
 
-    it('covers quick-budget success for applyFixes and restore remove miss', async () => {
-      mockAPI.reconciliation.applyFixes.mockResolvedValueOnce({ success: true });
-      mockAPI.billAssignments.remove.mockResolvedValueOnce({ success: false });
-      mockAPI.skippedBills.unskip.mockResolvedValueOnce({ success: false });
-
+    it('covers restore when draft assignment removal is a no-op', async () => {
       render(<Harness />);
       fireEvent.click(screen.getByText('apply-fixes'));
       fireEvent.click(screen.getByText('restore'));
       fireEvent.click(screen.getByText('unskip'));
       await waitFor(() => {
         expect(generateSchedule).toHaveBeenCalled();
-        expect(mockAPI.billAssignments.remove).toHaveBeenCalled();
+        expect(removeBillAssignment).toHaveBeenCalled();
+        expect(unskipBill).toHaveBeenCalled();
       });
+      expect(mockAPI.billAssignments.remove).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { ProposedFix, ShortfallDetail, UnfundableReason } from '../types';
+import { formatCurrency } from './formatCurrency';
 
 export type { UnfundableReason };
 
@@ -59,7 +60,7 @@ const FIX_COPY = {
 } as const;
 
 function formatMoney(amount: number): string {
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  return formatCurrency(amount);
 }
 
 function formatPaycheckDate(dateStr: string): string {

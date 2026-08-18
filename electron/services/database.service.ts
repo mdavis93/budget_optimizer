@@ -163,16 +163,23 @@ export class DatabaseService {
   private crypto: CryptoService;
   private dbPath: string;
 
-  constructor(crypto: CryptoService) {
+  constructor(crypto: CryptoService, dbPath?: string) {
     this.crypto = crypto;
-    const userDataPath = app.getPath('userData');
-    this.dbPath = path.join(userDataPath, 'budget-data.db');
+    this.dbPath = dbPath ?? path.join(app.getPath('userData'), 'budget-data.db');
+  }
+
+  getCryptoService(): CryptoService {
+    return this.crypto;
+  }
+
+  getDbPath(): string {
+    return this.dbPath;
   }
 
   initialize(): void {
-    const userDataPath = app.getPath('userData');
-    if (!fs.existsSync(userDataPath)) {
-      fs.mkdirSync(userDataPath, { recursive: true });
+    const dbDir = path.dirname(this.dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true, mode: 0o700 });
     }
 
     this.db = new Database(this.dbPath);
@@ -312,13 +319,20 @@ export class DatabaseService {
       logger.info('Migration to schema version 11 complete (leaves)');
     }
 
+    // Schema version 12: Encrypt settings values
+    if (currentVersion < 12) {
+      this.migrateToVersion12();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (12)').run();
+      logger.info('Migration to schema version 12 complete (encrypted settings)');
+    }
+
     try {
       fs.chmodSync(this.dbPath, 0o600);
     } catch (error) {
       logger.warn('Failed to set database file permissions:', error);
     }
     
-    logger.info('Database initialized', { version: Math.max(currentVersion, 11) });
+    logger.info('Database initialized', { version: Math.max(currentVersion, 12) });
   }
 
   private migrateToVersion5(): void {
@@ -694,6 +708,30 @@ export class DatabaseService {
     logger.info('Created leaves table');
   }
 
+  private migrateToVersion12(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = this.db.prepare('SELECT * FROM settings').all() as SettingsRow[];
+    const upsert = this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+    for (const row of rows) {
+      const parsed = this.readSettingValue(row.value);
+      upsert.run(row.key, this.crypto.encryptObject(parsed.value));
+    }
+    logger.info('Encrypted settings values', { count: rows.length });
+  }
+
+  private readSettingValue(raw: string): { value: unknown; encrypted: boolean } {
+    try {
+      return { value: this.crypto.decryptObject(raw), encrypted: true };
+    } catch {
+      try {
+        return { value: JSON.parse(raw), encrypted: false };
+      } catch {
+        return { value: raw, encrypted: false };
+      }
+    }
+  }
+
   private migrateToVersion4(): void {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -960,8 +998,23 @@ export class DatabaseService {
 
   close(): void {
     if (this.db) {
+      try {
+        this.db.pragma('wal_checkpoint(TRUNCATE)');
+      } catch (error) {
+        logger.warn('WAL checkpoint failed:', error);
+      }
       this.db.close();
       this.db = null;
+    }
+    for (const suffix of ['-wal', '-shm'] as const) {
+      const sidecar = `${this.dbPath}${suffix}`;
+      if (fs.existsSync(sidecar)) {
+        try {
+          fs.chmodSync(sidecar, 0o600);
+        } catch (error) {
+          logger.warn('Failed to set sidecar file permissions:', error);
+        }
+      }
     }
   }
 
@@ -1346,12 +1399,13 @@ export class DatabaseService {
     const rows = this.db.prepare('SELECT * FROM settings').all() as SettingsRow[];
     
     const settings = { ...DEFAULT_SETTINGS };
+    const upsert = this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
     
     for (const row of rows) {
-      try {
-        (settings as Record<string, unknown>)[row.key] = JSON.parse(row.value);
-      } catch {
-        (settings as Record<string, unknown>)[row.key] = row.value;
+      const parsed = this.readSettingValue(row.value);
+      (settings as Record<string, unknown>)[row.key] = parsed.value;
+      if (!parsed.encrypted) {
+        upsert.run(row.key, this.crypto.encryptObject(parsed.value));
       }
     }
     
@@ -1369,7 +1423,7 @@ export class DatabaseService {
     
     const transaction = this.db.transaction(() => {
       for (const [key, value] of Object.entries(settings)) {
-        upsert.run(key, JSON.stringify(value));
+        upsert.run(key, this.crypto.encryptObject(value));
       }
     });
     

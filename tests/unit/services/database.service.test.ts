@@ -28,20 +28,20 @@ vi.mock('electron', () => ({
   },
 }));
 
-function createCrypto(): CryptoService {
+async function createCrypto(): Promise<CryptoService> {
   const crypto = new CryptoService();
   const salt = crypto.generateSalt();
-  crypto.setEncryptionKey(crypto.deriveKey('test-password', salt));
+  crypto.setEncryptionKey(await crypto.deriveKey('test-password', salt));
   return crypto;
 }
 
 describe('DatabaseService', () => {
   let db: DatabaseService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempRoot = path.join(os.tmpdir(), `budget-optimizer-database-test-${process.pid}-${Date.now()}`);
     fs.mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
-    db = new DatabaseService(createCrypto());
+    db = new DatabaseService(await createCrypto());
     db.initialize();
   });
 
@@ -226,6 +226,17 @@ describe('DatabaseService', () => {
       expect(updated.theme).toBe('dark');
       expect(updated.savingsAPY).toBe(4.25);
       expect(updated.defaultScheduleMonths).toBe(6);
+    });
+
+    it('stores settings as encrypted ciphertext and returns plaintext', () => {
+      db.updateSettings({ currency: 'EUR' });
+      const internalDb = (db as unknown as {
+        db: { prepare: (sql: string) => { get: (key: string) => { value: string } } };
+      }).db;
+      const row = internalDb.prepare("SELECT value FROM settings WHERE key = ?").get('currency');
+      expect(row.value).not.toBe('"EUR"');
+      expect(row.value).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
+      expect(db.getSettings().currency).toBe('EUR');
     });
 
     it('updates budget with partial fields only', () => {
@@ -712,22 +723,22 @@ describe('DatabaseService', () => {
       expect(updated?.name).toBe('household');
     });
 
-    it('creates userData directory when missing before initialize', () => {
+    it('creates userData directory when missing before initialize', async () => {
       const freshRoot = path.join(os.tmpdir(), `budget-optimizer-fresh-${process.pid}-${Date.now()}`);
       if (fs.existsSync(freshRoot)) {
         fs.rmSync(freshRoot, { recursive: true, force: true });
       }
       mockGetPath.mockReturnValue(freshRoot);
 
-      const freshDb = new DatabaseService(createCrypto());
+      const freshDb = new DatabaseService(await createCrypto());
       freshDb.initialize();
       expect(fs.existsSync(freshRoot)).toBe(true);
       freshDb.close();
       fs.rmSync(freshRoot, { recursive: true, force: true });
     });
 
-    it('throws when public methods are called before initialize', () => {
-      const uninitialized = new DatabaseService(createCrypto());
+    it('throws when public methods are called before initialize', async () => {
+      const uninitialized = new DatabaseService(await createCrypto());
       const budgetId = 'budget-1';
       const billInput = {
         creditorName: 'Rent',
@@ -813,11 +824,11 @@ describe('DatabaseService', () => {
       }
     });
 
-    it('throws when database is used before initialize or after close', () => {
-      const uninitialized = new DatabaseService(createCrypto());
+    it('throws when database is used before initialize or after close', async () => {
+      const uninitialized = new DatabaseService(await createCrypto());
       expect(() => uninitialized.getAllBudgets()).toThrow('Database not initialized');
 
-      const closed = new DatabaseService(createCrypto());
+      const closed = new DatabaseService(await createCrypto());
       closed.initialize();
       closed.close();
       expect(() => closed.getAllBudgets()).toThrow('Database not initialized');

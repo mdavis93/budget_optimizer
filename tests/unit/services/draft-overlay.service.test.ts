@@ -9,6 +9,8 @@ const baseManager = {
   getSkippedBills: vi.fn(() => []),
   getBillAssignments: vi.fn(() => []),
   getIncomeOverrides: vi.fn(() => []),
+  getDebts: vi.fn(() => [{ id: 'debt-1', billId: 'bill-1', principalBalance: 1000 }]),
+  getLeaves: vi.fn(() => [{ id: 'leave-1', incomeId: 'income-1', type: 'unpaid' }]),
   getStartingBalance: vi.fn(() => 1000),
   getTargetCashOnHand: vi.fn(() => 250),
   getMinCashOnHand: vi.fn(() => 100),
@@ -16,10 +18,7 @@ const baseManager = {
   getScheduleStartDate: vi.fn(() => '2026-01-01'),
 };
 
-const baseDatabase = {
-  getDebts: vi.fn(() => [{ id: 'debt-1', billId: 'bill-1', principalBalance: 1000 }]),
-  getLeaves: vi.fn(() => [{ id: 'leave-1', incomeId: 'income-1', type: 'unpaid' }]),
-};
+const baseDatabase = {};
 
 describe('draft-overlay.resolveScheduleInputs', () => {
   beforeEach(() => {
@@ -58,27 +57,25 @@ describe('draft-overlay.resolveScheduleInputs', () => {
       expect(resolved.startingBalance).toBe(777);
       expect(resolved.targetCashOnHand).toBe(400);
       expect(resolved.scheduleStartDate).toBe('2026-02-01');
-      expect(baseDatabase.getDebts).not.toHaveBeenCalled();
-      expect(baseDatabase.getLeaves).not.toHaveBeenCalled();
+      expect(baseManager.getDebts).not.toHaveBeenCalled();
+      expect(baseManager.getLeaves).not.toHaveBeenCalled();
     });
   });
 
   describe('sad', () => {
-    it('returns empty debts and leaves when no budgetId is active', () => {
+    it('returns manager debts and leaves even when no named budget id is active', () => {
       const manager = {
         ...baseManager,
         getCurrentState: vi.fn(() => ({ budgetId: null, isQuickBudget: true })),
-      };
-      const db = {
-        getDebts: vi.fn(() => ['unexpected']),
-        getLeaves: vi.fn(() => ['unexpected']),
+        getDebts: vi.fn(() => []),
+        getLeaves: vi.fn(() => []),
       };
 
-      const resolved = resolveScheduleInputs(manager as never, db as never);
+      const resolved = resolveScheduleInputs(manager as never, {} as never);
       expect(resolved.debts).toEqual([]);
       expect(resolved.leaves).toEqual([]);
-      expect(db.getDebts).not.toHaveBeenCalled();
-      expect(db.getLeaves).not.toHaveBeenCalled();
+      expect(manager.getDebts).toHaveBeenCalled();
+      expect(manager.getLeaves).toHaveBeenCalled();
     });
   });
 

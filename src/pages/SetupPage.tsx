@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle, Check, Fingerprint, Wand2 } from 'lucide-react';
 import AppIcon from '../components/AppIcon';
@@ -21,6 +21,14 @@ export default function SetupPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
 
+  useEffect(() => {
+    return () => {
+      setPassword('');
+      setConfirmPassword('');
+      setRecoveryKey(null);
+    };
+  }, []);
+
   const handleGeneratePassword = () => {
     const generated = generateSecurePassword();
     setPassword(generated);
@@ -36,8 +44,8 @@ export default function SetupPage() {
     setValidationError(null);
     clearError();
     
-    if (password.length < 8) {
-      setValidationError('Password must be at least 8 characters');
+    if (password.length < 12) {
+      setValidationError('Password must be at least 12 characters');
       return;
     }
     
@@ -53,9 +61,9 @@ export default function SetupPage() {
 
       if (result.success && result.recoveryKey) {
         setRecoveryKey(result.recoveryKey);
+        setPassword('');
+        setConfirmPassword('');
         setStep('recovery-key');
-        // Prompt after advancing UI so the save dialog isn't hidden behind a loading state
-        void window.electronAPI.credentials.offerSave(password);
       } else {
         setValidationError(result.error || 'Failed to create password');
       }
@@ -69,6 +77,7 @@ export default function SetupPage() {
 
   const handleRecoveryKeyConfirmed = async () => {
     await window.electronAPI.auth.clearPendingRecoveryKey();
+    setRecoveryKey(null);
     
     if (biometricAvailable) {
       setStep('biometric');

@@ -1,37 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDraftActions, useDraftData, useSchedule } from '../context/DraftContext';
-import { useBudget } from '../context/BudgetContext';
-import { useToast } from '../components/Toast';
-import { copyDiagnosticReport, reportError } from '../utils/reportError';
+import { reportError } from '../utils/reportError';
 import type { BreakGlassPlan, ProposedFix } from '../types';
 
-function toastIpcFailure(
-  showToast: ReturnType<typeof useToast>['showToast'],
-  message: string,
-  diagnosticId?: string
-) {
-  showToast('error', message, {
-    action: diagnosticId
-      ? {
-          label: 'Copy report',
-          onClick: () => {
-            void copyDiagnosticReport(diagnosticId);
-          },
-        }
-      : undefined,
-  });
-}
-
 export function useScheduleMutations() {
-  const { isQuickBudget } = useBudget();
   const { billAssignments } = useDraftData();
-  const { showToast } = useToast();
   const {
     applyBreakGlassPlan,
     applyReconciliationFixes,
     clearBillAssignments,
     clearStaleBillAssignments,
-    reloadSnapshot,
     removeBillAssignment,
     removeIncomeOverride,
     setIncomeOverride,
@@ -82,36 +60,13 @@ export function useScheduleMutations() {
             [`${fix.billId}-${fix.billDueDate}`, fix.toPaycheckDate!] as [string, string]
         );
 
-      if (isQuickBudget) {
-        const result = await window.electronAPI.reconciliation.applyFixes(
-          fixes.map((fix) => ({
-            id: fix.id,
-            type: fix.type,
-            billId: fix.billId,
-            billDueDate: fix.billDueDate,
-            fromPaycheckDate: fix.fromPaycheckDate,
-            toPaycheckDate: fix.toPaycheckDate,
-          }))
-        );
-        if (result.success) {
-          setShowReconciliation(false);
-          setDismissedReconciliation(false);
-          generateSchedule(startDate, months, startingBalance, {
-            force: true,
-            preferredAssignments: preferred,
-          });
-        } else {
-          toastIpcFailure(
-            showToast,
-            result.error || 'Failed to apply reconciliation fixes',
-            result.diagnosticId
-          );
-        }
-      } else if (applyReconciliationFixes(fixes)) {
-        setShowReconciliation(false);
-        setDismissedReconciliation(false);
-        generateSchedule(startDate, months, startingBalance, { force: true });
-      }
+      applyReconciliationFixes(fixes);
+      setShowReconciliation(false);
+      setDismissedReconciliation(false);
+      generateSchedule(startDate, months, startingBalance, {
+        force: true,
+        preferredAssignments: preferred,
+      });
     } catch (error) {
       void reportError('renderer:useScheduleMutations.handleApplyFixes', error);
     } finally {
@@ -120,9 +75,7 @@ export function useScheduleMutations() {
   }, [
     applyReconciliationFixes,
     generateSchedule,
-    isQuickBudget,
     months,
-    showToast,
     startDate,
     startingBalance,
   ]);
@@ -154,30 +107,11 @@ export function useScheduleMutations() {
           [`${step.billId}-${step.billDueDate}`, step.toPaycheckDate] as [string, string]
       );
 
-      if (isQuickBudget) {
-        const result = await window.electronAPI.breakGlassAdvisor.apply(
-          plan.steps.map((step) => ({
-            billId: step.billId,
-            billDueDate: step.billDueDate,
-            fromPaycheckDate: step.fromPaycheckDate,
-            toPaycheckDate: step.toPaycheckDate,
-          }))
-        );
-        if (result.success) {
-          await generateSchedule(startDate, months, startingBalance, {
-            force: true,
-            preferredAssignments: preferred,
-          });
-        } else {
-          toastIpcFailure(
-            showToast,
-            result.error || 'Failed to apply break-glass plan',
-            result.diagnosticId
-          );
-        }
-      } else if (applyBreakGlassPlan(plan)) {
-        await generateSchedule(startDate, months, startingBalance, { force: true });
-      }
+      applyBreakGlassPlan(plan);
+      await generateSchedule(startDate, months, startingBalance, {
+        force: true,
+        preferredAssignments: preferred,
+      });
     } catch (error) {
       void reportError('renderer:useScheduleMutations.handleAcceptBreakGlassPlan', error);
     } finally {
@@ -187,9 +121,7 @@ export function useScheduleMutations() {
   }, [
     applyBreakGlassPlan,
     generateSchedule,
-    isQuickBudget,
     months,
-    showToast,
     startDate,
     startingBalance,
   ]);
@@ -201,13 +133,7 @@ export function useScheduleMutations() {
   const handleSkipBill = useCallback(async (billId: string, billDate: string) => {
     setSkippingBill(`${billId}-${billDate}`);
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.skippedBills.skip(billId, billDate);
-        if (result.success) {
-          await reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (skipBill(billId, billDate)) {
+      if (skipBill(billId, billDate)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } catch (error) {
@@ -215,103 +141,54 @@ export function useScheduleMutations() {
     } finally {
       setSkippingBill(null);
     }
-  }, [
-    generateSchedule,
-    isQuickBudget,
-    months,
-    reloadSnapshot,
-    skipBill,
-    startDate,
-    startingBalance,
-  ]);
+  }, [generateSchedule, months, skipBill, startDate, startingBalance]);
 
   const handleUnskipBill = useCallback(async (billId: string, billDate: string) => {
     setUnskippingBill(`${billId}-${billDate}`);
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.skippedBills.unskip(billId, billDate);
-        if (result.success) {
-          await reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (unskipBill(billId, billDate)) {
+      if (unskipBill(billId, billDate)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } finally {
       setUnskippingBill(null);
     }
-  }, [
-    generateSchedule,
-    isQuickBudget,
-    months,
-    reloadSnapshot,
-    startDate,
-    startingBalance,
-    unskipBill,
-  ]);
+  }, [generateSchedule, months, startDate, startingBalance, unskipBill]);
 
   const handleRestoreBill = useCallback(async (billId: string, billDueDate: string) => {
     setRestoringBill(`${billId}-${billDueDate}`);
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.billAssignments.remove(billId, billDueDate);
-        if (result.success) {
-          await reloadSnapshot();
-        }
-      } else {
-        removeBillAssignment(billId, billDueDate);
-      }
+      removeBillAssignment(billId, billDueDate);
     } catch (error) {
       void reportError('renderer:useScheduleMutations.handleUnskipBill', error);
     } finally {
       setRestoringBill(null);
     }
-  }, [isQuickBudget, reloadSnapshot, removeBillAssignment]);
+  }, [removeBillAssignment]);
 
   const handleRestoreAllBills = useCallback(async () => {
     if (billAssignments.length === 0) return;
     setIsRestoringAllBills(true);
     try {
-      if (isQuickBudget) {
-        for (const assignment of billAssignments) {
-          await window.electronAPI.billAssignments.remove(
-            assignment.billId,
-            assignment.billDueDate
-          );
-        }
-        await reloadSnapshot();
-      } else {
-        clearBillAssignments();
-      }
+      clearBillAssignments();
     } catch (error) {
       void reportError('renderer:useScheduleMutations.handleRestoreBill', error);
     } finally {
       setIsRestoringAllBills(false);
     }
-  }, [billAssignments, clearBillAssignments, isQuickBudget, reloadSnapshot]);
+  }, [billAssignments, clearBillAssignments]);
 
   const handleClearStaleBills = useCallback(async (validPaycheckDates: ReadonlySet<string>) => {
     const stale = billAssignments.filter((a) => !validPaycheckDates.has(a.paycheckDate));
     if (stale.length === 0) return;
     setIsClearingStaleBills(true);
     try {
-      if (isQuickBudget) {
-        for (const assignment of stale) {
-          await window.electronAPI.billAssignments.remove(
-            assignment.billId,
-            assignment.billDueDate
-          );
-        }
-        await reloadSnapshot();
-      } else {
-        clearStaleBillAssignments(validPaycheckDates);
-      }
+      clearStaleBillAssignments(validPaycheckDates);
     } catch (error) {
       void reportError('renderer:useScheduleMutations.handleRestoreAllBills', error);
     } finally {
       setIsClearingStaleBills(false);
     }
-  }, [billAssignments, clearStaleBillAssignments, isQuickBudget, reloadSnapshot]);
+  }, [billAssignments, clearStaleBillAssignments]);
 
   const handleSaveIncomeOverride = useCallback(async (
     incomeId: string,
@@ -321,53 +198,25 @@ export function useScheduleMutations() {
     const key = `${incomeId}-${paycheckDate}`;
     setSavingIncomeKey(key);
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.incomeOverrides.set(incomeId, paycheckDate, amount);
-        if (result.success) {
-          await reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (setIncomeOverride(incomeId, paycheckDate, amount)) {
+      if (setIncomeOverride(incomeId, paycheckDate, amount)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } finally {
       setSavingIncomeKey(null);
     }
-  }, [
-    generateSchedule,
-    isQuickBudget,
-    months,
-    reloadSnapshot,
-    setIncomeOverride,
-    startDate,
-    startingBalance,
-  ]);
+  }, [generateSchedule, months, setIncomeOverride, startDate, startingBalance]);
 
   const handleClearIncomeOverride = useCallback(async (incomeId: string, paycheckDate: string) => {
     const key = `${incomeId}-${paycheckDate}`;
     setSavingIncomeKey(key);
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.incomeOverrides.remove(incomeId, paycheckDate);
-        if (result.success) {
-          await reloadSnapshot();
-          await generateSchedule(startDate, months, startingBalance, { force: true });
-        }
-      } else if (removeIncomeOverride(incomeId, paycheckDate)) {
+      if (removeIncomeOverride(incomeId, paycheckDate)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
       }
     } finally {
       setSavingIncomeKey(null);
     }
-  }, [
-    generateSchedule,
-    isQuickBudget,
-    months,
-    reloadSnapshot,
-    removeIncomeOverride,
-    startDate,
-    startingBalance,
-  ]);
+  }, [generateSchedule, months, removeIncomeOverride, startDate, startingBalance]);
 
   return {
     skippingBill,

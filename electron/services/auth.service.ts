@@ -5,6 +5,12 @@ import fs from 'fs';
 import { CryptoService } from './crypto.service';
 import { logger } from './logger.service';
 
+const MIN_PASSWORD_LENGTH = 12;
+
+function zeroUtf8Copy(value: string): void {
+  Buffer.from(value, 'utf8').fill(0);
+}
+
 interface AuthConfig {
   salt: string;
   passwordHash: string;
@@ -65,24 +71,26 @@ export class AuthService {
     recoveryKey?: string;
     error?: string 
   }> {
-    if (password.length < 8) {
-      return { success: false, error: 'Password must be at least 8 characters' };
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return { success: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
     }
 
     try {
       const salt = this.crypto.generateSalt();
       const recoverySalt = this.crypto.generateSalt(); // Unique per-user recovery salt
-      const passwordHash = this.crypto.hashPassword(password, salt);
-      const encryptionKey = this.crypto.deriveKey(password, salt);
+      const passwordHash = await this.crypto.hashPassword(password, salt);
+      const encryptionKey = await this.crypto.deriveKey(password, salt);
       
       const recoveryKey = this.crypto.generateRecoveryKey();
-      const recoveryKeyHash = this.crypto.hashPassword(recoveryKey, salt);
-      
-      const recoveryDerivedKey = this.crypto.deriveKeyFromRecovery(recoveryKey, recoverySalt);
-      const encryptedKeyBackup = this.crypto.encryptWithKey(
-        encryptionKey.toString('hex'),
-        recoveryDerivedKey
+      const recoveryKeyHash = await this.crypto.hashPassword(
+        recoveryKey.toLowerCase().trim(),
+        recoverySalt
       );
+      
+      const recoveryDerivedKey = await this.crypto.deriveKeyFromRecovery(recoveryKey, recoverySalt);
+      const keyHex = encryptionKey.toString('hex');
+      const encryptedKeyBackup = this.crypto.encryptWithKey(keyHex, recoveryDerivedKey);
+      zeroUtf8Copy(keyHex);
       
       this.config = {
         salt,
@@ -101,7 +109,7 @@ export class AuthService {
       this.pendingRecoveryKey = recoveryKey;
       
       return { success: true, recoveryKey };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Failed to create master password' };
     }
   }
@@ -181,14 +189,14 @@ export class AuthService {
     }
 
     try {
-      const passwordHash = this.crypto.hashPassword(password, this.config.salt);
+      const passwordHash = await this.crypto.hashPassword(password, this.config.salt);
       
       if (!this.crypto.secureCompare(passwordHash, this.config.passwordHash)) {
         this.recordFailedAttempt('unlock');
         return { success: false, error: 'Invalid password' };
       }
       
-      const encryptionKey = this.crypto.deriveKey(password, this.config.salt);
+      const encryptionKey = await this.crypto.deriveKey(password, this.config.salt);
       this.crypto.setEncryptionKey(encryptionKey);
       this.crypto.setMasterPasswordHash(passwordHash);
       this.isUnlocked = true;
@@ -196,7 +204,7 @@ export class AuthService {
       this.resetAutoLock(this.autoLockMinutes);
       
       return { success: true };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Failed to unlock' };
     }
   }
@@ -213,9 +221,9 @@ export class AuthService {
 
     try {
       const normalizedKey = recoveryKey.toLowerCase().trim();
-      const recoveryKeyHash = this.crypto.hashPassword(normalizedKey, this.config.salt);
+      const matches = await this.recoveryKeyHashMatches(normalizedKey);
       
-      if (!this.crypto.secureCompare(recoveryKeyHash, this.config.recoveryKeyHash)) {
+      if (!matches) {
         this.recordFailedAttempt('verify-recovery');
         return { success: false, error: 'Invalid recovery key' };
       }
@@ -223,9 +231,29 @@ export class AuthService {
       this.clearFailedAttempts('verify-recovery');
       
       return { success: true };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Failed to verify recovery key' };
     }
+  }
+
+  private async recoveryKeyHashMatches(normalizedKey: string): Promise<boolean> {
+    if (!this.config) {
+      return false;
+    }
+    const salts: string[] = [];
+    if (this.config.recoverySalt) {
+      salts.push(this.config.recoverySalt);
+    }
+    if (!salts.includes(this.config.salt)) {
+      salts.push(this.config.salt);
+    }
+    for (const salt of salts) {
+      const hash = await this.crypto.hashPassword(normalizedKey, salt);
+      if (this.crypto.secureCompare(hash, this.config.recoveryKeyHash)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async resetPasswordWithRecoveryKey(
@@ -236,8 +264,8 @@ export class AuthService {
       return { success: false, error: 'No account configured' };
     }
 
-    if (newPassword.length < 8) {
-      return { success: false, error: 'New password must be at least 8 characters' };
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return { success: false, error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters` };
     }
 
     const rateLimitError = this.checkRateLimit('reset-recovery');
@@ -247,9 +275,9 @@ export class AuthService {
 
     try {
       const normalizedKey = recoveryKey.toLowerCase().trim();
-      const recoveryKeyHash = this.crypto.hashPassword(normalizedKey, this.config.salt);
+      const matches = await this.recoveryKeyHashMatches(normalizedKey);
       
-      if (!this.crypto.secureCompare(recoveryKeyHash, this.config.recoveryKeyHash)) {
+      if (!matches) {
         this.recordFailedAttempt('reset-recovery');
         return { success: false, error: 'Invalid recovery key' };
       }
@@ -263,7 +291,7 @@ export class AuthService {
 
       this.clearFailedAttempts('reset-recovery');
       
-      const recoveryDerivedKey = this.crypto.deriveKeyFromRecovery(
+      const recoveryDerivedKey = await this.crypto.deriveKeyFromRecovery(
         normalizedKey,
         this.config.recoverySalt
       );
@@ -272,19 +300,22 @@ export class AuthService {
         recoveryDerivedKey
       );
       const encryptionKey = Buffer.from(encryptionKeyHex, 'hex');
+      zeroUtf8Copy(encryptionKeyHex);
       
       const newSalt = this.crypto.generateSalt();
       const newRecoverySalt = this.crypto.generateSalt(); // New unique recovery salt
-      const newPasswordHash = this.crypto.hashPassword(newPassword, newSalt);
+      const newPasswordHash = await this.crypto.hashPassword(newPassword, newSalt);
       
       const newRecoveryKey = this.crypto.generateRecoveryKey();
-      const newRecoveryKeyHash = this.crypto.hashPassword(newRecoveryKey, newSalt);
-      
-      const newRecoveryDerivedKey = this.crypto.deriveKeyFromRecovery(newRecoveryKey, newRecoverySalt);
-      const newEncryptedKeyBackup = this.crypto.encryptWithKey(
-        encryptionKey.toString('hex'),
-        newRecoveryDerivedKey
+      const newRecoveryKeyHash = await this.crypto.hashPassword(
+        newRecoveryKey.toLowerCase().trim(),
+        newRecoverySalt
       );
+      
+      const newRecoveryDerivedKey = await this.crypto.deriveKeyFromRecovery(newRecoveryKey, newRecoverySalt);
+      const keyHex = encryptionKey.toString('hex');
+      const newEncryptedKeyBackup = this.crypto.encryptWithKey(keyHex, newRecoveryDerivedKey);
+      zeroUtf8Copy(keyHex);
       
       this.config = {
         salt: newSalt,
@@ -338,7 +369,7 @@ export class AuthService {
       }
       
       return { success: false, error: 'Failed to retrieve key' };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Biometric authentication failed' };
     }
   }
@@ -358,9 +389,10 @@ export class AuthService {
       }
 
       if (safeStorage.isEncryptionAvailable()) {
-        const keyHex = this.crypto['encryptionKey']?.toString('hex');
+        const keyHex = this.crypto.getEncryptionKeyHex();
         if (keyHex) {
           const encrypted = safeStorage.encryptString(keyHex);
+          zeroUtf8Copy(keyHex);
           this.saveBiometricKey(encrypted.toString('base64'));
           
           this.config.biometricEnabled = true;
@@ -371,7 +403,7 @@ export class AuthService {
       }
       
       return { success: false, error: 'Failed to store key securely' };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Failed to enable biometric' };
     }
   }
@@ -431,33 +463,34 @@ export class AuthService {
       return { success: false, error: 'No master password set' };
     }
 
-    const oldHash = this.crypto.hashPassword(oldPassword, this.config.salt);
+    const oldHash = await this.crypto.hashPassword(oldPassword, this.config.salt);
     if (!this.crypto.secureCompare(oldHash, this.config.passwordHash)) {
       return { success: false, error: 'Current password is incorrect' };
     }
 
-    if (newPassword.length < 8) {
-      return { success: false, error: 'New password must be at least 8 characters' };
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return { success: false, error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters` };
     }
 
     try {
-      const encryptionKey = this.crypto['encryptionKey'];
-      if (!encryptionKey) {
+      const keyHex = this.crypto.getEncryptionKeyHex();
+      if (!keyHex || !this.crypto.hasEncryptionKey()) {
         return { success: false, error: 'App must be unlocked first' };
       }
 
       const newSalt = this.crypto.generateSalt();
       const newRecoverySalt = this.crypto.generateSalt(); // New unique recovery salt
-      const newHash = this.crypto.hashPassword(newPassword, newSalt);
+      const newHash = await this.crypto.hashPassword(newPassword, newSalt);
 
       const newRecoveryKey = this.crypto.generateRecoveryKey();
-      const newRecoveryKeyHash = this.crypto.hashPassword(newRecoveryKey, newSalt);
-      
-      const newRecoveryDerivedKey = this.crypto.deriveKeyFromRecovery(newRecoveryKey, newRecoverySalt);
-      const newEncryptedKeyBackup = this.crypto.encryptWithKey(
-        encryptionKey.toString('hex'),
-        newRecoveryDerivedKey
+      const newRecoveryKeyHash = await this.crypto.hashPassword(
+        newRecoveryKey.toLowerCase().trim(),
+        newRecoverySalt
       );
+      
+      const newRecoveryDerivedKey = await this.crypto.deriveKeyFromRecovery(newRecoveryKey, newRecoverySalt);
+      const newEncryptedKeyBackup = this.crypto.encryptWithKey(keyHex, newRecoveryDerivedKey);
+      zeroUtf8Copy(keyHex);
 
       this.config.salt = newSalt;
       this.config.passwordHash = newHash;
@@ -476,7 +509,7 @@ export class AuthService {
       this.pendingRecoveryKey = newRecoveryKey;
       
       return { success: true, newRecoveryKey };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Failed to change password' };
     }
   }

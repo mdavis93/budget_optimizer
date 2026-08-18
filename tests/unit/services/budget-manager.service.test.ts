@@ -1,5 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BudgetManager } from '../../../electron/services/budget-manager.service';
+import { CryptoService } from '../../../electron/services/crypto.service';
+import { DatabaseService } from '../../../electron/services/database.service';
 
 vi.mock('../../../electron/services/logger.service', () => ({
   budgetLogger: {
@@ -8,107 +13,143 @@ vi.mock('../../../electron/services/logger.service', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  databaseLogger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-describe('BudgetManager', () => {
-  const baseBudget = {
-    id: 'budget-1',
-    name: 'Main',
-    startingBalance: 1000,
-    targetCashOnHand: 250,
-    minCashOnHand: 100,
-    minSavingsPerPaycheck: 0,
-    scheduleStartDate: '2026-04-01',
-    createdAt: '2026-04-10T00:00:00.000Z',
-    updatedAt: '2026-04-10T00:00:00.000Z',
-  };
+vi.mock('electron', () => ({
+  app: {
+    getPath: () => path.join(os.tmpdir(), 'budget-optimizer-budget-manager-userdata'),
+  },
+}));
 
-  let database: {
-    getBudgetById: ReturnType<typeof vi.fn>;
-    getAllBudgets: ReturnType<typeof vi.fn>;
-    createBudget: ReturnType<typeof vi.fn>;
-    deleteBudget: ReturnType<typeof vi.fn>;
-    getBudgetStats: ReturnType<typeof vi.fn>;
-    getAllBudgetsWithStats: ReturnType<typeof vi.fn>;
-    updateBudget: ReturnType<typeof vi.fn>;
-    getAllIncomes: ReturnType<typeof vi.fn>;
-    getAllBills: ReturnType<typeof vi.fn>;
-    getAllGoals: ReturnType<typeof vi.fn>;
-    getSkippedBills: ReturnType<typeof vi.fn>;
-    getBillAssignments: ReturnType<typeof vi.fn>;
-    getIncomeOverrides: ReturnType<typeof vi.fn>;
-    getIncomeById: ReturnType<typeof vi.fn>;
-    createIncome: ReturnType<typeof vi.fn>;
-    updateIncome: ReturnType<typeof vi.fn>;
-    deleteIncome: ReturnType<typeof vi.fn>;
-    getBillById: ReturnType<typeof vi.fn>;
-    createBillEntry: ReturnType<typeof vi.fn>;
-    updateBillEntry: ReturnType<typeof vi.fn>;
-    deleteBillEntry: ReturnType<typeof vi.fn>;
-    skipBill: ReturnType<typeof vi.fn>;
-    unskipBill: ReturnType<typeof vi.fn>;
-    isSkipped: ReturnType<typeof vi.fn>;
-    assignBillToPaycheck: ReturnType<typeof vi.fn>;
-    removeBillAssignment: ReturnType<typeof vi.fn>;
-    getBillAssignment: ReturnType<typeof vi.fn>;
-    setIncomeOverride: ReturnType<typeof vi.fn>;
-    removeIncomeOverride: ReturnType<typeof vi.fn>;
-    getGoalById: ReturnType<typeof vi.fn>;
-    createGoal: ReturnType<typeof vi.fn>;
-    updateGoal: ReturnType<typeof vi.fn>;
-    deleteGoal: ReturnType<typeof vi.fn>;
+const baseBudget = {
+  id: 'budget-1',
+  name: 'Main',
+  startingBalance: 1000,
+  targetCashOnHand: 250,
+  minCashOnHand: 100,
+  minSavingsPerPaycheck: 0,
+  scheduleStartDate: '2026-04-01',
+  createdAt: '2026-04-10T00:00:00.000Z',
+  updatedAt: '2026-04-10T00:00:00.000Z',
+};
+
+const quickBudget = {
+  id: 'quick-budget-1',
+  name: 'Quick Budget',
+  startingBalance: 0,
+  targetCashOnHand: 250,
+  minCashOnHand: 100,
+  minSavingsPerPaycheck: 0,
+  scheduleStartDate: '2026-04-01',
+  createdAt: '2026-04-10T00:00:00.000Z',
+  updatedAt: '2026-04-10T00:00:00.000Z',
+};
+
+function createDatabaseMock(budget: typeof baseBudget) {
+  return {
+    getBudgetById: vi.fn((id: string) => (id === budget.id ? { ...budget } : null)),
+    getAllBudgets: vi.fn(() => [{ ...budget }]),
+    createBudget: vi.fn((input: Record<string, unknown>) => ({ ...budget, ...input, id: 'budget-created' })),
+    deleteBudget: vi.fn(() => true),
+    getBudgetStats: vi.fn(() => ({ incomeCount: 0, billCount: 0 })),
+    getAllBudgetsWithStats: vi.fn(() => []),
+    updateBudget: vi.fn((id: string, input: Record<string, unknown>) => ({ ...budget, id, ...input })),
+    getAllIncomes: vi.fn(() => []),
+    getAllBills: vi.fn(() => []),
+    getAllGoals: vi.fn(() => []),
+    getSkippedBills: vi.fn(() => []),
+    getBillAssignments: vi.fn(() => []),
+    getIncomeOverrides: vi.fn(() => []),
+    getIncomeById: vi.fn(() => null),
+    createIncome: vi.fn((budgetId: string, income: unknown) => ({ id: 'db-income', budgetId, ...income })),
+    updateIncome: vi.fn(() => ({ id: 'db-income-updated' })),
+    deleteIncome: vi.fn(() => true),
+    getBillById: vi.fn(() => null),
+    createBillEntry: vi.fn((budgetId: string, bill: unknown) => ({ id: 'db-bill', budgetId, ...bill })),
+    updateBillEntry: vi.fn(() => ({ id: 'db-bill-updated' })),
+    deleteBillEntry: vi.fn(() => true),
+    skipBill: vi.fn((budgetId: string, billId: string, skipDate: string) => ({ budgetId, billId, skipDate })),
+    unskipBill: vi.fn(() => true),
+    isSkipped: vi.fn(() => false),
+    assignBillToPaycheck: vi.fn(
+      (budgetId: string, billId: string, billDueDate: string, paycheckDate: string) => ({
+        budgetId,
+        billId,
+        billDueDate,
+        paycheckDate,
+      })
+    ),
+    removeBillAssignment: vi.fn(() => true),
+    getBillAssignment: vi.fn(() => null),
+    setIncomeOverride: vi.fn((budgetId: string, incomeId: string, paycheckDate: string, amount: number) => ({
+      budgetId,
+      incomeId,
+      paycheckDate,
+      amount,
+    })),
+    removeIncomeOverride: vi.fn(() => true),
+    getGoalById: vi.fn(() => null),
+    createGoal: vi.fn((budgetId: string, goal: unknown) => ({ id: 'db-goal', budgetId, ...goal })),
+    updateGoal: vi.fn(() => ({ id: 'db-goal-updated' })),
+    deleteGoal: vi.fn(() => true),
+    getDebts: vi.fn(() => []),
+    getDebtById: vi.fn(() => null),
+    getDebtByBillId: vi.fn(() => null),
+    createDebt: vi.fn((budgetId: string, input: unknown) => ({ id: 'db-debt', budgetId, ...input })),
+    updateDebt: vi.fn(() => ({ id: 'db-debt-updated' })),
+    deleteDebt: vi.fn(() => true),
+    getLeaves: vi.fn(() => []),
+    createLeave: vi.fn((budgetId: string, input: unknown) => ({ id: 'db-leave', budgetId, ...input })),
+    updateLeave: vi.fn(() => ({ id: 'db-leave-updated' })),
+    deleteLeave: vi.fn(() => true),
+    getBudgetSnapshot: vi.fn(() => ({
+      incomes: [],
+      bills: [],
+      goals: [],
+      skippedBills: [],
+      billAssignments: [],
+      incomeOverrides: [],
+      debts: [],
+      leaves: [],
+      budget,
+    })),
+    close: vi.fn(),
+    getCryptoService: vi.fn(() => ({})),
   };
+}
+
+async function createCrypto(): Promise<CryptoService> {
+  const crypto = new CryptoService();
+  const salt = crypto.generateSalt();
+  crypto.setEncryptionKey(await crypto.deriveKey('test-password', salt));
+  return crypto;
+}
+
+describe('BudgetManager', () => {
+  let database: ReturnType<typeof createDatabaseMock>;
+  let ephemeral: ReturnType<typeof createDatabaseMock>;
+  let scratchDir: string;
   let manager: BudgetManager;
 
   beforeEach(() => {
-    database = {
-      getBudgetById: vi.fn((id: string) => (id === 'budget-1' ? baseBudget : null)),
-      getAllBudgets: vi.fn(() => [baseBudget]),
-      createBudget: vi.fn((input: unknown) => ({ id: 'budget-created', ...input })),
-      deleteBudget: vi.fn(() => true),
-      getBudgetStats: vi.fn(() => ({ incomeCount: 0, billCount: 0 })),
-      getAllBudgetsWithStats: vi.fn(() => []),
-      updateBudget: vi.fn((id: string, input: Record<string, unknown>) => ({ ...baseBudget, id, ...input })),
-      getAllIncomes: vi.fn(() => []),
-      getAllBills: vi.fn(() => []),
-      getAllGoals: vi.fn(() => []),
-      getSkippedBills: vi.fn(() => []),
-      getBillAssignments: vi.fn(() => []),
-      getIncomeOverrides: vi.fn(() => []),
-      getIncomeById: vi.fn(() => null),
-      createIncome: vi.fn((budgetId: string, income: unknown) => ({ id: 'db-income', budgetId, ...income })),
-      updateIncome: vi.fn(() => ({ id: 'db-income-updated' })),
-      deleteIncome: vi.fn(() => true),
-      getBillById: vi.fn(() => null),
-      createBillEntry: vi.fn((budgetId: string, bill: unknown) => ({ id: 'db-bill', budgetId, ...bill })),
-      updateBillEntry: vi.fn(() => ({ id: 'db-bill-updated' })),
-      deleteBillEntry: vi.fn(() => true),
-      skipBill: vi.fn((budgetId: string, billId: string, skipDate: string) => ({ budgetId, billId, skipDate })),
-      unskipBill: vi.fn(() => true),
-      isSkipped: vi.fn(() => false),
-      assignBillToPaycheck: vi.fn(
-        (budgetId: string, billId: string, billDueDate: string, paycheckDate: string) => ({
-          budgetId,
-          billId,
-          billDueDate,
-          paycheckDate,
-        })
-      ),
-      removeBillAssignment: vi.fn(() => true),
-      getBillAssignment: vi.fn(() => null),
-      setIncomeOverride: vi.fn((budgetId: string, incomeId: string, paycheckDate: string, amount: number) => ({
-        budgetId,
-        incomeId,
-        paycheckDate,
-        amount,
-      })),
-      removeIncomeOverride: vi.fn(() => true),
-      getGoalById: vi.fn(() => null),
-      createGoal: vi.fn((budgetId: string, goal: unknown) => ({ id: 'db-goal', budgetId, ...goal })),
-      updateGoal: vi.fn(() => ({ id: 'db-goal-updated' })),
-      deleteGoal: vi.fn(() => true),
-    };
-    manager = new BudgetManager(database as never);
+    scratchDir = path.join(os.tmpdir(), `qb-scratch-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    database = createDatabaseMock(baseBudget);
+    ephemeral = createDatabaseMock(quickBudget);
+    ephemeral.createBudget = vi.fn(() => ({ ...quickBudget }));
+    manager = new BudgetManager(database as never, {
+      createEphemeralDatabase: vi.fn(() => ephemeral as never),
+      resolveScratchDir: () => scratchDir,
+    });
+  });
+
+  afterEach(() => {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
   });
 
   describe('happy', () => {
@@ -134,6 +175,7 @@ describe('BudgetManager', () => {
       manager.setStartingBalance(123);
       expect(manager.getStartingBalance()).toBe(123);
       expect(database.updateBudget).not.toHaveBeenCalled();
+      expect(ephemeral.updateBudget).toHaveBeenCalledWith('quick-budget-1', { startingBalance: 123 });
     });
 
     it('switches current budget and exits quick mode', () => {
@@ -165,11 +207,12 @@ describe('BudgetManager', () => {
 
     it('exposes current state and ends quick budget mode', () => {
       manager.startQuickBudget();
-      expect(manager.getCurrentState()).toEqual({ budgetId: null, isQuickBudget: true });
+      expect(manager.getCurrentState()).toEqual({ budgetId: 'quick-budget-1', isQuickBudget: true });
 
       manager.endQuickBudget();
       expect(manager.isQuickBudget()).toBe(false);
       expect(manager.getCurrentState()).toEqual({ budgetId: null, isQuickBudget: false });
+      expect(ephemeral.close).toHaveBeenCalled();
     });
 
     it('routes income operations to database when not in quick mode', () => {
@@ -239,26 +282,7 @@ describe('BudgetManager', () => {
       expect(database.getGoalById).toHaveBeenCalledWith('goal-1', 'budget-1');
     });
 
-    it('routes income/bill/goal operations to quick service in quick mode', () => {
-      const quick = (manager as unknown as { quickBudgetService: Record<string, ReturnType<typeof vi.fn>> }).quickBudgetService;
-      quick.createIncome = vi.fn(() => ({ id: 'quick-income' }));
-      quick.updateIncome = vi.fn(() => ({ id: 'quick-income' }));
-      quick.deleteIncome = vi.fn(() => true);
-      quick.getAllIncomes = vi.fn(() => []);
-      quick.getIncomeById = vi.fn(() => null);
-
-      quick.createBill = vi.fn(() => ({ id: 'quick-bill' }));
-      quick.updateBill = vi.fn(() => ({ id: 'quick-bill' }));
-      quick.deleteBill = vi.fn(() => true);
-      quick.getAllBills = vi.fn(() => []);
-      quick.getBillById = vi.fn(() => null);
-
-      quick.createGoal = vi.fn(() => ({ id: 'quick-goal' }));
-      quick.updateGoal = vi.fn(() => ({ id: 'quick-goal' }));
-      quick.deleteGoal = vi.fn(() => true);
-      quick.getAllGoals = vi.fn(() => []);
-      quick.getGoalById = vi.fn(() => null);
-
+    it('routes income/bill/goal operations to the ephemeral database in quick mode', () => {
       manager.startQuickBudget();
       manager.createIncome({
         sourceName: 'Gig',
@@ -302,19 +326,19 @@ describe('BudgetManager', () => {
       manager.getAllGoals();
       manager.getGoalById('q-goal');
 
-      expect(quick.createIncome).toHaveBeenCalled();
-      expect(quick.updateIncome).toHaveBeenCalled();
-      expect(quick.deleteIncome).toHaveBeenCalledWith('q-inc');
+      expect(ephemeral.createIncome).toHaveBeenCalled();
+      expect(ephemeral.updateIncome).toHaveBeenCalled();
+      expect(ephemeral.deleteIncome).toHaveBeenCalledWith('q-inc', 'quick-budget-1');
       expect(database.createIncome).not.toHaveBeenCalled();
 
-      expect(quick.createBill).toHaveBeenCalled();
-      expect(quick.updateBill).toHaveBeenCalled();
-      expect(quick.deleteBill).toHaveBeenCalledWith('q-bill');
+      expect(ephemeral.createBillEntry).toHaveBeenCalled();
+      expect(ephemeral.updateBillEntry).toHaveBeenCalled();
+      expect(ephemeral.deleteBillEntry).toHaveBeenCalledWith('q-bill', 'quick-budget-1');
       expect(database.createBillEntry).not.toHaveBeenCalled();
 
-      expect(quick.createGoal).toHaveBeenCalled();
-      expect(quick.updateGoal).toHaveBeenCalled();
-      expect(quick.deleteGoal).toHaveBeenCalledWith('q-goal');
+      expect(ephemeral.createGoal).toHaveBeenCalled();
+      expect(ephemeral.updateGoal).toHaveBeenCalled();
+      expect(ephemeral.deleteGoal).toHaveBeenCalledWith('q-goal', 'quick-budget-1');
       expect(database.createGoal).not.toHaveBeenCalled();
     });
 
@@ -378,50 +402,46 @@ describe('BudgetManager', () => {
       expect(manager.getAllBudgetsWithStats()).toEqual([]);
     });
 
-    it('returns null current budget id and quick allocation settings in quick mode', () => {
+    it('returns ephemeral current budget id and writes allocation settings to the scratch db', () => {
       manager.setCurrentBudget('budget-1');
       manager.startQuickBudget();
 
-      expect(manager.getCurrentBudgetId()).toBeNull();
+      expect(manager.getCurrentBudgetId()).toBe('quick-budget-1');
 
       manager.setStartingBalance(250);
       manager.setTargetCashOnHand(400);
       manager.setMinCashOnHand(150);
       manager.setMinSavingsPerPaycheck(25);
 
-      const quick = (manager as unknown as { quickBudgetService: { setScheduleStartDate: (d: string) => void } })
-        .quickBudgetService;
-      quick.setScheduleStartDate('2026-05-01');
-
-      expect(manager.getStartingBalance()).toBe(250);
-      expect(manager.getTargetCashOnHand()).toBe(400);
-      expect(manager.getMinCashOnHand()).toBe(150);
-      expect(manager.getMinSavingsPerPaycheck()).toBe(25);
-      expect(manager.getScheduleStartDate()).toBe('2026-05-01');
+      expect(ephemeral.updateBudget).toHaveBeenCalledWith('quick-budget-1', { startingBalance: 250 });
+      expect(ephemeral.updateBudget).toHaveBeenCalledWith('quick-budget-1', { targetCashOnHand: 400 });
+      expect(ephemeral.updateBudget).toHaveBeenCalledWith('quick-budget-1', { minCashOnHand: 150 });
+      expect(ephemeral.updateBudget).toHaveBeenCalledWith('quick-budget-1', { minSavingsPerPaycheck: 25 });
       expect(database.updateBudget).not.toHaveBeenCalled();
+      expect(manager.getAllBudgets()).toEqual([baseBudget]);
+      expect(database.getAllBudgets).toHaveBeenCalled();
     });
 
-    it('routes skipped bills, assignments, and overrides to quick mode service', () => {
-      const quick = (manager as unknown as { quickBudgetService: Record<string, ReturnType<typeof vi.fn>> }).quickBudgetService;
-      quick.skipBill = vi.fn((billId: string, skipDate: string) => ({ billId, skipDate }));
-      quick.unskipBill = vi.fn(() => true);
-      quick.isSkipped = vi.fn(() => true);
-      quick.getSkippedBills = vi.fn(() => [{ billId: 'bill-1', skipDate: '2026-01-01' }]);
-      quick.assignBillToPaycheck = vi.fn((billId: string, billDueDate: string, paycheckDate: string) => ({
-        billId, billDueDate, paycheckDate,
+    it('routes skipped bills, assignments, and overrides to the ephemeral database', () => {
+      ephemeral.getSkippedBills = vi.fn(() => [{ billId: 'bill-1', skipDate: '2026-01-01' }]);
+      ephemeral.isSkipped = vi.fn(() => true);
+      ephemeral.getBillAssignment = vi.fn(() => ({
+        billId: 'bill-1',
+        billDueDate: '2026-01-01',
+        paycheckDate: '2025-12-20',
       }));
-      quick.removeBillAssignment = vi.fn(() => true);
-      quick.getBillAssignment = vi.fn(() => ({ billId: 'bill-1', billDueDate: '2026-01-01', paycheckDate: '2025-12-20' }));
-      quick.getBillAssignments = vi.fn(() => [{ billId: 'bill-1', billDueDate: '2026-01-01', paycheckDate: '2025-12-20' }]);
-      quick.setIncomeOverride = vi.fn((incomeId: string, paycheckDate: string, amount: number) => ({
-        incomeId, paycheckDate, amount,
-      }));
-      quick.removeIncomeOverride = vi.fn(() => true);
-      quick.getIncomeOverrides = vi.fn(() => [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 500 }]);
+      ephemeral.getBillAssignments = vi.fn(() => [
+        { billId: 'bill-1', billDueDate: '2026-01-01', paycheckDate: '2025-12-20' },
+      ]);
+      ephemeral.getIncomeOverrides = vi.fn(() => [
+        { incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 500 },
+      ]);
 
       manager.startQuickBudget();
       expect(manager.getSkippedBills()).toEqual([{ billId: 'bill-1', skipDate: '2026-01-01' }]);
-      expect(manager.skipBill('bill-1', '2026-01-01')).toEqual({ billId: 'bill-1', skipDate: '2026-01-01' });
+      expect(manager.skipBill('bill-1', '2026-01-01')).toEqual(
+        expect.objectContaining({ billId: 'bill-1', skipDate: '2026-01-01' })
+      );
       expect(manager.unskipBill('bill-1', '2026-01-01')).toBe(true);
       expect(manager.isSkipped('bill-1', '2026-01-01')).toBe(true);
       expect(manager.getBillAssignments()).toEqual([
@@ -441,6 +461,44 @@ describe('BudgetManager', () => {
         expect.objectContaining({ incomeId: 'income-1', amount: 500 })
       );
       expect(manager.removeIncomeOverride('income-1', '2026-01-01')).toBe(true);
+      expect(database.skipBill).not.toHaveBeenCalled();
+      expect(ephemeral.skipBill).toHaveBeenCalledWith('quick-budget-1', 'bill-1', '2026-01-01');
+    });
+
+    it('routes debt and leave operations to the vault when not in quick mode', () => {
+      manager.setCurrentBudget('budget-1');
+      const debtInput = {
+        billId: 'bill-1',
+        principalBalance: 1000,
+        apr: 10,
+        monthlyPayment: 50,
+      };
+      const leaveInput = {
+        incomeId: 'income-1',
+        name: 'Medical',
+        type: 'unpaid' as const,
+        startDate: '2026-02-01',
+        endDate: '2026-02-14',
+      };
+
+      manager.createDebt(debtInput);
+      manager.updateDebt('debt-1', { apr: 12 });
+      manager.getDebts();
+      manager.getDebtById('debt-1');
+      manager.getDebtByBillId('bill-1');
+      manager.deleteDebt('debt-1');
+      manager.createLeave(leaveInput);
+      manager.updateLeave('leave-1', leaveInput);
+      manager.getLeaves();
+      manager.deleteLeave('leave-1');
+
+      expect(database.createDebt).toHaveBeenCalledWith('budget-1', debtInput);
+      expect(database.updateDebt).toHaveBeenCalledWith('debt-1', 'budget-1', { apr: 12 });
+      expect(database.getDebts).toHaveBeenCalledWith('budget-1');
+      expect(database.deleteDebt).toHaveBeenCalledWith('debt-1', 'budget-1');
+      expect(database.createLeave).toHaveBeenCalledWith('budget-1', leaveInput);
+      expect(database.getLeaves).toHaveBeenCalledWith('budget-1');
+      expect(database.deleteLeave).toHaveBeenCalledWith('leave-1', 'budget-1');
     });
   });
 
@@ -637,6 +695,94 @@ describe('BudgetManager', () => {
       expect(database.getBudgetById).toHaveBeenCalledTimes(2);
       expect(manager.getTargetCashOnHand()).toBe(250);
       expect(database.getBudgetById).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('ephemeral sqlite file', () => {
+    it('routes debts and leaves through the scratch file without mutating the vault', async () => {
+      const root = path.join(os.tmpdir(), `qb-file-${process.pid}-${Date.now()}`);
+      const vaultDir = path.join(root, 'vault');
+      const scratch = path.join(root, 'quick-budget-scratch');
+      fs.mkdirSync(vaultDir, { recursive: true, mode: 0o700 });
+      const crypto = await createCrypto();
+      const vault = new DatabaseService(crypto, path.join(vaultDir, 'budget-data.db'));
+      vault.initialize();
+      const named = vault.createBudget({ name: 'Main' });
+      const namedBill = vault.createBillEntry(named.id, {
+        creditorName: 'Vault Card',
+        budgetedAmount: 100,
+        dueDay: 1,
+        isRecurring: true,
+        priority: 'normal',
+      });
+      vault.createDebt(named.id, {
+        billId: namedBill.id,
+        principalBalance: 500,
+        apr: 8,
+        monthlyPayment: 50,
+      });
+      const namedIncome = vault.createIncome(named.id, {
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'biweekly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      vault.createLeave(named.id, {
+        incomeId: namedIncome.id,
+        name: 'Vault Leave',
+        type: 'unpaid',
+        startDate: '2026-03-01',
+        endDate: '2026-03-05',
+      });
+
+      const fileManager = new BudgetManager(vault, { resolveScratchDir: () => scratch });
+      fileManager.startQuickBudget();
+      expect(fileManager.getCurrentBudgetId()).not.toBeNull();
+      expect(fileManager.isQuickBudget()).toBe(true);
+      expect(fs.existsSync(path.join(scratch, 'budget.db'))).toBe(true);
+
+      const quickBill = fileManager.createBill({
+        creditorName: 'Quick Card',
+        budgetedAmount: 80,
+        dueDay: 10,
+        isRecurring: true,
+        priority: 'normal',
+      });
+      fileManager.createDebt({
+        billId: quickBill.id,
+        principalBalance: 250,
+        apr: 12,
+        monthlyPayment: 25,
+      });
+      const quickIncome = fileManager.createIncome({
+        sourceName: 'Gig',
+        amount: 400,
+        cadence: 'weekly',
+        startDate: '2026-01-01',
+        isActive: true,
+      });
+      fileManager.createLeave({
+        incomeId: quickIncome.id,
+        name: 'Quick Leave',
+        type: 'paid',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+      });
+
+      expect(fileManager.getDebts()).toHaveLength(1);
+      expect(fileManager.getLeaves()).toHaveLength(1);
+      expect(vault.getDebts(named.id)).toHaveLength(1);
+      expect(vault.getLeaves(named.id)).toHaveLength(1);
+      expect(vault.getAllBudgets().some((budget) => budget.id === named.id)).toBe(true);
+      expect(vault.getAllBudgets().some((budget) => budget.name === 'Quick Budget')).toBe(false);
+
+      fileManager.endQuickBudget();
+      expect(fs.existsSync(path.join(scratch, 'budget.db'))).toBe(false);
+      expect(vault.getDebts(named.id)).toHaveLength(1);
+      expect(vault.getLeaves(named.id)).toHaveLength(1);
+      vault.close();
+      fs.rmSync(root, { recursive: true, force: true });
     });
   });
 });

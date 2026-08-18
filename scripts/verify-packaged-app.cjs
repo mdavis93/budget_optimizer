@@ -23,10 +23,9 @@ const asarPath = path.join(appDir, 'Contents/Resources/app.asar');
 const asarCli = path.join(root, 'node_modules/@electron/asar/bin/asar.js');
 
 const requiredAsarPaths = [
-  '/node_modules/bindings/',
-  '/node_modules/file-uri-to-path/',
   '/node_modules/better-sqlite3/',
   '/node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+  '/node_modules/keytar/',
 ];
 
 const forbiddenAsarPaths = [
@@ -157,6 +156,38 @@ runElectronNodeVerify(
     console.error(error.message || error);
     process.exit(1);
   }
-`,
+  `,
   'PACKAGED_DB_OK'
+);
+
+runElectronNodeVerify(
+  'keytar',
+  `
+  try {
+    const path = require('path');
+    const candidates = [
+      path.join(process.resourcesPath, 'app.asar/node_modules/keytar'),
+      path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/keytar'),
+    ];
+    let keytar = null;
+    let lastError = null;
+    for (const candidate of candidates) {
+      try {
+        keytar = require(candidate);
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!keytar || typeof keytar.getPassword !== 'function') {
+      throw lastError || new Error('keytar module did not load');
+    }
+    console.log('PACKAGED_KEYTAR_OK');
+    process.exit(0);
+  } catch (error) {
+    console.error(error.message || error);
+    process.exit(1);
+  }
+  `,
+  'PACKAGED_KEYTAR_OK'
 );

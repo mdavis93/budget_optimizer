@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { recordDiagnosticBreadcrumb } from './utils/diagnosticContext';
 import { useAuth } from './context/AuthContext';
@@ -12,16 +12,17 @@ import LoadingScreen from './components/LoadingScreen';
 import { PlatformExitGuardProvider } from './platform/PlatformExitGuard';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
-import DashboardPage from './pages/DashboardPage';
-import IncomePage from './pages/IncomePage';
-import BillsPage from './pages/BillsPage';
-import DebtsPage from './pages/DebtsPage';
-import SchedulePage from './pages/SchedulePage';
-import GoalsPage from './pages/GoalsPage';
-import SummaryPage from './pages/SummaryPage';
-import BudgetsPage from './pages/BudgetsPage';
-import ExportPage from './pages/ExportPage';
-import SettingsPage from './pages/SettingsPage';
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const IncomePage = lazy(() => import('./pages/IncomePage'));
+const BillsPage = lazy(() => import('./pages/BillsPage'));
+const DebtsPage = lazy(() => import('./pages/DebtsPage'));
+const SchedulePage = lazy(() => import('./pages/SchedulePage'));
+const GoalsPage = lazy(() => import('./pages/GoalsPage'));
+const SummaryPage = lazy(() => import('./pages/SummaryPage'));
+const BudgetsPage = lazy(() => import('./pages/BudgetsPage'));
+const ExportPage = lazy(() => import('./pages/ExportPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 function RouteBreadcrumbTracker() {
   const location = useLocation();
@@ -91,6 +92,7 @@ function App() {
           <BudgetProvider>
           <DraftProvider>
           <PlatformExitGuardProvider>
+          <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route 
               path="/login" 
@@ -128,6 +130,7 @@ function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+          </Suspense>
           </PlatformExitGuardProvider>
           </DraftProvider>
           </BudgetProvider>

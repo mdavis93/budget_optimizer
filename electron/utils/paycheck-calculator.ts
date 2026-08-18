@@ -28,7 +28,7 @@ export function getNextIncomeDate(current: Date, cadence: Income['cadence']): Da
       return addWeeks(current, 1);
     case 'biweekly':
       return addWeeks(current, 2);
-    case 'semimonthly':
+    case 'semimonthly': {
       const day = getDate(current);
       if (day === 1) {
         return setDate(current, 15);
@@ -39,6 +39,7 @@ export function getNextIncomeDate(current: Date, cadence: Income['cadence']): Da
       } else {
         return setDate(addMonths(current, 1), 1);
       }
+    }
     case 'monthly':
       return addMonths(current, 1);
     default:

@@ -35,8 +35,8 @@ export default function ChangePasswordModal({ isOpen, onClose, onSuccess }: Chan
     e.preventDefault();
     setError(null);
 
-    if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters');
+    if (newPassword.length < 12) {
+      setError('New password must be at least 12 characters');
       return;
     }
 

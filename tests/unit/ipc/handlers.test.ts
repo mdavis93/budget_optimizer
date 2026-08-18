@@ -102,6 +102,15 @@ class MockIpcMain {
   }
 }
 
+function registerHandlers(ipcMain: MockIpcMain, services: ReturnType<typeof createServices>): void {
+  registerIpcHandlers(ipcMain as never, services as never, {
+    getMainWindow: () => ({
+      webContents: ipcMain.sender,
+      isDestroyed: () => false,
+    }),
+  });
+}
+
 function createServices(overrides: Partial<Record<string, unknown>> = {}) {
   let onLockListener: (() => void) | null = null;
   const baseAuth = {
@@ -180,6 +189,16 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       createGoal: vi.fn(),
       updateGoal: vi.fn(() => null),
       deleteGoal: vi.fn(() => false),
+      getDebts: vi.fn(() => []),
+      getDebtById: vi.fn(() => null),
+      getDebtByBillId: vi.fn(() => null),
+      createDebt: vi.fn(),
+      updateDebt: vi.fn(() => null),
+      deleteDebt: vi.fn(() => false),
+      getLeaves: vi.fn(() => []),
+      createLeave: vi.fn(),
+      updateLeave: vi.fn(() => null),
+      deleteLeave: vi.fn(() => false),
       getBudgetSnapshot: vi.fn(() => ({
         incomes: [{ id: 'income-1' }],
         bills: [{ id: 'bill-1' }],
@@ -302,7 +321,7 @@ describe('ipc handlers', () => {
           unlockWithBiometric: vi.fn(async () => ({ success: false, error: 'no biometric' })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('auth:unlock', 'bad')).resolves.toEqual({
         success: false,
@@ -312,6 +331,63 @@ describe('ipc handlers', () => {
         success: false,
         error: 'no biometric',
       });
+    });
+
+    it('unlocks from saved credentials without returning a password', async () => {
+      const services = createServices({
+        credentials: {
+          ...createServices().credentials,
+          getPassword: vi.fn(async () => ({ success: true, password: 'saved-secret' })),
+        },
+      });
+      const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => undefined);
+      const settingsSpy = vi.spyOn(DatabaseService.prototype, 'getSettings').mockReturnValue({
+        autoLockMinutes: 5,
+      } as never);
+      registerHandlers(ipcMain, services);
+
+      const result = await ipcMain.invoke('auth:unlock-with-saved-credentials');
+      expect(result).toEqual({ success: true });
+      expect(result).not.toHaveProperty('password');
+      expect(services.auth.unlock).toHaveBeenCalledWith('saved-secret');
+      initSpy.mockRestore();
+      settingsSpy.mockRestore();
+    });
+
+    it('rejects unlock-with-saved-credentials when no password is stored', async () => {
+      const services = createServices({
+        credentials: {
+          ...createServices().credentials,
+          getPassword: vi.fn(async () => ({ success: false, error: 'No saved password found' })),
+        },
+      });
+      registerHandlers(ipcMain, services);
+
+      await expect(ipcMain.invoke('auth:unlock-with-saved-credentials')).resolves.toEqual({
+        success: false,
+        error: 'No saved password found',
+      });
+      expect(services.auth.unlock).not.toHaveBeenCalled();
+    });
+
+    it('rejects mutating handlers when the sender is not the app window', async () => {
+      const services = createServices();
+      registerIpcHandlers(ipcMain as never, services as never, {
+        getMainWindow: () => ({
+          webContents: { id: 'other-window' },
+          isDestroyed: () => false,
+        }),
+      });
+
+      await expect(ipcMain.invoke('auth:unlock', 'pw')).resolves.toEqual({
+        success: false,
+        error: 'Invalid sender',
+      });
+      await expect(ipcMain.invoke('budget:get-all')).resolves.toEqual({
+        success: false,
+        error: 'Invalid sender',
+      });
+      expect(services.auth.unlock).not.toHaveBeenCalled();
     });
 
     it('reverts first-time setup when database initialization fails', async () => {
@@ -324,7 +400,7 @@ describe('ipc handlers', () => {
       const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => {
         throw new Error('disk full');
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('auth:create-master-password', 'pw')).resolves.toEqual({
         success: false,
@@ -339,7 +415,7 @@ describe('ipc handlers', () => {
       const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => {
         throw new Error('locked db');
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('auth:unlock', 'pw')).resolves.toEqual({
         success: false,
@@ -350,11 +426,9 @@ describe('ipc handlers', () => {
 
     it('uses extra payment amortization when linked bill budgets above minimum', async () => {
       const services = createServices({
-        database: {
-          getDebts: vi.fn(() => []),
-      getLeaves: vi.fn(() => []),
-          getSettings: vi.fn(() => ({ autoLockMinutes: 5 })),
-          close: vi.fn(),
+        budgetManager: {
+          ...createServices().budgetManager,
+          getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 150 }]),
           getDebtById: vi.fn(() => ({
             id: 'debt-1',
             billId: 'bill-1',
@@ -362,10 +436,6 @@ describe('ipc handlers', () => {
             apr: 12,
             monthlyPayment: 100,
           })),
-        },
-        budgetManager: {
-          ...createServices().budgetManager,
-          getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 150 }]),
         },
         debt: {
           calculateAmortization: vi.fn(() => ({
@@ -375,7 +445,7 @@ describe('ipc handlers', () => {
           })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await ipcMain.invoke('debts:get-amortization', 'debt-1');
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(1000, 12, 100, 50, 'monthly');
@@ -383,7 +453,7 @@ describe('ipc handlers', () => {
 
     it('invokes schedule:build via scheduleCompute host and returns schedule payload', async () => {
       const services = createServices();
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('schedule:build', '2026-01-01', 2, 500);
 
@@ -443,7 +513,7 @@ describe('ipc handlers', () => {
           }),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
       expect(ipcMain.sender.send).toHaveBeenCalledWith(
@@ -495,7 +565,7 @@ describe('ipc handlers', () => {
           }),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       ipcMain.sender.isDestroyed.mockReturnValue(true);
       await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
@@ -523,7 +593,7 @@ describe('ipc handlers', () => {
           deleteIncome: vi.fn(() => true),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const created = await ipcMain.invoke('income:create', { sourceName: 'Salary' });
       const updated = await ipcMain.invoke('income:update', 'inc-1', { sourceName: 'Updated' });
@@ -549,7 +619,7 @@ describe('ipc handlers', () => {
           deleteGoal: vi.fn(() => true),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const billCreated = await ipcMain.invoke('bills:create', { creditorName: 'Rent' });
       const billUpdated = await ipcMain.invoke('bills:update', 'bill-1', { creditorName: 'Updated Bill' });
@@ -574,7 +644,7 @@ describe('ipc handlers', () => {
           updateSettings: vi.fn((input) => ({ autoLockMinutes: 10, ...input })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const settings = await ipcMain.invoke('settings:get');
       const updated = await ipcMain.invoke('settings:update', { currency: 'CAD' });
@@ -584,7 +654,7 @@ describe('ipc handlers', () => {
       expect(services.database.updateSettings).toHaveBeenCalledWith({ currency: 'CAD' });
     });
 
-    it('switches budgets and applies reconciliation fixes', async () => {
+    it('switches budgets without persisting bill assignment locks', async () => {
       const services = createServices({
         budgetManager: {
           ...createServices().budgetManager,
@@ -593,47 +663,13 @@ describe('ipc handlers', () => {
           skipBill: vi.fn(),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const switched = await ipcMain.invoke('budget:switch', 'budget-2');
-      const reconcile = await ipcMain.invoke('reconciliation:apply-fixes', [
-        {
-          id: 'fix-0001',
-          type: 'move_bill',
-          billId: 'bill-0001',
-          billDueDate: '2026-02-01',
-          fromPaycheckDate: '2026-01-15',
-          toPaycheckDate: '2026-01-31',
-        },
-      ]);
 
       expect(switched).toEqual({ success: true, data: { id: 'budget-2' } });
-      expect(reconcile).toEqual({ success: true });
-      // Accept must not persist locks — soft preferred is passed via schedule:build.
       expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
-    });
-
-    it('applies break-glass advisor steps without locking bill assignments', async () => {
-      const services = createServices({
-        budgetManager: {
-          ...createServices().budgetManager,
-          assignBillToPaycheck: vi.fn(),
-        },
-      });
-      registerIpcHandlers(ipcMain as never, services as never);
-
-      const result = await ipcMain.invoke('breakGlassAdvisor:apply', [
-        {
-          billId: 'bill-0001',
-          billDueDate: '2026-08-08',
-          fromPaycheckDate: '2026-07-31',
-          toPaycheckDate: '2026-07-24',
-        },
-      ]);
-
-      expect(result).toEqual({ success: true });
-      expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
     });
 
     it('locks auth and clears active budget/database services', async () => {
@@ -644,7 +680,7 @@ describe('ipc handlers', () => {
           close,
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('auth:lock');
       expect(result).toEqual({ success: true });
@@ -659,21 +695,6 @@ describe('ipc handlers', () => {
         database: {
           ...createServices().database,
           updateSettings: vi.fn((input) => ({ autoLockMinutes: 5, ...input })),
-          getDebtByBillId: vi.fn(() => ({ id: 'debt-1' })),
-          createDebt: vi.fn(() => ({ id: 'debt-1' })),
-          updateDebt: vi.fn(() => ({ id: 'debt-1', apr: 10 })),
-          deleteDebt: vi.fn(() => true),
-          getLeaves: vi.fn(() => [{ id: 'leave-1' }]),
-          createLeave: vi.fn(() => ({ id: 'leave-1' })),
-          updateLeave: vi.fn(() => ({ id: 'leave-1', type: 'unpaid' })),
-          deleteLeave: vi.fn(() => true),
-          getDebtById: vi.fn(() => ({
-            id: 'debt-1',
-            billId: 'bill-0001',
-            principalBalance: 1000,
-            apr: 10,
-            monthlyPayment: 100,
-          })),
         },
         budgetManager: {
           ...createServices().budgetManager,
@@ -700,6 +721,21 @@ describe('ipc handlers', () => {
           removeIncomeOverride: vi.fn(() => true),
           getAllGoals: vi.fn(() => [{ id: 'goal-1' }]),
           getAllBills: vi.fn(() => [{ id: 'bill-0001', budgetedAmount: 120, creditorName: 'Bill' }]),
+          getDebtByBillId: vi.fn(() => ({ id: 'debt-1' })),
+          createDebt: vi.fn(() => ({ id: 'debt-1' })),
+          updateDebt: vi.fn(() => ({ id: 'debt-1', apr: 10 })),
+          deleteDebt: vi.fn(() => true),
+          getLeaves: vi.fn(() => [{ id: 'leave-1' }]),
+          createLeave: vi.fn(() => ({ id: 'leave-1' })),
+          updateLeave: vi.fn(() => ({ id: 'leave-1', type: 'unpaid' })),
+          deleteLeave: vi.fn(() => true),
+          getDebtById: vi.fn(() => ({
+            id: 'debt-1',
+            billId: 'bill-0001',
+            principalBalance: 1000,
+            apr: 10,
+            monthlyPayment: 100,
+          })),
         },
         auth: {
           ...createServices().auth,
@@ -762,7 +798,7 @@ describe('ipc handlers', () => {
           }),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       approveExportPath('/Users/tester/exports/report.pdf');
       approveExportPath('/Users/tester/exports/report.html');
@@ -778,17 +814,20 @@ describe('ipc handlers', () => {
       await expect(ipcMain.invoke('auth:get-pending-recovery-key')).resolves.toBeNull();
       await expect(ipcMain.invoke('auth:clear-pending-recovery-key')).resolves.toEqual({ success: true });
       await expect(ipcMain.invoke('auth:verify-recovery-key', 'key')).resolves.toEqual({ success: true });
-      await expect(ipcMain.invoke('auth:set-auto-lock', 10)).resolves.toEqual({ success: true });
       await expect(ipcMain.invoke('auth:activity-ping')).resolves.toEqual({ success: true });
 
-      await expect(ipcMain.invoke('credentials:save', 'pass')).resolves.toEqual({ success: true });
-      await expect(ipcMain.invoke('credentials:get')).resolves.toEqual({ success: true, password: null });
       await expect(ipcMain.invoke('credentials:delete')).resolves.toEqual({ success: true });
       await expect(ipcMain.invoke('credentials:has')).resolves.toBe(true);
-      await expect(ipcMain.invoke('credentials:offer-save', 'new-pass-123')).resolves.toEqual({
-        success: true,
-        saved: false,
-      });
+      expect(() => ipcMain.invoke('credentials:get')).toThrow('No handler registered for credentials:get');
+      expect(() => ipcMain.invoke('credentials:save', 'pass')).toThrow(
+        'No handler registered for credentials:save'
+      );
+      expect(() => ipcMain.invoke('credentials:offer-save', 'new-pass-123')).toThrow(
+        'No handler registered for credentials:offer-save'
+      );
+      expect(() => ipcMain.invoke('auth:set-auto-lock', 10)).toThrow(
+        'No handler registered for auth:set-auto-lock'
+      );
 
       await expect(ipcMain.invoke('budget:get-all')).resolves.toEqual({ success: true, data: [{ id: 'budget-1' }] });
       await expect(ipcMain.invoke('budget:get-all-with-stats')).resolves.toEqual({
@@ -882,10 +921,11 @@ describe('ipc handlers', () => {
         success: true,
         data: { autoLockMinutes: 5 },
       });
-      await expect(ipcMain.invoke('settings:update', { theme: 'dark' })).resolves.toEqual({
+      await expect(ipcMain.invoke('settings:update', { theme: 'dark', autoLockMinutes: 15 })).resolves.toEqual({
         success: true,
-        data: { autoLockMinutes: 5, theme: 'dark' },
+        data: { autoLockMinutes: 15, theme: 'dark' },
       });
+      expect(services.auth.setAutoLock).toHaveBeenCalledWith(15);
 
       await expect(ipcMain.invoke('debts:get-all')).resolves.toEqual({ success: true, data: [] });
       await expect(ipcMain.invoke('debts:get-by-bill', 'bill-0001')).resolves.toEqual({
@@ -944,7 +984,7 @@ describe('ipc handlers', () => {
       const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => {
         throw new Error('biometric db locked');
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('auth:unlock-with-biometric')).resolves.toEqual({
         success: false,
@@ -956,7 +996,7 @@ describe('ipc handlers', () => {
     it('reinitializes database after successful password reset with recovery', async () => {
       const services = createServices();
       const initSpy = vi.spyOn(DatabaseService.prototype, 'initialize').mockImplementation(() => undefined);
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(
         ipcMain.invoke('auth:reset-password-with-recovery', 'recovery-key', 'new-password-123')
@@ -972,7 +1012,7 @@ describe('ipc handlers', () => {
           getCurrentState: vi.fn(() => ({ budgetId: null, isQuickBudget: false })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('budget:get-current')).resolves.toEqual({
         success: true,
@@ -982,7 +1022,7 @@ describe('ipc handlers', () => {
 
     it('uses overlay starting balance when schedule:build receives draft overlay', async () => {
       const services = createServices();
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await ipcMain.invoke('schedule:build', '2026-02-01', 3, 750, { startingBalance: 750 });
 
@@ -1006,9 +1046,6 @@ describe('ipc handlers', () => {
           ...createServices().budgetManager,
           getAllGoals: vi.fn(() => [{ id: 'goal-1', name: 'Fund', targetAmount: 1000, targetDate: '2026-12-01' }]),
           getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 100, creditorName: 'Card' }]),
-        },
-        database: {
-          ...createServices().database,
           getDebts: vi.fn(() => [
             {
               id: 'debt-1',
@@ -1028,7 +1065,7 @@ describe('ipc handlers', () => {
           })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await ipcMain.invoke('goals:get-projections');
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
@@ -1045,7 +1082,7 @@ describe('ipc handlers', () => {
           getAllGoals: vi.fn(() => []),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('goals:get-projections')).resolves.toEqual({
         success: true,
@@ -1064,7 +1101,7 @@ describe('ipc handlers', () => {
           calculateAmortization: vi.fn(() => ({ monthsToPayoff: 3, payments: [{ payment: 100 }], payoffDate: '2026-03-01' })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('debts:get-all-with-amortization', {
         debts: [
@@ -1092,6 +1129,27 @@ describe('ipc handlers', () => {
       });
       expect(result).toEqual({ success: true, data: expect.any(Array) });
     });
+
+    it('creates debts in quick budget mode when the ephemeral budget id is set', async () => {
+      const services = createServices({
+        budgetManager: {
+          ...createServices().budgetManager,
+          getCurrentState: vi.fn(() => ({ budgetId: 'quick-1', isQuickBudget: true })),
+          createDebt: vi.fn(() => ({ id: 'debt-q' })),
+        },
+      });
+      registerHandlers(ipcMain, services);
+
+      await expect(
+        ipcMain.invoke('debts:create', {
+          billId: 'bill-1',
+          principalBalance: 100,
+          apr: 10,
+          monthlyPayment: 25,
+        })
+      ).resolves.toEqual({ success: true, data: { id: 'debt-q' } });
+      expect(services.budgetManager.createDebt).toHaveBeenCalled();
+    });
   });
 
   describe('sad', () => {
@@ -1100,9 +1158,6 @@ describe('ipc handlers', () => {
         budgetManager: {
           ...createServices().budgetManager,
           updateBudget: vi.fn(() => null),
-        },
-        database: {
-          ...createServices().database,
           updateDebt: vi.fn(() => null),
           deleteDebt: vi.fn(() => false),
           getDebtById: vi.fn(() => null),
@@ -1110,7 +1165,7 @@ describe('ipc handlers', () => {
           deleteLeave: vi.fn(() => false),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('budget:update', 'missing', { name: 'x' })).resolves.toMatchObject({
         success: false,
@@ -1148,7 +1203,7 @@ describe('ipc handlers', () => {
 
     it('rejects export:to-html with invalid path', async () => {
       const services = createServices();
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('export:to-html', { paychecks: [] }, '/etc/passwd');
       expect(result).toEqual({ success: false, error: 'Invalid export path' });
@@ -1157,7 +1212,7 @@ describe('ipc handlers', () => {
 
     it('rejects export:to-pdf and export:to-spreadsheet with invalid paths', async () => {
       const services = createServices();
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('export:to-pdf', { paychecks: [] }, '/etc/passwd')).resolves.toEqual({
         success: false,
@@ -1181,7 +1236,7 @@ describe('ipc handlers', () => {
           updateGoal: vi.fn(() => null),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('income:update', 'missing', { sourceName: 'x' })).resolves.toMatchObject({
         success: false,
@@ -1216,7 +1271,7 @@ describe('ipc handlers', () => {
           setCurrentBudget: vi.fn(() => null),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('budget:switch', 'missing-budget');
       expect(result).toEqual({ success: false, error: 'Budget not found' });
@@ -1231,7 +1286,7 @@ describe('ipc handlers', () => {
           }),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('auth:lock');
       expect(result).toEqual({ success: false, error: 'lock failed' });
@@ -1244,7 +1299,7 @@ describe('ipc handlers', () => {
           getCurrentState: vi.fn(() => ({ budgetId: null, isQuickBudget: false })),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('debts:get-all')).resolves.toEqual({
         success: false,
@@ -1321,7 +1376,7 @@ describe('ipc handlers', () => {
           deleteGoal: vi.fn(() => false),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('skipped-bills:unskip', 'bill-1', '2026-01-01')).resolves.toMatchObject({
         success: false,
@@ -1344,7 +1399,7 @@ describe('ipc handlers', () => {
           updateBudget: vi.fn(() => null),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('budget:update', 'missing-budget', { name: 'X' })).resolves.toMatchObject({
         success: false,
@@ -1359,7 +1414,7 @@ describe('ipc handlers', () => {
           deleteBudget: vi.fn(() => false),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('budget:delete', 'budget-1')).resolves.toMatchObject({
         success: false,
@@ -1375,7 +1430,7 @@ describe('ipc handlers', () => {
           removeBillAssignment: vi.fn(() => false),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('skipped-bills:unskip', 'bill-1', '2026-01-01')).resolves.toEqual({
         success: false,
@@ -1394,7 +1449,7 @@ describe('ipc handlers', () => {
           }),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       await expect(ipcMain.invoke('auth:create-master-password', 'pw')).resolves.toEqual({
         success: false,
@@ -1418,7 +1473,7 @@ describe('ipc handlers', () => {
           }),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       approveExportPath('/Users/tester/exports/ok.pdf');
       approveExportPath('/Users/tester/exports/ok.html');
@@ -1449,40 +1504,23 @@ describe('ipc handlers', () => {
           getIsUnlocked: vi.fn(() => false),
         },
       });
-      registerIpcHandlers(ipcMain as never, services as never);
+      registerHandlers(ipcMain, services);
 
       const result = await ipcMain.invoke('budget:get-all');
       expect(result).toEqual({ success: false, error: 'App is locked' });
-    });
-
-    it('rejects invalid reconciliation payloads', async () => {
-      const services = createServices();
-      registerIpcHandlers(ipcMain as never, services as never);
-
-      const result = await ipcMain.invoke('reconciliation:apply-fixes', [
-        { type: 'move_bill', billId: 'bill-1' },
-      ]);
-
-      expect(result).toMatchObject({
-        success: false,
-        error: expect.stringContaining('Invalid reconciliation fixes'),
-      });
-      expect(result).toHaveProperty('diagnosticId', 'diag-test');
-      expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
-      expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });
   });
 
   describe('diagnostics', () => {
     describe('happy', () => {
-      it('reports, gets event bundle, and exports after path approval while locked', async () => {
+      it('reports while locked but requires unlock to get or export diagnostics', async () => {
         const services = createServices({
           auth: {
             ...createServices().auth,
             getIsUnlocked: vi.fn(() => false),
           },
         });
-        registerIpcHandlers(ipcMain as never, services as never);
+        registerHandlers(ipcMain, services);
 
         await expect(
           ipcMain.invoke('diagnostics:report', {
@@ -1490,6 +1528,33 @@ describe('ipc handlers', () => {
             message: 'ui boom',
           })
         ).resolves.toEqual({ success: true, data: { id: 'diag-test' } });
+
+        await expect(ipcMain.invoke('diagnostics:get-event', 'diag-test')).resolves.toEqual({
+          success: false,
+          error: 'App is locked',
+        });
+        await expect(ipcMain.invoke('diagnostics:get-bundle', 5)).resolves.toEqual({
+          success: false,
+          error: 'App is locked',
+        });
+        approveExportPath('/Users/tester/diagnostics.json');
+        await expect(
+          ipcMain.invoke('diagnostics:export', '/Users/tester/diagnostics.json', 10)
+        ).resolves.toEqual({
+          success: false,
+          error: 'App is locked',
+        });
+        expect(diagnostics.exportBundle).not.toHaveBeenCalled();
+
+        await expect(ipcMain.invoke('budget:get-all')).resolves.toEqual({
+          success: false,
+          error: 'App is locked',
+        });
+      });
+
+      it('gets event bundle and exports after unlock', async () => {
+        const services = createServices();
+        registerHandlers(ipcMain, services);
 
         await expect(ipcMain.invoke('diagnostics:get-event', 'diag-test')).resolves.toMatchObject({
           success: true,
@@ -1509,11 +1574,6 @@ describe('ipc handlers', () => {
           '/Users/tester/diagnostics.json',
           10
         );
-
-        await expect(ipcMain.invoke('budget:get-all')).resolves.toEqual({
-          success: false,
-          error: 'App is locked',
-        });
       });
     });
 
@@ -1521,7 +1581,7 @@ describe('ipc handlers', () => {
       it('rejects malformed report and unapproved export path', async () => {
         vi.mocked(diagnostics.exportBundle).mockClear();
         const services = createServices();
-        registerIpcHandlers(ipcMain as never, services as never);
+        registerHandlers(ipcMain, services);
 
         await expect(ipcMain.invoke('diagnostics:report', null)).resolves.toEqual({
           success: false,
@@ -1543,7 +1603,7 @@ describe('ipc handlers', () => {
           error: 'Diagnostics bag exceeds max depth',
         });
         const services = createServices();
-        registerIpcHandlers(ipcMain as never, services as never);
+        registerHandlers(ipcMain, services);
 
         await expect(
           ipcMain.invoke('diagnostics:report', {

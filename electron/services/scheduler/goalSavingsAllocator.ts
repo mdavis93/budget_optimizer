@@ -128,7 +128,7 @@ export function fillProportional(amount: number, capacities: number[]): number[]
       return { i, free, base, frac: exact - Math.floor(exact) };
     });
 
-    let assigned = shares.reduce((sum, s) => sum + s.base, 0);
+    const assigned = shares.reduce((sum, s) => sum + s.base, 0);
     let leftover = remaining - assigned;
     shares.sort((a, b) => b.frac - a.frac || a.i - b.i);
     for (const s of shares) {
@@ -204,7 +204,7 @@ export function allocateGoalsAndSavings(
 
   for (const reserve of reserveTiers) {
     for (const goal of sortedGoals) {
-      let remaining = need.get(goal.id) ?? 0;
+      const remaining = need.get(goal.id) ?? 0;
       if (remaining <= 0) continue;
       const window = windows.get(goal.id) ?? [];
       if (window.length === 0) continue;

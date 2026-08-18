@@ -5,6 +5,7 @@ import {
   GoalComfortTier,
   GoalCopyVars,
 } from './goalAchievabilityCopy';
+import { formatCurrency } from './formatCurrency';
 
 export type { GoalComfortTier };
 
@@ -45,7 +46,7 @@ export interface GoalAchievabilityMessaging {
 const SCHEDULE_MONTHS = 12;
 
 function formatMoney(amount: number): string {
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  return formatCurrency(amount);
 }
 
 function formatMonthYear(dateStr: string): string {
@@ -270,7 +271,7 @@ export function buildGoalAchievabilityMessaging(
     ariaMessage: copy.ariaMessage,
     timeline,
     margin,
-    footnote: `Assumes $${minCashOnHand} min cash each paycheck and goals funded from surplus after bills & savings.`,
+    footnote: `Assumes ${formatCurrency(minCashOnHand)} min cash each paycheck and goals funded from surplus after bills & savings.`,
     suggestions: projection.suggestions,
     scheduleLink: {
       goalId: goal.id,

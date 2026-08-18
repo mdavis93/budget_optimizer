@@ -17,6 +17,7 @@ function AuthHarness() {
       <button onClick={() => void auth.checkAuthStatus()}>check</button>
       <button onClick={() => void auth.createPassword('StrongPass123!')}>create</button>
       <button onClick={() => void auth.unlock('StrongPass123!')}>unlock</button>
+      <button onClick={() => void auth.unlockWithSavedCredentials()}>unlock-saved</button>
       <button onClick={() => void auth.lock()}>lock</button>
       <button onClick={() => void auth.enableBiometric()}>enable-bio</button>
       <button onClick={() => void auth.unlockWithBiometric()}>unlock-bio</button>
@@ -110,6 +111,16 @@ describe('AuthContext', () => {
       });
     });
 
+    it('unlocks with saved credentials', async () => {
+      mockAPI.auth.unlockWithSavedCredentials.mockResolvedValue({ success: true });
+      renderProvider();
+      fireEvent.click(screen.getByText('unlock-saved'));
+      await waitFor(() => {
+        expect(screen.getByTestId('unlocked')).toHaveTextContent('true');
+      });
+      expect(mockAPI.auth.unlockWithSavedCredentials).toHaveBeenCalled();
+    });
+
     it('locks the UI when main sends auth:locked', async () => {
       let lockedHandler: (() => void) | undefined;
       mockAPI.auth.onLocked.mockImplementation((callback: () => void) => {
@@ -163,6 +174,27 @@ describe('AuthContext', () => {
       });
     });
 
+    it('sets error when unlockWithSavedCredentials fails', async () => {
+      mockAPI.auth.unlockWithSavedCredentials.mockResolvedValue({
+        success: false,
+        error: 'No saved password found',
+      });
+      renderProvider();
+      fireEvent.click(screen.getByText('unlock-saved'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('No saved password found');
+      });
+    });
+
+    it('uses default error when unlockWithSavedCredentials fails without message', async () => {
+      mockAPI.auth.unlockWithSavedCredentials.mockResolvedValue({ success: false });
+      renderProvider();
+      fireEvent.click(screen.getByText('unlock-saved'));
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Could not unlock with saved password');
+      });
+    });
+
     it('sets error when unlock returns unsuccessful result', async () => {
       mockAPI.auth.unlock.mockResolvedValue({ success: false, error: 'Bad password' });
 
@@ -196,6 +228,17 @@ describe('AuthContext', () => {
 
       renderProvider();
       fireEvent.click(screen.getByText('unlock'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('An unexpected error occurred');
+      });
+    });
+
+    it('handles unexpected unlockWithSavedCredentials exception', async () => {
+      mockAPI.auth.unlockWithSavedCredentials.mockRejectedValue(new Error('boom'));
+
+      renderProvider();
+      fireEvent.click(screen.getByText('unlock-saved'));
 
       await waitFor(() => {
         expect(screen.getByTestId('error')).toHaveTextContent('An unexpected error occurred');

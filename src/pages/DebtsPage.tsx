@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CreditCard, Plus, ChevronDown } from 'lucide-react';
 import { useDraftData, useDraftActions } from '../context/DraftContext';
-import { useBudget } from '../context/BudgetContext';
-import { useToast } from '../components/Toast';
-import { copyDiagnosticReport, reportError } from '../utils/reportError';
+import { reportError } from '../utils/reportError';
+import { formatCurrency } from '../utils/formatCurrency';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -25,13 +24,10 @@ export default function DebtsPage() {
   const { debts, bills } = useDraftData();
   const {
     getDebtsWithAmortization,
-    reloadSnapshot,
     createDebt,
     updateDebt,
     deleteDebt: removeDebt,
   } = useDraftActions();
-  const { isQuickBudget } = useBudget();
-  const { showToast } = useToast();
   const [debtsWithAmortization, setDebtsWithAmortization] = useState<DebtWithAmortization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(12);
@@ -101,26 +97,7 @@ export default function DebtsPage() {
 
   const handleCreateDebt = async (data: DebtInput) => {
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.debts.create(data);
-        if (result.success) {
-          await reloadSnapshot();
-          await loadDebts();
-          setIsModalOpen(false);
-          setPreselectedBill(null);
-        } else {
-          showToast('error', result.error || 'Failed to create debt', {
-            action: result.diagnosticId
-              ? {
-                  label: 'Copy report',
-                  onClick: () => {
-                    void copyDiagnosticReport(result.diagnosticId!);
-                  },
-                }
-              : undefined,
-          });
-        }
-      } else if (createDebt(data)) {
+      if (createDebt(data)) {
         await loadDebts();
         setIsModalOpen(false);
         setPreselectedBill(null);
@@ -144,25 +121,7 @@ export default function DebtsPage() {
     if (!editingDebt) return;
 
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.debts.update(editingDebt.debt.id, data);
-        if (result.success) {
-          await reloadSnapshot();
-          await loadDebts();
-          setEditingDebt(null);
-        } else {
-          showToast('error', result.error || 'Failed to update debt', {
-            action: result.diagnosticId
-              ? {
-                  label: 'Copy report',
-                  onClick: () => {
-                    void copyDiagnosticReport(result.diagnosticId!);
-                  },
-                }
-              : undefined,
-          });
-        }
-      } else if (updateDebt(editingDebt.debt.id, data)) {
+      if (updateDebt(editingDebt.debt.id, data)) {
         await loadDebts();
         setEditingDebt(null);
       }
@@ -175,25 +134,7 @@ export default function DebtsPage() {
     if (!deleteDebt) return;
 
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.debts.delete(deleteDebt.debt.id);
-        if (result.success) {
-          await reloadSnapshot();
-          await loadDebts();
-          setDeleteDebt(null);
-        } else {
-          showToast('error', result.error || 'Failed to delete debt', {
-            action: result.diagnosticId
-              ? {
-                  label: 'Copy report',
-                  onClick: () => {
-                    void copyDiagnosticReport(result.diagnosticId!);
-                  },
-                }
-              : undefined,
-          });
-        }
-      } else if (removeDebt(deleteDebt.debt.id)) {
+      if (removeDebt(deleteDebt.debt.id)) {
         await loadDebts();
         setDeleteDebt(null);
       }
@@ -274,13 +215,13 @@ export default function DebtsPage() {
             <div className="card p-4">
               <p className="text-sm text-(--color-text-muted)">Total Debt Balance</p>
               <p className="text-2xl font-bold text-danger-400">
-                ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(totalBalance)}
               </p>
             </div>
             <div className="card p-4">
               <p className="text-sm text-(--color-text-muted)">Total Interest (All Debts)</p>
               <p className="text-2xl font-bold text-warning-400">
-                ${totalInterest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(totalInterest)}
               </p>
             </div>
             <div className="card p-4">
@@ -377,10 +318,9 @@ export default function DebtsPage() {
                         <span className="text-xs text-(--color-text-muted)">({group.items.length})</span>
                       </div>
                       <span className="text-xs text-(--color-text-muted) shrink-0 tabular-nums">
-                        $
-                        {group.items
-                          .reduce((sum, d) => sum + d.debt.principalBalance, 0)
-                          .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                        {formatCurrency(
+                          group.items.reduce((sum, d) => sum + d.debt.principalBalance, 0)
+                        )}{' '}
                         balance
                       </span>
                     </summary>

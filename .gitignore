@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # Build output
 dist/
@@ -39,6 +40,8 @@ Thumbs.db
 # Test
 coverage/
 test-coverage-*.txt
+cov_output.txt
+*.docx
 playwright-report/
 test-results/
 .coverage-e2e/

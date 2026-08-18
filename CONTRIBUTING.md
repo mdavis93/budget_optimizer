@@ -34,7 +34,7 @@ pnpm lint
 pnpm test:coverage:check   # use-native node + Vitest coverage + clean-output verification
 pnpm run build:vite && pnpm run verify:csp
 pnpm audit --prod --audit-level critical
-pnpm audit:dev             # full-tree audit (high+); GHSA allowlist currently empty
+pnpm audit:dev             # full-tree audit (high+); GHSA-mh99-v99m-4gvg and GHSA-qwww-vcr4-c8h2 deferred in scripts/audit-dev.cjs
 ```
 
 Run manually anytime: `pnpm prepush`.

@@ -48,7 +48,7 @@ export interface ResolvedScheduleInputs {
 
 export function resolveScheduleInputs(
   budgetManager: BudgetManager,
-  database: DatabaseService,
+  _database: DatabaseService,
   overlay?: DraftOverlayInput | null
 ): ResolvedScheduleInputs {
   if (overlay) {
@@ -56,7 +56,6 @@ export function resolveScheduleInputs(
     assertValid(overlayValidation, 'Invalid draft overlay');
   }
 
-  const state = budgetManager.getCurrentState();
   const incomes = overlay?.incomes ?? budgetManager.getAllIncomes();
   const bills = overlay?.bills ?? budgetManager.getAllBills();
   const goals = overlay?.goals ?? budgetManager.getAllGoals();
@@ -65,19 +64,8 @@ export function resolveScheduleInputs(
   const preferredAssignments = new Map(overlay?.preferredAssignments ?? []);
   const incomeOverrides = overlay?.incomeOverrides ?? budgetManager.getIncomeOverrides();
 
-  let debts: Debt[] = [];
-  if (overlay?.debts) {
-    debts = overlay.debts;
-  } else if (state.budgetId) {
-    debts = database.getDebts(state.budgetId);
-  }
-
-  let leaves: Leave[] = [];
-  if (overlay?.leaves) {
-    leaves = overlay.leaves;
-  } else if (state.budgetId) {
-    leaves = database.getLeaves(state.budgetId);
-  }
+  const debts = overlay?.debts ?? budgetManager.getDebts();
+  const leaves = overlay?.leaves ?? budgetManager.getLeaves();
 
   const startingBalance = overlay?.startingBalance ?? budgetManager.getStartingBalance();
   const targetCashOnHand = overlay?.targetCashOnHand ?? budgetManager.getTargetCashOnHand();

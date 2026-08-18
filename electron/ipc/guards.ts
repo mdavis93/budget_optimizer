@@ -17,6 +17,25 @@ export interface GuardedServices {
 
 export type GuardError = ApiFailure;
 
+type MainWindowLike = {
+  webContents: unknown;
+  isDestroyed: () => boolean;
+} | null;
+
+let getMainWindow: () => MainWindowLike = () => null;
+
+export function setMainWindowGetter(fn: () => MainWindowLike): void {
+  getMainWindow = fn;
+}
+
+export function assertAppSender(event: IpcMainInvokeEvent): GuardError | null {
+  const main = getMainWindow();
+  if (!main || main.isDestroyed() || event.sender !== main.webContents) {
+    return { success: false, error: 'Invalid sender' };
+  }
+  return null;
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -87,6 +106,10 @@ export function withUnlockGuard<TArgs extends unknown[], TResult>(
   handler: GuardedHandler<TArgs, TResult>
 ): GuardedHandler<TArgs, TResult | GuardError> {
   return async (event, ...args) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     const guardError = requireUnlocked(services);
     if (guardError) {
       return guardError;
@@ -100,6 +123,10 @@ export function withBudgetGuard<TArgs extends unknown[], TResult>(
   handler: GuardedHandler<TArgs, TResult>
 ): GuardedHandler<TArgs, TResult | GuardError> {
   return async (event, ...args) => {
+    const senderError = assertAppSender(event);
+    if (senderError) {
+      return senderError;
+    }
     const guardError = requireBudgetReady(services);
     if (guardError) {
       return guardError;

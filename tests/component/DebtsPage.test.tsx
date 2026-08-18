@@ -283,64 +283,6 @@ describe('DebtsPage', () => {
       });
     });
 
-    it('uses quick-budget IPC debt flows', async () => {
-      mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.debts.create.mockResolvedValue({ success: true, data: { id: 'debt-2' } });
-      mockAPI.debts.update.mockResolvedValue({ success: true, data: { id: 'debt-1' } });
-      mockAPI.debts.delete.mockResolvedValue({ success: true, data: true });
-      renderWithRouter(<DebtsPage />, { mockAPI });
-
-      expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
-      fireEvent.click(screen.getByText('CardOne: Backup'));
-      fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[0]);
-      fireEvent.change(screen.getByLabelText('Linked Bill'), {
-        target: { value: 'bill-2' },
-      });
-      fireEvent.change(screen.getByLabelText('Remaining Balance (Principal)'), {
-        target: { value: '800' },
-      });
-      fireEvent.change(screen.getByLabelText('Annual Percentage Rate (APR)'), {
-        target: { value: '17' },
-      });
-      fireEvent.change(screen.getByLabelText('Monthly Payment'), {
-        target: { value: '100' },
-      });
-      fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[1]);
-
-      await waitFor(() => {
-        expect(mockAPI.debts.create).toHaveBeenCalled();
-        expect(reloadSnapshot).toHaveBeenCalled();
-      });
-    });
-
-    it('updates and deletes debts through quick-budget IPC', async () => {
-      mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.debts.update.mockResolvedValue({ success: true, data: { id: 'debt-1' } });
-      mockAPI.debts.delete.mockResolvedValue({ success: true, data: true });
-      renderWithRouter(<DebtsPage />, { mockAPI });
-
-      expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole('button', { name: /Edit debt/i }));
-      fireEvent.change(screen.getByLabelText('Monthly Payment'), {
-        target: { value: '140' },
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Update Debt' }));
-      await waitFor(() => {
-        expect(mockAPI.debts.update).toHaveBeenCalled();
-        expect(reloadSnapshot).toHaveBeenCalled();
-      });
-      await waitFor(() => {
-        expect(document.querySelector('.animate-spin')).toBeNull();
-      });
-
-      fireEvent.click(await screen.findByRole('button', { name: /Delete debt/i }));
-      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await waitFor(() => {
-        expect(mockAPI.debts.delete).toHaveBeenCalled();
-      });
-    });
-
     it('opens setup modal for untracked debt bills', async () => {
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('Finish Setting Up Your Debts')).toBeInTheDocument();
@@ -371,26 +313,6 @@ describe('DebtsPage', () => {
         expect(createDebt).toHaveBeenCalled();
       });
       expect(screen.getByRole('dialog', { name: /Add Debt/i })).toBeInTheDocument();
-    });
-
-    it('does not close modal when quick-budget create IPC fails', async () => {
-      mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.debts.create.mockResolvedValue({ success: false, error: 'failed' });
-      renderWithRouter(<DebtsPage />, { mockAPI });
-      expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
-
-      fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[0]);
-      fireEvent.change(screen.getByLabelText('Linked Bill'), { target: { value: 'bill-2' } });
-      fireEvent.change(screen.getByLabelText('Remaining Balance (Principal)'), { target: { value: '500' } });
-      fireEvent.change(screen.getByLabelText('Annual Percentage Rate (APR)'), { target: { value: '12' } });
-      fireEvent.change(screen.getByLabelText('Monthly Payment'), { target: { value: '80' } });
-      fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[1]);
-
-      await waitFor(() => {
-        expect(mockAPI.debts.create).toHaveBeenCalled();
-      });
-      expect(screen.getByRole('dialog', { name: /Add Debt/i })).toBeInTheDocument();
-      expect(reloadSnapshot).not.toHaveBeenCalled();
     });
 
     it('cancels add-debt modal and clears preselected bill', async () => {
@@ -435,78 +357,20 @@ describe('DebtsPage', () => {
       expect(screen.getByText('—')).toBeInTheDocument();
     });
 
-    it('toasts quick-budget create/update/delete failures with optional Copy report', async () => {
+    it('creates debts through draft actions in quick budget mode', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.debts.create.mockResolvedValueOnce({
-        success: false,
-        error: 'create failed',
-        diagnosticId: 'diag-debt',
-      });
-      mockAPI.debts.update.mockResolvedValueOnce({ success: false });
-      mockAPI.debts.delete.mockResolvedValueOnce({
-        success: false,
-        error: 'delete failed',
-        diagnosticId: 'diag-del',
-      });
-      Object.assign(navigator, {
-        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
-      });
-      mockAPI.diagnostics.getEvent.mockResolvedValue({
-        success: true,
-        data: { errors: [{ id: 'diag-debt' }] },
-      });
-
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
-
       fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[0]);
       fireEvent.change(screen.getByLabelText('Linked Bill'), { target: { value: 'bill-2' } });
-      fireEvent.change(screen.getByLabelText('Remaining Balance (Principal)'), {
-        target: { value: '900' },
-      });
-      fireEvent.change(screen.getByLabelText('Annual Percentage Rate (APR)'), {
-        target: { value: '19' },
-      });
-      fireEvent.change(screen.getByLabelText('Monthly Payment'), { target: { value: '120' } });
+      fireEvent.change(screen.getByLabelText('Remaining Balance (Principal)'), { target: { value: '800' } });
+      fireEvent.change(screen.getByLabelText('Annual Percentage Rate (APR)'), { target: { value: '17' } });
+      fireEvent.change(screen.getByLabelText('Monthly Payment'), { target: { value: '100' } });
       fireEvent.click(screen.getAllByRole('button', { name: 'Add Debt' })[1]);
-
       await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          'error',
-          'create failed',
-          expect.objectContaining({
-            action: expect.objectContaining({ label: 'Copy report' }),
-          })
-        );
+        expect(createDebt).toHaveBeenCalled();
       });
-      const createAction = mockShowToast.mock.calls.at(-1)?.[2] as {
-        action: { onClick: () => void };
-      };
-      createAction.action.onClick();
-      expect(mockAPI.diagnostics.getEvent).toHaveBeenCalledWith('diag-debt');
-
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      fireEvent.click(await screen.findByRole('button', { name: /Edit debt/i }));
-      fireEvent.click(screen.getByRole('button', { name: 'Update Debt' }));
-      await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          'error',
-          'Failed to update debt',
-          expect.objectContaining({ action: undefined })
-        );
-      });
-
-      fireEvent.click(await screen.findByRole('button', { name: /Delete debt/i }));
-      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          'error',
-          'delete failed',
-          expect.objectContaining({
-            action: expect.objectContaining({ label: 'Copy report' }),
-          })
-        );
-      });
+      expect(mockAPI.debts.create).not.toHaveBeenCalled();
     });
 
     it('renders chart data for 6-month view window', async () => {

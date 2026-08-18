@@ -20,6 +20,7 @@ export function notifyRendererLocked(): void {
 export function applyLockSideEffects(services: LockSideEffectServices): void {
   clearApprovedExportPaths();
   if (services.budgetManager) {
+    services.budgetManager.endQuickBudget();
     services.budgetManager = null;
   }
   if (services.database) {

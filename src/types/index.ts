@@ -1,4 +1,5 @@
 export * from '@shared/types';
+export { PRIORITY_LABELS } from '@shared/constants';
 
 import type { Income, Bill } from '@shared/types';
 
@@ -7,13 +8,6 @@ export const CADENCE_LABELS: Record<Income['cadence'], string> = {
   biweekly: 'Bi-weekly',
   semimonthly: 'Semi-monthly',
   monthly: 'Monthly',
-};
-
-export const PRIORITY_LABELS: Record<Bill['priority'], string> = {
-  critical: 'Critical',
-  high: 'High',
-  normal: 'Normal',
-  low: 'Low',
 };
 
 export const PRIORITY_COLORS: Record<Bill['priority'], string> = {

@@ -1,4 +1,4 @@
-import { isAfter, isEqual, format, differenceInDays } from 'date-fns';
+import { isAfter, format, differenceInDays } from 'date-fns';
 import { Bill, SavingsGoal } from '../database.service';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,

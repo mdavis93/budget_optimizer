@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Fingerprint, AlertCircle, Key, ArrowLeft, Check, Wand2 } from 'lucide-react';
 import AppIcon from '../components/AppIcon';
@@ -11,11 +11,20 @@ type LoginMode = 'login' | 'recovery' | 'new-password' | 'show-new-recovery';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { unlock, unlockWithBiometric, biometricAvailable, biometricEnabled, error, clearError } = useAuth();
+  const {
+    unlock,
+    unlockWithSavedCredentials,
+    unlockWithBiometric,
+    biometricAvailable,
+    biometricEnabled,
+    error,
+    clearError,
+  } = useAuth();
   const [mode, setMode] = useState<LoginMode>('login');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasSavedPassword, setHasSavedPassword] = useState(false);
   
   const [recoveryKey, setRecoveryKey] = useState('');
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
@@ -26,15 +35,34 @@ export default function LoginPage() {
   const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
   
   const [newRecoveryKey, setNewRecoveryKey] = useState<string | null>(null);
-  const [filledFromKeychain, setFilledFromKeychain] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
-  const handleFillFromCredentials = async () => {
-    const result = await window.electronAPI.credentials.get();
-    if (result.success && result.password) {
-      setPassword(result.password);
-      setFilledFromKeychain(true);
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI.credentials.has().then((has) => {
+      if (!cancelled) {
+        setHasSavedPassword(has);
+      }
+    });
+    return () => {
+      cancelled = true;
+      setPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setRecoveryKey('');
+      setNewRecoveryKey(null);
+    };
+  }, []);
+
+  const handleUnlockWithSavedPassword = async () => {
+    setIsLoading(true);
+    clearError();
+    const success = await unlockWithSavedCredentials();
+    if (success) {
+      setPassword('');
+      navigate('/dashboard');
     }
+    setIsLoading(false);
   };
 
   const handleGenerateNewPassword = () => {
@@ -56,6 +84,7 @@ export default function LoginPage() {
     const success = await unlock(password);
     
     if (success) {
+      setPassword('');
       navigate('/dashboard');
     }
     
@@ -95,8 +124,8 @@ export default function LoginPage() {
     e.preventDefault();
     setNewPasswordError(null);
 
-    if (newPassword.length < 8) {
-      setNewPasswordError('Password must be at least 8 characters');
+    if (newPassword.length < 12) {
+      setNewPasswordError('Password must be at least 12 characters');
       return;
     }
 
@@ -111,9 +140,10 @@ export default function LoginPage() {
       const result = await window.electronAPI.auth.resetPasswordWithRecovery(recoveryKey, newPassword);
 
       if (result.success && result.newRecoveryKey) {
+        setNewPassword('');
+        setConfirmNewPassword('');
         setNewRecoveryKey(result.newRecoveryKey);
         setMode('show-new-recovery');
-        void window.electronAPI.credentials.offerSave(newPassword);
       } else {
         setNewPasswordError(result.error || 'Failed to reset password');
       }
@@ -126,6 +156,8 @@ export default function LoginPage() {
 
   const handleRecoveryComplete = async () => {
     await window.electronAPI.auth.clearPendingRecoveryKey();
+    setNewRecoveryKey(null);
+    setRecoveryKey('');
     navigate('/dashboard');
   };
 
@@ -369,17 +401,7 @@ export default function LoginPage() {
           )}
           
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label htmlFor="password" className="label mb-0">Master Password</label>
-              <button
-                type="button"
-                onClick={handleFillFromCredentials}
-                className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors"
-              >
-                <Key className="w-3.5 h-3.5" />
-                Fill from Keychain
-              </button>
-            </div>
+            <label htmlFor="password" className="label">Master Password</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -400,11 +422,6 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            <p className="text-xs text-(--color-text-muted) mt-1">
-              {filledFromKeychain
-                ? 'Password filled from system credential store.'
-                : 'If you saved your password to Keychain, click Fill from Keychain to use it.'}
-            </p>
           </div>
           
           <button
@@ -414,6 +431,31 @@ export default function LoginPage() {
           >
             {isLoading ? 'Unlocking...' : 'Unlock'}
           </button>
+          
+          {hasSavedPassword && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-(--color-border)" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="px-2 bg-(--color-bg-primary) text-(--color-text-muted)">
+                    or
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleUnlockWithSavedPassword}
+                disabled={isLoading}
+                className="btn-secondary w-full"
+              >
+                <Key className="w-5 h-5 mr-2" />
+                Unlock with saved password
+              </button>
+            </>
+          )}
           
           {biometricAvailable && biometricEnabled && (
             <>

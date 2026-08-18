@@ -1,8 +1,6 @@
 import { useCallback, useState, type DragEvent } from 'react';
-import { useDraftActions, useSchedule } from '../context/DraftContext';
-import { useBudget } from '../context/BudgetContext';
-import { useToast } from '../components/Toast';
-import { copyDiagnosticReport, reportError } from '../utils/reportError';
+import { useDraftActions } from '../context/DraftContext';
+import { reportError } from '../utils/reportError';
 import type { PaycheckBill } from '../types';
 import type { DraggedBill } from '../components/schedule';
 import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
@@ -14,15 +12,7 @@ interface PendingAssignment {
 }
 
 export function useBillDragAssignment() {
-  const { isQuickBudget } = useBudget();
-  const { assignBill, reloadSnapshot } = useDraftActions();
-  const { showToast } = useToast();
-  const {
-    generateSchedule,
-    scheduleStartDate: startDate,
-    scheduleMonths: months,
-    scheduleStartingBalance: startingBalance,
-  } = useSchedule();
+  const { assignBill } = useDraftActions();
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -35,45 +25,13 @@ export function useBillDragAssignment() {
   ) => {
     setIsAssigning(true);
     try {
-      if (isQuickBudget) {
-        const result = await window.electronAPI.billAssignments.assign(
-          billId,
-          billDueDate,
-          targetPaycheckDate
-        );
-        if (result.success) {
-          await reloadSnapshot();
-          generateSchedule(startDate, months, startingBalance, { force: true });
-        } else {
-          showToast('error', result.error || 'Failed to assign bill', {
-            action: result.diagnosticId
-              ? {
-                  label: 'Copy report',
-                  onClick: () => {
-                    void copyDiagnosticReport(result.diagnosticId!);
-                  },
-                }
-              : undefined,
-          });
-        }
-      } else {
-        assignBill(billId, billDueDate, targetPaycheckDate);
-      }
+      assignBill(billId, billDueDate, targetPaycheckDate);
     } catch (error) {
       void reportError('renderer:useBillDragAssignment.applyBillAssignment', error);
     } finally {
       setIsAssigning(false);
     }
-  }, [
-    assignBill,
-    generateSchedule,
-    isQuickBudget,
-    months,
-    reloadSnapshot,
-    showToast,
-    startDate,
-    startingBalance,
-  ]);
+  }, [assignBill]);
 
   const handleDragStart = useCallback((bill: PaycheckBill, sourcePaycheckDate: string) => {
     setDraggedBill({

@@ -1,31 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useBillDragAssignment } from '../../../src/hooks/useBillDragAssignment';
 import { createMockElectronAPI } from '../../mocks/electron-api.mock';
 import { needsAssignmentConfirmation } from '../../../src/utils/assignmentConstraints';
 
-const showToast = vi.fn();
 const assignBill = vi.fn();
-const reloadSnapshot = vi.fn().mockResolvedValue(undefined);
-const generateSchedule = vi.fn();
-const budgetState = { isQuickBudget: true };
 
 vi.mock('../../../src/components/Toast', () => ({
-  useToast: () => ({ showToast, dismissToast: vi.fn() }),
-}));
-
-vi.mock('../../../src/context/BudgetContext', () => ({
-  useBudget: () => budgetState,
+  useToast: () => ({ showToast: vi.fn(), dismissToast: vi.fn() }),
 }));
 
 vi.mock('../../../src/context/DraftContext', () => ({
-  useDraftActions: () => ({ assignBill, reloadSnapshot }),
-  useSchedule: () => ({
-    generateSchedule,
-    scheduleStartDate: '2026-01-01',
-    scheduleMonths: 3,
-    scheduleStartingBalance: 500,
-  }),
+  useDraftActions: () => ({ assignBill }),
 }));
 
 vi.mock('../../../src/utils/assignmentConstraints', () => ({
@@ -81,7 +67,6 @@ describe('useBillDragAssignment', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    budgetState.isQuickBudget = true;
     vi.mocked(needsAssignmentConfirmation).mockReturnValue(false);
     mockAPI = createMockElectronAPI();
     window.electronAPI = mockAPI as unknown as Window['electronAPI'];
@@ -91,16 +76,11 @@ describe('useBillDragAssignment', () => {
   });
 
   describe('sad', () => {
-    it('toasts assign failures with and without diagnostic copy actions', async () => {
-      mockAPI.billAssignments.assign.mockResolvedValueOnce({
-        success: false,
-        error: 'assign failed',
-        diagnosticId: 'diag-assign',
+    it('reports thrown assign errors via diagnostics', async () => {
+      assignBill.mockImplementationOnce(() => {
+        throw new Error('assign failed');
       });
-      mockAPI.diagnostics.getEvent.mockResolvedValue({
-        success: true,
-        data: { errors: [{ id: 'diag-assign' }] },
-      });
+      mockAPI.diagnostics.report.mockResolvedValue({ success: true, data: { id: 'diag-assign' } });
 
       render(<Harness />);
       fireEvent.click(screen.getByText('drag-start'));
@@ -108,55 +88,24 @@ describe('useBillDragAssignment', () => {
       fireEvent.click(screen.getByText('drag-over'));
       fireEvent.click(screen.getByText('drop'));
       await waitFor(() => {
-        expect(showToast).toHaveBeenCalledWith(
-          'error',
-          'assign failed',
-          expect.objectContaining({
-            action: expect.objectContaining({ label: 'Copy report' }),
-          })
-        );
-      });
-      const action = showToast.mock.calls.at(-1)?.[2] as { action: { onClick: () => void } };
-      await act(async () => {
-        action.action.onClick();
-      });
-      expect(mockAPI.diagnostics.getEvent).toHaveBeenCalledWith('diag-assign');
-
-      fireEvent.click(screen.getByText('drag-start'));
-      mockAPI.billAssignments.assign.mockResolvedValueOnce({ success: false });
-      fireEvent.click(screen.getByText('drop'));
-      await waitFor(() => {
-        expect(showToast).toHaveBeenCalledWith(
-          'error',
-          'Failed to assign bill',
-          expect.objectContaining({ action: undefined })
-        );
+        expect(mockAPI.diagnostics.report).toHaveBeenCalled();
       });
     });
   });
 
   describe('happy', () => {
-    it('reloads on quick-budget success and assigns in draft mode', async () => {
-      mockAPI.billAssignments.assign.mockResolvedValueOnce({ success: true });
+    it('assigns through draft actions on drop', async () => {
       render(<Harness />);
-      fireEvent.click(screen.getByText('drag-start'));
-      fireEvent.click(screen.getByText('drop'));
-      await waitFor(() => {
-        expect(reloadSnapshot).toHaveBeenCalled();
-        expect(generateSchedule).toHaveBeenCalled();
-      });
-
-      budgetState.isQuickBudget = false;
       fireEvent.click(screen.getByText('drag-start'));
       fireEvent.click(screen.getByText('drop'));
       await waitFor(() => {
         expect(assignBill).toHaveBeenCalledWith('bill-1', '2026-01-15', '2026-01-10');
       });
+      expect(mockAPI.billAssignments.assign).not.toHaveBeenCalled();
     });
 
     it('queues confirmation then applies on confirm', async () => {
       vi.mocked(needsAssignmentConfirmation).mockReturnValue(true);
-      mockAPI.billAssignments.assign.mockResolvedValue({ success: true });
       render(<Harness />);
       fireEvent.click(screen.getByText('drag-start'));
       fireEvent.click(screen.getByText('drop'));
@@ -165,7 +114,7 @@ describe('useBillDragAssignment', () => {
       });
       fireEvent.click(screen.getByText('confirm'));
       await waitFor(() => {
-        expect(reloadSnapshot).toHaveBeenCalled();
+        expect(assignBill).toHaveBeenCalledWith('bill-1', '2026-01-15', '2026-01-10');
         expect(screen.getByTestId('pending')).toHaveTextContent('no');
       });
     });
@@ -173,7 +122,9 @@ describe('useBillDragAssignment', () => {
 
   describe('hostile', () => {
     it('reports thrown assign errors and no-ops confirm without pending', async () => {
-      mockAPI.billAssignments.assign.mockRejectedValueOnce(new Error('ipc down'));
+      assignBill.mockImplementationOnce(() => {
+        throw new Error('ipc down');
+      });
       mockAPI.diagnostics.report.mockResolvedValue({ success: true, data: { id: 'diag-x' } });
       render(<Harness />);
       fireEvent.click(screen.getByText('confirm'));

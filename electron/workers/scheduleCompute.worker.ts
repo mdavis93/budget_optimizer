@@ -70,7 +70,6 @@ export function handleMessage(data: unknown): void {
 
 if (!parentPort) {
   if (process.env.VITEST !== 'true') {
-    // eslint-disable-next-line no-console
     console.error('schedule-worker: process.parentPort is unavailable');
     process.exit(1);
   }

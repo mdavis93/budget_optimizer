@@ -89,14 +89,18 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   const startQuickBudget = useCallback(async () => {
     const result = await window.electronAPI.budget.startQuick();
     if (result.success) {
-      setCurrentBudget(null);
+      const current = await window.electronAPI.budget.getCurrent();
       setIsQuickBudget(true);
+      if (current.success && current.data?.budget) {
+        setCurrentBudget(current.data.budget);
+      }
     }
   }, []);
 
   const endQuickBudget = useCallback(async () => {
     const result = await window.electronAPI.budget.endQuick();
     if (result.success) {
+      setCurrentBudget(null);
       setIsQuickBudget(false);
     }
   }, []);

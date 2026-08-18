@@ -212,7 +212,7 @@ class DiagnosticsService {
       /* ignore */
     }
 
-    let lines: string[] = [];
+    let lines: string[];
     try {
       lines = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim());
     } catch {

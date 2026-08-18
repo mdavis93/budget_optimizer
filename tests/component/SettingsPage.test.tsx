@@ -82,7 +82,6 @@ describe('SettingsPage', () => {
       await user.selectOptions(screen.getByLabelText('Auto-Lock'), '15');
       await waitFor(() => {
         expect(mockAPI.settings.update).toHaveBeenCalledWith({ autoLockMinutes: 15 });
-        expect(mockAPI.auth.setAutoLock).toHaveBeenCalledWith(15);
       });
 
       await user.selectOptions(screen.getByLabelText('Currency'), 'EUR');
@@ -175,9 +174,9 @@ describe('SettingsPage', () => {
       fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'short' } });
       fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'short' } });
       fireEvent.submit(form);
-      expect(await screen.findByText('New password must be at least 8 characters')).toBeInTheDocument();
+      expect(await screen.findByText('New password must be at least 12 characters')).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'long-enough' } });
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'long-enough-pw' } });
       fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'different' } });
       fireEvent.submit(form);
       expect(await screen.findByText('Passwords do not match')).toBeInTheDocument();
