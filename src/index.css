@@ -96,9 +96,19 @@
   }
 
   * {
+    -webkit-app-region: no-drag;
+  }
+
+  body {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  button,
+  nav,
+  [role='button'] {
     -webkit-user-select: none;
     user-select: none;
-    -webkit-app-region: no-drag;
   }
 
   input,
