@@ -44,7 +44,16 @@ export function handleMessage(data: unknown): void {
 
   const request = data as ScheduleComputeRequest;
   try {
-    const result = runScheduleCompute(request);
+    const result = runScheduleCompute(request, (report) => {
+      reply({
+        type: 'progress',
+        protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+        jobId: request.jobId,
+        inputHash: request.inputHash,
+        op: request.op,
+        ...report,
+      });
+    });
     reply(result);
     process.exit(0);
   } catch (error) {

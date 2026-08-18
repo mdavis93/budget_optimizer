@@ -19,12 +19,14 @@ import {
   SCHEDULE_COMPUTE_TIMEOUT_MS,
   ScheduleComputeError,
   type ScheduleComputeOp,
+  type ScheduleComputeProgressMessage,
   type ScheduleComputeRequest,
   type ScheduleComputeSuccessMessage,
 } from '@shared/scheduleComputeProtocol';
 import {
   assertScheduleComputeSuccessMessage,
   isWorkerMessage,
+  readScheduleComputeProgressMessage,
 } from '@shared/scheduleComputeValidate';
 import { resolveScheduleWorkerPath } from '../utils/scheduleWorkerPath';
 import { logger } from './logger.service';
@@ -42,12 +44,17 @@ type Flight = {
   op: ScheduleComputeOp;
   child: UtilityProcess | null;
   waiters: FlightWaiter[];
+  progressListeners: Array<(progress: ScheduleComputeProgressMessage) => void>;
   settled: boolean;
   killAfterSpawn: boolean;
   timeoutHandle: ReturnType<typeof setTimeout> | null;
   killEscalateHandle: ReturnType<typeof setTimeout> | null;
   startedAt: number;
 };
+
+export interface ScheduleComputeRunOptions {
+  onProgress?: (progress: ScheduleComputeProgressMessage) => void;
+}
 
 export interface ScheduleComputeHostOptions {
   workerPath?: string;
@@ -111,7 +118,8 @@ export class ScheduleComputeHost {
   runJob(
     request: Omit<ScheduleComputeRequest, 'protocolVersion' | 'jobId'> & {
       jobId?: string;
-    }
+    },
+    options?: ScheduleComputeRunOptions
   ): Promise<ScheduleComputeSuccessMessage> {
     if (this.disposed) {
       return Promise.reject(
@@ -130,10 +138,18 @@ export class ScheduleComputeHost {
     const key = coalesceKey(fullRequest.op, fullRequest.inputHash);
     const existing = this.coalesce.get(key);
     if (existing) {
+      if (
+        options?.onProgress &&
+        this.current &&
+        !this.current.settled &&
+        coalesceKey(this.current.op, this.current.inputHash) === key
+      ) {
+        this.current.progressListeners.push(options.onProgress);
+      }
       return existing;
     }
 
-    const promise = this.startFlight(fullRequest).finally(() => {
+    const promise = this.startFlight(fullRequest, options?.onProgress).finally(() => {
       if (this.coalesce.get(key) === promise) {
         this.coalesce.delete(key);
       }
@@ -165,7 +181,8 @@ export class ScheduleComputeHost {
   }
 
   private startFlight(
-    request: ScheduleComputeRequest
+    request: ScheduleComputeRequest,
+    onProgress?: (progress: ScheduleComputeProgressMessage) => void
   ): Promise<ScheduleComputeSuccessMessage> {
     if (this.current && !this.current.settled) {
       this.settleFlight(
@@ -190,6 +207,7 @@ export class ScheduleComputeHost {
         op: request.op,
         child: null,
         waiters: [{ resolve, reject }],
+        progressListeners: onProgress ? [onProgress] : [],
         settled: false,
         killAfterSpawn: false,
         timeoutHandle: null,
@@ -237,6 +255,21 @@ export class ScheduleComputeHost {
             flight,
             new ScheduleComputeError('worker_error', message.error || 'Worker error')
           );
+          return;
+        }
+        if (message.type === 'progress') {
+          const progress = readScheduleComputeProgressMessage(message, {
+            jobId: flight.jobId,
+            inputHash: flight.inputHash,
+            op: flight.op,
+          });
+          if (!progress) {
+            logger.warn('schedule-compute ignored malformed progress', {
+              jobId: flight.jobId,
+            });
+            return;
+          }
+          this.emitProgress(flight, progress);
           return;
         }
         if (message.type !== 'result') {
@@ -325,6 +358,16 @@ export class ScheduleComputeHost {
         );
       }, this.timeoutMs);
     });
+  }
+
+  private emitProgress(flight: Flight, progress: ScheduleComputeProgressMessage): void {
+    for (const listener of flight.progressListeners) {
+      try {
+        listener(progress);
+      } catch {
+        // Progress is best-effort; a listener fault must not fail the job.
+      }
+    }
   }
 
   private killChild(flight: Flight): void {

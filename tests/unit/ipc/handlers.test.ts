@@ -84,6 +84,10 @@ type HandlerFn = (event: unknown, ...args: unknown[]) => Promise<unknown> | unkn
 
 class MockIpcMain {
   private handlers = new Map<string, HandlerFn>();
+  readonly sender = {
+    send: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+  };
 
   handle(channel: string, fn: HandlerFn): void {
     this.handlers.set(channel, fn);
@@ -94,7 +98,7 @@ class MockIpcMain {
     if (!fn) {
       throw new Error(`No handler registered for ${channel}`);
     }
-    return Promise.resolve(fn({ sender: {} }, ...args));
+    return Promise.resolve(fn({ sender: this.sender }, ...args));
   }
 }
 
@@ -392,9 +396,60 @@ describe('ipc handlers', () => {
             months: 2,
             startingBalance: 1234,
           }),
-        })
+        }),
+        expect.objectContaining({ onProgress: expect.any(Function) })
       );
       expect(services.scheduler.generateSchedule).not.toHaveBeenCalled();
+    });
+
+    it('forwards schedule compute progress to the invoking renderer', async () => {
+      const services = createServices({
+        scheduleCompute: {
+          ...createServices().scheduleCompute,
+          runJob: vi.fn(async (_request, options?: { onProgress?: (progress: unknown) => void }) => {
+            options?.onProgress?.({
+              type: 'progress',
+              protocolVersion: 1,
+              jobId: 'job-1',
+              inputHash: 'hash-1',
+              op: 'schedule',
+              stage: 'assigning',
+            });
+            return {
+              type: 'result',
+              protocolVersion: 1,
+              jobId: 'test-job',
+              inputHash: 'hash-1',
+              op: 'schedule',
+              schedule: {
+                startDate: '2026-01-01',
+                endDate: '2026-01-31',
+                paychecks: [],
+                fullPaychecks: [],
+                viewportMonths: 1,
+                entries: [],
+                summary: {
+                  totalIncome: 0,
+                  totalExpenses: 0,
+                  netBalance: 0,
+                  finalSavingsBalance: 0,
+                  shortfallCount: 0,
+                },
+                recommendations: [],
+                maxBudgetRemaining: 0,
+                minCashOnHand: 100,
+              },
+            };
+          }),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      expect(ipcMain.sender.send).toHaveBeenCalledWith(
+        'schedule:progress',
+        expect.objectContaining({ type: 'progress', stage: 'assigning' })
+      );
     });
 
     it('routes income CRUD handlers through budget manager', async () => {
@@ -877,7 +932,8 @@ describe('ipc handlers', () => {
             months: 3,
             startingBalance: 750,
           }),
-        })
+        }),
+        expect.objectContaining({ onProgress: expect.any(Function) })
       );
       expect(services.scheduler.generateSchedule).not.toHaveBeenCalled();
     });

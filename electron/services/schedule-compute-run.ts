@@ -1,6 +1,7 @@
 import type { Bill, Income, Leave, SavingsGoal } from '@shared/types';
 import { SchedulerService } from './scheduler.service';
 import type {
+  ScheduleComputeProgressSink,
   ScheduleComputeRequest,
   ScheduleComputeSuccessMessage,
 } from '@shared/scheduleComputeProtocol';
@@ -8,12 +9,16 @@ import { SCHEDULE_COMPUTE_PROTOCOL_VERSION } from '@shared/scheduleComputeProtoc
 import { deserializeScheduleComputeInput } from './schedule-compute-serialize';
 import { filterBreakGlassPlansByDryRun } from './scheduler/breakGlassDryRun';
 
+const noopProgress: ScheduleComputeProgressSink = () => undefined;
+
 /**
  * Pure schedule/goal compute used by the utilityProcess worker and unit tests.
  * Must stay free of DB / filesystem / network side effects.
+ * `onProgress` is an optional output port (stage tokens only — no I/O).
  */
 export function runScheduleCompute(
-  request: ScheduleComputeRequest
+  request: ScheduleComputeRequest,
+  onProgress: ScheduleComputeProgressSink = noopProgress
 ): ScheduleComputeSuccessMessage {
   const native = deserializeScheduleComputeInput(request.input);
   const scheduler = new SchedulerService();
@@ -52,6 +57,7 @@ export function runScheduleCompute(
     };
   }
 
+  onProgress({ stage: 'assigning' });
   const data = scheduler.generateSchedule(
     incomes,
     bills,
@@ -74,17 +80,27 @@ export function runScheduleCompute(
     ...data,
     paychecks: data.fullPaychecks ?? data.paychecks,
   };
+  onProgress({ stage: 'reconciling' });
   data.reconciliation = scheduler.analyzeAndProposeFixes(fullHorizon);
+  onProgress({ stage: 'advising' });
   const proposed = scheduler.proposeBreakGlassPlans(fullHorizon, {
     scheduleStartDate: native.startDate,
     targetCashOnHand: native.targetCashOnHand,
     minCashOnHand: native.minCashOnHand,
     lockedBillKeys: new Set(native.manualAssignments.keys()),
   });
+  const planCount = proposed.plans.length;
+  let dryRunIndex = 0;
   data.breakGlassAdvisor = filterBreakGlassPlansByDryRun(
     proposed,
     fullHorizon,
     (preferredAssignments) => {
+      dryRunIndex += 1;
+      onProgress({
+        stage: 'validating_plan',
+        current: dryRunIndex,
+        total: planCount,
+      });
       const trial = scheduler.generateSchedule(
         incomes,
         bills,
@@ -109,6 +125,7 @@ export function runScheduleCompute(
     }
   );
 
+  onProgress({ stage: 'finishing' });
   const viewported = scheduler.applyViewportFilter(
     data,
     native.months,

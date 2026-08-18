@@ -25,6 +25,7 @@ import type {
   SkippedBill,
 } from '@shared/types';
 import type { DiagnosticBundle, DiagnosticReportInput } from '@shared/diagnostics';
+import type { ScheduleComputeProgressMessage } from '@shared/scheduleComputeProtocol';
 
 interface BudgetStats {
   incomeCount: number;
@@ -144,6 +145,7 @@ interface ElectronAPI {
 
   schedule: {
     build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlay) => Promise<ApiResult<ScheduleData>>;
+    onProgress: (callback: (progress: ScheduleComputeProgressMessage) => void) => () => void;
   };
 
   reconciliation: {

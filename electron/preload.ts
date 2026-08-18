@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { ScheduleComputeProgressMessage } from '@shared/scheduleComputeProtocol';
 
 const api = {
   platform: () => ipcRenderer.invoke('app:get-platform'),
@@ -131,6 +132,11 @@ const api = {
     /** Full schedule: project incomes/bills, exact assignment, allocate goals, attach reconciliation analysis. */
     build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
       ipcRenderer.invoke('schedule:build', startDate, months, startingBalance, overlay),
+    onProgress: (callback: (progress: ScheduleComputeProgressMessage) => void) => {
+      const handler = (_event: unknown, progress: ScheduleComputeProgressMessage) => callback(progress);
+      ipcRenderer.on('schedule:progress', handler);
+      return () => ipcRenderer.removeListener('schedule:progress', handler);
+    },
   },
 
   reconciliation: {

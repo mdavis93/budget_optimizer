@@ -544,4 +544,80 @@ describe('runScheduleWorkerSmoke', () => {
       expect.objectContaining({ serviceName: 'budget-optimizer-schedule' })
     );
   });
+
+  it('forwards validated progress and ignores malformed packets', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+    const onProgress = vi.fn();
+    const pending = host.runJob(
+      { op: 'schedule', inputHash: 'hash-p', input: minimalInput(), jobId: 'job-p' },
+      { onProgress }
+    );
+    child.__emitSpawn();
+    child.emit('message', {
+      type: 'progress',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-p',
+      inputHash: 'hash-p',
+      op: 'schedule',
+      stage: 'assigning',
+    });
+    child.emit('message', {
+      type: 'progress',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-p',
+      inputHash: 'hash-p',
+      op: 'schedule',
+      stage: 'assigning',
+      schedule: { paychecks: [] },
+    });
+    child.emit('message', scheduleResult('job-p', 'hash-p'));
+    await expect(pending).resolves.toMatchObject({ jobId: 'job-p' });
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'progress', stage: 'assigning', jobId: 'job-p' })
+    );
+    host.dispose();
+  });
+
+  it('fans progress out to coalesced waiters', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+    const firstProgress = vi.fn();
+    const secondProgress = vi.fn();
+    const input = minimalInput();
+    const a = host.runJob(
+      { op: 'schedule', inputHash: 'same-hash', input, jobId: 'job-a' },
+      { onProgress: firstProgress }
+    );
+    const b = host.runJob(
+      { op: 'schedule', inputHash: 'same-hash', input, jobId: 'job-b' },
+      { onProgress: secondProgress }
+    );
+    child.__emitSpawn();
+    child.emit('message', {
+      type: 'progress',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-a',
+      inputHash: 'same-hash',
+      op: 'schedule',
+      stage: 'reconciling',
+    });
+    child.emit('message', scheduleResult('job-a', 'same-hash'));
+    await expect(a).resolves.toMatchObject({ jobId: 'job-a' });
+    await expect(b).resolves.toMatchObject({ jobId: 'job-a' });
+    expect(firstProgress).toHaveBeenCalled();
+    expect(secondProgress).toHaveBeenCalled();
+    host.dispose();
+  });
 });

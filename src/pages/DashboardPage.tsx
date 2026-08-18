@@ -12,6 +12,8 @@ import {
 import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
 import { BalanceProjectionChart, ChartSuspense } from '../components/charts/lazyCharts';
+import { ScheduleBuildProgress } from '../components/schedule';
+import { copyDiagnosticReport } from '../utils/reportError';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
 import { getMonthlyBillEquivalent, getMonthlyIncomeEquivalent } from '../utils/cadence';
@@ -63,6 +65,11 @@ export default function DashboardPage() {
     scheduleInputHash,
     setScheduleStartingBalance,
     isLoading,
+    error,
+    diagnosticId,
+    progress,
+    buildStartedAt,
+    clearError,
   } = useSchedule();
 
   useEffect(() => {
@@ -188,12 +195,46 @@ export default function DashboardPage() {
           
           {isLoading ? (
             <div
-              className="h-64 flex flex-col items-center justify-center gap-3 text-(--color-text-secondary)"
+              className="h-64 flex flex-col items-center justify-center px-4 text-(--color-text-secondary)"
               role="status"
               aria-live="polite"
             >
-              <div className="w-8 h-8 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
-              <p className="text-sm">Building schedule for Balance Projection…</p>
+              <ScheduleBuildProgress
+                heading="Building schedule for Balance Projection…"
+                progress={progress}
+                startedAt={buildStartedAt}
+              />
+            </div>
+          ) : error ? (
+            <div
+              className="h-64 flex flex-col items-center justify-center gap-3 text-center px-4"
+              role="alert"
+            >
+              <p className="font-medium">Could not build the balance projection.</p>
+              <p className="text-sm text-(--color-text-secondary)">{error}</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    clearError();
+                    void generateSchedule(scheduleStartDate, 3, scheduleStartingBalance, { force: true });
+                  }}
+                >
+                  Try again
+                </button>
+                {diagnosticId ? (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      void copyDiagnosticReport(diagnosticId);
+                    }}
+                  >
+                    Copy report
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : chartData.length > 0 ? (
             <div className="h-64">

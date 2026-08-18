@@ -56,6 +56,7 @@ import {
   type ScheduleCacheEntry,
 } from '../utils/scheduleCache';
 import { buildScheduleInputHash } from '../utils/scheduleInputHash';
+import type { ScheduleComputeProgressReport } from '@shared/scheduleComputeProtocol';
 
 interface DraftDataContextValue {
   draft: DraftState;
@@ -123,6 +124,8 @@ interface ScheduleContextValue {
   isLoading: boolean;
   error: string | null;
   diagnosticId: string | null;
+  progress: ScheduleComputeProgressReport | null;
+  buildStartedAt: number | null;
   /** Sync read of last failure id (avoids toast race with React state). */
   peekScheduleDiagnosticId: () => string | null;
   scheduleStartDate: string;
@@ -168,7 +171,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const [isScheduleLoading, setIsScheduleLoading] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [scheduleDiagnosticId, setScheduleDiagnosticId] = useState<string | null>(null);
+  const [scheduleProgress, setScheduleProgress] = useState<ScheduleComputeProgressReport | null>(null);
+  const [scheduleBuildStartedAt, setScheduleBuildStartedAt] = useState<number | null>(null);
   const scheduleDiagnosticIdRef = useRef<string | null>(null);
+  const isScheduleLoadingRef = useRef(false);
 
   const [scheduleMonths, setScheduleMonthsState] = useState(3);
   const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
@@ -334,6 +340,23 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         debounceTimerRef.current = null;
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const subscribe = window.electronAPI?.schedule?.onProgress;
+    if (!subscribe) {
+      return undefined;
+    }
+    return subscribe((progress) => {
+      if (!mountedRef.current || !isScheduleLoadingRef.current) {
+        return;
+      }
+      setScheduleProgress({
+        stage: progress.stage,
+        current: progress.current,
+        total: progress.total,
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -1181,7 +1204,11 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     }
 
     const requestGen = ++scheduleRequestGenRef.current;
+    isScheduleLoadingRef.current = true;
     setIsScheduleLoading(true);
+    setScheduleError(null);
+    setScheduleProgress(null);
+    setScheduleBuildStartedAt(Date.now());
     try {
       const result = await window.electronAPI.schedule.build(startDate, months, startingBalance, overlay);
       if (!mountedRef.current) {
@@ -1208,6 +1235,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         fullScheduleRef.current = canonical;
         scheduleDiagnosticIdRef.current = null;
         setScheduleDiagnosticId(null);
+        setScheduleError(null);
         return applyScheduleResult(canonical, months);
       }
       setScheduleError(result.error || 'Failed to generate schedule');
@@ -1228,7 +1256,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       return null;
     } finally {
       if (mountedRef.current && requestGen === scheduleRequestGenRef.current) {
+        isScheduleLoadingRef.current = false;
         setIsScheduleLoading(false);
+        setScheduleProgress(null);
+        setScheduleBuildStartedAt(null);
       }
     }
   }, [buildDraftOverlay, applyScheduleResult]);
@@ -1388,9 +1419,11 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const scheduleValue = useMemo(
     (): ScheduleContextValue => ({
       schedule,
-      isLoading: isScheduleLoading || isLoading,
+      isLoading: isScheduleLoading,
       error: scheduleError,
       diagnosticId: scheduleDiagnosticId,
+      progress: scheduleProgress,
+      buildStartedAt: scheduleBuildStartedAt,
       peekScheduleDiagnosticId,
       scheduleStartDate,
       scheduleMonths,
@@ -1405,9 +1438,10 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     [
       schedule,
       isScheduleLoading,
-      isLoading,
       scheduleError,
       scheduleDiagnosticId,
+      scheduleProgress,
+      scheduleBuildStartedAt,
       peekScheduleDiagnosticId,
       scheduleStartDate,
       scheduleMonths,

@@ -95,6 +95,53 @@ describe('DashboardPage', () => {
 
       expect(screen.getByText('No upcoming payments this week')).toBeInTheDocument();
     });
+
+    it('shows a progress bar while the balance projection is building', () => {
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
+        bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
+        generateSchedule,
+        isLoading: true,
+        progress: { stage: 'assigning' },
+        buildStartedAt: Date.now(),
+        schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
+        scheduleStartDate: '2026-01-01',
+        scheduleStartingBalance: 700,
+      });
+
+      render(
+        <TestMemoryRouter>
+          <DashboardPage />
+        </TestMemoryRouter>
+      );
+
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+      expect(screen.getByText('Assigning bills to paychecks…')).toBeInTheDocument();
+    });
+
+    it('shows a failed projection state instead of the empty chart copy', () => {
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
+        bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
+        generateSchedule,
+        isLoading: false,
+        error: 'Schedule worker exited',
+        diagnosticId: null,
+        clearError: vi.fn(),
+        schedule: null,
+        scheduleStartDate: '2026-01-01',
+        scheduleStartingBalance: 700,
+      });
+
+      render(
+        <TestMemoryRouter>
+          <DashboardPage />
+        </TestMemoryRouter>
+      );
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not build the balance projection.');
+      expect(screen.queryByText('Add income and bills to see your balance projection')).not.toBeInTheDocument();
+    });
   });
 
   describe('hostile', () => {

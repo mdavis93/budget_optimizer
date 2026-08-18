@@ -9,6 +9,7 @@ import { SCHEDULE_COMPUTE_PROTOCOL_VERSION } from '@shared/scheduleComputeProtoc
 import {
   assertScheduleComputeSuccessMessage,
   estimatePayloadBytes,
+  readScheduleComputeProgressMessage,
 } from '@shared/scheduleComputeValidate';
 import type { Income, Bill } from '@shared/types';
 
@@ -262,5 +263,85 @@ describe('runScheduleCompute', () => {
         goalId: 'goal-1',
       });
     }
+  });
+
+  it('reports ordered stage tokens through the progress sink', () => {
+    const income: Income = {
+      id: 'inc-1',
+      sourceName: 'Job',
+      amount: 2000,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const bill: Bill = {
+      id: 'bill-1',
+      creditorName: 'Rent',
+      budgetedAmount: 800,
+      dueDay: 5,
+      isRecurring: true,
+      priority: 'critical',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const input = serializeScheduleComputeInput({
+      incomes: [income],
+      bills: [bill],
+      startDate: '2026-01-01',
+      months: 3,
+      startingBalance: 1000,
+      skippedBills: new Set(),
+      manualAssignments: new Map(),
+      preferredAssignments: new Map(),
+      targetCashOnHand: 250,
+      goals: [],
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      debtPayoffs: new Map(),
+      incomeOverrides: new Map(),
+      leaves: [],
+      nowIso: '2026-01-01T00:00:00.000Z',
+    });
+    const stages: string[] = [];
+    runScheduleCompute(
+      {
+        protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+        jobId: 'run-progress',
+        inputHash: computeScheduleInputHash('schedule', input),
+        op: 'schedule',
+        input,
+      },
+      (report) => {
+        stages.push(report.stage);
+      }
+    );
+    expect(stages[0]).toBe('assigning');
+    expect(stages).toContain('reconciling');
+    expect(stages).toContain('advising');
+    expect(stages.at(-1)).toBe('finishing');
+  });
+
+  it('drops malformed progress without throwing', () => {
+    expect(
+      readScheduleComputeProgressMessage(
+        { type: 'progress', extra: 'nope' },
+        { jobId: 'j', inputHash: 'h', op: 'schedule' }
+      )
+    ).toBeNull();
+    expect(
+      readScheduleComputeProgressMessage(
+        {
+          type: 'progress',
+          protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+          jobId: 'j',
+          inputHash: 'h',
+          op: 'schedule',
+          stage: 'assigning',
+        },
+        { jobId: 'j', inputHash: 'h', op: 'schedule' }
+      )
+    ).toMatchObject({ type: 'progress', stage: 'assigning' });
   });
 });

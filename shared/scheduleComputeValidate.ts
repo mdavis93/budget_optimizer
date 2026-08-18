@@ -1,10 +1,27 @@
 import {
   SCHEDULE_COMPUTE_MAX_PAYLOAD_BYTES,
+  SCHEDULE_COMPUTE_PROGRESS_MAX_BYTES,
   SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+  SCHEDULE_COMPUTE_STAGES,
   type ScheduleComputeOp,
+  type ScheduleComputeProgressMessage,
+  type ScheduleComputeStage,
   type ScheduleComputeSuccessMessage,
   type ScheduleComputeWorkerMessage,
 } from './scheduleComputeProtocol';
+
+const PROGRESS_KEYS = new Set([
+  'type',
+  'protocolVersion',
+  'jobId',
+  'inputHash',
+  'op',
+  'stage',
+  'current',
+  'total',
+]);
+
+const STAGE_SET = new Set<string>(SCHEDULE_COMPUTE_STAGES);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -120,4 +137,51 @@ export function assertScheduleComputeSuccessMessage(
 
 export function isWorkerMessage(value: unknown): value is ScheduleComputeWorkerMessage {
   return isRecord(value) && typeof value.type === 'string';
+}
+
+/**
+ * Best-effort progress parse. Returns null on any mismatch — callers must not
+ * fail the compute job for a bad progress packet.
+ */
+export function readScheduleComputeProgressMessage(
+  value: unknown,
+  expected: { jobId: string; inputHash: string; op: ScheduleComputeOp }
+): ScheduleComputeProgressMessage | null {
+  if (!isRecord(value) || value.type !== 'progress') {
+    return null;
+  }
+  if (estimatePayloadBytes(value) > SCHEDULE_COMPUTE_PROGRESS_MAX_BYTES) {
+    return null;
+  }
+  for (const key of Object.keys(value)) {
+    if (!PROGRESS_KEYS.has(key)) {
+      return null;
+    }
+  }
+  if (value.protocolVersion !== SCHEDULE_COMPUTE_PROTOCOL_VERSION) {
+    return null;
+  }
+  if (value.jobId !== expected.jobId || value.inputHash !== expected.inputHash || value.op !== expected.op) {
+    return null;
+  }
+  if (typeof value.stage !== 'string' || !STAGE_SET.has(value.stage)) {
+    return null;
+  }
+  if (value.current !== undefined && !(isFiniteNumber(value.current) && value.current >= 0)) {
+    return null;
+  }
+  if (value.total !== undefined && !(isFiniteNumber(value.total) && value.total >= 0)) {
+    return null;
+  }
+
+  return {
+    type: 'progress',
+    protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+    jobId: expected.jobId,
+    inputHash: expected.inputHash,
+    op: expected.op,
+    stage: value.stage as ScheduleComputeStage,
+    ...(value.current !== undefined ? { current: value.current } : {}),
+    ...(value.total !== undefined ? { total: value.total } : {}),
+  };
 }
