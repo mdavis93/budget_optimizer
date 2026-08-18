@@ -3,6 +3,11 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import SchedulePage from '../../src/pages/SchedulePage';
 import { createMockElectronAPI, createMockSchedule } from '../mocks/electron-api.mock';
 import { renderWithRouter } from '../helpers/renderWithProviders';
+import { copyDiagnosticReport } from '../../src/utils/reportError';
+
+vi.mock('../../src/utils/reportError', () => ({
+  copyDiagnosticReport: vi.fn(),
+}));
 
 const mockUseData = vi.fn();
 const mockUseDraftActions = vi.fn();
@@ -267,6 +272,7 @@ describe('SchedulePage', () => {
     });
 
     it('shows a rebuild error without the busy overlay', () => {
+      const clearError = vi.fn();
       mockUseData.mockReturnValue({
         incomes: [{ id: 'inc-1' }],
         bills: [{ id: 'bill-1' }],
@@ -280,7 +286,7 @@ describe('SchedulePage', () => {
         isLoading: false,
         error: 'Schedule compute timed out',
         diagnosticId: 'diag-1',
-        clearError: vi.fn(),
+        clearError,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
         scheduleStartingBalance: 1000,
@@ -294,6 +300,13 @@ describe('SchedulePage', () => {
       expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent('Could not rebuild the schedule.');
       expect(screen.getByText('Schedule compute timed out')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(clearError).toHaveBeenCalledTimes(1);
+      expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy report' }));
+      expect(copyDiagnosticReport).toHaveBeenCalledWith('diag-1');
     });
 
     it('does not show busy overlay when schedule is not loading', () => {

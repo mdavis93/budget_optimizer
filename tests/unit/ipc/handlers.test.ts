@@ -452,6 +452,68 @@ describe('ipc handlers', () => {
       );
     });
 
+    it('does not send schedule progress after lock or renderer teardown', async () => {
+      const progressPayload = {
+        type: 'progress',
+        protocolVersion: 1,
+        jobId: 'job-1',
+        inputHash: 'hash-1',
+        op: 'schedule',
+        stage: 'assigning',
+      };
+      const resultPayload = {
+        type: 'result',
+        protocolVersion: 1,
+        jobId: 'test-job',
+        inputHash: 'hash-1',
+        op: 'schedule',
+        schedule: {
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+          paychecks: [],
+          fullPaychecks: [],
+          viewportMonths: 1,
+          entries: [],
+          summary: {
+            totalIncome: 0,
+            totalExpenses: 0,
+            netBalance: 0,
+            finalSavingsBalance: 0,
+            shortfallCount: 0,
+          },
+          recommendations: [],
+          maxBudgetRemaining: 0,
+          minCashOnHand: 100,
+        },
+      };
+      const services = createServices({
+        scheduleCompute: {
+          ...createServices().scheduleCompute,
+          runJob: vi.fn(async (_request, options?: { onProgress?: (progress: unknown) => void }) => {
+            options?.onProgress?.(progressPayload);
+            return resultPayload;
+          }),
+        },
+      });
+      registerIpcHandlers(ipcMain as never, services as never);
+
+      ipcMain.sender.isDestroyed.mockReturnValue(true);
+      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      expect(ipcMain.sender.send).not.toHaveBeenCalled();
+
+      ipcMain.sender.isDestroyed.mockReturnValue(false);
+      vi.mocked(services.auth.getIsUnlocked).mockReturnValueOnce(true).mockReturnValue(false);
+      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      expect(ipcMain.sender.send).not.toHaveBeenCalled();
+
+      vi.mocked(services.auth.getIsUnlocked).mockReturnValue(true);
+      const send = ipcMain.sender.send;
+      (ipcMain.sender as { send: unknown }).send = undefined;
+      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      ipcMain.sender.send = send;
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it('routes income CRUD handlers through budget manager', async () => {
       const services = createServices({
         budgetManager: {

@@ -620,4 +620,34 @@ describe('runScheduleWorkerSmoke', () => {
     expect(secondProgress).toHaveBeenCalled();
     host.dispose();
   });
+
+  it('keeps the job alive when a progress listener throws', async () => {
+    const child = createMockUtilityProcess();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+    });
+    const onProgress = vi.fn(() => {
+      throw new Error('renderer listener failed');
+    });
+    const pending = host.runJob(
+      { op: 'schedule', inputHash: 'hash-throw', input: minimalInput(), jobId: 'job-throw' },
+      { onProgress }
+    );
+    child.__emitSpawn();
+    child.emit('message', {
+      type: 'progress',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-throw',
+      inputHash: 'hash-throw',
+      op: 'schedule',
+      stage: 'assigning',
+    });
+    child.emit('message', scheduleResult('job-throw', 'hash-throw'));
+    await expect(pending).resolves.toMatchObject({ jobId: 'job-throw' });
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
 });

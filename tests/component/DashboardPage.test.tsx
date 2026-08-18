@@ -3,6 +3,11 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TestMemoryRouter } from '../helpers/router';
 import DashboardPage from '../../src/pages/DashboardPage';
+import { copyDiagnosticReport } from '../../src/utils/reportError';
+
+vi.mock('../../src/utils/reportError', () => ({
+  copyDiagnosticReport: vi.fn(),
+}));
 
 const mockUseData = vi.fn();
 
@@ -141,6 +146,36 @@ describe('DashboardPage', () => {
 
       expect(screen.getByRole('alert')).toHaveTextContent('Could not build the balance projection.');
       expect(screen.queryByText('Add income and bills to see your balance projection')).not.toBeInTheDocument();
+    });
+
+    it('retries a failed projection and copies the diagnostic report', async () => {
+      const user = userEvent.setup();
+      const clearError = vi.fn();
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
+        bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
+        generateSchedule,
+        isLoading: false,
+        error: 'Schedule worker exited',
+        diagnosticId: 'diag-dash',
+        clearError,
+        schedule: null,
+        scheduleStartDate: '2026-01-01',
+        scheduleStartingBalance: 700,
+      });
+
+      render(
+        <TestMemoryRouter>
+          <DashboardPage />
+        </TestMemoryRouter>
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(clearError).toHaveBeenCalledTimes(1);
+      expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 700, { force: true });
+
+      await user.click(screen.getByRole('button', { name: 'Copy report' }));
+      expect(copyDiagnosticReport).toHaveBeenCalledWith('diag-dash');
     });
   });
 
