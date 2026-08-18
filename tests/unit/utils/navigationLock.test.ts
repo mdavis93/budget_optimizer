@@ -26,6 +26,10 @@ describe('navigationLock', () => {
     preventDefault.mockClear();
     handlers['will-redirect']({ preventDefault }, 'https://evil.example/');
     expect(preventDefault).toHaveBeenCalled();
+
+    preventDefault.mockClear();
+    handlers['will-navigate']({ preventDefault }, 'file:///app/dist/index.html');
+    expect(preventDefault).not.toHaveBeenCalled();
   });
 
   it('denies all permission requests', () => {
