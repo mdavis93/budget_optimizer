@@ -140,7 +140,7 @@ function createWindow() {
 <p>The app window is still open, but <code>localhost:5173</code> refused the connection (${String(errorDescription)}). Reloading cannot recover until the dev server is running again.</p>
 <p>Quit this window and restart with <code>pnpm dev</code> or <code>pnpm electron:dev</code>. Your budget data is safe.</p>
 </main></body></html>`;
-        void mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        void mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
       }
     }
   );
