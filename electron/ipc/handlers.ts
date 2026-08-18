@@ -20,6 +20,7 @@ import {
 import {
   isScheduleComputeError,
   type ScheduleComputeOp,
+  type ScheduleComputeProgressMessage,
 } from '@shared/scheduleComputeProtocol';
 import type { GoalProjection, ScheduleData } from '@shared/types';
 import { resolveAppBrowserWindow } from '../utils/dialog';
@@ -146,7 +147,8 @@ async function runOffloadedCompute<T>(
   native: Parameters<typeof serializeScheduleComputeInput>[0],
   extract: (
     message: Awaited<ReturnType<ScheduleComputeHost['runJob']>>
-  ) => T
+  ) => T,
+  onProgress?: (progress: ScheduleComputeProgressMessage) => void
 ): Promise<ApiResult<T>> {
   if (services.scheduleCompute.isDisposed) {
     // Recover from a cancelled Quit that disposed the host while the window stayed open.
@@ -156,11 +158,20 @@ async function runOffloadedCompute<T>(
   try {
     const input = serializeScheduleComputeInput(native);
     const inputHash = computeScheduleInputHash(op, input);
-    const message = await services.scheduleCompute.runJob({
-      op,
-      inputHash,
-      input,
-    });
+    const message = onProgress
+      ? await services.scheduleCompute.runJob(
+          {
+            op,
+            inputHash,
+            input,
+          },
+          { onProgress }
+        )
+      : await services.scheduleCompute.runJob({
+          op,
+          inputHash,
+          input,
+        });
     return { success: true, data: extract(message) };
   } catch (error) {
     if (isScheduleComputeError(error)) {
@@ -641,7 +652,7 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
     );
   }));
 
-  ipcMain.handle('schedule:build', withBudgetGuard(services, async (_, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {
+  ipcMain.handle('schedule:build', withBudgetGuard(services, async (event, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {
     const { budgetManager, database } = ready();
     const resolved = resolveScheduleInputs(budgetManager, database, overlay);
     const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
@@ -675,6 +686,19 @@ export function registerIpcHandlers(ipcMain: IpcMain, services: Services): void 
           throw new Error('Unexpected compute op for schedule');
         }
         return message.schedule as ScheduleData;
+      },
+      (progress) => {
+        const sender = event.sender;
+        if (typeof sender.isDestroyed === 'function' && sender.isDestroyed()) {
+          return;
+        }
+        if (!services.auth.getIsUnlocked()) {
+          return;
+        }
+        if (typeof sender.send !== 'function') {
+          return;
+        }
+        sender.send('schedule:progress', progress);
       }
     );
   }));

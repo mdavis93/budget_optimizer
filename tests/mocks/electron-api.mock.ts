@@ -298,6 +298,7 @@ export const createMockElectronAPI = () => {
 
     schedule: {
       build: vi.fn().mockResolvedValue({ success: true, data: createMockSchedule() }),
+      onProgress: vi.fn(() => () => undefined),
     },
 
     reconciliation: {

@@ -16,6 +16,19 @@ export const SCHEDULE_COMPUTE_KILL_ESCALATION_MS = 2_000;
 /** Reject oversized request/response payloads (approx serialized size). */
 export const SCHEDULE_COMPUTE_MAX_PAYLOAD_BYTES = 32 * 1024 * 1024;
 
+/** Progress is best-effort telemetry — keep payloads tiny (never schedule bodies). */
+export const SCHEDULE_COMPUTE_PROGRESS_MAX_BYTES = 2048;
+
+export const SCHEDULE_COMPUTE_STAGES = [
+  'assigning',
+  'reconciling',
+  'advising',
+  'validating_plan',
+  'finishing',
+] as const;
+
+export type ScheduleComputeStage = (typeof SCHEDULE_COMPUTE_STAGES)[number];
+
 export type ScheduleComputeOp = 'schedule' | 'goals';
 
 export type ScheduleComputeErrorCode =
@@ -94,9 +107,29 @@ export interface ScheduleComputeWorkerErrorMessage {
   error: string;
 }
 
+export interface ScheduleComputeProgressReport {
+  stage: ScheduleComputeStage;
+  current?: number;
+  total?: number;
+}
+
+export type ScheduleComputeProgressSink = (report: ScheduleComputeProgressReport) => void;
+
+export interface ScheduleComputeProgressMessage {
+  type: 'progress';
+  protocolVersion: typeof SCHEDULE_COMPUTE_PROTOCOL_VERSION;
+  jobId: string;
+  inputHash: string;
+  op: ScheduleComputeOp;
+  stage: ScheduleComputeStage;
+  current?: number;
+  total?: number;
+}
+
 export type ScheduleComputeWorkerMessage =
   | ScheduleComputeSuccessMessage
   | ScheduleComputeWorkerErrorMessage
+  | ScheduleComputeProgressMessage
   | { type: 'pong'; jobId: string }
   | { type: 'ping'; jobId: string };
 

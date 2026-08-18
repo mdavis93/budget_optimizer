@@ -3,6 +3,11 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import SchedulePage from '../../src/pages/SchedulePage';
 import { createMockElectronAPI, createMockSchedule } from '../mocks/electron-api.mock';
 import { renderWithRouter } from '../helpers/renderWithProviders';
+import { copyDiagnosticReport } from '../../src/utils/reportError';
+
+vi.mock('../../src/utils/reportError', () => ({
+  copyDiagnosticReport: vi.fn(),
+}));
 
 const mockUseData = vi.fn();
 const mockUseDraftActions = vi.fn();
@@ -155,6 +160,11 @@ vi.mock('../../src/components/schedule', () => ({
       <button onClick={() => onClearStale(new Set(['2026-01-15']))}>mock-panel-clear-stale</button>
     </div>
   ),
+  ScheduleBuildProgress: ({ heading }: { heading: string }) => (
+    <div>
+      <p>{heading}</p>
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/ReconciliationPage', () => ({
@@ -258,6 +268,45 @@ describe('SchedulePage', () => {
       renderWithRouter(<SchedulePage />, { mockAPI });
       expect(screen.getByTestId('schedule-busy-overlay')).toBeInTheDocument();
       expect(screen.getByText('Rebuilding schedule…')).toBeInTheDocument();
+      expect(screen.queryByText(/a few seconds/i)).not.toBeInTheDocument();
+    });
+
+    it('shows a rebuild error without the busy overlay', () => {
+      const clearError = vi.fn();
+      mockUseData.mockReturnValue({
+        incomes: [{ id: 'inc-1' }],
+        bills: [{ id: 'bill-1' }],
+        billAssignments: [],
+        incomeOverrides: [],
+        schedule: createMockSchedule({
+          paychecks: [createMockSchedule().paychecks[0]],
+          recommendations: [],
+        }),
+        generateSchedule,
+        isLoading: false,
+        error: 'Schedule compute timed out',
+        diagnosticId: 'diag-1',
+        clearError,
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        scheduleStartingBalance: 1000,
+        scheduleInputHash: 'test-hash',
+        setScheduleStartDate: vi.fn(),
+        setScheduleMonths: vi.fn(),
+        setScheduleStartingBalance: vi.fn(),
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not rebuild the schedule.');
+      expect(screen.getByText('Schedule compute timed out')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(clearError).toHaveBeenCalledTimes(1);
+      expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy report' }));
+      expect(copyDiagnosticReport).toHaveBeenCalledWith('diag-1');
     });
 
     it('does not show busy overlay when schedule is not loading', () => {

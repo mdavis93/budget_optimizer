@@ -16,6 +16,7 @@ import {
   ScheduleRecommendations,
   BreakGlassAdvisorPanel,
   ManualMovesPanel,
+  ScheduleBuildProgress,
 } from '../components/schedule';
 import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
@@ -40,6 +41,11 @@ export default function SchedulePage() {
     setScheduleMonths: setMonths,
     setScheduleStartingBalance: setStartingBalance,
     peekScheduleDiagnosticId,
+    error,
+    diagnosticId,
+    progress,
+    buildStartedAt,
+    clearError,
   } = useSchedule();
   const { currentBudget } = useBudget();
   const { incomes, bills, billAssignments, incomeOverrides } = useDraftData();
@@ -263,6 +269,41 @@ export default function SchedulePage() {
         </div>
       </div>
 
+      {error && !isLoading ? (
+        <div
+          className="rounded-xl border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3"
+          role="alert"
+        >
+          <div className="flex-1">
+            <p className="font-medium">Could not rebuild the schedule.</p>
+            <p className="text-sm text-(--color-text-secondary)">{error}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                clearError();
+                void generateSchedule(startDate, months, startingBalance, { force: true });
+              }}
+            >
+              Try again
+            </button>
+            {diagnosticId ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  void copyDiagnosticReport(diagnosticId);
+                }}
+              >
+                Copy report
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <ScheduleControls
         startDate={startDate}
         months={months}
@@ -326,16 +367,22 @@ export default function SchedulePage() {
           aria-live="polite"
           data-testid="schedule-busy-overlay"
         >
-          <div className="rounded-xl bg-(--color-bg-primary) border border-(--color-border) shadow-lg px-6 py-5 flex items-center gap-3 max-w-md mx-4">
-            <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
-            <div>
-              <p className="font-medium text-(--color-text-primary)">
-                {isApplyingBreakGlass ? 'Applying adjustments…' : 'Rebuilding schedule…'}
-              </p>
-              <p className="text-sm text-(--color-text-secondary)">
-                This can take a few seconds for a full-year projection.
-              </p>
-            </div>
+          <div className="rounded-xl bg-(--color-bg-primary) border border-(--color-border) shadow-lg px-6 py-5 max-w-md mx-4">
+            {isApplyingBreakGlass && !isLoading ? (
+              <div className="flex items-center gap-3">
+                <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
+                <div>
+                  <p className="font-medium text-(--color-text-primary)">Applying adjustments…</p>
+                  <p className="text-sm text-(--color-text-secondary)">Updating your draft placements.</p>
+                </div>
+              </div>
+            ) : (
+              <ScheduleBuildProgress
+                heading="Rebuilding schedule…"
+                progress={progress}
+                startedAt={buildStartedAt}
+              />
+            )}
           </div>
         </div>
       )}

@@ -105,4 +105,38 @@ describe('scheduleCompute.worker handleMessage', () => {
     );
     expect(exit).toHaveBeenCalledWith(1);
   });
+
+  it('posts progress before the result', async () => {
+    const { runScheduleCompute } = await import(
+      '../../../electron/services/schedule-compute-run'
+    );
+    vi.mocked(runScheduleCompute).mockImplementationOnce((_request, onProgress) => {
+      onProgress?.({ stage: 'assigning' });
+      return {
+        type: 'result',
+        protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+        jobId: 'job-p',
+        inputHash: 'hash-p',
+        op: 'schedule',
+        schedule: {},
+      };
+    });
+
+    const { handleMessage } = await import('../../../electron/workers/scheduleCompute.worker');
+    handleMessage({
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'job-p',
+      inputHash: 'hash-p',
+      op: 'schedule',
+      input: {},
+    });
+
+    expect(postMessage.mock.calls[0][0]).toMatchObject({
+      type: 'progress',
+      stage: 'assigning',
+      jobId: 'job-p',
+    });
+    expect(postMessage.mock.calls[1][0]).toMatchObject({ type: 'result', jobId: 'job-p' });
+    expect(exit).toHaveBeenCalledWith(0);
+  });
 });

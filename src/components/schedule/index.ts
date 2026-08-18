@@ -6,3 +6,4 @@ export { default as ReconciliationBanner } from './ReconciliationBanner';
 export { default as ScheduleRecommendations } from './ScheduleRecommendations';
 export { default as BreakGlassAdvisorPanel } from './BreakGlassAdvisorPanel';
 export { default as ManualMovesPanel } from './ManualMovesPanel';
+export { default as ScheduleBuildProgress } from './ScheduleBuildProgress';
