@@ -22,6 +22,7 @@ import { useDraftStatus } from '../context/DraftContext';
 import { usePlatformExit } from '../platform/PlatformExitGuard';
 import GlobalDraftBanner from './GlobalDraftBanner';
 import DraftSaveBar from './DraftSaveBar';
+import { ErrorBoundary } from './ErrorBoundary';
 import clsx from 'clsx';
 import { DraftDomain, ROUTE_DRAFT_DOMAIN } from '../types/draft';
 
@@ -186,7 +187,9 @@ export default function Layout() {
           </div>
           <div className="flex-1 min-h-0 overflow-auto p-6">
             <GlobalDraftBanner />
-            <Outlet />
+            <ErrorBoundary variant="page" resetKey={`${location.pathname}${location.search}`}>
+              <Outlet />
+            </ErrorBoundary>
           </div>
           {/* Domain save/discard lives in the main column footer (not an overlay). */}
           {currentDomain && <DraftSaveBar domain={currentDomain} />}

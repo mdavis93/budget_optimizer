@@ -9,6 +9,7 @@ describe('reportError', () => {
     vi.clearAllMocks();
     mockAPI = createMockElectronAPI();
     window.electronAPI = mockAPI as unknown as Window['electronAPI'];
+    window.location.hash = '';
   });
 
   describe('happy', () => {
@@ -25,6 +26,9 @@ describe('reportError', () => {
           source: 'renderer:test',
           message: 'boom',
           stack: 'stack-line',
+          diagnostics: expect.objectContaining({
+            navTrail: expect.any(Array),
+          }),
         })
       );
     });
@@ -37,6 +41,38 @@ describe('reportError', () => {
       await expect(reportError('renderer:test', 'plain')).resolves.toBe('diag-str');
       expect(mockAPI.diagnostics.report).toHaveBeenCalledWith(
         expect.objectContaining({ message: 'plain', stack: null })
+      );
+    });
+
+    it('tags dynamic import failures and includes the current route trail', async () => {
+      mockAPI.diagnostics.report.mockResolvedValue({
+        success: true,
+        data: { id: 'diag-import' },
+      });
+      window.location.hash = '#/settings';
+      const { recordDiagnosticBreadcrumb } = await import('../../../src/utils/diagnosticContext');
+      recordDiagnosticBreadcrumb('route', '/goals');
+      recordDiagnosticBreadcrumb('route', '/settings');
+      await expect(
+        reportError(
+          'renderer:ErrorBoundary',
+          new TypeError(
+            'Failed to fetch dynamically imported module: http://localhost:5173/src/pages/SettingsPage.tsx'
+          )
+        )
+      ).resolves.toBe('diag-import');
+      expect(mockAPI.diagnostics.report).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorCode: 'DYNAMIC_IMPORT',
+          diagnostics: expect.objectContaining({
+            importPath: '/src/pages/SettingsPage.tsx',
+            errorName: 'TypeError',
+            navTrail: expect.arrayContaining([
+              expect.objectContaining({ kind: 'route', detail: '/goals' }),
+              expect.objectContaining({ kind: 'route', detail: '/settings' }),
+            ]),
+          }),
+        })
       );
     });
   });

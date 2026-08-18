@@ -16,6 +16,8 @@ export interface DiagnosticEvent {
 
 export interface DiagnosticBundle {
   exportedAt: string;
+  /** Present when copying a single event so the triggering id is obvious in a trail. */
+  copiedEventId?: string;
   app: {
     version: string;
     electron: string;
@@ -27,6 +29,8 @@ export interface DiagnosticBundle {
     budgetUnlocked: boolean;
   };
   errors: DiagnosticEvent[];
+  /** Recent ring events (including the copied one) for path-to-failure diagnosis. */
+  recent?: DiagnosticEvent[];
 }
 
 export interface DiagnosticReportInput {

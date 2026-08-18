@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 
 export function ChartSuspense({ children, heightClass = 'h-64' }: { children: ReactNode; heightClass?: string }) {
   return (
@@ -12,14 +12,6 @@ export function ChartSuspense({ children, heightClass = 'h-64' }: { children: Re
   );
 }
 
-export const BalanceProjectionChart = lazy(() => import('./BalanceProjectionChart'));
-export const DebtAmortizationChart = lazy(() => import('./DebtAmortizationChart'));
-export const IncomeExpensesChart = lazy(() =>
-  import('./SummaryCharts').then((module) => ({ default: module.IncomeExpensesChart }))
-);
-export const CategoryPieChart = lazy(() =>
-  import('./SummaryCharts').then((module) => ({ default: module.CategoryPieChart }))
-);
-export const SavingsAreaChart = lazy(() =>
-  import('./SummaryCharts').then((module) => ({ default: module.SavingsAreaChart }))
-);
+export { default as BalanceProjectionChart } from './BalanceProjectionChart';
+export { default as DebtAmortizationChart } from './DebtAmortizationChart';
+export { IncomeExpensesChart, CategoryPieChart, SavingsAreaChart } from './SummaryCharts';

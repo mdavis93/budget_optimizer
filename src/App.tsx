@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { recordDiagnosticBreadcrumb } from './utils/diagnosticContext';
 import { useAuth } from './context/AuthContext';
 import { BudgetProvider, useBudget } from './context/BudgetContext';
 import { DraftProvider } from './context/DraftContext';
@@ -9,18 +10,28 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import LoadingScreen from './components/LoadingScreen';
 import { PlatformExitGuardProvider } from './platform/PlatformExitGuard';
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const SetupPage = lazy(() => import('./pages/SetupPage'));
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-const IncomePage = lazy(() => import('./pages/IncomePage'));
-const BillsPage = lazy(() => import('./pages/BillsPage'));
-const DebtsPage = lazy(() => import('./pages/DebtsPage'));
-const SchedulePage = lazy(() => import('./pages/SchedulePage'));
-const GoalsPage = lazy(() => import('./pages/GoalsPage'));
-const SummaryPage = lazy(() => import('./pages/SummaryPage'));
-const BudgetsPage = lazy(() => import('./pages/BudgetsPage'));
-const ExportPage = lazy(() => import('./pages/ExportPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+import LoginPage from './pages/LoginPage';
+import SetupPage from './pages/SetupPage';
+import DashboardPage from './pages/DashboardPage';
+import IncomePage from './pages/IncomePage';
+import BillsPage from './pages/BillsPage';
+import DebtsPage from './pages/DebtsPage';
+import SchedulePage from './pages/SchedulePage';
+import GoalsPage from './pages/GoalsPage';
+import SummaryPage from './pages/SummaryPage';
+import BudgetsPage from './pages/BudgetsPage';
+import ExportPage from './pages/ExportPage';
+import SettingsPage from './pages/SettingsPage';
+
+function RouteBreadcrumbTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    recordDiagnosticBreadcrumb('route', `${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
+
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isUnlocked, isLoading } = useAuth();
@@ -76,10 +87,10 @@ function App() {
     <ErrorBoundary>
       <ToastProvider>
         <HashRouter>
+          <RouteBreadcrumbTracker />
           <BudgetProvider>
           <DraftProvider>
           <PlatformExitGuardProvider>
-          <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route 
               path="/login" 
@@ -117,7 +128,6 @@ function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </Suspense>
           </PlatformExitGuardProvider>
           </DraftProvider>
           </BudgetProvider>

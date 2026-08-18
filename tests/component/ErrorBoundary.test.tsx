@@ -67,6 +67,92 @@ describe('ErrorBoundary', () => {
         })
       );
     });
+
+    it('Reload App calls location.reload', () => {
+      const reload = vi.fn();
+      const previous = window.location;
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          hash: '#/goals',
+          href: 'http://localhost/#/goals',
+          pathname: '/',
+          search: '',
+          origin: 'http://localhost',
+          reload,
+          assign: vi.fn(),
+          replace: vi.fn(),
+        },
+      });
+      try {
+        renderWithRouter(
+          <ErrorBoundary>
+            <Boom />
+          </ErrorBoundary>,
+          { mockAPI }
+        );
+        fireEvent.click(screen.getByRole('button', { name: /Reload App/i }));
+        expect(reload).toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(window, 'location', {
+          configurable: true,
+          value: previous,
+        });
+      }
+    });
+
+    it('Go Home updates the hash without reloading the window', () => {
+      const reload = vi.fn();
+      const locationStub = {
+        hash: '#/goals',
+        href: 'http://localhost/#/goals',
+        pathname: '/',
+        search: '',
+        origin: 'http://localhost',
+        reload,
+        assign: vi.fn(),
+        replace: vi.fn(),
+      };
+      const previous = window.location;
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: locationStub,
+      });
+      try {
+        renderWithRouter(
+          <ErrorBoundary>
+            <Boom />
+          </ErrorBoundary>,
+          { mockAPI }
+        );
+        expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Go Home/i }));
+        expect(reload).not.toHaveBeenCalled();
+        expect(locationStub.hash).toBe('#/dashboard');
+        expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+      } finally {
+        Object.defineProperty(window, 'location', {
+          configurable: true,
+          value: previous,
+        });
+      }
+    });
+
+    it('clears the fallback when resetKey changes', () => {
+      const { rerender } = renderWithRouter(
+        <ErrorBoundary resetKey="/settings">
+          <Boom />
+        </ErrorBoundary>,
+        { mockAPI }
+      );
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+      rerender(
+        <ErrorBoundary resetKey="/dashboard">
+          <div>dashboard ok</div>
+        </ErrorBoundary>
+      );
+      expect(screen.getByText('dashboard ok')).toBeInTheDocument();
+    });
   });
 
   describe('sad', () => {
@@ -118,6 +204,19 @@ describe('ErrorBoundary', () => {
       );
       fireEvent.click(screen.getByText('Show error details'));
       expect(screen.getByText(/at Boom/)).toBeInTheDocument();
+    });
+
+    it('page variant offers Try Again instead of Reload App', () => {
+      renderWithRouter(
+        <ErrorBoundary variant="page">
+          <Boom />
+        </ErrorBoundary>,
+        { mockAPI }
+      );
+      expect(screen.getByRole('button', { name: /Try Again/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Reload App/i })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Try Again/i }));
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     });
   });
 });
