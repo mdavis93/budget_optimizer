@@ -151,7 +151,6 @@ export const createMockElectronAPI = () => {
     platform: vi.fn().mockResolvedValue('darwin'),
     checkBiometricAvailable: vi.fn().mockResolvedValue(false),
     showSaveDialog: vi.fn().mockResolvedValue({ canceled: false, filePath: '/test/path' }),
-    showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ['/test/file'] }),
     quitApp: vi.fn().mockResolvedValue(undefined),
     onCloseRequested: vi.fn(() => () => {}),
 
@@ -192,6 +191,7 @@ export const createMockElectronAPI = () => {
       isFirstTimeSetup: vi.fn().mockResolvedValue(false),
       createMasterPassword: vi.fn().mockResolvedValue({ success: true, recoveryKey: 'test-key' }),
       unlock: vi.fn().mockResolvedValue({ success: true }),
+      unlockWithSavedCredentials: vi.fn().mockResolvedValue({ success: true }),
       unlockWithBiometric: vi.fn().mockResolvedValue({ success: true }),
       lock: vi.fn().mockResolvedValue(undefined),
       isUnlocked: vi.fn().mockResolvedValue(true),
@@ -202,7 +202,6 @@ export const createMockElectronAPI = () => {
       clearPendingRecoveryKey: vi.fn().mockResolvedValue(undefined),
       verifyRecoveryKey: vi.fn().mockResolvedValue({ success: true }),
       resetPasswordWithRecovery: vi.fn().mockResolvedValue({ success: true, newRecoveryKey: 'new-key' }),
-      setAutoLock: vi.fn().mockResolvedValue({ success: true }),
       activityPing: vi.fn().mockResolvedValue({ success: true }),
       onLocked: vi.fn(() => () => {}),
     },
@@ -301,14 +300,6 @@ export const createMockElectronAPI = () => {
       onProgress: vi.fn(() => () => undefined),
     },
 
-    reconciliation: {
-      applyFixes: vi.fn().mockResolvedValue({ success: true }),
-    },
-
-    breakGlassAdvisor: {
-      apply: vi.fn().mockResolvedValue({ success: true }),
-    },
-
     export: {
       toPdf: vi.fn().mockResolvedValue({ success: true }),
       toHtml: vi.fn().mockResolvedValue({ success: true }),
@@ -330,11 +321,8 @@ export const createMockElectronAPI = () => {
     },
 
     credentials: {
-      save: vi.fn().mockResolvedValue({ success: true }),
-      get: vi.fn().mockResolvedValue({ success: true, password: 'test-password' }),
       delete: vi.fn().mockResolvedValue({ success: true }),
       has: vi.fn().mockResolvedValue(false),
-      offerSave: vi.fn().mockResolvedValue({ success: true, saved: false }),
     },
 
     diagnostics: {

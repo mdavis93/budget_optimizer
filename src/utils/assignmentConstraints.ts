@@ -1,6 +1,7 @@
 import { parseISO, isAfter, differenceInDays } from 'date-fns';
+import { MAX_PREPAY_DAYS } from '@shared/constants';
 
-export const MAX_PREPAY_DAYS = 14;
+export { MAX_PREPAY_DAYS };
 
 export type AssignmentViolation = 'late' | 'too_early';
 

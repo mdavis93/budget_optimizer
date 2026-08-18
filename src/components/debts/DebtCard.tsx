@@ -4,6 +4,7 @@ import { CreditCard, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent
 import { DebtAmortizationChart, ChartSuspense } from '../charts/lazyCharts';
 import { CHART_COLORS } from '../charts/chartTheme';
 import { DebtWithAmortization } from '../../types';
+import { formatCurrency } from '../../utils/formatCurrency';
 import type { TimePeriod } from './debtSorting';
 
 interface DebtCardProps {
@@ -46,10 +47,10 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
           <div>
             <h3 className="font-semibold text-lg">{bill.creditorName}</h3>
             <p className="text-sm text-(--color-text-muted)">
-              ${debt.monthlyPayment.toFixed(2)}/mo min payment
+              {formatCurrency(debt.monthlyPayment)}/mo min payment
               {extraPayment > 0 && (
                 <span className="text-success-400">
-                  {' '}+ ${extraPayment.toFixed(2)} extra
+                  {' '}+ {formatCurrency(extraPayment)} extra
                 </span>
               )}
             </p>
@@ -79,7 +80,7 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
             <DollarSign className="w-4 h-4" />
             <span className="text-xs">Balance</span>
           </div>
-          <p className="text-lg font-semibold">${debt.principalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          <p className="text-lg font-semibold">{formatCurrency(debt.principalBalance)}</p>
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 text-(--color-text-muted)">
@@ -105,7 +106,7 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
             <span className="text-xs">Total Interest</span>
           </div>
           <p className="text-lg font-semibold text-danger-400">
-            ${amortization.totalInterest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            {formatCurrency(amortization.totalInterest)}
           </p>
         </div>
       </div>
@@ -116,11 +117,11 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.principal }} />
-              <span>Principal: ${displayedPrincipal.toFixed(2)}</span>
+              <span>Principal: {formatCurrency(displayedPrincipal)}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.interest }} />
-              <span>Interest: ${displayedInterest.toFixed(2)}</span>
+              <span>Interest: {formatCurrency(displayedInterest)}</span>
             </div>
           </div>
         </div>
@@ -134,12 +135,12 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
         <div className="mt-4 p-3 rounded-lg bg-(--color-bg-tertiary) text-sm">
           <div className="flex justify-between">
             <span className="text-(--color-text-muted)">Total Payments ({amortization.monthsToPayoff} months)</span>
-            <span className="font-medium">${amortization.totalPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            <span className="font-medium">{formatCurrency(amortization.totalPayments)}</span>
           </div>
           <div className="flex justify-between mt-1">
             <span className="text-(--color-text-muted)">Amount Over Principal</span>
             <span className="font-medium text-danger-400">
-              +${(amortization.totalPayments - amortization.totalPrincipal).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              +{formatCurrency(amortization.totalPayments - amortization.totalPrincipal)}
             </span>
           </div>
         </div>

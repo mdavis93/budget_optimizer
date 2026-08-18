@@ -4,21 +4,30 @@ import { format, parseISO, getMonth, getYear } from 'date-fns';
 import type { ScheduleData } from './scheduler.service';
 import { PRIORITY_LABELS } from '../utils/constants';
 
-const CURRENCY_FORMAT = '"$"#,##0.00;[Red]-"$"#,##0.00';
+function excelCurrencyNumFmt(currency: string): string {
+  const symbol =
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' })
+      .formatToParts(0)
+      .find((part) => part.type === 'currency')?.value ?? '$';
+  const escaped = symbol.replace(/"/g, '""');
+  return `"${escaped}"#,##0.00;[Red]-"${escaped}"#,##0.00`;
+}
 
 export class SpreadsheetService {
   async generateXlsx(
     schedule: ScheduleData,
-    outputPath: string
+    outputPath: string,
+    currency = 'USD'
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      const currencyFormat = excelCurrencyNumFmt(currency);
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Budget Optimizer';
       workbook.created = new Date();
 
-      this.buildSummarySheet(workbook, schedule);
-      this.buildPaycheckSheet(workbook, schedule);
-      this.buildScheduleSheet(workbook, schedule);
+      this.buildSummarySheet(workbook, schedule, currencyFormat);
+      this.buildPaycheckSheet(workbook, schedule, currencyFormat);
+      this.buildScheduleSheet(workbook, schedule, currencyFormat);
 
       const finalPath = outputPath.endsWith('.xlsx') ? outputPath : `${outputPath}.xlsx`;
       const buffer = await workbook.xlsx.writeBuffer();
@@ -32,7 +41,11 @@ export class SpreadsheetService {
     }
   }
 
-  private buildSummarySheet(workbook: ExcelJS.Workbook, schedule: ScheduleData): void {
+  private buildSummarySheet(
+    workbook: ExcelJS.Workbook,
+    schedule: ScheduleData,
+    currencyFormat: string
+  ): void {
     const sheet = workbook.addWorksheet('Summary');
     const { summary, paychecks, recommendations, startDate, endDate } = schedule;
 
@@ -80,7 +93,7 @@ export class SpreadsheetService {
     metrics.forEach(([label, value, isCurrency]) => {
       const row = sheet.addRow([label, value]);
       if (isCurrency) {
-        row.getCell(2).numFmt = CURRENCY_FORMAT;
+        row.getCell(2).numFmt = currencyFormat;
       }
     });
 
@@ -96,7 +109,11 @@ export class SpreadsheetService {
     }
   }
 
-  private buildPaycheckSheet(workbook: ExcelJS.Workbook, schedule: ScheduleData): void {
+  private buildPaycheckSheet(
+    workbook: ExcelJS.Workbook,
+    schedule: ScheduleData,
+    currencyFormat: string
+  ): void {
     const sheet = workbook.addWorksheet('By Paycheck');
 
     sheet.columns = [
@@ -145,7 +162,7 @@ export class SpreadsheetService {
       ]);
 
       [3, 4, 5, 6, 7, 8].forEach(col => {
-        row.getCell(col).numFmt = CURRENCY_FORMAT;
+        row.getCell(col).numFmt = currencyFormat;
       });
 
       if (paycheck.isShortfall) {
@@ -162,7 +179,11 @@ export class SpreadsheetService {
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
   }
 
-  private buildScheduleSheet(workbook: ExcelJS.Workbook, schedule: ScheduleData): void {
+  private buildScheduleSheet(
+    workbook: ExcelJS.Workbook,
+    schedule: ScheduleData,
+    currencyFormat: string
+  ): void {
     const sheet = workbook.addWorksheet('Schedule');
 
     sheet.columns = [
@@ -206,7 +227,7 @@ export class SpreadsheetService {
           '',
           src.amount,
         ]);
-        row.getCell(6).numFmt = CURRENCY_FORMAT;
+        row.getCell(6).numFmt = currencyFormat;
         row.getCell(6).font = { color: { argb: 'FF15803D' } };
       });
 
@@ -228,7 +249,7 @@ export class SpreadsheetService {
           bill.isIncomeAttached ? 'Per Paycheck' : format(parseISO(bill.billDate), 'yyyy-MM-dd'),
           -bill.amount,
         ]);
-        row.getCell(6).numFmt = CURRENCY_FORMAT;
+        row.getCell(6).numFmt = currencyFormat;
         row.getCell(6).font = { color: { argb: 'FFDC2626' } };
       });
 
@@ -241,7 +262,7 @@ export class SpreadsheetService {
           '',
           -gd.amount,
         ]);
-        row.getCell(6).numFmt = CURRENCY_FORMAT;
+        row.getCell(6).numFmt = currencyFormat;
         row.getCell(6).font = { color: { argb: 'FF9333EA' } };
       });
 
@@ -254,7 +275,7 @@ export class SpreadsheetService {
           '',
           paycheck.savingsDeposit,
         ]);
-        row.getCell(6).numFmt = CURRENCY_FORMAT;
+        row.getCell(6).numFmt = currencyFormat;
         row.getCell(6).font = { color: { argb: 'FF2563EB' } };
       }
     });

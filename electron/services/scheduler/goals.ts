@@ -165,7 +165,7 @@ export function generateGoalSuggestions(
   goal: SavingsGoal,
   availablePerPaycheck: number,
   paychecks: PaycheckEntry[],
-  scheduleEndDate: string
+  _scheduleEndDate: string
 ): GoalSuggestion[] {
   const suggestions: GoalSuggestion[] = [];
   const remainingAmount = goal.targetAmount - goal.alreadySaved;
@@ -210,7 +210,7 @@ export function generateGoalSuggestions(
     if (achievableTotal < goal.targetAmount && achievableTotal > goal.alreadySaved) {
       suggestions.push({
         type: 'reduce_target',
-        description: `Reduce target to $${formatCurrency(achievableTotal)} for 100% achievability`,
+        description: `Reduce target to ${formatCurrency(achievableTotal)} for 100% achievability`,
         newValue: achievableTotal,
         resultPercent: 100,
       });

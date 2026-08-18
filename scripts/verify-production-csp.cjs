@@ -31,6 +31,15 @@ if (scriptSrc.includes('unsafe-inline')) {
 if (connectSrc.includes('localhost')) {
   errors.push('connect-src must not allow localhost in production');
 }
+if (html.includes('fonts.googleapis.com') || csp.includes('fonts.googleapis.com')) {
+  errors.push('CSP/HTML must not include fonts.googleapis.com');
+}
+if (html.includes('fonts.gstatic.com') || csp.includes('fonts.gstatic.com')) {
+  errors.push('CSP/HTML must not include fonts.gstatic.com');
+}
+if (!csp.includes("object-src 'none'")) {
+  errors.push("CSP must include object-src 'none'");
+}
 
 if (errors.length > 0) {
   for (const error of errors) {

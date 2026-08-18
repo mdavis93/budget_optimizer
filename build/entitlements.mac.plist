@@ -4,9 +4,9 @@
 <dict>
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
+    <!-- Chromium needs JIT. disable-library-validation was dropped after an
+         Electron 42 packaged smoke: better-sqlite3 and keytar both load. -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
     <key>com.apple.security.application-groups</key>
     <array>

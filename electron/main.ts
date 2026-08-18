@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain, systemPreferences, dialog, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { PRODUCTION_CSP } from '@shared/productionCsp';
+import { isAllowedNavigation } from './utils/isAllowedNavigation';
+import { attachNavigationLock, denyAllPermissions } from './utils/navigationLock';
 import { AuthService } from './services/auth.service';
 import { CryptoService } from './services/crypto.service';
 import { DatabaseService } from './services/database.service';
@@ -51,6 +54,9 @@ function shutdownApp() {
   if (services?.scheduleCompute) {
     services.scheduleCompute.dispose();
   }
+  if (services?.budgetManager) {
+    services.budgetManager.endQuickBudget();
+  }
   if (services?.database) {
     services.database.close();
   }
@@ -84,6 +90,13 @@ function resolveWindowIcon() {
 function createWindow() {
   allowWindowClose = false;
   const windowIcon = resolveWindowIcon();
+  const distDir = path.join(__dirname, '../dist');
+  const appNavOpts = {
+    devServerUrl: VITE_DEV_SERVER_URL,
+    distDir,
+    packaged: app.isPackaged,
+    extraFileRoots: app.isPackaged ? [] : [__dirname],
+  };
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -102,6 +115,25 @@ function createWindow() {
     },
     show: true,
   });
+
+  attachNavigationLock(mainWindow.webContents, appNavOpts);
+  denyAllPermissions(mainWindow.webContents.session);
+
+  if (app.isPackaged) {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      const inject = isAllowedNavigation(details.url, { distDir, packaged: true });
+      if (!inject) {
+        callback({ responseHeaders: details.responseHeaders });
+        return;
+      }
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [PRODUCTION_CSP],
+        },
+      });
+    });
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
@@ -134,13 +166,8 @@ function createWindow() {
         devServerDown
       ) {
         showingDevServerRecovery = true;
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev server unreachable</title>
-<style>body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}main{max-width:32rem}h1{font-size:1.25rem;margin:0 0 12px}p{line-height:1.5;color:#94a3b8}code{color:#93c5fd}</style></head>
-<body><main><h1>Vite dev server is not reachable</h1>
-<p>The app window is still open, but <code>localhost:5173</code> refused the connection (${String(errorDescription)}). Reloading cannot recover until the dev server is running again.</p>
-<p>Quit this window and restart with <code>pnpm dev</code> or <code>pnpm electron:dev</code>. Your budget data is safe.</p>
-</main></body></html>`;
-        void mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        const recoveryPath = path.join(__dirname, 'dev-server-down.html');
+        void mainWindow?.loadFile(recoveryPath);
       }
     }
   );
@@ -160,10 +187,6 @@ function createWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     // Page loaded
   });
-
-  const indexPath = VITE_DEV_SERVER_URL 
-    ? VITE_DEV_SERVER_URL 
-    : path.join(__dirname, '../dist/index.html');
 
   if (VITE_DEV_SERVER_URL && !app.isPackaged) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
@@ -230,7 +253,9 @@ app.whenReady().then(async () => {
 
   createWindow();
   
-  registerIpcHandlers(ipcMain, services);
+  registerIpcHandlers(ipcMain, services, {
+    getMainWindow: () => mainWindow,
+  });
 
   app.on('child-process-gone', (_event, details) => {
     services.scheduleCompute.notifyChildProcessGone(details.name);
@@ -273,6 +298,9 @@ app.on('before-quit', (event) => {
   if (services?.scheduleCompute) {
     services.scheduleCompute.dispose();
   }
+  if (services?.budgetManager) {
+    services.budgetManager.endQuickBudget();
+  }
   if (services?.database) {
     services.database.close();
   }
@@ -309,11 +337,6 @@ ipcMain.handle('app:show-save-dialog', async (_, options) => {
     approveExportPath(result.filePath);
   }
   return result;
-});
-
-ipcMain.handle('app:show-open-dialog', async (_, options) => {
-  if (!mainWindow) return { canceled: true };
-  return dialog.showOpenDialog(mainWindow, options);
 });
 
 export { mainWindow };

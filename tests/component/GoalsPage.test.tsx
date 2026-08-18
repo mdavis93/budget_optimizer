@@ -236,17 +236,9 @@ describe('GoalsPage', () => {
       expect(baseDraftActions.deleteGoal).not.toHaveBeenCalled();
     });
 
-    it('uses quick-budget IPC create/update/delete handlers', async () => {
+    it('creates goals through draft actions in quick budget mode', async () => {
       const user = userEvent.setup();
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      window.electronAPI = {
-        goals: {
-          create: vi.fn(async () => ({ success: true, data: { id: 'goal-2' } })),
-          update: vi.fn(async () => ({ success: true, data: { id: 'goal-1' } })),
-          delete: vi.fn(async () => ({ success: true, data: true })),
-        },
-      } as unknown as Window['electronAPI'];
-
       render(<GoalsPage />);
       await user.click(await screen.findByRole('button', { name: /Add Goal/i }));
       fireEvent.change(screen.getByLabelText('Goal Name'), { target: { value: 'House' } });
@@ -255,19 +247,7 @@ describe('GoalsPage', () => {
       await user.click(screen.getByRole('button', { name: /Create Goal/i }));
 
       await waitFor(() => {
-        expect(window.electronAPI.goals.create).toHaveBeenCalled();
-      });
-
-      await user.click(screen.getByRole('button', { name: /Edit Emergency Fund/i }));
-      await user.click(screen.getByRole('button', { name: /Save Changes/i }));
-      await waitFor(() => {
-        expect(window.electronAPI.goals.update).toHaveBeenCalled();
-      });
-
-      await user.click(screen.getByRole('button', { name: /Delete Emergency Fund/i }));
-      await user.click(screen.getByRole('button', { name: /^Delete$/i }));
-      await waitFor(() => {
-        expect(window.electronAPI.goals.delete).toHaveBeenCalled();
+        expect(baseDraftActions.createGoal).toHaveBeenCalled();
       });
     });
 
@@ -321,16 +301,6 @@ describe('GoalsPage', () => {
         expect(createGoal).toHaveBeenCalled();
       });
       expect(screen.getByRole('dialog', { name: /Create Savings Goal/i })).toBeInTheDocument();
-    });
-
-    it('reloads snapshot on mount in quick-budget mode', async () => {
-      const reloadSnapshot = vi.fn(async () => {});
-      mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockDraftContext({}, { reloadSnapshot });
-      render(<GoalsPage />);
-      await waitFor(() => {
-        expect(reloadSnapshot).toHaveBeenCalled();
-      });
     });
 
     it('recovers when projection loading fails', async () => {

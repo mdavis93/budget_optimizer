@@ -97,9 +97,9 @@ export const test = base.extend<HarnessFixtures>({
     });
 
     // Native modal dialogs are not part of the DOM and would hang a headless
-    // run. The app fires `credentials.offerSave()` (a Save/Not Now message box)
-    // during master-password creation, and Export uses save/open dialogs. Stub
-    // them to deterministic, non-blocking responses for the whole session.
+    // run. Main still fires credentials.offerSave() (a Save/Not Now message box)
+    // after master-password create/change/reset, and Export uses save dialogs.
+    // Stub them to deterministic, non-blocking responses for the whole session.
     await app.evaluate(async ({ dialog }) => {
       dialog.showMessageBox = async () =>
         ({ response: 1, checkboxChecked: false }) as Awaited<

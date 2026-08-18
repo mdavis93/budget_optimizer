@@ -19,7 +19,7 @@
     "electron:build": "node scripts/sync-app-icon.cjs && pnpm run build:vite && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder && node scripts/verify-packaged-app.cjs",
     "electron:build:ci": "node scripts/sync-app-icon.cjs && pnpm run build:vite && node scripts/rebuild-electron-native.cjs && node scripts/sync-better-sqlite3-native.cjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never && node scripts/verify-packaged-app.cjs",
     "sync:icon": "node scripts/sync-app-icon.cjs",
-    "lint": "eslint src --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint src electron shared --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "typecheck:electron": "tsc -p tsconfig.node.json --noEmit",
     "test": "node scripts/use-native.cjs node && vitest",
@@ -43,7 +43,8 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "exceljs": "^4.4.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
@@ -61,14 +62,12 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.10",
-    "concurrently": "^10.0.4",
     "electron": "^42.9.0",
     "electron-builder": "^26.15.3",
     "electron-playwright-helpers": "^3.1.2",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.4",
-    "exceljs": "^4.4.0",
     "globals": "^17.11.0",
     "husky": "^9.1.7",
     "jsdom": "^30.0.1",
@@ -79,8 +78,7 @@
     "vite": "^8.2.1",
     "vite-plugin-electron": "^1.1.1",
     "vite-plugin-electron-renderer": "^1.0.0",
-    "vitest": "^4.1.10",
-    "wait-on": "^9.1.0"
+    "vitest": "^4.1.10"
   },
   "build": {
     "appId": "com.budgetoptimizer.app",
@@ -92,7 +90,8 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "!.cache/**"
+      "!.cache/**",
+      "!node_modules/exceljs/**"
     ],
     "npmRebuild": false,
     "mac": {

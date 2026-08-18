@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import { promisify } from 'util';
+
+const pbkdf2 = promisify(crypto.pbkdf2);
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
@@ -232,13 +235,13 @@ export class CryptoService {
     return words.join(' ');
   }
 
-  deriveKeyFromRecovery(recoveryKey: string, salt: string): Buffer {
+  async deriveKeyFromRecovery(recoveryKey: string, salt: string): Promise<Buffer> {
     const normalizedKey = recoveryKey.toLowerCase().trim().split(/\s+/).join(' ');
     if (!salt || !/^[0-9a-f]{64}$/i.test(salt)) {
       throw new Error('Recovery salt is required');
     }
     const saltBuffer = Buffer.from(salt, 'hex');
-    return crypto.pbkdf2Sync(
+    return pbkdf2(
       normalizedKey,
       saltBuffer,
       PBKDF2_ITERATIONS,
@@ -279,8 +282,8 @@ export class CryptoService {
     return decrypted.toString('utf8');
   }
 
-  deriveKey(password: string, salt: string): Buffer {
-    return crypto.pbkdf2Sync(
+  async deriveKey(password: string, salt: string): Promise<Buffer> {
+    return pbkdf2(
       password,
       Buffer.from(salt, 'hex'),
       PBKDF2_ITERATIONS,
@@ -289,8 +292,8 @@ export class CryptoService {
     );
   }
 
-  hashPassword(password: string, salt: string): string {
-    const hash = crypto.pbkdf2Sync(
+  async hashPassword(password: string, salt: string): Promise<string> {
+    const hash = await pbkdf2(
       password,
       Buffer.from(salt, 'hex'),
       PBKDF2_ITERATIONS,
@@ -302,6 +305,14 @@ export class CryptoService {
 
   setEncryptionKey(key: Buffer): void {
     this.encryptionKey = key;
+  }
+
+  getEncryptionKeyHex(): string | null {
+    return this.encryptionKey ? this.encryptionKey.toString('hex') : null;
+  }
+
+  hasEncryptionKey(): boolean {
+    return this.encryptionKey !== null;
   }
 
   setMasterPasswordHash(hash: string): void {

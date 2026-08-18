@@ -1,13 +1,50 @@
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { BrowserWindow } from 'electron';
 
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
+  app: {
+    getPath: (name: string) => (name === 'userData' ? '/Users/tester/budget-userdata' : '/tmp'),
+  },
 }));
 
 import { PdfService } from '../../../electron/services/pdf.service';
 import { ScheduleData } from '../../../electron/services/scheduler.service';
+
+function makeScratchDir(): string {
+  const parent = path.join(process.cwd(), '.cache');
+  fs.mkdirSync(parent, { recursive: true });
+  return fs.mkdtempSync(path.join(parent, 'pdf-'));
+}
+
+function mockPdfWindow(overrides: {
+  loadFile?: ReturnType<typeof vi.fn>;
+  printToPDF?: ReturnType<typeof vi.fn>;
+  destroy?: ReturnType<typeof vi.fn>;
+  isDestroyed?: ReturnType<typeof vi.fn>;
+} = {}) {
+  const loadFile = overrides.loadFile ?? vi.fn(async () => {});
+  const printToPDF = overrides.printToPDF ?? vi.fn(async () => Buffer.from('pdf-bytes'));
+  const destroy = overrides.destroy ?? vi.fn();
+  const isDestroyed = overrides.isDestroyed ?? vi.fn(() => false);
+  vi.mocked(BrowserWindow).mockImplementation(function () {
+    return {
+      loadFile,
+      webContents: {
+        printToPDF,
+        setWindowOpenHandler: vi.fn(),
+        on: vi.fn(),
+        session: { setPermissionRequestHandler: vi.fn() },
+      },
+      destroy,
+      isDestroyed,
+    } as unknown as BrowserWindow;
+  });
+  return { loadFile, printToPDF, destroy, isDestroyed };
+}
 
 describe('PdfService.generateHtml', () => {
   const schedule: ScheduleData = {
@@ -78,27 +115,20 @@ describe('PdfService.generateHtml', () => {
     });
 
     it('returns failure when pdf generation throws', async () => {
-      const service = new PdfService();
-      const loadFile = vi.fn(async () => {});
-      const printToPDF = vi.fn(async () => {
-        throw new Error('pdf failure');
-      });
-      const destroy = vi.fn();
-      const isDestroyed = vi.fn(() => false);
-
-      vi.mocked(BrowserWindow).mockImplementation(function () {
-        return {
-          loadFile,
-          webContents: { printToPDF },
-          destroy,
-          isDestroyed,
-        } as unknown as BrowserWindow;
+      const scratchRoot = makeScratchDir();
+      const service = new PdfService(scratchRoot);
+      const { loadFile, destroy } = mockPdfWindow({
+        printToPDF: vi.fn(async () => {
+          throw new Error('pdf failure');
+        }),
       });
 
-      const result = await service.generatePdf(schedule, '/tmp/budget-report.pdf');
+      const result = await service.generatePdf(schedule, path.join(scratchRoot, 'budget-report.pdf'));
       expect(result).toEqual({ success: false, error: 'pdf failure' });
       expect(loadFile).toHaveBeenCalled();
       expect(destroy).toHaveBeenCalled();
+      expect(fs.readdirSync(scratchRoot).every((name) => !name.endsWith('.html'))).toBe(true);
+      fs.rmSync(scratchRoot, { recursive: true, force: true });
     });
   });
 
@@ -245,61 +275,73 @@ describe('PdfService.generateHtml', () => {
     });
 
     it('ignores temp-file cleanup failures after pdf generation', async () => {
-      const service = new PdfService();
-      const loadFile = vi.fn(async () => {});
-      const printToPDF = vi.fn(async () => Buffer.from('pdf-bytes'));
-      const destroy = vi.fn();
-      const isDestroyed = vi.fn(() => false);
+      const scratchRoot = makeScratchDir();
+      const service = new PdfService(scratchRoot);
+      mockPdfWindow();
 
-      vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {
         throw new Error('cleanup failed');
       });
 
-      vi.mocked(BrowserWindow).mockImplementation(function () {
-        return {
-          loadFile,
-          webContents: { printToPDF },
-          destroy,
-          isDestroyed,
-        } as unknown as BrowserWindow;
-      });
-
-      const result = await service.generatePdf(schedule, '/tmp/budget-report.pdf');
+      const result = await service.generatePdf(schedule, path.join(scratchRoot, 'budget-report.pdf'));
       expect(result).toEqual({ success: true });
       vi.restoreAllMocks();
+      fs.rmSync(scratchRoot, { recursive: true, force: true });
     });
 
     it('writes PDF output when BrowserWindow succeeds', async () => {
-      const service = new PdfService();
-      const loadFile = vi.fn(async () => {});
-      const printToPDF = vi.fn(async () => Buffer.from('pdf-bytes'));
-      const destroy = vi.fn();
-      const isDestroyed = vi.fn(() => false);
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
-      const unlinkSpy = vi.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
-      const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const scratchRoot = makeScratchDir();
+      const service = new PdfService(scratchRoot);
+      const { loadFile, printToPDF, destroy } = mockPdfWindow();
 
-      vi.mocked(BrowserWindow).mockImplementation(function () {
-        return {
-          loadFile,
-          webContents: { printToPDF },
-          destroy,
-          isDestroyed,
-        } as unknown as BrowserWindow;
-      });
-
-      const result = await service.generatePdf(schedule, '/tmp/budget-report');
+      const result = await service.generatePdf(schedule, path.join(scratchRoot, 'budget-report'));
       expect(result).toEqual({ success: true });
       expect(loadFile).toHaveBeenCalled();
       expect(printToPDF).toHaveBeenCalled();
-      expect(writeSpy).toHaveBeenCalled();
-      expect(unlinkSpy).toHaveBeenCalled();
-      expect(existsSpy).toHaveBeenCalled();
       expect(destroy).toHaveBeenCalled();
+      expect(fs.existsSync(path.join(scratchRoot, 'budget-report.pdf'))).toBe(true);
+      fs.rmSync(scratchRoot, { recursive: true, force: true });
+    });
 
-      vi.restoreAllMocks();
+    it('writes scratch HTML under the injected userData dir, not os.tmpdir, and unlinks after success', async () => {
+      const scratchRoot = makeScratchDir();
+      expect(scratchRoot.startsWith(os.tmpdir())).toBe(false);
+      const service = new PdfService(scratchRoot);
+      let capturedHtmlPath = '';
+      mockPdfWindow({
+        loadFile: vi.fn(async (filePath: string) => {
+          capturedHtmlPath = filePath;
+          expect(filePath.startsWith(scratchRoot)).toBe(true);
+          expect(filePath.startsWith(os.tmpdir())).toBe(false);
+          expect(fs.existsSync(filePath)).toBe(true);
+        }),
+      });
+
+      const result = await service.generatePdf(schedule, path.join(scratchRoot, 'out.pdf'));
+      expect(result).toEqual({ success: true });
+      expect(capturedHtmlPath).toBeTruthy();
+      expect(fs.existsSync(capturedHtmlPath)).toBe(false);
+      fs.rmSync(scratchRoot, { recursive: true, force: true });
+    });
+
+    it('unlinks scratch HTML after generatePdf throws', async () => {
+      const scratchRoot = makeScratchDir();
+      const service = new PdfService(scratchRoot);
+      let capturedHtmlPath = '';
+      mockPdfWindow({
+        loadFile: vi.fn(async (filePath: string) => {
+          capturedHtmlPath = filePath;
+        }),
+        printToPDF: vi.fn(async () => {
+          throw new Error('printer down');
+        }),
+      });
+
+      const result = await service.generatePdf(schedule, path.join(scratchRoot, 'out.pdf'));
+      expect(result.success).toBe(false);
+      expect(capturedHtmlPath).toBeTruthy();
+      expect(fs.existsSync(capturedHtmlPath)).toBe(false);
+      fs.rmSync(scratchRoot, { recursive: true, force: true });
     });
   });
 });

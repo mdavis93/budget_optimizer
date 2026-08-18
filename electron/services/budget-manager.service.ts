@@ -1,22 +1,88 @@
-import { DatabaseService, Budget, BudgetInput, BudgetSnapshot, Income, Bill, SkippedBill, BillAssignment, IncomeOverride, SavingsGoal, SavingsGoalInput } from './database.service';
-import { QuickBudgetService } from './quick-budget.service';
+import fs from 'fs';
+import path from 'path';
+import { app } from 'electron';
+import {
+  DatabaseService,
+  Budget,
+  BudgetInput,
+  BudgetSnapshot,
+  Income,
+  Bill,
+  SkippedBill,
+  BillAssignment,
+  IncomeOverride,
+  SavingsGoal,
+  SavingsGoalInput,
+  Debt,
+  DebtInput,
+  Leave,
+  LeaveInput,
+} from './database.service';
 import { budgetLogger as logger } from './logger.service';
+
+export interface BudgetManagerOptions {
+  createEphemeralDatabase?: (dbPath: string) => DatabaseService;
+  resolveScratchDir?: () => string;
+}
+
+function unlinkEphemeralFiles(dbPath: string): void {
+  for (const suffix of ['', '-wal', '-shm']) {
+    try {
+      fs.unlinkSync(dbPath + suffix);
+    } catch {
+      // Scratch files may already be gone after close().
+    }
+  }
+  const scratchDir = path.dirname(dbPath);
+  try {
+    fs.rmdirSync(scratchDir);
+  } catch {
+    // Directory may still contain unrelated files.
+  }
+}
 
 export class BudgetManager {
   private currentBudgetId: string | null = null;
   private currentBudget: Budget | null = null;
-  private isQuickBudgetMode: boolean = false;
-  private quickBudgetService: QuickBudgetService;
-  private database: DatabaseService;
+  private isQuickBudgetMode = false;
+  private readonly vault: DatabaseService;
+  private ephemeral: DatabaseService | null = null;
+  private ephemeralDbPath: string | null = null;
+  private readonly createEphemeralDatabase: (dbPath: string) => DatabaseService;
+  private readonly resolveScratchDir: () => string;
 
-  constructor(database: DatabaseService) {
-    this.database = database;
-    this.quickBudgetService = new QuickBudgetService();
+  constructor(database: DatabaseService, options: BudgetManagerOptions = {}) {
+    this.vault = database;
+    this.createEphemeralDatabase =
+      options.createEphemeralDatabase ??
+      ((dbPath: string) => {
+        const db = new DatabaseService(this.vault.getCryptoService(), dbPath);
+        db.initialize();
+        try {
+          fs.chmodSync(dbPath, 0o600);
+        } catch (error) {
+          logger.warn('Failed to set ephemeral database permissions:', error);
+        }
+        return db;
+      });
+    this.resolveScratchDir =
+      options.resolveScratchDir ??
+      (() => path.join(app.getPath('userData'), 'quick-budget-scratch'));
   }
 
-  // Budget State Management
+  private activeDb(): DatabaseService {
+    return this.ephemeral ?? this.vault;
+  }
+
+  private requireBudgetId(): string {
+    if (!this.currentBudgetId) {
+      throw new Error('No budget selected');
+    }
+    return this.currentBudgetId;
+  }
+
   getCurrentBudgetId(): string | null {
-    return this.isQuickBudgetMode ? null : this.currentBudgetId;
+    return this.currentBudgetId;
   }
 
   isQuickBudget(): boolean {
@@ -31,7 +97,8 @@ export class BudgetManager {
   }
 
   setCurrentBudget(id: string): Budget | null {
-    const budget = this.database.getBudgetById(id);
+    this.endQuickBudget();
+    const budget = this.vault.getBudgetById(id);
     if (!budget) {
       logger.warn('Attempted to switch to non-existent budget', { id });
       return null;
@@ -39,57 +106,76 @@ export class BudgetManager {
 
     this.currentBudgetId = id;
     this.currentBudget = budget;
-    this.isQuickBudgetMode = false;
-    this.quickBudgetService.clear();
-    
     logger.info('Switched to budget', { id, name: budget.name });
     return budget;
   }
 
   startQuickBudget(): void {
+    this.endQuickBudget();
+    const scratchDir = this.resolveScratchDir();
+    fs.mkdirSync(scratchDir, { recursive: true, mode: 0o700 });
+    const dbPath = path.join(scratchDir, 'budget.db');
+    const ephemeral = this.createEphemeralDatabase(dbPath);
+    const budget = ephemeral.createBudget({ name: 'Quick Budget' });
+    this.ephemeral = ephemeral;
+    this.ephemeralDbPath = dbPath;
+    this.currentBudgetId = budget.id;
+    this.currentBudget = budget;
     this.isQuickBudgetMode = true;
-    this.currentBudget = null;
-    this.quickBudgetService.clear();
-    logger.info('Started Quick Budget mode');
+    logger.info('Started Quick Budget mode', { budgetId: budget.id });
   }
 
   endQuickBudget(): void {
+    if (!this.isQuickBudgetMode && !this.ephemeral) {
+      return;
+    }
+    const dbPath = this.ephemeralDbPath;
+    if (this.ephemeral) {
+      this.ephemeral.close();
+      this.ephemeral = null;
+    }
+    this.ephemeralDbPath = null;
     this.isQuickBudgetMode = false;
+    this.currentBudgetId = null;
     this.currentBudget = null;
-    this.quickBudgetService.clear();
+    if (dbPath) {
+      unlinkEphemeralFiles(dbPath);
+    }
     logger.info('Ended Quick Budget mode');
   }
 
-  /**
-   * Returns the current budget record, reusing the cached copy when it matches
-   * the active budget id. Collapses the repeated getBudgetById reads the
-   * settings getters would otherwise each perform per schedule build.
-   */
   private getCurrentBudgetRecord(): Budget | null {
     if (!this.currentBudgetId) {
       return null;
     }
     if (!this.currentBudget || this.currentBudget.id !== this.currentBudgetId) {
-      this.currentBudget = this.database.getBudgetById(this.currentBudgetId);
+      this.currentBudget = this.activeDb().getBudgetById(this.currentBudgetId);
     }
     return this.currentBudget;
   }
 
-  // Budget CRUD (always goes to database)
   getAllBudgets(): Budget[] {
-    return this.database.getAllBudgets();
+    return this.vault.getAllBudgets();
   }
 
   getBudgetById(id: string): Budget | null {
-    return this.database.getBudgetById(id);
+    if (this.ephemeral && id === this.currentBudgetId) {
+      return this.ephemeral.getBudgetById(id);
+    }
+    return this.vault.getBudgetById(id);
   }
 
   createBudget(input: BudgetInput): Budget {
-    return this.database.createBudget(input);
+    return this.vault.createBudget(input);
   }
 
   updateBudget(id: string, input: Partial<BudgetInput>): Budget | null {
-    const updated = this.database.updateBudget(id, input);
+    if (this.ephemeral && id === this.currentBudgetId) {
+      const updated = this.ephemeral.updateBudget(id, input);
+      this.currentBudget = updated;
+      return updated;
+    }
+    const updated = this.vault.updateBudget(id, input);
     if (id === this.currentBudgetId) {
       this.currentBudget = updated;
     }
@@ -97,90 +183,62 @@ export class BudgetManager {
   }
 
   deleteBudget(id: string): boolean {
-    // Cannot delete current budget
     if (id === this.currentBudgetId) {
       logger.warn('Cannot delete current budget', { id });
       return false;
     }
-    return this.database.deleteBudget(id);
+    return this.vault.deleteBudget(id);
   }
 
   getBudgetStats(budgetId: string): { incomeCount: number; billCount: number } {
-    return this.database.getBudgetStats(budgetId);
+    return this.vault.getBudgetStats(budgetId);
   }
 
   getAllBudgetsWithStats(): Array<Budget & { incomeCount: number; billCount: number }> {
-    return this.database.getAllBudgetsWithStats();
+    return this.vault.getAllBudgetsWithStats();
   }
 
-  // Starting Balance (routes to quick budget or current budget)
   getStartingBalance(): number {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getStartingBalance();
-    }
     return this.getCurrentBudgetRecord()?.startingBalance ?? 0;
   }
 
   setStartingBalance(balance: number): void {
-    if (this.isQuickBudgetMode) {
-      this.quickBudgetService.setStartingBalance(balance);
-    } else if (this.currentBudgetId) {
-      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { startingBalance: balance });
+    if (this.currentBudgetId) {
+      this.currentBudget = this.activeDb().updateBudget(this.currentBudgetId, { startingBalance: balance });
     }
   }
 
-  // Target Cash on Hand (routes to quick budget or current budget)
   getTargetCashOnHand(): number {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getTargetCashOnHand();
-    }
     return this.getCurrentBudgetRecord()?.targetCashOnHand ?? 250;
   }
 
   setTargetCashOnHand(amount: number): void {
-    if (this.isQuickBudgetMode) {
-      this.quickBudgetService.setTargetCashOnHand(amount);
-    } else if (this.currentBudgetId) {
-      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { targetCashOnHand: amount });
+    if (this.currentBudgetId) {
+      this.currentBudget = this.activeDb().updateBudget(this.currentBudgetId, { targetCashOnHand: amount });
     }
   }
 
-  // Minimum Cash on Hand (routes to quick budget or current budget)
   getMinCashOnHand(): number {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getMinCashOnHand();
-    }
     return this.getCurrentBudgetRecord()?.minCashOnHand ?? 100;
   }
 
   setMinCashOnHand(amount: number): void {
-    if (this.isQuickBudgetMode) {
-      this.quickBudgetService.setMinCashOnHand(amount);
-    } else if (this.currentBudgetId) {
-      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { minCashOnHand: amount });
+    if (this.currentBudgetId) {
+      this.currentBudget = this.activeDb().updateBudget(this.currentBudgetId, { minCashOnHand: amount });
     }
   }
 
-  // Minimum Savings Per Paycheck (routes to quick budget or current budget)
   getMinSavingsPerPaycheck(): number {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getMinSavingsPerPaycheck();
-    }
     return this.getCurrentBudgetRecord()?.minSavingsPerPaycheck ?? 0;
   }
 
   setMinSavingsPerPaycheck(amount: number): void {
-    if (this.isQuickBudgetMode) {
-      this.quickBudgetService.setMinSavingsPerPaycheck(amount);
-    } else if (this.currentBudgetId) {
-      this.currentBudget = this.database.updateBudget(this.currentBudgetId, { minSavingsPerPaycheck: amount });
+    if (this.currentBudgetId) {
+      this.currentBudget = this.activeDb().updateBudget(this.currentBudgetId, { minSavingsPerPaycheck: amount });
     }
   }
 
   getScheduleStartDate(): string {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getScheduleStartDate();
-    }
     const budget = this.getCurrentBudgetRecord();
     if (!budget) {
       const now = new Date();
@@ -189,246 +247,179 @@ export class BudgetManager {
     return budget.scheduleStartDate ?? `${budget.createdAt.slice(0, 7)}-01`;
   }
 
-  // Income Operations (routed based on mode)
   getAllIncomes(): Income[] {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getAllIncomes();
-    }
     if (!this.currentBudgetId) return [];
-    return this.database.getAllIncomes(this.currentBudgetId);
+    return this.activeDb().getAllIncomes(this.currentBudgetId);
   }
 
   getIncomeById(id: string): Income | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getIncomeById(id);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.getIncomeById(id, this.currentBudgetId);
+    return this.activeDb().getIncomeById(id, this.currentBudgetId);
   }
 
   createIncome(income: Omit<Income, 'id' | 'createdAt' | 'updatedAt'>): Income {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.createIncome(income);
-    }
-    if (!this.currentBudgetId) {
-      throw new Error('No budget selected');
-    }
-    return this.database.createIncome(this.currentBudgetId, income);
+    return this.activeDb().createIncome(this.requireBudgetId(), income);
   }
 
   updateIncome(id: string, income: Omit<Income, 'id' | 'createdAt' | 'updatedAt'>): Income | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.updateIncome(id, income);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.updateIncome(id, this.currentBudgetId, income);
+    return this.activeDb().updateIncome(id, this.currentBudgetId, income);
   }
 
   deleteIncome(id: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.deleteIncome(id);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.deleteIncome(id, this.currentBudgetId);
+    return this.activeDb().deleteIncome(id, this.currentBudgetId);
   }
 
-  // Bill Operations (routed based on mode)
   getAllBills(): Bill[] {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getAllBills();
-    }
     if (!this.currentBudgetId) return [];
-    return this.database.getAllBills(this.currentBudgetId);
+    return this.activeDb().getAllBills(this.currentBudgetId);
   }
 
   getBillById(id: string): Bill | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getBillById(id);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.getBillById(id, this.currentBudgetId);
+    return this.activeDb().getBillById(id, this.currentBudgetId);
   }
 
   createBill(bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>): Bill {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.createBill(bill);
-    }
-    if (!this.currentBudgetId) {
-      throw new Error('No budget selected');
-    }
-    return this.database.createBillEntry(this.currentBudgetId, bill);
+    return this.activeDb().createBillEntry(this.requireBudgetId(), bill);
   }
 
   updateBill(id: string, bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>): Bill | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.updateBill(id, bill);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.updateBillEntry(id, this.currentBudgetId, bill);
+    return this.activeDb().updateBillEntry(id, this.currentBudgetId, bill);
   }
 
   deleteBill(id: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.deleteBill(id);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.deleteBillEntry(id, this.currentBudgetId);
+    return this.activeDb().deleteBillEntry(id, this.currentBudgetId);
   }
 
-  // Skipped Bills Operations (routed based on mode)
   getSkippedBills(): SkippedBill[] {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getSkippedBills();
-    }
     if (!this.currentBudgetId) return [];
-    return this.database.getSkippedBills(this.currentBudgetId);
+    return this.activeDb().getSkippedBills(this.currentBudgetId);
   }
 
   skipBill(billId: string, skipDate: string): SkippedBill {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.skipBill(billId, skipDate);
-    }
-    if (!this.currentBudgetId) {
-      throw new Error('No budget selected');
-    }
-    return this.database.skipBill(this.currentBudgetId, billId, skipDate);
+    return this.activeDb().skipBill(this.requireBudgetId(), billId, skipDate);
   }
 
   unskipBill(billId: string, skipDate: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.unskipBill(billId, skipDate);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.unskipBill(this.currentBudgetId, billId, skipDate);
+    return this.activeDb().unskipBill(this.currentBudgetId, billId, skipDate);
   }
 
   isSkipped(billId: string, skipDate: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.isSkipped(billId, skipDate);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.isSkipped(this.currentBudgetId, billId, skipDate);
+    return this.activeDb().isSkipped(this.currentBudgetId, billId, skipDate);
   }
 
-  // Bill Assignments Operations (routed based on mode)
   getBillAssignments(): BillAssignment[] {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getBillAssignments();
-    }
     if (!this.currentBudgetId) return [];
-    return this.database.getBillAssignments(this.currentBudgetId);
+    return this.activeDb().getBillAssignments(this.currentBudgetId);
   }
 
   assignBillToPaycheck(billId: string, billDueDate: string, paycheckDate: string): BillAssignment {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.assignBillToPaycheck(billId, billDueDate, paycheckDate);
-    }
-    if (!this.currentBudgetId) {
-      throw new Error('No budget selected');
-    }
-    return this.database.assignBillToPaycheck(this.currentBudgetId, billId, billDueDate, paycheckDate);
+    return this.activeDb().assignBillToPaycheck(this.requireBudgetId(), billId, billDueDate, paycheckDate);
   }
 
   removeBillAssignment(billId: string, billDueDate: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.removeBillAssignment(billId, billDueDate);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.removeBillAssignment(this.currentBudgetId, billId, billDueDate);
+    return this.activeDb().removeBillAssignment(this.currentBudgetId, billId, billDueDate);
   }
 
   getBillAssignment(billId: string, billDueDate: string): BillAssignment | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getBillAssignment(billId, billDueDate);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.getBillAssignment(this.currentBudgetId, billId, billDueDate);
+    return this.activeDb().getBillAssignment(this.currentBudgetId, billId, billDueDate);
   }
 
   getIncomeOverrides(): IncomeOverride[] {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getIncomeOverrides();
-    }
     if (!this.currentBudgetId) return [];
-    return this.database.getIncomeOverrides(this.currentBudgetId);
+    return this.activeDb().getIncomeOverrides(this.currentBudgetId);
   }
 
   setIncomeOverride(incomeId: string, paycheckDate: string, amount: number): IncomeOverride {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.setIncomeOverride(incomeId, paycheckDate, amount);
-    }
-    if (!this.currentBudgetId) {
-      throw new Error('No budget selected');
-    }
-    return this.database.setIncomeOverride(this.currentBudgetId, incomeId, paycheckDate, amount);
+    return this.activeDb().setIncomeOverride(this.requireBudgetId(), incomeId, paycheckDate, amount);
   }
 
   removeIncomeOverride(incomeId: string, paycheckDate: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.removeIncomeOverride(incomeId, paycheckDate);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.removeIncomeOverride(this.currentBudgetId, incomeId, paycheckDate);
+    return this.activeDb().removeIncomeOverride(this.currentBudgetId, incomeId, paycheckDate);
   }
 
-  // Savings Goals Operations (routed based on mode)
   getAllGoals(): SavingsGoal[] {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getAllGoals();
-    }
     if (!this.currentBudgetId) return [];
-    return this.database.getAllGoals(this.currentBudgetId);
+    return this.activeDb().getAllGoals(this.currentBudgetId);
   }
 
   getGoalById(id: string): SavingsGoal | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.getGoalById(id);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.getGoalById(id, this.currentBudgetId);
+    return this.activeDb().getGoalById(id, this.currentBudgetId);
   }
 
   createGoal(input: SavingsGoalInput): SavingsGoal {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.createGoal(input);
-    }
-    if (!this.currentBudgetId) {
-      throw new Error('No budget selected');
-    }
-    return this.database.createGoal(this.currentBudgetId, input);
+    return this.activeDb().createGoal(this.requireBudgetId(), input);
   }
 
   updateGoal(id: string, input: Partial<SavingsGoalInput>): SavingsGoal | null {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.updateGoal(id, input);
-    }
     if (!this.currentBudgetId) return null;
-    return this.database.updateGoal(id, this.currentBudgetId, input);
+    return this.activeDb().updateGoal(id, this.currentBudgetId, input);
   }
 
   deleteGoal(id: string): boolean {
-    if (this.isQuickBudgetMode) {
-      return this.quickBudgetService.deleteGoal(id);
-    }
     if (!this.currentBudgetId) return false;
-    return this.database.deleteGoal(id, this.currentBudgetId);
+    return this.activeDb().deleteGoal(id, this.currentBudgetId);
+  }
+
+  getDebts(): Debt[] {
+    if (!this.currentBudgetId) return [];
+    return this.activeDb().getDebts(this.currentBudgetId);
+  }
+
+  getDebtById(id: string): Debt | null {
+    if (!this.currentBudgetId) return null;
+    return this.activeDb().getDebtById(id, this.currentBudgetId);
+  }
+
+  getDebtByBillId(billId: string): Debt | null {
+    if (!this.currentBudgetId) return null;
+    return this.activeDb().getDebtByBillId(billId, this.currentBudgetId);
+  }
+
+  createDebt(input: DebtInput): Debt {
+    return this.activeDb().createDebt(this.requireBudgetId(), input);
+  }
+
+  updateDebt(id: string, input: Partial<DebtInput>): Debt | null {
+    if (!this.currentBudgetId) return null;
+    return this.activeDb().updateDebt(id, this.currentBudgetId, input);
+  }
+
+  deleteDebt(id: string): boolean {
+    if (!this.currentBudgetId) return false;
+    return this.activeDb().deleteDebt(id, this.currentBudgetId);
+  }
+
+  getLeaves(): Leave[] {
+    if (!this.currentBudgetId) return [];
+    return this.activeDb().getLeaves(this.currentBudgetId);
+  }
+
+  createLeave(input: LeaveInput): Leave {
+    return this.activeDb().createLeave(this.requireBudgetId(), input);
+  }
+
+  updateLeave(id: string, input: LeaveInput): Leave | null {
+    if (!this.currentBudgetId) return null;
+    return this.activeDb().updateLeave(id, this.currentBudgetId, input);
+  }
+
+  deleteLeave(id: string): boolean {
+    if (!this.currentBudgetId) return false;
+    return this.activeDb().deleteLeave(id, this.currentBudgetId);
   }
 
   getBudgetSnapshot(): BudgetSnapshot {
-    if (this.isQuickBudgetMode) {
-      return {
-        incomes: this.quickBudgetService.getAllIncomes(),
-        bills: this.quickBudgetService.getAllBills(),
-        goals: this.quickBudgetService.getAllGoals(),
-        skippedBills: this.quickBudgetService.getSkippedBills(),
-        billAssignments: this.quickBudgetService.getBillAssignments(),
-        incomeOverrides: this.quickBudgetService.getIncomeOverrides(),
-        debts: [],
-        leaves: [],
-        budget: null,
-      };
-    }
-
     if (!this.currentBudgetId) {
       return {
         incomes: [],
@@ -442,7 +433,6 @@ export class BudgetManager {
         budget: null,
       };
     }
-
-    return this.database.getBudgetSnapshot(this.currentBudgetId);
+    return this.activeDb().getBudgetSnapshot(this.currentBudgetId);
   }
 }

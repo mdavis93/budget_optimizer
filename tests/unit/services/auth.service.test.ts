@@ -31,11 +31,11 @@ vi.mock('../../../electron/services/logger.service', () => ({
 
 import { AuthService } from '../../../electron/services/auth.service';
 
-function writeLegacyAuthConfig(crypto: CryptoService, password: string, recoveryKey: string) {
+async function writeLegacyAuthConfig(crypto: CryptoService, password: string, recoveryKey: string) {
   const salt = crypto.generateSalt();
-  const encryptionKey = crypto.deriveKey(password, salt);
+  const encryptionKey = await crypto.deriveKey(password, salt);
   const recoverySalt = crypto.generateSalt();
-  const recoveryDerivedKey = crypto.deriveKeyFromRecovery(recoveryKey, recoverySalt);
+  const recoveryDerivedKey = await crypto.deriveKeyFromRecovery(recoveryKey, recoverySalt);
   const encryptedKeyBackup = crypto.encryptWithKey(
     encryptionKey.toString('hex'),
     recoveryDerivedKey
@@ -43,9 +43,9 @@ function writeLegacyAuthConfig(crypto: CryptoService, password: string, recovery
 
   const config = {
     salt,
-    passwordHash: crypto.hashPassword(password, salt),
+    passwordHash: await crypto.hashPassword(password, salt),
     biometricEnabled: false,
-    recoveryKeyHash: crypto.hashPassword(recoveryKey.toLowerCase().trim(), salt),
+    recoveryKeyHash: await crypto.hashPassword(recoveryKey.toLowerCase().trim(), salt),
     encryptedKeyBackup,
     recoverySalt,
   };
@@ -83,22 +83,22 @@ describe('AuthService recovery salt', () => {
     expect(saved.recoverySalt).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('requires recoverySalt when deriving recovery keys', () => {
+  it('requires recoverySalt when deriving recovery keys', async () => {
     const crypto = new CryptoService();
     const recoveryKey = crypto.generateRecoveryKey();
     const recoverySalt = crypto.generateSalt();
 
-    expect(() => crypto.deriveKeyFromRecovery(recoveryKey, '')).toThrow(
+    await expect(crypto.deriveKeyFromRecovery(recoveryKey, '')).rejects.toThrow(
       'Recovery salt is required'
     );
-    expect(crypto.deriveKeyFromRecovery(recoveryKey, recoverySalt)).toBeInstanceOf(Buffer);
+    await expect(crypto.deriveKeyFromRecovery(recoveryKey, recoverySalt)).resolves.toBeInstanceOf(Buffer);
   });
 
   it('rejects password reset for configs missing recoverySalt', async () => {
     const crypto = new CryptoService();
     const password = 'testpassword123';
     const recoveryKey = crypto.generateRecoveryKey();
-    writeLegacyAuthConfig(crypto, password, recoveryKey);
+    await writeLegacyAuthConfig(crypto, password, recoveryKey);
 
     const configPath = path.join(tempRoot, 'auth.config');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
@@ -116,7 +116,7 @@ describe('AuthService recovery salt', () => {
     const crypto = new CryptoService();
     const password = 'testpassword123';
     const recoveryKey = crypto.generateRecoveryKey();
-    writeLegacyAuthConfig(crypto, password, recoveryKey);
+    await writeLegacyAuthConfig(crypto, password, recoveryKey);
 
     const auth = new AuthService();
     const result = await auth.resetPasswordWithRecoveryKey(recoveryKey, 'newpassword456');
@@ -186,7 +186,42 @@ describe('AuthService lock and password paths', () => {
     it('rejects master password creation when too short', async () => {
       const auth = new AuthService();
       const result = await auth.createMasterPassword('short');
-      expect(result).toEqual({ success: false, error: 'Password must be at least 8 characters' });
+      expect(result).toEqual({ success: false, error: 'Password must be at least 12 characters' });
+    });
+
+    it('rejects 11-character passwords and accepts 12 on create', async () => {
+      const tooShort = new AuthService();
+      expect(await tooShort.createMasterPassword('12345678901')).toEqual({
+        success: false,
+        error: 'Password must be at least 12 characters',
+      });
+
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+      const longEnough = new AuthService();
+      const created = await longEnough.createMasterPassword('123456789012');
+      expect(created.success).toBe(true);
+    });
+
+    it('unlocks an existing 8-character vault', async () => {
+      const crypto = new CryptoService();
+      const recoveryKey = crypto.generateRecoveryKey();
+      await writeLegacyAuthConfig(crypto, '12345678', recoveryKey);
+
+      const auth = new AuthService();
+      const result = await auth.unlock('12345678');
+      expect(result.success).toBe(true);
+      expect(auth.getIsUnlocked()).toBe(true);
+    });
+
+    it('verifies recovery keys hashed with the password salt', async () => {
+      const crypto = new CryptoService();
+      const password = 'testpassword123';
+      const recoveryKey = crypto.generateRecoveryKey();
+      await writeLegacyAuthConfig(crypto, password, recoveryKey);
+
+      const auth = new AuthService();
+      const result = await auth.verifyRecoveryKey(recoveryKey);
+      expect(result.success).toBe(true);
     });
 
     it('rejects unlock with wrong password and keeps app locked', async () => {
@@ -293,7 +328,7 @@ describe('AuthService lock and password paths', () => {
       await auth.createMasterPassword('testpassword123');
 
       const result = await auth.changePassword('testpassword123', 'short');
-      expect(result).toEqual({ success: false, error: 'New password must be at least 8 characters' });
+      expect(result).toEqual({ success: false, error: 'New password must be at least 12 characters' });
     });
 
     it('rejects changePassword when app is locked (no encryption key)', async () => {
@@ -320,7 +355,7 @@ describe('AuthService lock and password paths', () => {
       expect(recoveryKey).toBeTruthy();
 
       const result = await auth.resetPasswordWithRecoveryKey(recoveryKey!, 'short');
-      expect(result).toEqual({ success: false, error: 'New password must be at least 8 characters' });
+      expect(result).toEqual({ success: false, error: 'New password must be at least 12 characters' });
     });
 
     it('clears pending recovery key and setup on rollback', async () => {

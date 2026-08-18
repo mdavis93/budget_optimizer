@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
+import { setDefaultCurrency } from '../utils/formatCurrency';
 
 interface AuthContextType {
   isUnlocked: boolean;
@@ -10,6 +11,7 @@ interface AuthContextType {
   checkAuthStatus: () => Promise<void>;
   createPassword: (password: string) => Promise<boolean>;
   unlock: (password: string) => Promise<boolean>;
+  unlockWithSavedCredentials: () => Promise<boolean>;
   unlockWithBiometric: () => Promise<boolean>;
   lock: () => Promise<void>;
   enableBiometric: () => Promise<boolean>;
@@ -33,6 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!isUnlocked) {
+      return;
+    }
+    void window.electronAPI.settings?.get?.().then((result) => {
+      if (result.success && result.data?.currency) {
+        setDefaultCurrency(result.data.currency);
+      }
+    }).catch(() => undefined);
+  }, [isUnlocked]);
 
   const checkAuthStatus = useCallback(async () => {
     // Only the first status probe may flash the full-app loading screen.
@@ -103,6 +116,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const unlockWithSavedCredentials = useCallback(async (): Promise<boolean> => {
+    setError(null);
+    try {
+      const result = await window.electronAPI.auth.unlockWithSavedCredentials();
+      if (result.success) {
+        setIsUnlocked(true);
+        return true;
+      }
+      setError(result.error || 'Could not unlock with saved password');
+      return false;
+    } catch {
+      setError('An unexpected error occurred');
+      return false;
+    }
+  }, []);
+
   const unlockWithBiometric = useCallback(async (): Promise<boolean> => {
     setError(null);
     try {
@@ -154,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkAuthStatus,
         createPassword,
         unlock,
+        unlockWithSavedCredentials,
         unlockWithBiometric,
         lock,
         enableBiometric,

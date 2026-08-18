@@ -42,7 +42,6 @@ describe('SetupPage', () => {
       success: true,
       recoveryKey: 'word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12',
     });
-    mockAPI.credentials.offerSave.mockResolvedValue({ success: true, saved: false });
   });
 
   function renderSetupPage() {
@@ -67,7 +66,7 @@ describe('SetupPage', () => {
     expect(confirmInput.type).toBe('text');
   });
 
-  it('advances to recovery key and triggers save dialog after successful account creation', async () => {
+  it('advances to recovery key after successful account creation', async () => {
     renderSetupPage();
 
     fireEvent.change(screen.getByLabelText('Master Password'), {
@@ -87,22 +86,11 @@ describe('SetupPage', () => {
       expect(screen.getByText('Save Your Recovery Key')).toBeInTheDocument();
     });
 
-    expect(mockAPI.credentials.offerSave).toHaveBeenCalledWith('MySecurePass123!');
     expect(screen.queryByText('Creating...')).not.toBeInTheDocument();
     expect(screen.queryByText('Create Master Password')).not.toBeInTheDocument();
   });
 
-  it('does not block the UI on the save dialog promise', async () => {
-    let offerSaveResolved = false;
-    mockAPI.credentials.offerSave.mockImplementation(() => {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          offerSaveResolved = true;
-          resolve({ success: true, saved: false });
-        }, 100);
-      });
-    });
-
+  it('does not wait on a renderer save-password call after creating an account', async () => {
     renderSetupPage();
 
     fireEvent.change(screen.getByLabelText('Master Password'), {
@@ -117,7 +105,7 @@ describe('SetupPage', () => {
       expect(screen.getByText('Save Your Recovery Key')).toBeInTheDocument();
     });
 
-    expect(offerSaveResolved).toBe(false);
+    expect(mockAPI.credentials).not.toHaveProperty('offerSave');
     expect(screen.queryByText('Creating...')).not.toBeInTheDocument();
   });
 
@@ -134,7 +122,6 @@ describe('SetupPage', () => {
 
     expect(await screen.findByText('Passwords do not match')).toBeInTheDocument();
     expect(mockAPI.auth.createMasterPassword).not.toHaveBeenCalled();
-    expect(mockAPI.credentials.offerSave).not.toHaveBeenCalled();
   });
 
   it('shows minimum length validation before IPC call', async () => {
@@ -147,7 +134,7 @@ describe('SetupPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /create password/i }));
 
-    expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+    expect(await screen.findByText('Password must be at least 12 characters')).toBeInTheDocument();
     expect(mockAPI.auth.createMasterPassword).not.toHaveBeenCalled();
   });
 

@@ -33,6 +33,52 @@ describe('reportError', () => {
       );
     });
 
+    it('reports Error instances with missing stack as null', async () => {
+      mockAPI.diagnostics.report.mockResolvedValue({
+        success: true,
+        data: { id: 'diag-nostack' },
+      });
+      const err = new Error('no-stack');
+      err.stack = undefined;
+      await expect(reportError('renderer:test', err)).resolves.toBe('diag-nostack');
+      expect(mockAPI.diagnostics.report).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'no-stack', stack: null })
+      );
+    });
+
+    it('merges extras.diagnostics objects and ignores non-objects', async () => {
+      mockAPI.diagnostics.report.mockResolvedValue({
+        success: true,
+        data: { id: 'diag-extras' },
+      });
+      await expect(
+        reportError('renderer:test', 'plain', {
+          diagnostics: { extraKey: 'yes' },
+          errorCode: 'CUSTOM',
+        })
+      ).resolves.toBe('diag-extras');
+      expect(mockAPI.diagnostics.report).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorCode: 'CUSTOM',
+          diagnostics: expect.objectContaining({ extraKey: 'yes' }),
+        })
+      );
+
+      mockAPI.diagnostics.report.mockClear();
+      mockAPI.diagnostics.report.mockResolvedValue({
+        success: true,
+        data: { id: 'diag-array' },
+      });
+      await expect(
+        reportError('renderer:test', 'plain', { diagnostics: ['not-an-object'] as never })
+      ).resolves.toBe('diag-array');
+      expect(mockAPI.diagnostics.report).toHaveBeenCalledWith(
+        expect.objectContaining({
+          diagnostics: expect.not.objectContaining({ 0: 'not-an-object' }),
+        })
+      );
+    });
+
     it('reports string errors', async () => {
       mockAPI.diagnostics.report.mockResolvedValue({
         success: true,

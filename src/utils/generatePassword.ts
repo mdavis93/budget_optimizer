@@ -3,23 +3,32 @@ const LOWER = 'abcdefghijklmnopqrstuvwxyz';
 const DIGITS = '0123456789';
 const SYMBOLS = '!@#$%^&*-_=+';
 const ALL_CHARS = UPPER + LOWER + DIGITS + SYMBOLS;
+const UINT32_RANGE = 0x100000000;
+
+function unbiasedIndex(maxExclusive: number): number {
+  const cutoff = Math.floor(UINT32_RANGE / maxExclusive) * maxExclusive;
+  let x = crypto.getRandomValues(new Uint32Array(1))[0];
+  while (x >= cutoff) {
+    x = crypto.getRandomValues(new Uint32Array(1))[0];
+  }
+  return x % maxExclusive;
+}
 
 function pickRandomChar(pool: string): string {
-  const index = crypto.getRandomValues(new Uint32Array(1))[0] % pool.length;
-  return pool[index];
+  return pool[unbiasedIndex(pool.length)];
 }
 
 function shuffle(chars: string[]): string[] {
   const result = [...chars];
   for (let i = result.length - 1; i > 0; i--) {
-    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    const j = unbiasedIndex(i + 1);
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
 }
 
 export function generateSecurePassword(length = 20): string {
-  const minLength = 8;
+  const minLength = 12;
   const targetLength = Math.max(length, minLength);
 
   const required = [

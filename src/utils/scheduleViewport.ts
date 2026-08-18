@@ -8,9 +8,8 @@ import {
   rebuildBreakGlassAdvisorForViewport,
   rebuildReconciliationForViewport,
 } from '@shared/scheduleViewportSlice';
+import { SCHEDULE_CALCULATION_MONTHS } from '@shared/constants';
 import { Bill, PaycheckEntry, ScheduleData } from '../types';
-
-export const SCHEDULE_CALCULATION_MONTHS = 12;
 
 function filterPaychecksByViewport(
   fullPaychecks: PaycheckEntry[],

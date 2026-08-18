@@ -127,6 +127,8 @@ describe('BudgetContext', () => {
       await waitFor(() => {
         expect(screen.getByTestId('is-quick')).toHaveTextContent('true');
       });
+      expect(mockAPI.budget.getCurrent).toHaveBeenCalled();
+      expect(screen.getByTestId('current-budget')).not.toHaveTextContent('');
 
       mockAPI.budget.getCurrent.mockResolvedValue({
         success: true,

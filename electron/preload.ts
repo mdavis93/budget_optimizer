@@ -1,15 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { ElectronAPI } from '@shared/electronApi';
 import type { ScheduleComputeProgressMessage } from '@shared/scheduleComputeProtocol';
 
 const api = {
   platform: () => ipcRenderer.invoke('app:get-platform'),
   checkBiometricAvailable: () => ipcRenderer.invoke('app:check-biometric-available'),
-  showSaveDialog: (options: Electron.SaveDialogOptions) => 
-    ipcRenderer.invoke('app:show-save-dialog', options),
-  showOpenDialog: (options: Electron.OpenDialogOptions) => 
-    ipcRenderer.invoke('app:show-open-dialog', options),
+  showSaveDialog: (options) => ipcRenderer.invoke('app:show-save-dialog', options),
   quitApp: () => ipcRenderer.invoke('app:quit'),
-  onCloseRequested: (callback: () => void) => {
+  onCloseRequested: (callback) => {
     const handler = () => callback();
     ipcRenderer.on('app:close-requested', handler);
     return () => ipcRenderer.removeListener('app:close-requested', handler);
@@ -20,38 +18,36 @@ const api = {
     getAllWithStats: () => ipcRenderer.invoke('budget:get-all-with-stats'),
     getCurrent: () => ipcRenderer.invoke('budget:get-current'),
     getSnapshot: () => ipcRenderer.invoke('budget:get-snapshot'),
-    getStats: (budgetId: string) => ipcRenderer.invoke('budget:get-stats', budgetId),
-    create: (input: BudgetInput) => ipcRenderer.invoke('budget:create', input),
-    update: (id: string, input: Partial<BudgetInput>) => 
-      ipcRenderer.invoke('budget:update', id, input),
-    delete: (id: string) => ipcRenderer.invoke('budget:delete', id),
-    switch: (id: string) => ipcRenderer.invoke('budget:switch', id),
+    getStats: (budgetId) => ipcRenderer.invoke('budget:get-stats', budgetId),
+    create: (input) => ipcRenderer.invoke('budget:create', input),
+    update: (id, input) => ipcRenderer.invoke('budget:update', id, input),
+    delete: (id) => ipcRenderer.invoke('budget:delete', id),
+    switch: (id) => ipcRenderer.invoke('budget:switch', id),
     startQuick: () => ipcRenderer.invoke('budget:start-quick'),
     endQuick: () => ipcRenderer.invoke('budget:end-quick'),
   },
 
   auth: {
     isFirstTimeSetup: () => ipcRenderer.invoke('auth:is-first-time-setup'),
-    createMasterPassword: (password: string) => 
+    createMasterPassword: (password) =>
       ipcRenderer.invoke('auth:create-master-password', password),
-    unlock: (password: string) => ipcRenderer.invoke('auth:unlock', password),
+    unlock: (password) => ipcRenderer.invoke('auth:unlock', password),
+    unlockWithSavedCredentials: () => ipcRenderer.invoke('auth:unlock-with-saved-credentials'),
     unlockWithBiometric: () => ipcRenderer.invoke('auth:unlock-with-biometric'),
     lock: () => ipcRenderer.invoke('auth:lock'),
     isUnlocked: () => ipcRenderer.invoke('auth:is-unlocked'),
     enableBiometric: () => ipcRenderer.invoke('auth:enable-biometric'),
     isBiometricEnabled: () => ipcRenderer.invoke('auth:is-biometric-enabled'),
-    changePassword: (oldPassword: string, newPassword: string) =>
+    changePassword: (oldPassword, newPassword) =>
       ipcRenderer.invoke('auth:change-password', oldPassword, newPassword),
     getPendingRecoveryKey: () => ipcRenderer.invoke('auth:get-pending-recovery-key'),
     clearPendingRecoveryKey: () => ipcRenderer.invoke('auth:clear-pending-recovery-key'),
-    verifyRecoveryKey: (recoveryKey: string) => 
+    verifyRecoveryKey: (recoveryKey) =>
       ipcRenderer.invoke('auth:verify-recovery-key', recoveryKey),
-    resetPasswordWithRecovery: (recoveryKey: string, newPassword: string) =>
+    resetPasswordWithRecovery: (recoveryKey, newPassword) =>
       ipcRenderer.invoke('auth:reset-password-with-recovery', recoveryKey, newPassword),
-    setAutoLock: (minutes: number) =>
-      ipcRenderer.invoke('auth:set-auto-lock', minutes),
     activityPing: () => ipcRenderer.invoke('auth:activity-ping'),
-    onLocked: (callback: () => void) => {
+    onLocked: (callback) => {
       const handler = () => callback();
       ipcRenderer.on('auth:locked', handler);
       return () => ipcRenderer.removeListener('auth:locked', handler);
@@ -60,242 +56,100 @@ const api = {
 
   income: {
     getAll: () => ipcRenderer.invoke('income:get-all'),
-    create: (income: IncomeInput) => ipcRenderer.invoke('income:create', income),
-    update: (id: string, income: IncomeInput) => 
-      ipcRenderer.invoke('income:update', id, income),
-    delete: (id: string) => ipcRenderer.invoke('income:delete', id),
+    create: (income) => ipcRenderer.invoke('income:create', income),
+    update: (id, income) => ipcRenderer.invoke('income:update', id, income),
+    delete: (id) => ipcRenderer.invoke('income:delete', id),
   },
 
   bills: {
     getAll: () => ipcRenderer.invoke('bills:get-all'),
-    create: (bill: BillInput) => ipcRenderer.invoke('bills:create', bill),
-    update: (id: string, bill: BillInput) => 
-      ipcRenderer.invoke('bills:update', id, bill),
-    delete: (id: string) => ipcRenderer.invoke('bills:delete', id),
+    create: (bill) => ipcRenderer.invoke('bills:create', bill),
+    update: (id, bill) => ipcRenderer.invoke('bills:update', id, bill),
+    delete: (id) => ipcRenderer.invoke('bills:delete', id),
   },
 
   skippedBills: {
     getAll: () => ipcRenderer.invoke('skipped-bills:get-all'),
-    skip: (billId: string, skipDate: string) => 
-      ipcRenderer.invoke('skipped-bills:skip', billId, skipDate),
-    unskip: (billId: string, skipDate: string) => 
-      ipcRenderer.invoke('skipped-bills:unskip', billId, skipDate),
-    isSkipped: (billId: string, skipDate: string) => 
-      ipcRenderer.invoke('skipped-bills:is-skipped', billId, skipDate),
+    skip: (billId, skipDate) => ipcRenderer.invoke('skipped-bills:skip', billId, skipDate),
+    unskip: (billId, skipDate) => ipcRenderer.invoke('skipped-bills:unskip', billId, skipDate),
+    isSkipped: (billId, skipDate) => ipcRenderer.invoke('skipped-bills:is-skipped', billId, skipDate),
   },
 
   billAssignments: {
     getAll: () => ipcRenderer.invoke('bill-assignments:get-all'),
-    assign: (billId: string, billDueDate: string, paycheckDate: string) => 
+    assign: (billId, billDueDate, paycheckDate) =>
       ipcRenderer.invoke('bill-assignments:assign', billId, billDueDate, paycheckDate),
-    remove: (billId: string, billDueDate: string) => 
+    remove: (billId, billDueDate) =>
       ipcRenderer.invoke('bill-assignments:remove', billId, billDueDate),
   },
 
   incomeOverrides: {
     getAll: () => ipcRenderer.invoke('income-overrides:get-all'),
-    set: (incomeId: string, paycheckDate: string, amount: number) =>
+    set: (incomeId, paycheckDate, amount) =>
       ipcRenderer.invoke('income-overrides:set', incomeId, paycheckDate, amount),
-    remove: (incomeId: string, paycheckDate: string) =>
+    remove: (incomeId, paycheckDate) =>
       ipcRenderer.invoke('income-overrides:remove', incomeId, paycheckDate),
   },
 
   goals: {
     getAll: () => ipcRenderer.invoke('goals:get-all'),
-    create: (input: SavingsGoalInput) => ipcRenderer.invoke('goals:create', input),
-    update: (id: string, input: Partial<SavingsGoalInput>) => 
-      ipcRenderer.invoke('goals:update', id, input),
-    delete: (id: string) => ipcRenderer.invoke('goals:delete', id),
-    getProjections: (overlay?: DraftOverlayInput) => ipcRenderer.invoke('goals:get-projections', overlay),
+    create: (input) => ipcRenderer.invoke('goals:create', input),
+    update: (id, input) => ipcRenderer.invoke('goals:update', id, input),
+    delete: (id) => ipcRenderer.invoke('goals:delete', id),
+    getProjections: (overlay) => ipcRenderer.invoke('goals:get-projections', overlay),
   },
 
   debts: {
     getAll: () => ipcRenderer.invoke('debts:get-all'),
-    getByBill: (billId: string) => ipcRenderer.invoke('debts:get-by-bill', billId),
-    create: (input: DebtInput) => ipcRenderer.invoke('debts:create', input),
-    update: (id: string, input: Partial<DebtInput>) => 
-      ipcRenderer.invoke('debts:update', id, input),
-    delete: (id: string) => ipcRenderer.invoke('debts:delete', id),
-    getAmortization: (debtId: string) => ipcRenderer.invoke('debts:get-amortization', debtId),
-    getAllWithAmortization: (overlay?: DraftOverlayInput) =>
+    getByBill: (billId) => ipcRenderer.invoke('debts:get-by-bill', billId),
+    create: (input) => ipcRenderer.invoke('debts:create', input),
+    update: (id, input) => ipcRenderer.invoke('debts:update', id, input),
+    delete: (id) => ipcRenderer.invoke('debts:delete', id),
+    getAmortization: (debtId) => ipcRenderer.invoke('debts:get-amortization', debtId),
+    getAllWithAmortization: (overlay) =>
       ipcRenderer.invoke('debts:get-all-with-amortization', overlay),
   },
 
   leaves: {
     getAll: () => ipcRenderer.invoke('leaves:get-all'),
-    create: (input: LeaveInput) => ipcRenderer.invoke('leaves:create', input),
-    update: (id: string, input: LeaveInput) => ipcRenderer.invoke('leaves:update', id, input),
-    delete: (id: string) => ipcRenderer.invoke('leaves:delete', id),
+    create: (input) => ipcRenderer.invoke('leaves:create', input),
+    update: (id, input) => ipcRenderer.invoke('leaves:update', id, input),
+    delete: (id) => ipcRenderer.invoke('leaves:delete', id),
   },
 
   schedule: {
-    /** Full schedule: project incomes/bills, exact assignment, allocate goals, attach reconciliation analysis. */
-    build: (startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) =>
+    build: (startDate, months, startingBalance, overlay) =>
       ipcRenderer.invoke('schedule:build', startDate, months, startingBalance, overlay),
-    onProgress: (callback: (progress: ScheduleComputeProgressMessage) => void) => {
+    onProgress: (callback) => {
       const handler = (_event: unknown, progress: ScheduleComputeProgressMessage) => callback(progress);
       ipcRenderer.on('schedule:progress', handler);
       return () => ipcRenderer.removeListener('schedule:progress', handler);
     },
   },
 
-  reconciliation: {
-    applyFixes: (fixes: Array<{
-      id: string;
-      type: 'move_bill';
-      billId: string;
-      billDueDate: string;
-      fromPaycheckDate: string;
-      toPaycheckDate?: string;
-    }>) => ipcRenderer.invoke('reconciliation:apply-fixes', fixes),
-  },
-
-  breakGlassAdvisor: {
-    apply: (steps: Array<{
-      billId: string;
-      billDueDate: string;
-      fromPaycheckDate: string;
-      toPaycheckDate: string;
-    }>) => ipcRenderer.invoke('breakGlassAdvisor:apply', steps),
-  },
-
   export: {
-    toPdf: (schedule: ScheduleData, filePath: string) =>
-      ipcRenderer.invoke('export:to-pdf', schedule, filePath),
-    toHtml: (schedule: ScheduleData, filePath: string) =>
-      ipcRenderer.invoke('export:to-html', schedule, filePath),
-    toSpreadsheet: (schedule: ScheduleData, filePath: string) =>
+    toPdf: (schedule, filePath) => ipcRenderer.invoke('export:to-pdf', schedule, filePath),
+    toHtml: (schedule, filePath) => ipcRenderer.invoke('export:to-html', schedule, filePath),
+    toSpreadsheet: (schedule, filePath) =>
       ipcRenderer.invoke('export:to-spreadsheet', schedule, filePath),
   },
 
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
-    update: (settings: AppSettings) => ipcRenderer.invoke('settings:update', settings),
+    update: (settings) => ipcRenderer.invoke('settings:update', settings),
   },
 
   credentials: {
-    save: (password: string) => ipcRenderer.invoke('credentials:save', password),
-    get: () => ipcRenderer.invoke('credentials:get'),
     delete: () => ipcRenderer.invoke('credentials:delete'),
     has: () => ipcRenderer.invoke('credentials:has'),
-    offerSave: (password: string) => ipcRenderer.invoke('credentials:offer-save', password),
   },
 
   diagnostics: {
-    report: (input: {
-      source: string;
-      level?: 'error' | 'warn';
-      message?: string;
-      stack?: string | null;
-      componentStack?: string | null;
-      errorCode?: string | null;
-      diagnostics?: Record<string, unknown>;
-    }) => ipcRenderer.invoke('diagnostics:report', input),
-    getEvent: (eventId: string) => ipcRenderer.invoke('diagnostics:get-event', eventId),
-    getBundle: (limit?: number) => ipcRenderer.invoke('diagnostics:get-bundle', limit),
-    export: (filePath: string, limit?: number) =>
-      ipcRenderer.invoke('diagnostics:export', filePath, limit),
+    report: (input) => ipcRenderer.invoke('diagnostics:report', input),
+    getEvent: (eventId) => ipcRenderer.invoke('diagnostics:get-event', eventId),
+    getBundle: (limit) => ipcRenderer.invoke('diagnostics:get-bundle', limit),
+    export: (filePath, limit) => ipcRenderer.invoke('diagnostics:export', filePath, limit),
   },
-};
-
-interface BudgetInput {
-  name: string;
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-}
-
-interface SavingsGoalInput {
-  name: string;
-  targetAmount: number;
-  targetDate: string;
-  alreadySaved?: number;
-  priority?: number;
-}
-
-interface IncomeInput {
-  sourceName: string;
-  amount: number;
-  cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
-  startDate: string;
-  isActive: boolean;
-}
-
-interface BillInput {
-  creditorName: string;
-  budgetedAmount: number;
-  dueDay: number;
-  category?: string;
-  isRecurring: boolean;
-  priority: 'critical' | 'high' | 'normal' | 'low';
-  preferredIncomeSourceId?: string;
-  isIncomeAttached?: boolean;
-}
-
-interface DebtInput {
-  billId: string;
-  principalBalance: number;
-  apr: number;
-  monthlyPayment: number;
-}
-
-interface LeaveInput {
-  incomeId: string;
-  name: string;
-  type: 'paid' | 'unpaid';
-  startDate: string;
-  endDate: string;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-}
-
-interface ScheduleData {
-  startDate: string;
-  endDate: string;
-  entries: Array<{
-    date: string;
-    type: 'income' | 'expense';
-    description: string;
-    amount: number;
-    runningBalance: number;
-    isShortfall: boolean;
-  }>;
-  summary: {
-    totalIncome: number;
-    totalExpenses: number;
-    netBalance: number;
-    shortfallCount: number;
-  };
-}
-
-interface DraftOverlayInput {
-  incomes?: unknown[];
-  bills?: unknown[];
-  goals?: unknown[];
-  debts?: unknown[];
-  leaves?: unknown[];
-  skippedBills?: unknown[];
-  billAssignments?: unknown[];
-  incomeOverrides?: unknown[];
-  startingBalance?: number;
-  targetCashOnHand?: number;
-  minCashOnHand?: number;
-  minSavingsPerPaycheck?: number;
-}
-
-interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
-  autoLockMinutes: number;
-  currency: string;
-  defaultScheduleMonths: number;
-  savingsAPY: number;
-  lastBudgetId?: string;
-}
+} satisfies ElectronAPI;
 
 contextBridge.exposeInMainWorld('electronAPI', api);
-
-declare global {
-  interface Window {
-    electronAPI: typeof api;
-  }
-}

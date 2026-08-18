@@ -130,7 +130,10 @@ IMPORTANT:
       </div>
 
       <button
-        onClick={onConfirm}
+        onClick={() => {
+          setConfirmed(false);
+          onConfirm();
+        }}
         disabled={!confirmed}
         className="btn-primary w-full"
       >

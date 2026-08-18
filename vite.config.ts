@@ -3,8 +3,10 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import electron from 'vite-plugin-electron/simple';
 import electronMulti from 'vite-plugin-electron';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PRODUCTION_CSP } from './shared/productionCsp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,15 +24,6 @@ const aliases = {
   '@electron': path.resolve(__dirname, './electron'),
   '@shared': path.resolve(__dirname, './shared'),
 };
-
-/** Applied to dist/index.html when mode === 'production'. Dev keeps relaxed CSP in index.html for HMR. */
-const PRODUCTION_CSP =
-  "default-src 'self'; " +
-  "script-src 'self'; " +
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "img-src 'self' data:; " +
-  "font-src 'self' https://fonts.gstatic.com; " +
-  "connect-src 'self';";
 
 export default defineConfig(async ({ mode }) => {
   const analyze = process.env.ANALYZE === '1';
@@ -56,6 +49,18 @@ export default defineConfig(async ({ mode }) => {
           );
         }
         return html;
+      },
+    },
+    {
+      name: 'copy-electron-static',
+      closeBundle() {
+        const from = path.resolve(__dirname, 'electron/static/dev-server-down.html');
+        const toDir = path.resolve(__dirname, 'dist-electron');
+        if (!fs.existsSync(from)) {
+          return;
+        }
+        fs.mkdirSync(toDir, { recursive: true });
+        fs.copyFileSync(from, path.join(toDir, 'dev-server-down.html'));
       },
     },
     ...(visualizerPlugin ? [visualizerPlugin] : []),

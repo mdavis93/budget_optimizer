@@ -42,4 +42,24 @@ export default defineConfig(
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
+  {
+    files: ['electron/**/*.ts', 'shared/**/*.ts'],
+    extends: [
+      js.configs.recommended,
+      ...tseslint.configs.recommended,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/no-explicit-any': 'warn',
+    },
+  },
 )

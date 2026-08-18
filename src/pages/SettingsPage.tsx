@@ -18,6 +18,7 @@ import {
   ChangePasswordModal,
 } from '../components/settings';
 import clsx from 'clsx';
+import { setDefaultCurrency } from '../utils/formatCurrency';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -47,7 +48,9 @@ export default function SettingsPage() {
       try {
         const result = await window.electronAPI.settings.get();
         if (isMounted && result.success && result.data) {
-          setCurrency(result.data.currency || 'USD');
+          const nextCurrency = result.data.currency || 'USD';
+          setCurrency(nextCurrency);
+          setDefaultCurrency(nextCurrency);
           setAutoLockMinutes(result.data.autoLockMinutes ?? 5);
           setSavingsAPY(result.data.savingsAPY ?? 0);
         }
@@ -81,10 +84,6 @@ export default function SettingsPage() {
     try {
       const result = await window.electronAPI.settings.update(updates);
       if (result.success) {
-        // If auto-lock changed, update the timer
-        if (updates.autoLockMinutes !== undefined) {
-          await window.electronAPI.auth.setAutoLock(updates.autoLockMinutes);
-        }
         setStatus({ type: 'success', message: 'Settings saved' });
         setTimeout(() => setStatus({ type: null, message: '' }), 2000);
       }
@@ -96,6 +95,7 @@ export default function SettingsPage() {
 
   const handleCurrencyChange = (value: string) => {
     setCurrency(value);
+    setDefaultCurrency(value);
     saveSettings({ currency: value });
   };
 

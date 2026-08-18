@@ -6,6 +6,8 @@ import {
   withBudgetGuard,
   ipcData,
   ipcVoid,
+  setMainWindowGetter,
+  assertAppSender,
 } from '../../../electron/ipc/guards';
 import { ValidationError } from '../../../electron/services/validation.service';
 
@@ -47,9 +49,15 @@ function createServices(overrides: {
 }
 
 describe('ipc guards', () => {
+  const sender = { id: 'app' };
+
   beforeEach(() => {
     report.mockReset();
     report.mockReturnValue({ success: true, id: 'diag-1' });
+    setMainWindowGetter(() => ({
+      webContents: sender,
+      isDestroyed: () => false,
+    }));
   });
 
   describe('requireUnlocked', () => {
@@ -89,15 +97,42 @@ describe('ipc guards', () => {
     });
   });
 
+  describe('assertAppSender', () => {
+    it('returns Invalid sender when the window is missing or destroyed', () => {
+      setMainWindowGetter(() => null);
+      expect(assertAppSender({ sender } as never)).toEqual({
+        success: false,
+        error: 'Invalid sender',
+      });
+
+      setMainWindowGetter(() => ({
+        webContents: sender,
+        isDestroyed: () => true,
+      }));
+      expect(assertAppSender({ sender } as never)).toEqual({
+        success: false,
+        error: 'Invalid sender',
+      });
+    });
+
+    it('rejects withUnlockGuard when sender is not the app window', async () => {
+      const handler = withUnlockGuard(createServices(), () => 'ok');
+      await expect(handler({ sender: { id: 'other' } } as never)).resolves.toEqual({
+        success: false,
+        error: 'Invalid sender',
+      });
+    });
+  });
+
   describe('withUnlockGuard', () => {
     it('runs handler when unlocked', async () => {
       const handler = withUnlockGuard(createServices(), () => 'ok');
-      await expect(handler({} as never)).resolves.toBe('ok');
+      await expect(handler({ sender } as never)).resolves.toBe('ok');
     });
 
     it('returns guard error when locked without reporting', async () => {
       const handler = withUnlockGuard(createServices({ isUnlocked: false }), () => 'ok');
-      await expect(handler({} as never)).resolves.toEqual({
+      await expect(handler({ sender } as never)).resolves.toEqual({
         success: false,
         error: 'App is locked',
       });
@@ -108,12 +143,12 @@ describe('ipc guards', () => {
   describe('withBudgetGuard', () => {
     it('runs handler when budget is ready', async () => {
       const handler = withBudgetGuard(createServices(), () => ({ success: true, data: 1 }));
-      await expect(handler({} as never)).resolves.toEqual({ success: true, data: 1 });
+      await expect(handler({ sender } as never)).resolves.toEqual({ success: true, data: 1 });
     });
 
     it('returns guard error when locked without reporting', async () => {
       const handler = withBudgetGuard(createServices({ isUnlocked: false }), () => 'ok');
-      await expect(handler({} as never)).resolves.toEqual({
+      await expect(handler({ sender } as never)).resolves.toEqual({
         success: false,
         error: 'App is locked',
       });

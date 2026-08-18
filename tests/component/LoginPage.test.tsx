@@ -20,6 +20,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 describe('LoginPage', () => {
   const mockAPI = createMockElectronAPI();
   const unlock = vi.fn();
+  const unlockWithSavedCredentials = vi.fn();
   const unlockWithBiometric = vi.fn();
   const clearError = vi.fn();
 
@@ -31,6 +32,7 @@ describe('LoginPage', () => {
     mockAPI.auth.clearPendingRecoveryKey.mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
       unlock,
+      unlockWithSavedCredentials,
       unlockWithBiometric,
       biometricAvailable: true,
       biometricEnabled: true,
@@ -72,13 +74,22 @@ describe('LoginPage', () => {
       expect(await screen.findByText('Invalid key')).toBeInTheDocument();
     });
 
-    it('fills password from keychain helper', async () => {
+    it('unlocks with saved password without filling the password field', async () => {
       const user = userEvent.setup();
-      mockAPI.credentials.get.mockResolvedValueOnce({ success: true, password: 'from-keychain-123' });
+      mockAPI.credentials.has.mockResolvedValue(true);
+      unlockWithSavedCredentials.mockResolvedValue(true);
       renderWithRouter(<LoginPage />, { mockAPI });
 
-      await user.click(screen.getByRole('button', { name: /Fill from Keychain/i }));
-      expect(screen.getByLabelText('Master Password')).toHaveValue('from-keychain-123');
+      const passwordInput = screen.getByLabelText('Master Password') as HTMLInputElement;
+      expect(await screen.findByRole('button', { name: /Unlock with saved password/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /Unlock with saved password/i }));
+
+      await waitFor(() => {
+        expect(unlockWithSavedCredentials).toHaveBeenCalled();
+        expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+      });
+      expect(passwordInput).toHaveValue('');
+      expect(unlock).not.toHaveBeenCalled();
     });
   });
 
@@ -135,10 +146,10 @@ describe('LoginPage', () => {
       fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'short' } });
       fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'short' } });
       fireEvent.submit(form);
-      expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+      expect(await screen.findByText('Password must be at least 12 characters')).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'longenough1' } });
-      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'different1' } });
+      fireEvent.change(screen.getByLabelText('New Password'), { target: { value: 'longenough12' } });
+      fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: 'different12' } });
       fireEvent.submit(form);
       expect(await screen.findByText('Passwords do not match')).toBeInTheDocument();
       expect(mockAPI.auth.resetPasswordWithRecovery).not.toHaveBeenCalled();
@@ -149,6 +160,7 @@ describe('LoginPage', () => {
       unlock.mockResolvedValue(false);
       mockUseAuth.mockReturnValue({
         unlock,
+        unlockWithSavedCredentials,
         unlockWithBiometric,
         biometricAvailable: false,
         biometricEnabled: false,

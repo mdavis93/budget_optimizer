@@ -442,11 +442,14 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
       await waitFor(() => {
         expect(applyBreakGlassPlan).toHaveBeenCalled();
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [['rent-2026-08-08', '2026-07-24']],
+        });
       });
     });
 
-    it('accepts Break Glass Advisor via quick-budget IPC apply', async () => {
+    it('accepts Break Glass Advisor via draft plus preferredAssignments', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
       mockUseData.mockReturnValue({
         incomes: [{ id: 'inc-1' }],
@@ -494,7 +497,7 @@ describe('SchedulePage', () => {
       renderWithRouter(<SchedulePage />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
       await waitFor(() => {
-        expect(mockAPI.breakGlassAdvisor.apply).toHaveBeenCalled();
+        expect(applyBreakGlassPlan).toHaveBeenCalled();
         expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
           force: true,
           preferredAssignments: [['rent-2026-08-08', '2026-07-24']],
@@ -621,7 +624,10 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
 
       await waitFor(() => {
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [['rent-2026-08-08', '2026-07-24']],
+        });
         expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
         expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
       });
@@ -629,7 +635,7 @@ describe('SchedulePage', () => {
   });
 
   describe('sad', () => {
-    it('clears busy overlay when applyBreakGlassPlan fails', async () => {
+    it('clears busy overlay after apply even when draft placements are blocked', async () => {
       applyBreakGlassPlan.mockReturnValueOnce(false);
 
       mockUseData.mockReturnValue({
@@ -669,7 +675,10 @@ describe('SchedulePage', () => {
 
       await waitFor(() => {
         expect(applyBreakGlassPlan).toHaveBeenCalled();
-        expect(generateSchedule).not.toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [],
+        });
         expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
         expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
       });
@@ -714,7 +723,10 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'accept-break-glass' }));
 
       await waitFor(() => {
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [],
+        });
         expect(screen.queryByTestId('schedule-busy-overlay')).not.toBeInTheDocument();
         expect(screen.getByText('Clear Break-Glass on Jul 31')).toBeInTheDocument();
       });
@@ -785,7 +797,10 @@ describe('SchedulePage', () => {
 
       await waitFor(() => {
         expect(applyReconciliationFixes).toHaveBeenCalled();
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000);
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
+          force: true,
+          preferredAssignments: [],
+        });
       });
     });
 
@@ -843,9 +858,8 @@ describe('SchedulePage', () => {
       });
     });
 
-    it('uses quick-budget IPC for reconciliation apply', async () => {
+    it('applies reconciliation via draft plus preferredAssignments in quick budget', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.reconciliation.applyFixes = vi.fn().mockResolvedValue({ success: true });
       mockUseData.mockReturnValue({
         incomes: [{ id: 'inc-1' }],
         bills: [{ id: 'bill-1' }],
@@ -875,7 +889,7 @@ describe('SchedulePage', () => {
       renderWithRouter(<SchedulePage />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'apply-fixes' }));
       await waitFor(() => {
-        expect(mockAPI.reconciliation.applyFixes).toHaveBeenCalled();
+        expect(applyReconciliationFixes).toHaveBeenCalled();
         expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, {
           force: true,
           preferredAssignments: [],
@@ -883,27 +897,20 @@ describe('SchedulePage', () => {
       });
     });
 
-    it('uses quick-budget IPC for unskip', async () => {
+    it('uses draft unskip in quick budget mode', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.skippedBills.unskip = vi.fn().mockResolvedValue({ success: true });
 
       renderWithRouter(<SchedulePage />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'mock-unskip-bill' }));
 
       await waitFor(() => {
-        expect(mockAPI.skippedBills.unskip).toHaveBeenCalledWith('bill-1', '2026-01-15');
-        expect(reloadSnapshot).toHaveBeenCalled();
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000, { force: true });
+        expect(unskipBill).toHaveBeenCalledWith('bill-1', '2026-01-15');
       });
+      expect(mockAPI.skippedBills.unskip).not.toHaveBeenCalled();
     });
 
-    it('uses quick-budget IPC handlers for skip and overrides', async () => {
+    it('uses draft skip and override handlers in quick budget mode', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.skippedBills.skip = vi.fn().mockResolvedValue({ success: true });
-      mockAPI.billAssignments.remove = vi.fn().mockResolvedValue({ success: true });
-      mockAPI.incomeOverrides.set = vi.fn().mockResolvedValue({ success: true });
-      mockAPI.incomeOverrides.remove = vi.fn().mockResolvedValue({ success: true });
-      mockAPI.billAssignments.assign = vi.fn().mockResolvedValue({ success: true });
 
       renderWithRouter(<SchedulePage />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'mock-skip-bill' }));
@@ -912,12 +919,12 @@ describe('SchedulePage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'mock-clear-override' }));
 
       await waitFor(() => {
-        expect(mockAPI.skippedBills.skip).toHaveBeenCalled();
-        expect(mockAPI.billAssignments.remove).toHaveBeenCalled();
-        expect(mockAPI.incomeOverrides.set).toHaveBeenCalled();
-        expect(mockAPI.incomeOverrides.remove).toHaveBeenCalled();
-        expect(reloadSnapshot).toHaveBeenCalled();
+        expect(skipBill).toHaveBeenCalled();
+        expect(removeBillAssignment).toHaveBeenCalled();
+        expect(setIncomeOverride).toHaveBeenCalled();
+        expect(removeIncomeOverride).toHaveBeenCalled();
       });
+      expect(mockAPI.skippedBills.skip).not.toHaveBeenCalled();
     });
 
     it('requires and confirms assignment warning for unusual drag-drop', async () => {
@@ -972,18 +979,17 @@ describe('SchedulePage', () => {
       });
     });
 
-    it('assigns bills through quick-budget IPC on drop', async () => {
+    it('assigns bills through draft actions on drop in quick budget mode', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
-      mockAPI.billAssignments.assign = vi.fn().mockResolvedValue({ success: true });
 
       renderWithRouter(<SchedulePage />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'mock-drag-start' }));
       fireEvent.click(screen.getByRole('button', { name: 'mock-drop' }));
 
       await waitFor(() => {
-        expect(mockAPI.billAssignments.assign).toHaveBeenCalled();
-        expect(reloadSnapshot).toHaveBeenCalled();
+        expect(assignBill).toHaveBeenCalled();
       });
+      expect(mockAPI.billAssignments.assign).not.toHaveBeenCalled();
     });
   });
 });

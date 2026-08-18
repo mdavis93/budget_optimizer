@@ -34,6 +34,8 @@ A secure desktop application for managing income, tracking bills, and optimizing
 - Node.js 22+ (CI uses Node 22)
 - [pnpm](https://pnpm.io/) 9.x (this repo pins `packageManager` in `package.json`)
 
+Do not use npm (`npm install` / `package-lock.json`). This repository is pnpm-only.
+
 ### Installation
 
 1. Clone the repository:

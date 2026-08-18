@@ -12,9 +12,9 @@ describe('generateSecurePassword', () => {
     expect(password.length).toBe(32);
   });
 
-  it('enforces minimum length of 8', () => {
+  it('enforces minimum length of 12', () => {
     const password = generateSecurePassword(4);
-    expect(password.length).toBe(8);
+    expect(password.length).toBe(12);
   });
 
   it('includes upper, lower, digit, and symbol characters', () => {

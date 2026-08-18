@@ -7,7 +7,6 @@ import Modal from '../components/Modal';
 import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
 import { useDraftData, useDraftStatus, useDraftActions } from '../context/DraftContext';
-import { useBudget } from '../context/BudgetContext';
 import { reportError } from '../utils/reportError';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
@@ -23,13 +22,11 @@ export default function GoalsPage() {
   const { dirtyDomains } = useDraftStatus();
   const {
     getGoalProjections,
-    reloadSnapshot,
     createGoal,
     updateGoal,
     deleteGoal,
   } = useDraftActions();
   const navigate = useNavigate();
-  const { isQuickBudget } = useBudget();
   const [projections, setProjections] = useState<GoalProjection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -53,9 +50,6 @@ export default function GoalsPage() {
     const doLoad = async () => {
       setIsLoading(true);
       try {
-        if (isQuickBudget) {
-          await reloadSnapshot();
-        }
         if (isMounted) {
           await loadProjections();
         }
@@ -68,7 +62,7 @@ export default function GoalsPage() {
 
     void doLoad();
     return () => { isMounted = false; };
-  }, [goals, dirtyDomains.size, isQuickBudget, reloadSnapshot, loadProjections]);
+  }, [goals, dirtyDomains.size, loadProjections]);
 
   const refreshData = useCallback(async () => {
     await loadProjections();
@@ -108,15 +102,7 @@ export default function GoalsPage() {
         alreadySaved,
         priority,
       };
-      if (isQuickBudget) {
-        const result = await window.electronAPI.goals.create(input);
-        if (result.success) {
-          await reloadSnapshot();
-          setShowCreateModal(false);
-          resetForm();
-          await refreshData();
-        }
-      } else if (createGoal(input)) {
+      if (createGoal(input)) {
         setShowCreateModal(false);
         resetForm();
         await refreshData();
@@ -140,15 +126,7 @@ export default function GoalsPage() {
         alreadySaved,
         priority,
       };
-      if (isQuickBudget) {
-        const result = await window.electronAPI.goals.update(editingGoal.id, updates);
-        if (result.success) {
-          await reloadSnapshot();
-          setEditingGoal(null);
-          resetForm();
-          await refreshData();
-        }
-      } else if (updateGoal(editingGoal.id, updates)) {
+      if (updateGoal(editingGoal.id, updates)) {
         setEditingGoal(null);
         resetForm();
         await refreshData();
@@ -159,14 +137,7 @@ export default function GoalsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (isQuickBudget) {
-      const result = await window.electronAPI.goals.delete(id);
-      if (result.success) {
-        await reloadSnapshot();
-        setDeleteConfirm(null);
-        await refreshData();
-      }
-    } else if (deleteGoal(id)) {
+    if (deleteGoal(id)) {
       setDeleteConfirm(null);
       await refreshData();
     }

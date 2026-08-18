@@ -1,16 +1,22 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import { attachNavigationLock, denyAllPermissions } from '../utils/navigationLock';
 import type { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
 import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
 
 export class PdfService {
-  async generateHtmlFile(schedule: ScheduleData, outputPath: string): Promise<{ success: boolean; error?: string }> {
+  constructor(private readonly scratchRoot?: string) {}
+
+  private resolveScratchDir(): string {
+    return this.scratchRoot ?? path.join(app.getPath('userData'), 'export-scratch');
+  }
+
+  async generateHtmlFile(schedule: ScheduleData, outputPath: string, currency = 'USD'): Promise<{ success: boolean; error?: string }> {
     try {
-      const html = this.generateHtml(schedule);
+      const html = this.generateHtml(schedule, currency);
       const htmlPath = outputPath.endsWith('.html') ? outputPath : outputPath.replace(/\.pdf$/, '.html');
       fs.writeFileSync(htmlPath, html);
       return { success: true };
@@ -22,16 +28,18 @@ export class PdfService {
     }
   }
 
-  async generatePdf(schedule: ScheduleData, outputPath: string): Promise<{ success: boolean; error?: string }> {
+  async generatePdf(schedule: ScheduleData, outputPath: string, currency = 'USD'): Promise<{ success: boolean; error?: string }> {
+    const scratchDir = this.resolveScratchDir();
+    fs.mkdirSync(scratchDir, { recursive: true, mode: 0o700 });
     const tempHtmlPath = path.join(
-      os.tmpdir(),
+      scratchDir,
       `budget-optimizer-${Date.now()}-${Math.random().toString(36).slice(2)}.html`
     );
     let win: BrowserWindow | null = null;
 
     try {
-      const html = this.generateHtml(schedule);
-      fs.writeFileSync(tempHtmlPath, html);
+      const html = this.generateHtml(schedule, currency);
+      fs.writeFileSync(tempHtmlPath, html, { mode: 0o600 });
 
       win = new BrowserWindow({
         show: false,
@@ -40,8 +48,16 @@ export class PdfService {
           contextIsolation: true,
           nodeIntegration: false,
           javascript: false,
+          partition: 'temp:pdf-export',
         },
       });
+
+      attachNavigationLock(win.webContents, {
+        distDir: scratchDir,
+        packaged: true,
+        extraFileRoots: [scratchDir],
+      });
+      denyAllPermissions(win.webContents.session);
 
       await win.loadFile(tempHtmlPath);
 
@@ -73,13 +89,13 @@ export class PdfService {
     }
   }
 
-  generateHtml(schedule: ScheduleData): string {
+  generateHtml(schedule: ScheduleData, currency = 'USD'): string {
     const { paychecks, summary, recommendations, startDate, endDate } = schedule;
 
     const totalGoalDeposits = paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0);
     const hasGoalDeposits = totalGoalDeposits > 0;
 
-    const formatCurrency = formatCurrencyDisplay;
+    const formatCurrency = (amount: number) => formatCurrencyDisplay(amount, currency);
 
     const formatDate = (dateStr: string) => {
       return format(parseISO(dateStr), 'MMM d, yyyy');
