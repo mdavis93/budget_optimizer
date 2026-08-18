@@ -4,7 +4,10 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { reportError } from './utils/reportError';
+import { recordDiagnosticBreadcrumb } from './utils/diagnosticContext';
 import './index.css';
+
+recordDiagnosticBreadcrumb('boot', window.location.hash || '#/');
 
 window.addEventListener('error', (event) => {
   void reportError('renderer:window.onerror', event.error ?? event.message, {

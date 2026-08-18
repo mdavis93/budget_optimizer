@@ -88,8 +88,36 @@ function cloneSim(
   }));
 }
 
-function receiveRoom(budgetRemaining: number, minCashOnHand: number): number {
-  return Math.max(0, budgetRemaining - minCashOnHand);
+function spareAbove(budgetRemaining: number, floor: number): number {
+  return Math.max(0, budgetRemaining - floor);
+}
+
+/**
+ * Room a landing can give without widening Break-Glass: keep healthy paychecks
+ * at/above target; already-BG paychecks may only dip to min (not shortfall).
+ */
+function receiveRoom(paycheck: SimPaycheck): number {
+  const floor =
+    paycheck.budgetRemaining >= paycheck.targetCashOnHand
+      ? paycheck.targetCashOnHand
+      : paycheck.minCashOnHand;
+  return spareAbove(paycheck.budgetRemaining, floor);
+}
+
+/** True when a paycheck that started at/above target would drop below it. */
+function healthyPaychecksRegressed(
+  base: SimPaycheck[],
+  sim: SimPaycheck[],
+  targetIndex: number
+): boolean {
+  for (let index = 0; index < sim.length; index++) {
+    if (index === targetIndex) continue;
+    const startedHealthy = base[index].budgetRemaining >= base[index].targetCashOnHand;
+    if (startedHealthy && sim[index].budgetRemaining < sim[index].targetCashOnHand) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function isMovable(
@@ -197,7 +225,7 @@ function ensureReceiveRoom(
   depth: number
 ): boolean {
   if (amountNeeded <= 0) return true;
-  if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
+  if (receiveRoom(sim[index]) >= amountNeeded) {
     return true;
   }
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
@@ -246,13 +274,13 @@ function ensureReceiveRoom(
       applyMove(sim, index, earlierIndex, bill);
       steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, daysEarly));
 
-      if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
+      if (receiveRoom(sim[index]) >= amountNeeded) {
         return true;
       }
     }
   }
 
-  return receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded;
+  return receiveRoom(sim[index]) >= amountNeeded;
 }
 
 /**
@@ -271,7 +299,7 @@ function ensureReceiveRoomLater(
   depth: number
 ): boolean {
   if (amountNeeded <= 0) return true;
-  if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
+  if (receiveRoom(sim[index]) >= amountNeeded) {
     return true;
   }
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
@@ -320,13 +348,13 @@ function ensureReceiveRoomLater(
       applyMove(sim, index, laterIndex, bill);
       steps.push(makeStep(bill, sim[index].date, sim[laterIndex].date, daysEarly));
 
-      if (receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded) {
+      if (receiveRoom(sim[index]) >= amountNeeded) {
         return true;
       }
     }
   }
 
-  return receiveRoom(sim[index].budgetRemaining, sim[index].minCashOnHand) >= amountNeeded;
+  return receiveRoom(sim[index]) >= amountNeeded;
 }
 
 function cloneSimAsSim(sim: SimPaycheck[]): SimPaycheck[] {
@@ -485,6 +513,7 @@ function tryClearBreakGlass(
 
   if (sim[targetIndex].budgetRemaining < targetCashOnHand) return null;
   if (hasShortfall(sim)) return null;
+  if (healthyPaychecksRegressed(base, sim, targetIndex)) return null;
   if (steps.length === 0 || steps.length > MAX_ADVISOR_PLAN_STEPS) return null;
   return steps;
 }

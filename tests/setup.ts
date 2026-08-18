@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom';
 import { vi, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { resetDiagnosticBreadcrumbsForTests } from '../src/utils/diagnosticContext';
 
-// Cleanup after each test
 afterEach(() => {
+  resetDiagnosticBreadcrumbsForTests();
   cleanup();
 });
 

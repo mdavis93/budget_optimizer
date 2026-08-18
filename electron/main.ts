@@ -108,15 +108,42 @@ function createWindow() {
     mainWindow?.focus();
   });
 
-  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-    logger.error('Failed to load:', errorCode, errorDescription);
-    diagnostics.report({
-      source: 'main:did-fail-load',
-      message: String(errorDescription),
-      errorCode: String(errorCode),
-      diagnostics: { errorCode, errorDescription: String(errorDescription) },
-    });
-  });
+  let showingDevServerRecovery = false;
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      logger.error('Failed to load:', errorCode, errorDescription);
+      diagnostics.report({
+        source: 'main:did-fail-load',
+        message: String(errorDescription),
+        errorCode: String(errorCode),
+        diagnostics: {
+          errorCode,
+          errorDescription: String(errorDescription),
+          url: String(validatedURL ?? ''),
+          isMainFrame: Boolean(isMainFrame),
+        },
+      });
+      const devServerDown =
+        errorCode === -102 || String(errorDescription).includes('CONNECTION_REFUSED');
+      if (
+        isMainFrame &&
+        !showingDevServerRecovery &&
+        VITE_DEV_SERVER_URL &&
+        !app.isPackaged &&
+        devServerDown
+      ) {
+        showingDevServerRecovery = true;
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev server unreachable</title>
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}main{max-width:32rem}h1{font-size:1.25rem;margin:0 0 12px}p{line-height:1.5;color:#94a3b8}code{color:#93c5fd}</style></head>
+<body><main><h1>Vite dev server is not reachable</h1>
+<p>The app window is still open, but <code>localhost:5173</code> refused the connection (${String(errorDescription)}). Reloading cannot recover until the dev server is running again.</p>
+<p>Quit this window and restart with <code>pnpm dev</code> or <code>pnpm electron:dev</code>. Your budget data is safe.</p>
+</main></body></html>`;
+        void mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      }
+    }
+  );
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     diagnostics.report({

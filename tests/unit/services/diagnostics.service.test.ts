@@ -92,6 +92,25 @@ describe('diagnostics.service', () => {
       expect(event.stack).not.toContain('/Users/davismi');
     });
 
+    it('does not treat Vite module URLs as secrets', () => {
+      const result = diagnostics.report({
+        source: 'renderer:ErrorBoundary',
+        message:
+          'Failed to fetch dynamically imported module: http://localhost:5173/src/components/charts/BalanceProjectionChart.tsx',
+        diagnostics: {
+          importPath: '/src/components/charts/BalanceProjectionChart.tsx',
+        },
+      });
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      const event = diagnostics.getEventBundle(result.id).data!.errors[0];
+      expect(event.message).toContain('BalanceProjectionChart.tsx');
+      expect(event.message).not.toContain('[REDACTED]');
+      expect(event.diagnostics.importPath).toBe(
+        '/src/components/charts/BalanceProjectionChart.tsx'
+      );
+    });
+
     it('rejects oversized diagnostics bag depth', () => {
       let bag: Record<string, unknown> = { leaf: true };
       for (let i = 0; i < DIAGNOSTICS_MAX_DEPTH + 2; i++) {
@@ -148,14 +167,18 @@ describe('diagnostics.service', () => {
       ).toEqual({ success: false, error: 'Invalid diagnostics bag' });
     });
 
-    it('rejects oversized diagnostics bag JSON', () => {
+    it('truncates oversized diagnostics bag instead of dropping the event', () => {
       const result = diagnostics.report({
         source: 'test:bag-size',
-        message: 'x',
-        diagnostics: { payload: 'word '.repeat(900) },
+        message: 'kept',
+        diagnostics: { payload: 'word '.repeat(3000), route: '/goals' },
       });
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Diagnostics bag too large');
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      const event = diagnostics.getEventBundle(result.id).data!.errors[0];
+      expect(event.message).toBe('kept');
+      expect(event.diagnostics.truncated).toBe(true);
+      expect(event.diagnostics.route).toBe('/goals');
     });
   });
 
@@ -286,6 +309,10 @@ describe('diagnostics.service', () => {
       expect(one.success).toBe(true);
       expect(one.data!.errors).toHaveLength(1);
       expect(one.data!.errors[0].id).toBe(reported.id);
+      expect(one.data!.copiedEventId).toBe(reported.id);
+      expect(one.data!.recent).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: reported.id })])
+      );
       expect(one.data!.app.version).toBe('1.2.3-test');
       expect(one.data!.session).toMatchObject({
         budgetUnlocked: false,

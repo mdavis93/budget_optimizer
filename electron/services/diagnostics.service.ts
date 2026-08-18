@@ -38,7 +38,7 @@ type SessionHooks = {
 
 const HOME_PATH_RE = /(?:\/Users\/[^/\s]+|\/home\/[^/\s]+)(?:\/[^\s]*)?/g;
 const SECRET_LIKE_RE =
-  /\b(?:[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2}|[a-z]+(?:-[a-z]+){8,})\b/g;
+  /\b(?:[A-Fa-f0-9]{32,}|[A-Za-z0-9+]{40,}={1,2}|[a-z]+(?:-[a-z]+){8,})\b/g;
 const MONEY_LIKE_RE = /(?:\$\s*)?\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d{2}\b/g;
 
 function isDeniedKey(key: string): boolean {
@@ -58,6 +58,28 @@ function scrubFreeText(value: string | null | undefined): string | null {
   out = out.replace(SECRET_LIKE_RE, '[REDACTED]');
   out = out.replace(MONEY_LIKE_RE, '[AMOUNT]');
   return out;
+}
+
+function clampBag(diagnostics: Record<string, unknown>): Record<string, unknown> {
+  if (JSON.stringify(diagnostics).length <= DIAGNOSTICS_BAG_JSON_MAX) {
+    return diagnostics;
+  }
+  const compact: Record<string, unknown> = { truncated: true };
+  for (const [key, value] of Object.entries(diagnostics)) {
+    if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+      compact[key] = value;
+    } else if (typeof value === 'string' && value.length <= 200) {
+      compact[key] = value;
+    }
+  }
+  const trail = diagnostics.navTrail;
+  if (Array.isArray(trail)) {
+    compact.navTrail = trail.slice(-5);
+  }
+  if (JSON.stringify(compact).length <= DIAGNOSTICS_BAG_JSON_MAX) {
+    return compact;
+  }
+  return { truncated: true };
 }
 
 function sanitizeBag(
@@ -267,10 +289,7 @@ class DiagnosticsService {
           return { success: false, error: sanitized.error };
         }
         diagnostics = sanitized.value as Record<string, unknown>;
-        const bagJson = JSON.stringify(diagnostics);
-        if (bagJson.length > DIAGNOSTICS_BAG_JSON_MAX) {
-          return { success: false, error: 'Diagnostics bag too large' };
-        }
+        diagnostics = clampBag(diagnostics);
       }
 
       const now = Date.now();
@@ -365,7 +384,15 @@ class DiagnosticsService {
       if (!event) {
         return { success: false, error: 'Event not found' };
       }
-      return { success: true, id: event.id, data: this.buildEnvelope([event]) };
+      return {
+        success: true,
+        id: event.id,
+        data: {
+          ...this.buildEnvelope([event]),
+          copiedEventId: event.id,
+          recent: this.ring.slice(-25),
+        },
+      };
     } catch (error) {
       logger.warn('diagnostics.getEventBundle failed:', errorMessage(error));
       return { success: false, error: 'Failed to get event' };

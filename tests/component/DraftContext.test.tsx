@@ -197,6 +197,31 @@ function DraftHarness() {
       >
         apply-move-no-target
       </button>
+      <button
+        onClick={() =>
+          draft.applyBreakGlassPlan({
+            id: 'break-glass-2026-01-29',
+            targetPaycheckDate: '2026-01-29',
+            headline: 'Clear Break-Glass',
+            maxDaysEarly: 14,
+            clearsBreakGlass: true,
+            steps: [
+              {
+                billId: 'bill-1',
+                billName: 'Electric Company',
+                billAmount: 150,
+                billDueDate: '2026-01-15',
+                fromPaycheckDate: '2026-01-29',
+                toPaycheckDate: '2026-01-15',
+                daysEarly: 14,
+                requiresConfirmation: false,
+              },
+            ],
+          })
+        }
+      >
+        apply-break-glass
+      </button>
       <button onClick={() => draft.updateBudgetFields({ startingBalance: 1234 })}>update-budget</button>
       <button
         onClick={() =>
@@ -1092,8 +1117,9 @@ describe('DraftContext', () => {
       fireEvent.click(screen.getByText('set-override'));
       fireEvent.click(screen.getByText('remove-override'));
       fireEvent.click(screen.getByText('apply-fixes'));
-      // Reconciliation Accept uses soft preferred — does not create locks or dirtiness.
-      expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('assignment-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-01-29');
+      fireEvent.click(screen.getByText('discard-schedule'));
       fireEvent.click(screen.getByText('delete-bill'));
       fireEvent.click(screen.getByText('discard-bills'));
       fireEvent.click(screen.getByText('unskip-bill'));
@@ -1303,7 +1329,7 @@ describe('DraftContext', () => {
       });
     });
 
-    it('applyReconciliationFixes does not lock bills (soft preferred only)', async () => {
+    it('applyReconciliationFixes writes draft assignments and marks schedule dirty', async () => {
       renderProvider();
       await waitFor(() => {
         expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
@@ -1316,11 +1342,38 @@ describe('DraftContext', () => {
 
       fireEvent.click(screen.getByText('apply-move-only'));
       await waitFor(() => {
-        // User drag lock unchanged — Advisor/reconciliation Accept must not write locks.
         expect(screen.getByTestId('assignment-count')).toHaveTextContent('1');
-        expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-01-29');
+        expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-02-12');
         expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('true');
       });
+
+      fireEvent.click(screen.getByText('discard-schedule'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
+      });
+    });
+
+    it('applyBreakGlassPlan writes draft assignments and is discarded without persist', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('bill-name')).toHaveTextContent('Electric Company');
+      });
+
+      fireEvent.click(screen.getByText('apply-break-glass'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('1');
+        expect(screen.getByTestId('assignment-paycheck')).toHaveTextContent('2026-01-15');
+        expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('true');
+      });
+      expect(mockPersistDomains).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText('discard-schedule'));
+      await waitFor(() => {
+        expect(screen.getByTestId('assignment-count')).toHaveTextContent('0');
+        expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
+      });
+      expect(mockPersistDomains).not.toHaveBeenCalled();
     });
 
     it('applyReconciliationFixes move_bill without toPaycheckDate is a no-op', async () => {

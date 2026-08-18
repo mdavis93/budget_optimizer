@@ -1,4 +1,8 @@
 import type { DiagnosticReportInput } from '@shared/diagnostics';
+import {
+  collectRendererDiagnostics,
+  inferredErrorCode,
+} from './diagnosticContext';
 
 /**
  * Fire-and-forget renderer → main diagnostics report.
@@ -20,11 +24,20 @@ export async function reportError(
           ? error
           : 'Unknown error';
     const stack = error instanceof Error ? error.stack ?? null : null;
+    const { diagnostics: extraBag, errorCode: extraCode, ...rest } = extras ?? {};
+    const diagnostics = {
+      ...collectRendererDiagnostics(error),
+      ...(extraBag && typeof extraBag === 'object' && !Array.isArray(extraBag)
+        ? extraBag
+        : {}),
+    };
     const result = await window.electronAPI.diagnostics.report({
       source,
       message,
       stack,
-      ...extras,
+      errorCode: inferredErrorCode(message, extraCode),
+      diagnostics,
+      ...rest,
     });
     if (result.success && result.data?.id) {
       return result.data.id;

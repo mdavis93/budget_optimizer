@@ -159,6 +159,58 @@ describe('breakGlassDryRun', () => {
     expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2026-08-21')).toBe(true);
   });
 
+  it('rejects dry-runs that create Break-Glass on a previously healthy paycheck', () => {
+    const baseline = scheduleOf([
+      paycheck({
+        date: '2027-01-01',
+        budgetRemaining: 200,
+        targetCashOnHand: 200,
+        minCashOnHand: 100,
+      }),
+      paycheck({
+        date: '2027-01-29',
+        budgetRemaining: 105,
+        targetCashOnHand: 200,
+        minCashOnHand: 100,
+      }),
+    ]);
+    const trial = scheduleOf([
+      paycheck({
+        date: '2027-01-01',
+        budgetRemaining: 190,
+        targetCashOnHand: 200,
+        minCashOnHand: 100,
+      }),
+      paycheck({
+        date: '2027-01-29',
+        budgetRemaining: 200,
+        targetCashOnHand: 200,
+        minCashOnHand: 100,
+      }),
+    ]);
+
+    expect(isBreakGlassPlanDryRunSafe(baseline, trial, '2027-01-29')).toBe(false);
+  });
+
+  it('rejects stacked dry-runs that re-break a prior cleared target', () => {
+    const baseline = scheduleOf([
+      paycheck({ date: '2027-01-01', budgetRemaining: 400 }),
+      paycheck({ date: '2027-01-29', budgetRemaining: 150 }),
+      paycheck({ date: '2027-02-26', budgetRemaining: 150 }),
+    ]);
+    const trial = scheduleOf([
+      paycheck({ date: '2027-01-01', budgetRemaining: 300 }),
+      paycheck({ date: '2027-01-29', budgetRemaining: 150 }),
+      paycheck({ date: '2027-02-26', budgetRemaining: 250 }),
+    ]);
+
+    expect(
+      isBreakGlassPlanDryRunSafe(baseline, trial, '2027-02-26', {
+        protectedPaycheckDates: ['2027-01-29'],
+      })
+    ).toBe(false);
+  });
+
   it('rejects when the target paycheck stays in the Break-Glass band', () => {
     const baseline = scheduleOf([
       paycheck({ date: '2026-08-07', budgetRemaining: 400 }),
@@ -317,5 +369,58 @@ describe('breakGlassDryRun', () => {
     expect(filtered.plans).toHaveLength(2);
     expect(preferredSeen[0]).toEqual(['sw-2026-08-21']);
     expect(preferredSeen[1]).toEqual(['sw-2026-08-21', 'electric-2026-09-25']);
+  });
+
+  it('drops a later plan when its dry-run re-breaks an earlier cleared target', () => {
+    const baseline = scheduleOf([
+      paycheck({ date: '2027-01-01', budgetRemaining: 400 }),
+      paycheck({ date: '2027-01-29', budgetRemaining: 150 }),
+      paycheck({ date: '2027-02-26', budgetRemaining: 150 }),
+    ]);
+    const report: BreakGlassAdvisorReport = {
+      plans: [
+        plan({
+          id: 'break-glass-2027-01-29',
+          targetPaycheckDate: '2027-01-29',
+          headline: 'Clear Break-Glass on Jan 29, 2027',
+        }),
+        plan({
+          id: 'break-glass-2027-02-26',
+          targetPaycheckDate: '2027-02-26',
+          headline: 'Clear Break-Glass on Feb 26, 2027',
+          steps: [
+            {
+              billId: 'kohls',
+              billName: "CC: Kohl's",
+              billAmount: 100,
+              billDueDate: '2027-02-12',
+              fromPaycheckDate: '2027-02-12',
+              toPaycheckDate: '2027-01-29',
+              daysEarly: 19,
+              requiresConfirmation: true,
+            },
+          ],
+        }),
+      ],
+    };
+
+    let call = 0;
+    const filtered = filterBreakGlassPlansByDryRun(report, baseline, () => {
+      call += 1;
+      if (call === 1) {
+        return scheduleOf([
+          paycheck({ date: '2027-01-01', budgetRemaining: 300 }),
+          paycheck({ date: '2027-01-29', budgetRemaining: 250 }),
+          paycheck({ date: '2027-02-26', budgetRemaining: 150 }),
+        ]);
+      }
+      return scheduleOf([
+        paycheck({ date: '2027-01-01', budgetRemaining: 300 }),
+        paycheck({ date: '2027-01-29', budgetRemaining: 150 }),
+        paycheck({ date: '2027-02-26', budgetRemaining: 250 }),
+      ]);
+    });
+
+    expect(filtered.plans.map((item) => item.id)).toEqual(['break-glass-2027-01-29']);
   });
 });

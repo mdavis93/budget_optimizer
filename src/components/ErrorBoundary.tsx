@@ -1,9 +1,12 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home, Copy } from 'lucide-react';
 import { copyDiagnosticReport, reportError } from '../utils/reportError';
+import { recordDiagnosticBreadcrumb } from '../utils/diagnosticContext';
 
 interface Props {
   children: ReactNode;
+  resetKey?: string;
+  variant?: 'app' | 'page';
 }
 
 interface State {
@@ -29,6 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    recordDiagnosticBreadcrumb('error', error.message);
     this.setState({ errorInfo });
     void reportError('renderer:ErrorBoundary', error, {
       componentStack: errorInfo.componentStack ?? null,
@@ -39,13 +43,43 @@ export class ErrorBoundary extends Component<Props, State> {
     });
   }
 
+  public componentDidUpdate(prevProps: Props): void {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({
+        hasError: false,
+        error: null,
+        errorInfo: null,
+        diagnosticId: null,
+        copyStatus: 'idle',
+      });
+    }
+  }
+
+  private clearError = (): void => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      diagnosticId: null,
+      copyStatus: 'idle',
+    });
+  };
+
   private handleReload = (): void => {
+    recordDiagnosticBreadcrumb('recover', 'reload');
     window.location.reload();
   };
 
   private handleGoHome = (): void => {
-    window.location.hash = '#/';
-    window.location.reload();
+    recordDiagnosticBreadcrumb('recover', 'go-home');
+    // Remount already-loaded modules instead of re-fetching from Vite.
+    window.location.hash = '#/dashboard';
+    this.clearError();
+  };
+
+  private handleRetry = (): void => {
+    recordDiagnosticBreadcrumb('recover', 'retry');
+    this.clearError();
   };
 
   private handleCopyReport = (): void => {
@@ -58,8 +92,15 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render(): ReactNode {
     if (this.state.hasError) {
+      const isPage = this.props.variant === 'page';
       return (
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div
+          className={
+            isPage
+              ? 'flex items-center justify-center p-4 h-full min-h-64'
+              : 'min-h-screen bg-gray-900 flex items-center justify-center p-4'
+          }
+        >
           <div className="max-w-md w-full bg-gray-800 rounded-lg shadow-xl p-6">
             <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-red-900/30 rounded-full">
               <AlertTriangle className="w-8 h-8 text-red-400" />
@@ -70,7 +111,9 @@ export class ErrorBoundary extends Component<Props, State> {
             </h1>
             
             <p className="text-gray-400 text-center mb-6">
-              An unexpected error occurred. Your data is safe, but the application needs to be reloaded.
+              {isPage
+                ? 'This page failed to load. Your data is safe — try another page or go to the dashboard.'
+                : 'An unexpected error occurred. Your data is safe. You can return home without reloading.'}
             </p>
 
             {this.state.error && (
@@ -90,11 +133,11 @@ export class ErrorBoundary extends Component<Props, State> {
                 Go Home
               </button>
               <button
-                onClick={this.handleReload}
+                onClick={isPage ? this.handleRetry : this.handleReload}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-sm transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
-                Reload App
+                {isPage ? 'Try Again' : 'Reload App'}
               </button>
             </div>
 
@@ -113,7 +156,7 @@ export class ErrorBoundary extends Component<Props, State> {
                       : 'Copy report'}
                 </button>
                 <p className="mt-2 text-xs text-gray-500 text-center">
-                  Contains error messages and stacks; review before sharing.
+                  Contains error messages, stacks, and recent navigation; review before sharing.
                 </p>
               </div>
             )}
