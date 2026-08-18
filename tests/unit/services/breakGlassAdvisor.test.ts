@@ -271,7 +271,7 @@ describe('proposeBreakGlassPlans', () => {
     const report = proposeBreakGlassPlans(
       scheduleOf([
         paycheck({ date: '2026-07-10', budgetRemaining: 500 }),
-        paycheck({ date: '2026-07-17', budgetRemaining: 250 }),
+        paycheck({ date: '2026-07-17', budgetRemaining: 400 }),
         paycheck({
           date: '2026-07-31',
           budgetRemaining: 150,
@@ -363,10 +363,9 @@ describe('proposeBreakGlassPlans', () => {
     expect(filtered?.plans[0].id).toBe('a');
   });
 
-  it('does not emit separate plans for cascade-induced secondary Break-Glass', () => {
-    // Only Jul 24 starts as BG (Jul 10 sits at target). Clearing Jul 24 lands a
-    // cascade bill onto Jul 10 and dips it into the BG band — without the original-date
-    // filter that date would steal a second advisor card.
+  it('does not propose a cascade that would create secondary Break-Glass', () => {
+    // Jul 3 has only $10 above target — not enough to absorb the cascade without
+    // dipping a healthy paycheck into the BG band.
     const report = proposeBreakGlassPlans(
       scheduleOf([
         paycheck({ date: '2026-07-03', budgetRemaining: 260, bills: [] }),
@@ -388,9 +387,7 @@ describe('proposeBreakGlassPlans', () => {
       ])
     );
 
-    expect(report.plans).toHaveLength(1);
-    expect(report.plans[0].targetPaycheckDate).toBe('2026-07-24');
-    expect(report.plans[0].steps.some((step) => step.toPaycheckDate === '2026-07-10')).toBe(true);
+    expect(report.plans).toEqual([]);
   });
 
   it('reverse-trickles Aug-due bills onto a later paycheck when earlier cascade cannot clear', () => {
@@ -670,7 +667,7 @@ describe('proposeBreakGlassPlans', () => {
             budgetRemaining: 150,
             bills: [bill({ billId: 'sil', creditorName: 'Silo', amount: 400, billDate: '2026-08-20' })],
           }),
-          paycheck({ date: '2026-08-14', budgetRemaining: 500, bills: [] }),
+          paycheck({ date: '2026-08-14', budgetRemaining: 700, bills: [] }),
         ],
         '2026-07-25'
       )
@@ -744,7 +741,7 @@ describe('proposeBreakGlassPlans', () => {
               }),
             ],
           }),
-          paycheck({ date: '2027-02-05', budgetRemaining: 250, bills: [] }),
+          paycheck({ date: '2027-02-05', budgetRemaining: 350, bills: [] }),
         ],
         '2027-01-01'
       ),
@@ -761,5 +758,43 @@ describe('proposeBreakGlassPlans', () => {
         daysEarly: 12,
       }),
     ]);
+  });
+
+  it('does not propose moves that put an at-target paycheck into Break-Glass', () => {
+    const report = proposeBreakGlassPlans(
+      scheduleOf(
+        [
+          paycheck({
+            date: '2027-01-01',
+            budgetRemaining: 200,
+            targetCashOnHand: 200,
+            minCashOnHand: 100,
+            bills: [],
+          }),
+          paycheck({
+            date: '2027-01-15',
+            budgetRemaining: 200,
+            targetCashOnHand: 200,
+            minCashOnHand: 100,
+            bills: [
+              bill({ billId: 'cap-a', creditorName: 'CC: Cap A', amount: 100, billDate: '2027-01-17' }),
+            ],
+          }),
+          paycheck({
+            date: '2027-01-29',
+            budgetRemaining: 105,
+            targetCashOnHand: 200,
+            minCashOnHand: 100,
+            bills: [
+              bill({ billId: 'apple', creditorName: 'CC: Apple', amount: 200, billDate: '2027-01-30' }),
+            ],
+          }),
+        ],
+        '2027-01-01'
+      ),
+      { targetCashOnHand: 200, minCashOnHand: 100 }
+    );
+
+    expect(report.plans).toEqual([]);
   });
 });
