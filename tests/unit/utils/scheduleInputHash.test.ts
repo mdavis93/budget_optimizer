@@ -3,8 +3,11 @@ import {
   buildBudgetFieldsHash,
   buildScheduleEntityHash,
   buildScheduleInputHash,
+  buildScheduleInputHashFromDraft,
   buildScheduleOverlayHash,
+  toScheduleIdentityInput,
 } from '../../../src/utils/scheduleInputHash';
+import { createEmptyDraftState } from '../../../src/types/draft';
 import { createMockBill, createMockIncome } from '../../mocks/electron-api.mock';
 
 describe('scheduleInputHash', () => {
@@ -57,6 +60,57 @@ describe('scheduleInputHash', () => {
 
     expect(withoutBudget).not.toBe(withBudget);
     expect(buildBudgetFieldsHash(null)).toBe('');
+    expect(buildBudgetFieldsHash(undefined)).toBe('');
+    expect(
+      buildBudgetFieldsHash({
+        name: 'Personal',
+        startingBalance: 1000,
+        targetCashOnHand: 250,
+        minCashOnHand: 100,
+        minSavingsPerPaycheck: 50,
+        scheduleStartDate: '2026-01-01',
+      })
+    ).not.toBe('');
+  });
+
+  it('falls back to budget fields in toScheduleIdentityInput and hashes from draft', () => {
+    const frozen = new Date(2026, 7, 20, 12, 0, 0);
+    const budgetFields = {
+      name: 'Personal',
+      startingBalance: 800,
+      targetCashOnHand: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 50,
+      scheduleStartDate: '2026-03-01',
+    };
+    const identity = toScheduleIdentityInput({
+      incomes: [],
+      bills: [],
+      skippedBills: [],
+      billAssignments: [],
+      incomeOverrides: [],
+      budgetFields,
+      now: frozen,
+    });
+    expect(identity.startDate).toBe('2026-03-01');
+    expect(identity.startingBalance).toBe(800);
+
+    const draft = {
+      ...createEmptyDraftState(),
+      budget: budgetFields,
+    };
+    const fromDraft = buildScheduleInputHashFromDraft(draft, {
+      startDate: '2026-04-01',
+      startingBalance: 200,
+      preferredAssignments: [['bill-1-2026-01-15', '2026-01-01']],
+      now: frozen,
+    });
+    const withoutPreferred = buildScheduleInputHashFromDraft(draft, {
+      startDate: '2026-04-01',
+      startingBalance: 200,
+      now: frozen,
+    });
+    expect(fromDraft).not.toBe(withoutPreferred);
   });
 
   it('includes leaves in schedule input hash', () => {
