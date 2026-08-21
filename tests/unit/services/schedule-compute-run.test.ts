@@ -352,6 +352,75 @@ describe('runScheduleCompute', () => {
     expect(stages.at(-1)?.stage).toBe('finishing');
   });
 
+  it('validates break-glass plans when a paycheck sits in the band', () => {
+    const income: Income = {
+      id: 'inc-1',
+      sourceName: 'Job',
+      amount: 2000,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const earlier: Bill = {
+      id: 'bill-flex',
+      creditorName: 'Flex',
+      budgetedAmount: 400,
+      dueDay: 20,
+      isRecurring: true,
+      priority: 'low',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const heavy: Bill = {
+      id: 'bill-heavy',
+      creditorName: 'Heavy',
+      budgetedAmount: 1700,
+      dueDay: 28,
+      isRecurring: true,
+      priority: 'normal',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const input = serializeScheduleComputeInput({
+      incomes: [income],
+      bills: [earlier, heavy],
+      startDate: '2026-01-01',
+      months: 3,
+      startingBalance: 200,
+      skippedBills: new Set(),
+      manualAssignments: new Map(),
+      preferredAssignments: new Map(),
+      targetCashOnHand: 250,
+      goals: [],
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      debtPayoffs: new Map(),
+      incomeOverrides: new Map(),
+      leaves: [],
+      nowIso: '2026-01-01T00:00:00.000Z',
+    });
+    const stages: string[] = [];
+    const result = runScheduleCompute(
+      {
+        protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+        jobId: 'run-bg',
+        inputHash: computeScheduleInputHash('schedule', input),
+        op: 'schedule',
+        input,
+      },
+      (report) => {
+        stages.push(report.stage);
+      }
+    );
+    expect(result.op).toBe('schedule');
+    expect(stages).toContain('advising');
+    if (result.op === 'schedule') {
+      expect(result.schedule.breakGlassAdvisor).toBeDefined();
+    }
+  });
+
   it('drops malformed progress without throwing', () => {
     expect(
       readScheduleComputeProgressMessage(
