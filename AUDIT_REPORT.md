@@ -1,1700 +1,615 @@
-# Budget Optimizer — Functional Audit Report
+# Budget Optimizer — Security, Architecture & Efficiency Audit
 
-**Version audited:** 2.8.0  
-**Audit date:** June 10, 2026  
-**Scope:** Static code review of `src/`, `electron/`, tests, and dependencies  
-**Methodology:** Architecture tracing, security pattern review, algorithm analysis, draft-state flow mapping, dependency audit (`npm audit`), test suite execution (`vitest run`)
+**App version:** 3.0.0  
+**Audit date:** 2026-08-18  
+**Scope:** Full tree — `src/`, `electron/`, `shared/`, `scripts/`, CI, lockfiles, production + full-tree dependency advisories  
+**Method:** Static review of Electron hardening, IPC/auth/crypto/DB, renderer data flow, schedule pipeline, duplication, hot paths, and package hygiene  
+**Threat model:** Local-first desktop finance app. Primary adversaries are (1) malicious or compromised renderer content (XSS, dependency, navigation), (2) other OS users / malware reading disk and `/tmp`, (3) offline brute-force of stolen `userData`. There is no network backend.
 
-**Audit closure target:** June 2026  
-**Baseline re-verified:** `main` @ d5e7624 (June 15, 2026)  
-**Status:** **DONE — retained for archival purposes only.** All findings are Closed, Accepted, or Won't-do. No living remediation backlog. See [Audit Closure Summary](#audit-closure-summary) for resolving PRs/commits.
-
-**Archive note (July 2026):** Post-audit engineering (exact scheduler v3.0, architecture snowball, Electron 42, E2E, SBOM, docs) is complete. Optional LP/constraint solver (**5.4** / A-08 enhancement) is **Won't-do** until product need resurfaces. Historical finding narratives below are preserved; disposition tables and this header are the source of truth for status.
+**Supersedes:** The June 2026 functional audit (v2.8.0). That document is closed/archival; this report is the living backlog and the Plan Agent seed.
 
 ---
 
-## Table of Contents
+## 1. Executive summary
 
-1. [Executive Summary](#executive-summary)
-2. [Risk Scorecard](#risk-scorecard)
-3. [Top 10 Findings](#top-10-findings)
-4. [1. Security](#1-security)
-5. [2. Efficiency](#2-efficiency)
-6. [3. Limited Bloat](#3-limited-bloat)
-7. [4. Algorithmic Intelligence](#4-algorithmic-intelligence)
-8. [5. Volatile / Draft State](#5-volatile--draft-state)
-9. [6. Additional Quality Checks](#6-additional-quality-checks)
-10. [Prioritized Remediation Roadmap](#prioritized-remediation-roadmap)
-11. [Appendix](#appendix)
+Budget Optimizer is a capable local-first Electron 42 finance app with a **sound core**: context isolation, sandbox, parameterized SQL, AES-256-GCM payload encryption, unlock-gated IPC for budget data, schedule compute isolated in a `utilityProcess`, and a coherent draft/commit model on the primary editing surfaces.
 
----
+It is **not yet one harmonious system**. Several security controls stop at “good Electron defaults” and do not complete the Electron threat model. Credentials still cross the renderer. Feature work has left parallel apply paths, duplicate constants, a 1,500-line DraftContext, and a Quick Budget mode that does not own debts/leaves. Display currency is stored but ignored. A leftover `package-lock.json` fights `pnpm`.
 
-## Executive Summary
-
-Budget Optimizer is a well-structured local-first Electron finance application with a sound security foundation: context isolation, renderer sandboxing, parameterized SQL, and AES-256-GCM encryption for income and bill payloads. The draft/commit pattern ("volatile until Save") is architecturally coherent and recently implemented across the main editing surfaces.
-
-However, this audit identifies **release-blocking security artifacts** (leftover debug telemetry that exfiltrates schedule metadata), **algorithm constraint gaps** (the 14-day early-payment rule is not uniformly enforced), and **efficiency bottlenecks** (full 12-month schedule regeneration on routine UI interactions). The scheduling engine is a capable heuristic rebalancer for typical biweekly scenarios, but it is not a global optimizer and can leave shortfalls or violate stated rules under sparse paycheck cadences or manual overrides.
-
-**Overall posture:** Functional and thoughtfully designed for a v2.x desktop app, but not yet production-hardened without addressing Phase 0 items below.
+**Overall posture:** B- for a private desktop finance app. Release-worthy after Phase 0–1. Harmony/lean work is Phase 2–3.
 
 
-| Domain                   | Grade  | Summary                                                              |
-| ------------------------ | ------ | -------------------------------------------------------------------- |
-| Security                 | **C+** | Strong Electron baseline; critical debug telemetry + IPC/export gaps |
-| Efficiency               | **C**  | Correct local-first model; hot paths over-invoked                    |
-| Limited Bloat            | **B-** | Lean test ratio; some dead deps and duplication                      |
-| Algorithmic Intelligence | **B-** | Practical heuristic; constraint enforcement incomplete               |
-| Volatile / Draft State   | **B+** | Well-architected; navigation and cross-domain gaps                   |
-| Additional Quality       | **C+** | Docs drift, thin integration tests, dependency hygiene gaps          |
+| Domain                      | Grade  | One-line                                                                                     |
+| --------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| Electron / IPC security     | **C+** | Isolation is on; navigation lock, session CSP, and credential IPC are not finished           |
+| Crypto / at-rest data       | **B**  | GCM + PBKDF2 is real; file is not SQLCipher; `/tmp` PDF HTML and plaintext settings leak     |
+| Auth / lock                 | **B-** | Unlock gates work; keychain fill is broken; 8-char minimum is weak for a KEK                 |
+| Architecture / harmony      | **C+** | Draft+worker is the right shape; Quick Budget, debts IPC, and no-op apply channels are silos |
+| Efficiency / leaks          | **B-** | Worker + viewport cache help; hanging debounce promises and JSON cache keys waste work       |
+| Bloat / duplication         | **C+** | Lean runtime deps; duplicate types/constants/formatters and unused packages                  |
+| Dependencies / supply chain | **B**  | CI audit gates exist; dual lockfile + exceljs-as-devDep + two ignored GHSAs                  |
 
 
-### Current Status
 
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-Substantial remediation since the June 10 audit. Revised approximate posture:
-
-
-| Domain                   | June 10 grade | Current posture                                                               |
-| ------------------------ | ------------- | ----------------------------------------------------------------------------- |
-| Security                 | C+            | **B** — Phase 0/4 items largely closed (12/14 S-* findings)                   |
-| Efficiency               | C             | **B-** — PR #26 + #53 closed most E-* hot paths                               |
-| Limited Bloat            | B-            | **B** — scheduler modularized; B-02/B-03/B-06 closed; B-04/B-07–B-09 later closed |
-| Algorithmic Intelligence | B-            | **B** — prepay cap and dedup fixed; A-03, A-08 accepted                       |
-| Volatile / Draft State   | B+            | **A-** — Phase 2 complete (#52–#55); V-07 accepted                            |
-| Additional Quality       | C+            | **B** — tests, CI, docs, E2E, SBOM closed; audit archive only                 |
+| Severity | Count | IDs                                   |
+| -------- | ----- | ------------------------------------- |
+| High     | 4     | S-01, S-02, S-03, S-04                |
+| Medium   | 12    | S-05–S-12, A-01–A-04                  |
+| Low      | 11    | S-13–S-15, A-05–A-08, E-03–E-04, B-03 |
 
 
-**Closure summary:** **Done — archival only.** All release-blockers, draft-hardening, architecture polish, Electron 42, E2E, and SBOM are closed. **5.4** (LP solver) is **Won't-do**. See [Audit Closure Summary](#audit-closure-summary).
-
-Original grades in the table above are unchanged; this block supersedes them for planning purposes only.
+No critical remote RCE or SQL injection was found. No production debug telemetry (the June S-01 class) remains; CI still greps for it.
 
 ---
 
-## Risk Scorecard
+## 2. What is already solid — do not re-litigate
 
+Keep these. Remediations below layer on them; they do not replace them.
 
-| Severity     | Count | Representative issues                                                                                                  |
-| ------------ | ----- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Critical** | 1     | Debug telemetry exfiltrating financial schedule data (S-01)                                                            |
-| **High**     | 12    | Unguarded credentials IPC, HTML export XSS, plaintext goals/debts, algorithm constraint gaps, schedule over-generation |
-| **Medium**   | 18    | Auto-lock broken, draft navigation gaps, duplicate utilities, IPC path divergence                                      |
-| **Low**      | 10    | Redundant deps, large page components, terminology mismatch                                                            |
-| **Info**     | 3     | README inaccuracies, naming overpromises                                                                               |
-
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-The severity counts in the table above reflect the **June 10, 2026 baseline only** and are not updated in place. Final disposition on current `main` (see [Audit Closure Summary](#audit-closure-summary)):
-
-
-| Domain               | Closed  | Accepted       | Won't-do / Deferred |
-| -------------------- | ------- | -------------- | ------------------- |
-| Security (S-*)       | 13 / 14 | 1 (S-10)       | 0                   |
-| Volatile (V-*)       | 7 / 8   | 1 (V-07)       | 0                   |
-| Efficiency (E-*)     | 10 / 10 | 0              | 0                   |
-| Algorithm (A-*)      | 6 / 8   | 2 (A-03, A-08) | 0 (5.4 Won't-do)    |
-| Bloat (B-*)          | 10 / 10 | 0              | 0                   |
-| Data integrity (D-*) | 3 / 5   | 2 (D-04, D-05) | 0                   |
-
-
-The original Critical count (S-01) is **resolved**. Zero findings remain Open without a final disposition. Living remediation backlog is **empty**.
+- Renderer: `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, preload via `contextBridge` (`electron/main.ts`, `electron/preload.ts`).
+- Data IPC is wrapped in `withBudgetGuard` / `withUnlockGuard` (`electron/ipc/guards.ts`).
+- SQLite uses `prepare`/`run` with bound parameters. Payload columns are AES-256-GCM (`iv:tag:ciphertext`). Schema v9–v10 encrypted metadata and junctions.
+- Unlock clears the key (`CryptoService.clearKey` zero-fills the Buffer) and `applyLockSideEffects` closes DB + clears export-path allowlist.
+- Export writes require a prior native save-dialog path, 60s TTL, home-directory prefix (`electron/utils/exportPaths.ts`).
+- HTML export escapes user strings (`electron/utils/escapeHtml.ts`). PDF window has `javascript: false`.
+- Schedule work is off-main in `utilityProcess` with newest-wins, timeout, and no DB/keytar in the worker.
+- Draft overlay is validated (`validateDraftOverlay`) before compute.
+- Diagnostics scrub secrets/paths/money and rate-limit reports.
+- Production CSP strips `unsafe-eval` / localhost (`vite.config.ts` + `scripts/verify-production-csp.cjs`).
+- CI: typecheck (renderer + electron), lint, coverage, CSP verify, `pnpm audit --prod --audit-level critical`, `pnpm audit:dev`.
 
 ---
 
-## Top 10 Findings
+## 3. Findings
 
+Each item: **why it matters in this app**, then **the remediation that is correct here** (not generic advice).
 
-| Rank | ID   | Finding                                                                                      | Domain     |
-| ---- | ---- | -------------------------------------------------------------------------------------------- | ---------- |
-| 1    | S-01 | Leftover `#region agent log` code writes schedule data to disk and POSTs to localhost ingest | Security   |
-| 2    | A-01 | Initial bill assignment can place bills >14 days early on sparse paycheck cadences           | Algorithm  |
-| 3    | S-02 | `credentials:get` returns OS keychain password without unlock guard                          | Security   |
-| 4    | E-01 | Goals page runs full 12-month schedule to show projections only                              | Efficiency |
-| 5    | A-02 | Manual drag-drop bill assignment has no never-late / ≤14-day validation                      | Algorithm  |
-| 6    | S-03 | HTML export interpolates user strings without escaping (XSS)                                 | Security   |
-| 7    | V-01 | Unsaved draft changes silently discarded on most navigation                                  | Volatile   |
-| 8    | E-02 | Schedule regenerated on every edit without debounce or cache                                 | Efficiency |
-| 9    | S-04 | Goals, debts, budget metadata stored in plaintext SQLite                                     | Security   |
-| 10   | E-03 | `reloadSnapshot()` triggers 6–7 IPC round trips per CRUD refresh                             | Efficiency |
+### 3.1 Security
 
+#### S-01 — High — Renderer can navigate off-origin and keep the preload bridge
 
-### Current Status
+**Where:** `electron/main.ts` `createWindow()`. No `will-navigate` / `will-redirect` deny, no `setWindowOpenHandler({ action: 'deny' })`, no `setPermissionRequestHandler`.
 
-*Updated June 15, 2026 against `main` @ d5e7624.*
+**Why it matters here:** This app’s entire trusted API (`window.electronAPI`) is injected into one `webContents`. Electron does not drop the preload when that contents navigates. A single XSS, compromised chart/font path, or `window.open`/`location` assignment can attach the finance IPC surface (unlock, export, diagnostics, schedule overlay) to an attacker origin. Sandbox + contextIsolation do **not** stop that. This is the highest-leverage Electron fix remaining.
 
+**Remediation:** In `createWindow`, after constructing `BrowserWindow`:
 
-| Rank | ID   | Status     | Resolution                                                            |
-| ---- | ---- | ---------- | --------------------------------------------------------------------- |
-| 1    | S-01 | **Closed** | Telemetry removed + CI grep guards                                    |
-| 2    | A-01 | **Closed** | `MAX_PREPAY_DAYS` in assignment step 2C                               |
-| 3    | S-02 | **Closed** | `requireUnlocked` + gated IPC                                         |
-| 4    | E-01 | **Closed** | Lightweight `generateGoalProjections()` skips rebalance loop (PR #26) |
-| 5    | A-02 | **Closed** | Confirm-before-override on Schedule; documented in CONTRIBUTING       |
-| 6    | S-03 | **Closed** | `escapeHtml` in PDF/HTML export                                       |
-| 7    | V-01 | **Closed** | Sidebar, Settings, Quit, Lock, budget switch guarded (PR #52)         |
-| 8    | E-02 | **Closed** | Debounce + cache + `scheduleInputHash` (PR #26, #53)                  |
-| 9    | S-04 | **Closed** | v9/v10 encryption migrations                                          |
-| 10   | E-03 | **Closed** | `budget:get-snapshot` single IPC (PR #26)                             |
+1. Allow navigation only to the Vite dev URL (unpackaged) or `file:` URLs under `dist/`.
+2. `setWindowOpenHandler(() => ({ action: 'deny' }))`.
+3. Deny all permission requests (media, clipboard-sanitized, notifications, etc.).
+4. Apply the same lock to the PDF `BrowserWindow` (defense in depth; it already has JS off).
 
+**Why this is the right fix:** The app is not a browser. It never needs a second origin or a popup. Navigation deny is cheaper and more correct than auditing every `href`/`window.open` in React.
 
 ---
 
-## 1. Security
+#### S-02 — High — Master password is copied into the renderer; Keychain fill is also broken
 
-**Overall grade: C+ (Concern)**
+**Where:**
 
-### Strengths
+- `credentials:get` is `withUnlockGuard`’d (`electron/ipc/handlers.ts`).
+- `LoginPage` calls `credentials.get()` **while locked** (`src/pages/LoginPage.tsx` `handleFillFromCredentials`).
+- `credentials:save` / `offerSave` / `change-password` still pass the plaintext password across IPC.
+- Preload types the password onto `ApiResult`.
 
+**Why it matters here:** Two failures stacked. (1) Fill from Keychain silently no-ops after login lock — a functional hole in the credential feature. (2) The design still treats the renderer as a safe place for the KEK password. Any future XSS (S-01, font CDN, chart DOM) can read React state and IPC results. A finance app should keep the password in main/OS keychain only.
 
-| Control                      | Location                                | Notes                                                               |
-| ---------------------------- | --------------------------------------- | ------------------------------------------------------------------- |
-| Context isolation + sandbox  | `electron/main.ts`                      | `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true` |
-| Preload bridge               | `electron/preload.ts`                   | Fixed API surface via `contextBridge`                               |
-| Parameterized SQL            | `electron/services/database.service.ts` | All user data paths use `?` placeholders via better-sqlite3         |
-| Encryption at rest (partial) | `electron/services/crypto.service.ts`   | AES-256-GCM; PBKDF2-SHA512 at **310,000** iterations                |
-| Password handling            | `electron/services/auth.service.ts`     | Hash-only storage; `secureCompare` for verification                 |
-| Logger redaction             | `electron/services/logger.service.ts`   | Redacts keys matching `password`, `token`, `secret`, etc.           |
-| PDF generation isolation     | `electron/services/pdf.service.ts`      | Hidden window with `javascript: false` for printToPDF               |
+**Remediation:** Replace get/save/offer password IPC with **main-owned** operations:
 
 
-### Findings
+| New channel                          | Behavior                                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `auth:unlock-with-saved-credentials` | Main reads keytar, calls `AuthService.unlock`, never returns the password                                           |
+| `credentials:offer-save-current`     | After a successful unlock/create/change/reset **in main**, prompt Keychain save using the password main already has |
+| `credentials:has`                    | Keep (boolean only, already unguarded)                                                                              |
+| `credentials:delete`                 | Keep, still unlock-gated                                                                                            |
 
-#### S-01 — Debug telemetry exfiltrates financial metadata
 
+Delete `credentials:get`, `credentials:save`, `credentials:offerSave(password)` from preload and `src/types/electron.d.ts`. Login becomes: biometric, typed password, or “Unlock with Keychain” (one click, no fill into the input). Clear password React state on successful unlock and on unmount.
 
-| Field              | Value                                                                                                                                                                                                                                                                                                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Critical                                                                                                                                                                                                                                                                                                      |
-| **Location**       | `electron/services/scheduler.service.ts` (lines 580–584), `src/pages/SchedulePage.tsx` (lines 266–267), `src/components/schedule/PaycheckView.tsx` (lines 114–115)                                                                                                                                            |
-| **Description**    | Leftover `#region agent log` instrumentation from a prior debugging session remains in production code paths. The main process appends paycheck bill-assignment data to a hardcoded file path. The renderer POSTs drag-drop and filter events to `http://127.0.0.1:7289/ingest/...` with session ID `f84ef2`. |
-| **Impact**         | Financial scheduling metadata (bill IDs, due dates, paycheck dates, assignment counts) leaves the intended trust boundary. On a machine with the ingest server running, data is transmitted off-process. The hardcoded path also leaks developer machine structure.                                           |
-| **Recommendation** | Remove all `#region agent log` blocks before any release. Add a pre-commit or CI grep rule to block debug telemetry patterns.                                                                                                                                                                                 |
-
-
-```580:584:electron/services/scheduler.service.ts
-    // #region agent log
-    const fs = require('fs') as typeof import('fs');
-    const debugPayload = {sessionId:'f84ef2',location:'scheduler.service.ts:assignBillsToPaychecks',message:'paycheck bill assignment result',data:{...},timestamp:Date.now(),hypothesisId:'B'};
-    try { fs.appendFileSync('/Users/davismi/Repos/budget_optimizer/.cursor/debug-f84ef2.log', JSON.stringify(debugPayload)+'\n'); } catch { /* ignore */ }
-    // #endregion
-```
-
-#### S-02 — Sensitive IPC handlers lack centralized unlock guards
-
-
-| Field              | Value                                                                                                                                                                                                                                                                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                                                                                                                                                                    |
-| **Location**       | `electron/ipc/handlers.ts`                                                                                                                                                                                                                                                                                                              |
-| **Description**    | Many handlers check that `budgetManager`/`database` are initialized (implying prior unlock), but several critical channels have no `getIsUnlocked()` guard: `credentials:get/save/delete`, `export:to-pdf/to-html/to-spreadsheet`, `auth:get-pending-recovery-key`. Export handlers also accept arbitrary `filePath` from the renderer. |
-| **Impact**         | Any renderer compromise (XSS, compromised extension, DevTools in dev builds) could read the saved master password from OS keychain, retrieve the pending recovery key, or write exported content to arbitrary writable paths.                                                                                                           |
-| **Recommendation** | Introduce a `requireUnlocked(event)` middleware applied to all sensitive handlers. Restrict export paths to dialog-selected locations or an allowlisted directory (e.g., user Downloads).                                                                                                                                               |
-
-
-```213:219:electron/ipc/handlers.ts
-  ipcMain.handle('credentials:save', async (_, password: string) => {
-    return services.credentials.savePassword(password);
-  });
-
-  ipcMain.handle('credentials:get', async () => {
-    return services.credentials.getPassword();
-  });
-```
-
-#### S-03 — HTML export XSS via unescaped user strings
-
-
-| Field              | Value                                                                                                                                                                                                                 |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                                                  |
-| **Location**       | `electron/services/pdf.service.ts` (`generateHtml`)                                                                                                                                                                   |
-| **Description**    | User-controlled strings (`src.name`, `bill.creditorName`, `gd.goalName`, recommendation text) are interpolated directly into HTML template literals without escaping.                                                 |
-| **Impact**         | A malicious creditor or goal name (e.g., `<img src=x onerror=alert(1)>`) executes JavaScript when the exported `.html` file is opened in a browser. PDF export is lower risk (sandboxed window, `javascript: false`). |
-| **Recommendation** | HTML-escape all dynamic strings before interpolation, or use a templating library with auto-escaping.                                                                                                                 |
-
-
-```145:149:electron/services/pdf.service.ts
-          ${paycheck.incomeSources.map(src => `
-            <div class="row row-income">
-              <span class="row-label">${src.name}</span>
-              <span class="row-amount income">+${formatCurrency(src.amount)}</span>
-            </div>
-```
-
-#### S-04 — Significant financial metadata stored in plaintext
-
-
-| Field              | Value                                                                                                                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                    |
-| **Location**       | `electron/services/database.service.ts`                                                                                                                                                 |
-| **Description**    | Only `incomes.data` and `bills.data` JSON blobs are encrypted. Budget names/balances, goal names/targets, debt principal/APR, and junction table metadata are plaintext SQLite columns. |
-| **Impact**         | Copying `budget-data.db` exposes financial structure even without the master password. README overstates protection ("All sensitive data … is encrypted").                              |
-| **Recommendation** | Either encrypt remaining columns (with migration) or revise documentation to accurately describe the threat model.                                                                      |
-
-
-#### S-05 — Auto-lock timer never resets on activity
-
-
-| Field              | Value                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                    |
-| **Location**       | `electron/services/auth.service.ts`                                                                                                                                       |
-| **Description**    | `resetAutoLock()` exists but is never called anywhere in the codebase. Timer only starts when user changes auto-lock duration in Settings—not on unlock or user activity. |
-| **Impact**         | Auto-lock feature is effectively non-functional for its intended purpose.                                                                                                 |
-| **Recommendation** | Call `resetAutoLock` on successful unlock and on user activity events (IPC heartbeat or renderer activity listener).                                                      |
-
-
-#### S-06 — CSP allows unsafe directives; stale Google OAuth origins
-
-
-| Field              | Value                                                                                                                                                                                                             |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                                            |
-| **Location**       | `index.html`                                                                                                                                                                                                      |
-| **Description**    | CSP includes `script-src 'unsafe-inline' 'unsafe-eval'`. `connect-src` allows Google OAuth/Sheets APIs, but `google.service.ts` no longer exists. `font-src` is missing while Google Fonts are loaded externally. |
-| **Impact**         | Weakened XSS mitigation in production builds; stale origins increase attack surface documentation drift.                                                                                                          |
-| **Recommendation** | Tighten CSP for production builds (drop `unsafe-eval`); remove unused Google origins; add `font-src`.                                                                                                             |
-
-
-#### S-07 — Settings update accepts arbitrary keys
-
-
-| Field              | Value                                                                                                                        |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                       |
-| **Location**       | `electron/services/database.service.ts` (`updateSettings`)                                                                   |
-| **Description**    | Any key/value pair from the renderer is upserted into the settings table without allowlisting.                               |
-| **Impact**         | Settings pollution; potential prototype-chain issues if keys like `__proto__` are passed and merged back onto `AppSettings`. |
-| **Recommendation** | Allowlist known setting keys; reject unknown keys at validation layer.                                                       |
-
-
-#### S-08 — No brute-force rate limiting on auth channels
-
-
-| Field              | Value                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                      |
-| **Location**       | `electron/ipc/handlers.ts` (`auth:unlock`, `auth:verify-recovery-key`, `auth:reset-password-with-recovery`) |
-| **Description**    | No lockout, delay, or attempt counter on password/recovery verification.                                    |
-| **Impact**         | Unlimited offline master password attempts against local hash.                                              |
-| **Recommendation** | Add exponential backoff after N failed attempts; optional lockout period.                                   |
-
-
-#### S-09 — Password change silently overwrites keychain
-
-
-| Field              | Value                                                                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                  |
-| **Location**       | `electron/ipc/handlers.ts` (`auth:change-password`)                                                                     |
-| **Description**    | On successful password change, keychain is updated without user consent (unlike `credentials:offerSave` which prompts). |
-| **Impact**         | Unexpected credential store mutation.                                                                                   |
-| **Recommendation** | Use `offerSave` pattern or explicit user confirmation.                                                                  |
-
-
-#### S-10 — Legacy recovery key static salt fallback
-
-
-| Field              | Value                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                         |
-| **Location**       | `electron/services/crypto.service.ts`                                                          |
-| **Description**    | Recovery key KDF falls back to static salt `budget-optimizer-recovery-v1` for legacy accounts. |
-| **Impact**         | Weaker KDF for accounts created before per-user recovery salts.                                |
-| **Recommendation** | Migration path to per-user salts on next unlock.                                               |
-
-
-#### S-11 — SQLite DB file permissions not hardened
-
-
-| Field              | Value                                                                                               |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                 |
-| **Location**       | `electron/services/database.service.ts`                                                             |
-| **Description**    | `auth.config` uses mode `0o600`; `budget-data.db` created without explicit restrictive permissions. |
-| **Recommendation** | Set `0o600` on DB file at creation.                                                                 |
-
-
-#### S-12 — DevTools auto-opened in development
-
-
-| Field           | Value                                                                      |
-| --------------- | -------------------------------------------------------------------------- |
-| **Severity**    | Low                                                                        |
-| **Location**    | `electron/main.ts`                                                         |
-| **Description** | `mainWindow.webContents.openDevTools()` when `VITE_DEV_SERVER_URL` is set. |
-| **Impact**      | Expected for dev; ensure production builds never set this flag.            |
-
-
-#### S-13 — Partial input validation coverage
-
-
-| Field              | Value                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                       |
-| **Location**       | `electron/services/validation.service.ts` vs `database.service.ts`                                        |
-| **Description**    | Bills and income are validated; goals, debts, budgets, settings, and reconciliation fix payloads are not. |
-| **Recommendation** | Extend validation service to all write paths.                                                             |
-
-
-#### S-14 — Draft overlay trusts renderer-shaped objects
-
-
-| Field              | Value                                                                         |
-| ------------------ | ----------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                           |
-| **Location**       | `electron/services/draft-overlay.service.ts`                                  |
-| **Description**    | Overlay arrays from IPC are merged without re-validation on the main process. |
-| **Recommendation** | Re-validate overlay payloads server-side before schedule computation.         |
-
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| ID   | Status       | Notes                                                                                          |
-| ---- | ------------ | ---------------------------------------------------------------------------------------------- |
-| S-01 | **Closed**   | Debug telemetry removed; CI grep + packaged-app guards                                         |
-| S-02 | **Closed**   | `requireUnlocked` / `withUnlockGuard`; credentials + export gated                              |
-| S-03 | **Closed**   | `escapeHtml` on all dynamic export strings                                                     |
-| S-04 | **Closed**   | v9/v10 migrations encrypt goals, debts, budget metadata, schedule junction data                |
-| S-05 | **Closed**   | Auto-lock resets on unlock + activity pings from Layout                                        |
-| S-06 | **Closed**   | Production CSP tightened; stale Google OAuth origins removed                                   |
-| S-07 | **Closed**   | Settings key allowlist in `validation.service.ts`                                              |
-| S-08 | **Closed**   | Auth rate limiting with backoff and lockout                                                    |
-| S-09 | **Closed**   | Password change uses `credentials.offerSave()`                                                 |
-| S-10 | **Accepted** | Static recovery salt fallback removed; legacy accounts without `recoverySalt` blocked at reset |
-| S-11 | **Closed**   | DB file chmod `0o600` on initialize                                                            |
-| S-12 | **Closed**   | DevTools only in unpackaged dev builds                                                         |
-| S-13 | **Closed**   | `validateSkippedBill()` / `validateBillAssignment()` on skip/assign IPC paths                  |
-| S-14 | **Closed**   | `validateDraftOverlay()` before schedule computation                                           |
-
-
-Key commits: `35d1133`, `6fa05a0`, `13f8b21`, `5a1fa68`, `cfd0588`.
+**Why this is the right fix:** It restores Keychain UX **and** removes the secret from the XSS domain. Guarding `credentials:get` without changing LoginPage was the wrong half-measure.
 
 ---
 
-## 2. Efficiency
+#### S-03 — High — Session has no CSP; production still phones Google Fonts
 
-**Overall grade: C (Concern)**
+**Where:** CSP is a meta tag only (`index.html`, swapped in `vite.config.ts`). Production still allows `style-src https://fonts.googleapis.com` and `font-src https://fonts.gstatic.com`. `index.html` always loads Inter/JetBrains from Google.
 
-### Strengths
+**Why it matters here:** Meta CSP is bypassed if navigation succeeds (S-01). Google Fonts is a **network identity leak** from a local-first finance app (OS, locale, app usage). It also keeps a remote origin in CSP that S-01 is trying to eliminate. `unsafe-inline` on style is acceptable for Tailwind; remote fonts are not.
 
-- Heavy native dependencies (`exceljs`, `better-sqlite3`, `keytar`) correctly externalized in `vite.config.ts` — not bundled into renderer.
-- SQLite uses WAL mode, prepared statements, and transactions.
-- Recent utility extractions reduce UI duplication: `src/utils/cadence.ts`, `src/utils/scheduleBills.ts`.
-- Paycheck date math centralized in `electron/utils/paycheck-calculator.ts` (not duplicated in renderer).
+**Remediation:**
 
-### Findings
+1. Self-host Inter + JetBrains Mono under `public/fonts/` (or drop to `system-ui` + ui-monospace — even leaner).
+2. Production CSP: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'none'`.
+3. Set the same policy on `session.defaultSession` via `session.webRequest.onHeadersReceived` (or `protocol.handle`) so it applies even if `index.html` is not the document.
+4. Extend `scripts/verify-production-csp.cjs` to fail on `fonts.googleapis.com` / `fonts.gstatic.com`.
 
-#### E-01 — Goals page runs full 12-month schedule for projections only
-
-
-| Field              | Value                                                                                                                                                                                               |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                                |
-| **Location**       | `electron/ipc/handlers.ts` (`goals:get-projections`), `src/pages/GoalsPage.tsx`                                                                                                                     |
-| **Description**    | IPC handler calls `scheduler.generateSchedule(..., SCHEDULE_CALCULATION_MONTHS)` (12 months) and returns only `goalProjections`. GoalsPage re-runs on `draft.goals` or `dirtyDomains.size` changes. |
-| **Impact**         | One of the heaviest codepaths executes on a page that only needs goal allocation math (~1,686-line scheduler service).                                                                              |
-| **Recommendation** | Extract `calculateGoalProjections()` as a standalone function that does not require full bill assignment/rebalance.                                                                                 |
-
-
-#### E-02 — Schedule regenerated on every edit without debounce or cache
-
-
-| Field              | Value                                                                                                                                                                                                                                                                        |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                                                                                                         |
-| **Location**       | `src/pages/DashboardPage.tsx`, `src/pages/SchedulePage.tsx`, `src/context/DataContext.tsx`                                                                                                                                                                                   |
-| **Description**    | `generateSchedule` → IPC `schedule:optimize` → full `SchedulerService.generateSchedule` on main process. Dashboard regens when incomes/bills change. SchedulePage regens on `dataHash` changes including every drag-drop assignment. No debounce, no input-hash memoization. |
-| **Impact**         | Main-thread CPU spikes; perceptible UI stalls during interactive schedule editing.                                                                                                                                                                                           |
-| **Recommendation** | Debounce schedule calls (300–500ms); cache by `(overlayHash, startDate, months, startingBalance)`; consider incremental paycheck-window invalidation.                                                                                                                        |
-
-
-#### E-03 — `reloadSnapshot()` = 6–7 parallel IPC round trips
-
-
-| Field              | Value                                                                                                                                                                                                                                                                               |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                                                                                                                |
-| **Location**       | `src/context/DraftContext.tsx` (lines 125–197)                                                                                                                                                                                                                                      |
-| **Description**    | Parallel calls to `income.getAll`, `bills.getAll`, `goals.getAll`, `skippedBills.getAll`, `billAssignments.getAll`, `incomeOverrides.getAll`, `debts.getAll` — each IPC + DB query + decrypt (for incomes/bills). Called after most CRUD in Quick Budget mode and on budget switch. |
-| **Impact**         | Latency stacks on every save/skip/assign; decrypt is O(n) per entity type.                                                                                                                                                                                                          |
-| **Recommendation** | Add single `budget:get-snapshot` IPC returning all budget-scoped data in one transaction. Update only mutated slices client-side after writes.                                                                                                                                      |
-
-
-#### E-04 — Global DraftContext causes broad re-renders
-
-
-| Field              | Value                                                                                                                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                  |
-| **Location**       | `src/context/DraftContext.tsx` (778 lines), `src/App.tsx`                                                                                               |
-| **Description**    | Provider wraps entire app. Context `value` useMemo depends on entire `draft` object; any mutation recreates value. Zero `React.memo` usage in codebase. |
-| **Impact**         | Typing in Bills/Income forms can re-render Layout, nav, and unrelated pages.                                                                            |
-| **Recommendation** | Split into data vs actions contexts, or adopt selector pattern (Zustand/jotai). Memoize heavy children (`PaycheckView`, debt lists).                    |
-
-
-#### E-05 — No route-level code splitting
-
-
-| Field              | Value                                                                                     |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                    |
-| **Location**       | `src/App.tsx`                                                                             |
-| **Description**    | All 11 pages imported eagerly; no `React.lazy` / `Suspense`.                              |
-| **Impact**         | Initial renderer bundle includes every page, including chart-heavy pages with `recharts`. |
-| **Recommendation** | Lazy-load `DebtsPage`, `SummaryPage`, `SchedulePage`, `ExportPage`, `SettingsPage`.       |
-
-
-#### E-06 — Divergent schedule IPC paths
-
-
-| Field              | Value                                                                                                                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                                          |
-| **Location**       | `electron/ipc/handlers.ts`, `electron/preload.ts`                                                                                                                                                               |
-| **Description**    | `schedule:generate` (12-mo calc + viewport filter + bill dedup + reconciliation) is exposed in preload but never called from `src/`. Renderer uses only `schedule:optimize`, which skips post-processing steps. |
-| **Impact**         | Dead code path with different behavior; maintenance hazard if re-enabled without alignment.                                                                                                                     |
-| **Recommendation** | Consolidate to one handler or remove unused path from preload.                                                                                                                                                  |
-
-
-#### E-07 — `structuredClone` on every snapshot reload
-
-
-| Field              | Value                                                          |
-| ------------------ | -------------------------------------------------------------- |
-| **Severity**       | Medium                                                         |
-| **Location**       | `src/context/DraftContext.tsx`                                 |
-| **Description**    | Full deep clone of all budget data on each `reloadSnapshot()`. |
-| **Impact**         | Memory allocation churn proportional to dataset size.          |
-| **Recommendation** | Immutable updates for draft edits; clone only dirty domains.   |
-
-
-#### E-08 — `recharts` on three pages without lazy loading
-
-
-| Field              | Value                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                      |
-| **Location**       | `DashboardPage.tsx`, `DebtsPage.tsx`, `SummaryPage.tsx`                                                     |
-| **Description**    | `recharts` (~150–250KB+ gzipped) imported statically; SummaryPage uses widest API surface (Area, Bar, Pie). |
-| **Recommendation** | Dynamic import inside chart components or lazy-load chart pages.                                            |
-
-
-#### E-09 — Monolithic scheduler module loaded for any schedule call
-
-
-| Field              | Value                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                     |
-| **Location**       | `electron/services/scheduler.service.ts` (1,686 lines)                                  |
-| **Description**    | Entire module loads for any schedule invocation including lightweight projection needs. |
-| **Recommendation** | Split into focused modules for targeted caching and smaller hot paths.                  |
-
-
-#### E-10 — Vite build has no chunking strategy
-
-
-| Field              | Value                                                                                               |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                 |
-| **Location**       | `vite.config.ts`                                                                                    |
-| **Description**    | No `manualChunks`, no bundle analyzer configured.                                                   |
-| **Recommendation** | Add `rollup-plugin-visualizer`; configure vendor chunks for `recharts`, `date-fns`, `lucide-react`. |
-
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| ID   | Status       | Notes                                                                          |
-| ---- | ------------ | ------------------------------------------------------------------------------ |
-| E-01 | **Closed**   | `generateGoalProjections()` skips rebalance loop; tests assert parity (PR #26) |
-| E-02 | **Closed**   | Debounce + in-memory cache + `scheduleInputHash` (PR #26, #53)                 |
-| E-03 | **Closed**   | Single `budget:get-snapshot` IPC (PR #26)                                      |
-| E-04 | **Closed**   | `DraftStatusContext` + memoization (#82)                               |
-| E-05 | **Closed**   | Route lazy-loading in `App.tsx`                                                |
-| E-06 | **Closed**   | Dead `schedule:generate` removed; single `schedule:build`                      |
-| E-07 | **Closed**   | Shallow `copyDraftState()` on reload; `structuredClone` only on discard paths  |
-| E-08 | **Closed**   | Charts lazy-loaded via `lazyCharts.tsx`; recharts vendor chunk                 |
-| E-09 | **Closed**   | Scheduler modularized under `electron/services/scheduler/`; facade ~212 LOC    |
-| E-10 | **Closed**   | `manualChunks` + optional bundle visualizer in `vite.config.ts`                |
-
-
-Primary remediation: PR [#26](https://github.com/mdavis93/budget_optimizer/pull/26) (E-01–E-10).
+**Why this is the right fix:** Local-first means no third-party origins, period. Session-level CSP is the control that survives navigation mistakes.
 
 ---
 
-## 3. Limited Bloat
+#### S-04 — High — PDF export writes plaintext financial HTML to `os.tmpdir()`
 
-**Overall grade: B- (Moderate Concern)**
+**Where:** `electron/services/pdf.service.ts` `generatePdf`.
 
-The codebase is lean relative to its feature set. Production code is ~~19,487 LOC; tests are ~3,146 LOC (**~~16% ratio**). This is healthy—not over-tested on trivia, not under-tested on the scheduler core.
+**Why it matters here:** The DB is encrypted at rest. The PDF pipeline dumps the full schedule (pay amounts, creditors, balances) into a world-readable temp file, then `loadFile`s it. On multi-user macOS/Linux, or with local malware watching `/tmp`, this undoes column encryption for the duration of export (and on crash, until reboot).
 
-### Positive Signals
+**Remediation:** Write the temp HTML under `app.getPath('temp')` is not enough on some OS layouts. Use `app.getPath('userData')/export-scratch/` with `mode: 0o700` dir and `0o600` file, unique name, `fs.open` + write, load, **always** unlink in `finally` (already present). Optionally skip the file entirely: `loadURL('data:text/html;base64,…')` or `webContents.loadURL` with a custom `app://` protocol that serves from memory. Prefer in-memory/`userData` over `/tmp`.
 
-- No widespread dead code in business logic paths.
-- Recent extractions (`cadence.ts`, `scheduleBills.ts`) show active de-bloating.
-- Test investment concentrated where algorithmic risk is highest (`scheduler.service.test.ts` = 1,414 LOC).
-
-### Findings
-
-#### B-01 — Unused `@react-pdf/renderer` dependency
-
-
-| Field              | Value                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                |
-| **Location**       | `package.json`                                                                                                      |
-| **Description**    | Listed in `dependencies`; zero imports in source. PDF export uses Chromium `printToPDF` via hidden `BrowserWindow`. |
-| **Recommendation** | Remove from `package.json` and lockfile.                                                                            |
-
-
-#### B-02 — `formatCurrency` duplicated across 12 files
-
-
-| Field              | Value                                                                                                                                                                                                                                                                 |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                                                                                                |
-| **Location**       | `DashboardPage.tsx`, `BillsPage.tsx`, `IncomePage.tsx`, `SchedulePage.tsx`, `GoalsPage.tsx`, `SummaryPage.tsx`, `CalendarView.tsx`, `ReconciliationPage.tsx`, `PaycheckView.tsx`, `pdf.service.ts`, `scheduler.service.ts`, `electron/utils/constants.ts` (canonical) |
-| **Recommendation** | Create `src/utils/formatCurrency.ts` (or shared isomorphic module) and import everywhere.                                                                                                                                                                             |
-
-
-#### B-03 — `PRIORITY_LABELS` duplicated in export services
-
-
-| Field              | Value                                                                        |
-| ------------------ | ---------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                       |
-| **Location**       | `src/types/index.ts` (canonical), `pdf.service.ts`, `spreadsheet.service.ts` |
-| **Recommendation** | Shared constants module imported by electron services.                       |
-
-
-#### B-04 — Mirrored type definitions across layers
-
-
-| Field              | Value                                                                                                                |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                               |
-| **Location**       | `src/types/index.ts`, `electron/services/database.service.ts`, `src/types/electron.d.ts`                             |
-| **Description**    | Entity types and IPC typings duplicated with drift risk. `database.service.ts` is 1,384 lines including row mappers. |
-| **Recommendation** | Single shared `types/` package or path alias; DB layer keeps only row interfaces.                                    |
-
-
-#### B-05 — God files: scheduler and IPC handlers
-
-
-| Field              | Value                                                              |
-| ------------------ | ------------------------------------------------------------------ |
-| **Severity**       | Medium                                                             |
-| **Location**       | `scheduler.service.ts` (1,686 LOC), `ipc/handlers.ts` (~1,190 LOC) |
-| **Description**    | Maintainability concern, not runtime dead weight.                  |
-| **Recommendation** | Split by domain when next touching these files.                    |
-
-
-#### B-06 — Redundant direct dependencies
-
-
-| Field              | Value                                                                                                                                                                       |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                                                                                         |
-| **Location**       | `package.json`                                                                                                                                                              |
-| **Description**    | `bindings`, `file-uri-to-path` are transitive deps of `better-sqlite3`. `uuid` used only in `quick-budget.service.ts` while `CryptoService.generateId()` is used elsewhere. |
-| **Recommendation** | Remove redundant direct deps; standardize on `crypto.randomUUID()` or `CryptoService`.                                                                                      |
-
-
-#### B-07 — Large page components
-
-
-| Field              | Value                                                                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                                                            |
-| **Location**       | `DebtsPage.tsx` (853 LOC), `SettingsPage.tsx` (640 LOC), `GoalsPage.tsx` (622 LOC), `SchedulePage.tsx` (562 LOC), `PaycheckView.tsx` (581 LOC) |
-| **Description**    | Maintainability bloat, not dead code.                                                                                                          |
-| **Recommendation** | Extract forms, chart wrappers, and sort/group helpers when next editing.                                                                       |
-
-
-#### B-08 — `BudgetManager` mostly passthrough
-
-
-| Field              | Value                                                                                                            |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                              |
-| **Location**       | `electron/services/budget-manager.service.ts` (389 lines)                                                        |
-| **Description**    | Many methods delegate directly to `DatabaseService`; `getTargetCashOnHand` etc. call `getBudgetById` repeatedly. |
-| **Recommendation** | Cache current budget on switch; collapse pure passthroughs.                                                      |
-
-
-#### B-09 — `DataContext` thin facade over `DraftContext`
-
-
-| Field              | Value                                                                        |
-| ------------------ | ---------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                          |
-| **Location**       | `src/context/DataContext.tsx`, `src/components/Layout.tsx`                   |
-| **Description**    | Extra provider nesting; `incomes`/`bills` are pass-throughs from draft.      |
-| **Recommendation** | Merge or expose schedule state from dedicated context to reduce indirection. |
-
-
-#### B-10 — Duplicate debt-payoff logic in IPC handlers
-
-
-| Field              | Value                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                   |
-| **Location**       | `electron/ipc/handlers.ts`                                                            |
-| **Description**    | `buildDebtPayoffs()` helper exists but `schedule:generate` has inline duplicate loop. |
-| **Recommendation** | Use helper everywhere.                                                                |
-
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| ID   | Status       | Notes                                                                       |
-| ---- | ------------ | --------------------------------------------------------------------------- |
-| B-01 | **Closed**   | `@react-pdf/renderer` removed; PDF via Chromium `printToPDF`                |
-| B-02 | **Closed**   | Shared `src/utils/formatCurrency.ts` replaces local copies                  |
-| B-03 | **Closed**   | Shared `PRIORITY_LABELS` in `electron/utils/constants.ts`                   |
-| B-04 | **Closed**   | Shared types module (`shared/`, #59)                                    |
-| B-05 | **Closed**   | Scheduler split into `electron/services/scheduler/`; handler split deferred |
-| B-06 | **Closed**   | Redundant direct deps removed; `crypto.randomUUID()` in quick-budget        |
-| B-07 | **Closed**   | Presentational splits (#81)                                                 |
-| B-08 | **Closed**   | BudgetManager current-budget cache                                          |
-| B-09 | **Closed**   | DataContext → Draft schedule slice (#83; removed)                           |
-| B-10 | **Closed**   | Shared `buildDebtPayoffs()` in handlers; inline duplicate removed           |
-
+**Why this is the right fix:** Export is a user-initiated disclosure to a **chosen** path. Intermediate files must have the same confidentiality as `budget-data.db`.
 
 ---
 
-## 4. Algorithmic Intelligence
+#### S-05 — Medium — Password policy is 8 characters; KEK derivation is sync PBKDF2 on the main process
 
-**Overall grade: B- (Moderate)**
+**Where:** `AuthService.createMasterPassword` / `changePassword` / `resetPasswordWithRecoveryKey`; `CryptoService.deriveKey` / `hashPassword` (`pbkdf2Sync`, 310_000, SHA-512). `PasswordStrength` is UI-only and does not block weak passwords.
 
-This is the deepest audit domain. The product promise—*"optimize payment schedules to avoid shortfalls with bills budgeted up to two weeks early but never late"*—is **partially met**. The engine is a practical four-phase greedy rebalancer suited to common biweekly/weekly paycheck cadences, but it is not a global optimizer and has enforceable constraint gaps.
+**Why it matters here:** The password is the KEK for every budget payload. 8 characters + no complexity is offline-crackable if `auth.config` + DB are copied. `pbkdf2Sync` blocks the Electron main thread for hundreds of ms per attempt (unlock, create, recovery) and freezes IPC.
 
-### Algorithm Architecture
+**Remediation:** Enforce min 12 (prefer 16) in `AuthService` (single policy module, used by IPC — not only the React meter). Keep PBKDF2-SHA-512 **or** migrate to `scrypt`/`argon2id` with a version byte in `auth.config` so existing vaults still unlock. Switch to async `pbkdf2`/`scrypt` so the UI stays live. Do **not** bump iterations without a config version — you cannot re-derive without the password.
 
-```mermaid
-flowchart TD
-    start[generateSchedule] --> projIncome[projectIncome]
-    start --> projBills[projectBills]
-    projIncome --> paychecks[getUniquePaycheckDates]
-    projBills --> paychecks
-    paychecks --> assign[assignBillsToPaychecks]
-    
-    assign --> step1[Step 1: Manual assignments - LOCKED]
-    assign --> step2a[Step 2A: Income-attached - every paycheck]
-    assign --> step2b[Step 2B: Preferred income - findPreferredPaycheck]
-    assign --> step2c[Step 2C: Regular bills - date window]
-    
-    step2c --> rebalance[rebalanceBills - 4 phases]
-    rebalance --> phase1[Phase 1: DirectMoves]
-    rebalance --> phase2[Phase 2: CascadeMoves]
-    rebalance --> phase3[Phase 3: DeepCascade]
-    rebalance --> phase4[Phase 4: EvenOut]
-    
-    phase4 --> build[buildPaycheckEntries]
-    build --> goals[Goal allocation waterfall]
-    build --> savings[Savings deposits]
-    build --> summary[calculateSummary + recommendations]
-    summary --> reconcile[analyzeAndProposeFixes if shortfalls]
-```
-
-
-
-**Core engine:** `electron/services/scheduler.service.ts` (1,686 lines)
-
-**Supporting modules:**
-
-- `electron/utils/paycheck-calculator.ts` — income date projection
-- `electron/utils/constants.ts` — `PRIORITY_ORDER`
-- `src/utils/cadence.ts` — monthly budget equivalence (UI only, not scheduling)
-- `src/utils/scheduleBills.ts` — UI display filter for moved bills
-
-### Key Constants
-
-```27:30:electron/services/scheduler/types.ts
-export const DEFAULT_TARGET_CASH_ON_HAND = 250;
-export const DEFAULT_MIN_CASH_ON_HAND = 100;
-export const MAX_PREPAY_DAYS = 14; // Bills cannot be paid more than 14 days early
-```
-
-Surplus and reconciliation use the user's target/min from `ScheduleData` (`maxBudgetRemaining`, `minCashOnHand`); `MIN_BREATHING_ROOM` was removed in 3.0.
-
-### Assignment Pipeline Detail
-
-#### Step 1: Manual assignments (locked from rebalance)
-
-Bills with entries in `BillAssignment` map (`billId-billDueDate → paycheckDate`) are placed first and added to `manuallyAssignedBills` set. Rebalance `moveBill` refuses to relocate locked bills.
-
-#### Step 2A: Income-attached bills
-
-Placed on **every** paycheck from the attached income source. No due-date alignment or prepay cap applied.
-
-#### Step 2B: Preferred income bills
-
-`findPreferredPaycheck()` selects the paycheck closest to (but not after) the due date, enforcing `daysEarly ≤ MAX_PREPAY_DAYS`:
-
-```396:412:electron/services/scheduler.service.ts
-    // Find the best paycheck: closest to bill due date, but not more than MAX_PREPAY_DAYS early
-    // ...
-      if (isAfter(paycheck.date, bill.date)) continue;
-      const daysEarly = differenceInDays(bill.date, paycheck.date);
-      if (daysEarly > MAX_PREPAY_DAYS) continue;
-```
-
-#### Step 2C: Regular bills (date window)
-
-Bills land on the first paycheck where `paycheckDate ≤ dueDate < nextPaycheckDate`:
-
-```554:558:electron/services/scheduler.service.ts
-        const isInDateRange = (
-          (isAfter(billDate, paycheckDate) || isEqual(billDate, paycheckDate)) &&
-          isBefore(billDate, nextPaycheckDate)
-        );
-```
-
-**Gap:** No `MAX_PREPAY_DAYS` check here. Monthly paycheck on the 1st with bill due on the 28th → ~27 days early.
-
-### Rebalancing Engine
-
-Four greedy phases, each capped at 50–200 passes:
-
-
-| Phase | Method                         | Strategy                                                            |
-| ----- | ------------------------------ | ------------------------------------------------------------------- |
-| 1     | `rebalancePhase1_DirectMoves`  | Move movable bills from deficit paycheck → earlier surplus paycheck |
-| 2     | `rebalancePhase2_CascadeMoves` | Free space on mid paycheck, pull deficit bill forward               |
-| 3     | `rebalancePhase3_DeepCascade`  | Chain smaller bill moves to create room for larger deficit bills    |
-| 4     | `rebalancePhase4_EvenOut`      | Spread load when balance is tight ($50–$150 range) but not deficit  |
-
-
-**Move rules (`moveBill`):**
-
-- Blocked if bill is manually assigned (locked)
-- Blocked if `daysEarly > 14`
-- Movable bills: non-`critical`, sorted lowest priority first, then largest amount
-- Critical bills never moved
-- Moves are always to **earlier** paycheck indices (never pushes bills later)
-
-**Rebalance balance model:**
-
-- Per-paycheck: `income − bills` with $50 breathing room
-- `startingBalance` is **not** used during rebalance (only in `buildPaycheckEntries` for paycheck #1)
-- No inter-paycheck cash carry during rebalance
-
-### Surplus Allocation (`buildPaycheckEntries`)
-
-Waterfall per paycheck:
-
-1. Reserve `minCashOnHand`
-2. `minSavingsPerPaycheck`
-3. Goals by priority (aggressive fill — glide-path helpers exist but are not used for actual allocation)
-4. Remainder → additional savings
-
-Shortfall = `budgetRemaining < 0`.
-
-### Post-hoc Reconciliation (`analyzeAndProposeFixes`)
-
-When shortfalls remain, proposes:
-
-- `move_bill` — to earlier paycheck with surplus, respecting 14-day cap
-- `skip_bill` — low/normal priority bills if moves insufficient
-
-### Intelligence Assessment
-
-#### What the algorithm optimizes for
-
-- **Primary:** Eliminate per-paycheck deficits by prepaying bills within move constraints
-- **Secondary:** Phase 4 evens out tight paychecks; priority-1 goals filled aggressively first
-- **Tertiary:** Maintain $50–$100 breathing room per paycheck
-
-#### What it does NOT optimize for
-
-- Global minimum early payments (greedy first-fit, not optimal)
-- Smoothed cash flow across the full schedule horizon
-- Inter-paycheck surplus transfer without physically moving bills
-- Combinatorial bill-packing (no knapsack, ILP, or constraint solver)
-- Payment timing relative to creditor grace periods beyond assignment window
-
-#### `optimizeSchedule` naming (historical)
-
-**Closed in 3.0:** `optimizeSchedule()` was removed; the sole IPC path is `schedule:build` → `generateSchedule()`.
-
-### Constraint Compliance Matrix
-
-
-| Rule                         | Auto assignment (2C)                | Rebalance moves    | Manual drag-drop            | Reconciliation proposals |
-| ---------------------------- | ----------------------------------- | ------------------ | --------------------------- | ------------------------ |
-| **≤ 14 days early**          | **Partial** — no cap in date window | Yes                | **No validation**           | Yes                      |
-| **Never late**               | Yes (window logic)                  | Yes (earlier only) | **No validation**           | Yes (earlier only)       |
-| **Critical bills immovable** | N/A                                 | Yes                | Locked if manually assigned | Skips critical           |
-
-
-### Algorithm Findings
-
-#### A-01 — Initial assignment can violate 14-day early cap
-
-
-| Field              | Value                                                                                                                                                                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Severity**       | High                                                                                                                                                                                                                                                               |
-| **Location**       | `scheduler.service.ts` lines 541–568 (step 2C)                                                                                                                                                                                                                     |
-| **Description**    | Date-window assignment has no `MAX_PREPAY_DAYS` check. Sparse paycheck cadences (monthly, semi-monthly with wide gaps) can place bills far earlier than 14 days. Rebalance may pull bills even earlier but cannot push them later to correct over-early placement. |
-| **Impact**         | Product rule "budgeted up to two weeks early" violated in automatic mode for common monthly-income scenarios.                                                                                                                                                      |
-| **Recommendation** | In step 2C, select the latest eligible paycheck within 14 days of due date, not the first window match. Add test: monthly paycheck + day-28 bill.                                                                                                                  |
-
-
-#### A-02 — Manual bill assignment has no constraint validation
-
-
-| Field              | Value                                                                                                                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | High                                                                                                                                                                                    |
-| **Location**       | `src/context/DraftContext.tsx` (`assignBill`, lines 532–552), `src/pages/SchedulePage.tsx` (`handleDrop`)                                                                               |
-| **Description**    | `assignBill(billId, billDueDate, paycheckDate)` accepts any target date. No check that `paycheckDate ≤ billDueDate` (never late) or `differenceInDays(billDueDate, paycheckDate) ≤ 14`. |
-| **Impact**         | User can create late or excessively early assignments that persist until Save and lock from auto-rebalance.                                                                             |
-| **Recommendation** | Validate in `assignBill` and/or `handleDrop`; show UI feedback on constraint violation.                                                                                                 |
-
-
-#### A-03 — Income-attached bills ignore due-date and prepay constraints
-
-
-| Field              | Value                                                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| **Severity**       | Medium                                                                                                                   |
-| **Location**       | `scheduler.service.ts` (step 2A)                                                                                         |
-| **Description**    | Income-attached bills appear on every paycheck from the attached income source regardless of bill due day or 14-day cap. |
-| **Impact**         | May over-allocate bills across paychecks; contradicts scheduling semantics for date-based bills.                         |
-| **Recommendation** | Document as intentional behavior or align with due-date window + prepay cap.                                             |
-
-
-#### A-04 — IPC post-processing diverges from `buildPaycheckEntries`
-
-
-| Field              | Value                                                                                                                                                                                                                                                            |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                                                                                           |
-| **Location**       | `electron/ipc/handlers.ts` (`schedule:generate`, lines 831–854)                                                                                                                                                                                                  |
-| **Description**    | Handler recalculates `budgetRemaining`/`savingsDeposit` using `targetCashOnHand` only, diverging from `buildPaycheckEntries` logic (`minCashOnHand`, `minSavingsPerPaycheck`, first-paycheck boost). Handler is unused by renderer today but remains in preload. |
-| **Impact**         | Dead path risk; if re-enabled, display/compute mismatch.                                                                                                                                                                                                         |
-| **Recommendation** | Remove or align with scheduler output.                                                                                                                                                                                                                           |
-
-
-#### A-05 — Deduplication key mismatch
-
-
-| Field              | Value                                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------ |
-| **Severity**       | Medium                                                                                                 |
-| **Location**       | `scheduler.service.ts` (line 590: `billId-creditorName-dueDay`) vs `handlers.ts` (creditorName-dueDay) |
-| **Description**    | Different dedup keys can collapse or fail to collapse distinct bill occurrences.                       |
-| **Impact**         | Duplicate bills in UI or missing bills in dedup.                                                       |
-| **Recommendation** | Standardize on `billId-date` key everywhere.                                                           |
-
-
-#### A-06 — `optimizeSchedule` is not a distinct optimizer
-
-
-| Field              | Value                                                                              |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                             |
-| **Location**       | `scheduler.service.ts` (`optimizeSchedule`, lines 1658–1684)                       |
-| **Description**    | Calls `generateSchedule` with empty skips/manual maps — same pipeline.             |
-| **Recommendation** | Rename to clarify, or implement distinct optimization pass if product requires it. |
-
-
-#### A-07 — Glide-path computed but not used for goal allocation
-
-
-| Field              | Value                                                                        |
-| ------------------ | ---------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                          |
-| **Location**       | `scheduler.service.ts` (`buildPaycheckEntries`), `paycheck-calculator.ts`    |
-| **Description**    | Glide-path helpers exist; actual allocation uses aggressive priority-1 fill. |
-| **Recommendation** | Use glide-path or remove dead computation.                                   |
-
-
-#### A-08 — Greedy rebalance may leave unresolved shortfalls
-
-
-| Field              | Value                                                                                                                                                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                        |
-| **Location**       | `scheduler.service.ts` (all rebalance phases)                                                                                                                 |
-| **Description**    | Heuristic cascades are not guaranteed to find solutions. When all movable bills are exhausted or locked, shortfalls remain and reconciliation proposes skips. |
-| **Impact**         | "Most efficient schedule with no bills late" is not guaranteed — skips may be proposed.                                                                       |
-| **Recommendation** | Document as best-effort; consider backtracking or LP for hard cases.                                                                                          |
-
-
-### Test Coverage Assessment
-
-**Test run (June 10, 2026):** 137 tests passed across 11 files in 1.61s.
-
-
-| Area                                         | Coverage | File                                            |
-| -------------------------------------------- | -------- | ----------------------------------------------- |
-| Income projection (all cadences)             | Strong   | `tests/unit/services/scheduler.service.test.ts` |
-| Bill projection (short months, priority)     | Strong   | same                                            |
-| Manual assignment placement + rebalance lock | Strong   | same                                            |
-| Starting balance (first paycheck only)       | Strong   | same                                            |
-| Goal projections, multi-goal priority        | Strong   | same                                            |
-| Budget integrity / ledger math               | Strong   | same                                            |
-| Cadence monthly multipliers                  | Strong   | `tests/unit/utils/cadence.test.ts`              |
-| UI bill move filtering                       | Strong   | `tests/unit/utils/scheduleBills.test.ts`        |
-| Paycheck calculator                          | Strong   | `tests/unit/utils/paycheck-calculator.test.ts`  |
-| Draft diff / ID remapping                    | Moderate | `tests/unit/utils/draftDiff.test.ts`            |
-| Debt amortization                            | Strong   | `tests/unit/services/debt.service.test.ts`      |
-
-
-
-| Missing tests                               | Risk                            |
-| ------------------------------------------- | ------------------------------- |
-| `rebalancePhase1–4` directly                | Core optimization untested      |
-| `MAX_PREPAY_DAYS = 14` enforcement          | Stated product rule             |
-| `findPreferredPaycheck` edge cases          | Preference + cap interaction    |
-| `analyzeAndProposeFixes`                    | Reconciliation UX depends on it |
-| Income-attached bill scheduling             | Every-paycheck behavior         |
-| Monthly paycheck + late-month due dates     | >14 day early gap               |
-| Manual late assignment                      | Never-late rule                 |
-| IPC handler post-processing                 | Display/compute divergence      |
-| Critical bill immovability during rebalance | Explicit guarantee              |
-
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| ID   | Status       | Notes                                                                               |
-| ---- | ------------ | ----------------------------------------------------------------------------------- |
-| A-01 | **Closed**   | `MAX_PREPAY_DAYS` enforced in step 2C via `findScoredAutomaticPaycheck()`           |
-| A-02 | **Closed**   | Confirm-before-override on Schedule; constraints tested; documented in CONTRIBUTING |
-| A-03 | **Accepted** | Income-attached bills on every matching paycheck — documented scheduler behavior    |
-| A-04 | **Closed**   | Divergent IPC post-processing removed; single `schedule:build` path                 |
-| A-05 | **Closed**   | Standardized `billOccurrenceKey(billId, yyyy-MM-dd)` in scheduler + IPC             |
-| A-06 | **Closed**   | `optimizeSchedule` removed; API is `schedule.build`                                 |
-| A-07 | **Closed**   | Glide-path allocation active in `paychecks.ts`                                      |
-| A-08 | **Accepted** | Exact assignment (#71) + post-assignment rebalance; not a global LP; **5.4 Won't-do**; README disclaimer |
-
-
-All algorithm findings dispositioned. Accepted items documented in CONTRIBUTING.
+**Why this is the right fix:** Policy belongs next to the hash, not in the Login form. Async KDF is required because this process also owns SQLite and IPC.
 
 ---
 
-## 5. Volatile / Draft State
+#### S-06 — Medium — `auth.config` recovery hash shares the login salt; encryption key is a private field poke
 
-**Overall grade: B+ (Good with gaps)**
+**Where:** `recoveryKeyHash = hashPassword(recoveryKey, salt)` uses the **password** salt. `enableBiometric` / `changePassword` use `this.crypto['encryptionKey']`.
 
-The user's mental model—*"all changes are volatile until the user engages with a button which commits changes"*—maps to the **draft/committed** pattern in code. The term "volatile" does not appear in the codebase; UI copy uses "Unsaved changes" / "Save Changes."
+**Where it matters:** Same salt lets an attacker amortize PBKDF2 work across password and recovery-word attacks. Bracket access to a private Buffer is a footgun (bundlers / future TS `erasablePrivate` will break biometric).
 
-### Architecture
+**Remediation:** Hash recovery with `recoverySalt` (already used for wrapping the data key). Expose `getEncryptionKeyHex()` / `hasEncryptionKey()` on `CryptoService` instead of poking the field. Zero the hex string after `safeStorage.encryptString`.
 
-```mermaid
-flowchart TD
-    open[User opens real budget] --> reload[reloadSnapshot from DB]
-    reload --> sync[committed = draft = DB snapshot]
-    sync --> edit{User edits}
-    
-    edit --> mutate[Mutate draft + markDirty domain]
-    mutate --> ui[UI reads draft.*]
-    mutate --> overlay[buildDraftOverlay for schedule preview]
-    
-    edit --> saveQ{Save action?}
-    saveQ -->|Save Changes| single[saveDomain - current route domain]
-    saveQ -->|Save All| all[saveAll - all dirty domains]
-    single --> persist[persistDomains → electronAPI]
-    all --> persist
-    persist --> finalize[committed := saved state, remap draft IDs]
-    
-    edit --> discardQ{Discard?}
-    discardQ -->|Per domain| restore[Restore domain slice from committed]
-    discardQ -->|Discard All| full[draft := clone committed]
-    
-    edit --> nav{Navigation?}
-    nav -->|Lock / switch budget| guard{hasUnsavedChanges?}
-    guard -->|Yes| modal[Modal: Save All or Discard All]
-    guard -->|No| proceed[Proceed]
-    nav -->|Sidebar / BudgetPicker / Quit| silent[Silent discard - GAP]
-    
-    quick[Quick Budget mode] --> immediate[Direct IPC + reloadSnapshot]
-```
-
-
-
-### Key Files
-
-
-| File                                         | Role                                                    |
-| -------------------------------------------- | ------------------------------------------------------- |
-| `src/context/DraftContext.tsx`               | Central state, mutations, save/discard, overlay builder |
-| `src/types/draft.ts`                         | 6 domains, route mapping, draft ID helpers              |
-| `src/utils/draftPersist.ts`                  | Diff, persist order, `computeDirtyDomains`              |
-| `src/utils/draftDiff.ts`                     | Entity diffs, ID remapping on commit                    |
-| `src/context/DataContext.tsx`                | Income/bill facade; schedule via overlay                |
-| `electron/services/draft-overlay.service.ts` | Backend merge of overlay + DB                           |
-| `src/components/DraftSaveBar.tsx`            | Per-page Save / Discard sticky bar                      |
-| `src/components/GlobalDraftBanner.tsx`       | Multi-domain Save All / Discard All                     |
-| `src/hooks/useUnsavedChangesGuard.tsx`       | Modal guard for destructive navigation                  |
-
-
-### Six Draft Domains
-
-
-| Domain     | Routes                  | Data                                         |
-| ---------- | ----------------------- | -------------------------------------------- |
-| `income`   | `/income`               | Income sources                               |
-| `bills`    | `/bills`                | Bills                                        |
-| `debts`    | `/debts`                | Debts                                        |
-| `goals`    | `/goals`                | Savings goals                                |
-| `schedule` | `/schedule`             | Skipped bills, assignments, income overrides |
-| `budget`   | `/budgets`, `/settings` | Name, starting balance, cash targets         |
-
-
-**Persist order** (respects cross-domain dependencies):  
-`income → bills → debts → goals → schedule → budget`
-
-**Quick Budget** bypasses draft entirely: all CRUD goes direct to IPC + `reloadSnapshot()`.
-
-### Strengths
-
-- Centralized draft layer with domain-scoped dirty tracking
-- Draft overlay enables schedule preview without persisting (`buildDraftOverlay()` + `draft-overlay.service.ts`)
-- ID remapping on commit via `draftDiff.ts` (draft IDs → real DB IDs)
-- Dirty-domain nav indicators in `Layout.tsx`
-- `GlobalDraftBanner` appears when ≥2 domains dirty
-
-### Findings
-
-#### V-01 — Navigation guard only on Lock and budget switch
-
-
-| Field              | Value                                                                                                                                                                                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                                                                   |
-| **Location**       | `src/hooks/useUnsavedChangesGuard.tsx`, `src/components/Layout.tsx`, `src/pages/BudgetsPage.tsx`                                                                                                                                         |
-| **Description**    | `useUnsavedChangesGuard` wired only for Lock App and budget switch. Sidebar `NavLink` navigation, `BudgetPicker` selection, and Quit App proceed without prompting. Budget switch triggers `reloadSnapshot()` and silently drops drafts. |
-| **Impact**         | User can lose unsaved work without warning—the opposite of the volatile-until-commit promise.                                                                                                                                            |
-| **Recommendation** | Guard all route transitions and budget picker; use React Router `useBlocker` or equivalent.                                                                                                                                              |
-
-
-#### V-02 — Per-domain Save can break cross-domain references
-
-
-| Field              | Value                                                                                                                                                                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                               |
-| **Location**       | `src/utils/draftPersist.ts`, `DraftSaveBar.tsx`                                                                                                                                                      |
-| **Description**    | `saveDomain(domain)` persists one domain. New draft income ID referenced by a bill will fail if bills saved alone. Schedule domain referencing draft entity IDs fails if saved before parent domain. |
-| **Impact**         | Partial save failures or inconsistent DB state.                                                                                                                                                      |
-| **Recommendation** | Warn when saving a domain with unresolved cross-references; auto-include dependent domains.                                                                                                          |
-
-
-#### V-03 — Dashboard/Summary/Export miss schedule/budget draft changes
-
-
-| Field              | Value                                                                                                                                                                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Medium                                                                                                                                                                                               |
-| **Location**       | `DashboardPage.tsx`, `SummaryPage.tsx`, `ExportPage.tsx`                                                                                                                                             |
-| **Description**    | These pages regenerate schedule when incomes/bills change, not when schedule-domain edits (assignments, skips, overrides) or budget-field edits change. SchedulePage handles via `scheduleDataHash`. |
-| **Impact**         | Stale projections on Dashboard/Summary/Export after schedule edits without visiting those pages' income/bill triggers.                                                                               |
-| **Recommendation** | Include `dirtyDomains` schedule/budget flags in regen dependencies.                                                                                                                                  |
-
-
-#### V-04 — No tests for DraftContext or draftPersist
-
-
-| Field              | Value                                                                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Severity**       | Low                                                                                                                                         |
-| **Location**       | `tests/`                                                                                                                                    |
-| **Description**    | Only `draftDiff.test.ts` covers draft utilities. No tests for `DraftContext`, `draftPersist`, `computeDirtyDomains`, or save/discard flows. |
-| **Recommendation** | Add integration tests for cross-domain save, discard, and ID remapping.                                                                     |
-
-
-#### V-05 — Terminology mismatch (Info)
-
-
-| Field              | Value                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| **Severity**       | Info                                                                                         |
-| **Description**    | User/docs say "volatile"; code says draft/committed/dirtyDomains; UI says "Unsaved changes." |
-| **Recommendation** | Align terminology in docs or add UI copy clarifying draft behavior.                          |
-
-
-#### V-06 — Settings page mixes persist models
-
-
-| Field              | Value                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| **Severity**       | Low                                                                                                                |
-| **Location**       | `SettingsPage.tsx`                                                                                                 |
-| **Description**    | Budget cash fields use draft; theme, password, currency, auto-lock save immediately. No strong visual distinction. |
-| **Recommendation** | Section headers indicating "Saved immediately" vs "Requires Save."                                                 |
-
-
-#### V-07 — Non-current budget edits bypass draft
-
-
-| Field              | Value                                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------ |
-| **Severity**       | Low                                                                                                    |
-| **Location**       | `BudgetsPage.tsx`                                                                                      |
-| **Description**    | Editing a non-active budget calls `updateBudget()` immediately. Only current budget uses draft fields. |
-| **Recommendation** | Document as intentional; consider consistent behavior.                                                 |
-
-
-#### V-08 — Debug fetch in SchedulePage draft path
-
-
-| Field              | Value                                                                 |
-| ------------------ | --------------------------------------------------------------------- |
-| **Severity**       | Medium (ties to S-01)                                                 |
-| **Location**       | `SchedulePage.tsx` line 267                                           |
-| **Description**    | `handleDrop` includes debug ingest POST in the draft assignment path. |
-| **Recommendation** | Remove with other agent log artifacts.                                |
-
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| ID   | Status       | Notes                                                                                                                                                               |
-| ---- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V-01 | **Closed**   | Sidebar NavLink, Settings link, Quit, Lock, and budget switch guarded (PR #52). BudgetPicker N/A pre-draft session.                                                 |
-| V-02 | **Closed**   | `getRequiredSaveDomains` + `DraftSaveBar` confirmation (PR #54).                                                                                                    |
-| V-03 | **Closed**   | Shared `scheduleInputHash`; Dashboard/Summary/Export regen (PR #53).                                                                                                |
-| V-04 | **Closed**   | `DraftContext.test.tsx`, `draftPersist.test.ts`, `DraftSaveBar.test.tsx`, and related coverage added.                                                               |
-| V-05 | **Closed**   | UI uses "Unsaved changes"; CONTRIBUTING documents draft mode (PR #55).                                                                                              |
-| V-06 | **Closed**   | Settings split into "Saved immediately" / "Requires Save (Budget)" (PR #55).                                                                                        |
-| V-07 | **Accepted** | Budget **details** editable on `/budgets` without Switch — non-current → immediate save + toast; current → draft + Save bar. Documented in CONTRIBUTING and PR #55. |
-| V-08 | **Closed**   | Debug telemetry removed; CI grep guards (same as S-01).                                                                                                             |
-
-
-**Product decision (V-07):** Budget **contents** (incomes, bills, schedule) require Switch; budget **details** (name, balances) are registry metadata editable from any card.
+**Why this is the right fix:** `recoverySalt` already exists for wrapping; the hash should use it. A real accessor is one line and removes the only private-field break-in.
 
 ---
 
-## 6. Additional Quality Checks
+#### S-07 — Medium — SQLite file is not encrypted; settings and IDs are plaintext; WAL not checkpointed
 
-### 6.1 Data Integrity & Reliability
+**Where:** `DatabaseService.initialize` (`journal_mode = WAL`), `getSettings`/`updateSettings` store JSON plaintext. Row `id`, `budget_id`, `bill_id`, timestamps are plaintext by design. `close()` does not `wal_checkpoint(TRUNCATE)`.
 
+**Why it matters here:** Column encryption hides amounts/names. An attacker with the file still sees how many budgets/bills/debts exist, which bill a debt links to, last-used budget id, theme, auto-lock, **currency**, and can read `-wal`/`-shm` after a crash. Settings are not secrets of the same grade as incomes, but they are still user finance prefs in a file named `budget-data.db`.
 
-| ID   | Issue                                                                       | Severity | Location                              |
-| ---- | --------------------------------------------------------------------------- | -------- | ------------------------------------- |
-| D-01 | Deduplication key mismatch (scheduler vs IPC)                               | Medium   | `scheduler.service.ts`, `handlers.ts` |
-| D-02 | `structuredClone` on every snapshot reload                                  | Medium   | `DraftContext.tsx`                    |
-| D-03 | Single-domain save vs DB FK cascades — UI `committed` can drift             | Medium   | `draftPersist.ts`                     |
-| D-04 | Bill delete cascades debt removal in draft but marks both domains dirty     | Low      | `DraftContext.tsx`                    |
-| D-05 | SQLite single-file — offline attack on master password remains threat model | Info     | `database.service.ts`                 |
+**Remediation (this app, not a rewrite):**
 
+1. Encrypt settings values with `encryptObject` (same as other tables).
+2. On `close()`, `PRAGMA wal_checkpoint(TRUNCATE)` then close; chmod `0o600` on `-wal`/`-shm` if they remain.
+3. Do **not** adopt SQLCipher in this cycle — native ABI + SQLCipher packaging is a product-sized migration (better-sqlite3 rebuild, Electron ABI). Document as accepted residual: ciphertext + plaintext metadata. Revisit only if the threat model includes disk seizure as primary.
 
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| ID   | Status       | Notes                                                                           |
-| ---- | ------------ | ------------------------------------------------------------------------------- |
-| D-01 | **Closed**   | Standardized `billOccurrenceKey(billId, date)` — same fix as A-05               |
-| D-02 | **Closed**   | Shallow `copyDraftState()` on reload; discard clones intentional (same as E-07) |
-| D-03 | **Closed**   | Cross-domain save via `getRequiredSaveDomains` + confirmation (PR #54)          |
-| D-04 | **Accepted** | Bill delete cascades linked debts and marks both domains dirty — intentional    |
-| D-05 | **Accepted** | Info-only threat model; no mitigation attempted                                 |
-
-
-### 6.2 Test Coverage & Quality
-
-
-| Metric                  | Value                                     |
-| ----------------------- | ----------------------------------------- |
-| Production LOC          | ~19,487                                   |
-| Test LOC                | ~3,146                                    |
-| Test : production ratio | ~16%                                      |
-| Test files              | 11 unit/component + 1 e2e                 |
-| Tests passing           | **137 / 137** (vitest run, June 10, 2026) |
-
-
-**Well-covered:** Scheduler projection, goals, debt amortization, cadence utils, paycheck calculator, credentials service.
-
-**Not covered:**
-
-- IPC handlers (`handlers.ts`)
-- Database service (migrations, CRUD, encryption round-trips)
-- DraftContext save/discard/persist flows
-- Page components (except SetupPage, Modal)
-- E2E: only `goals-flow.spec.ts`
-
-**Recommended coverage targets by risk:**
-
-1. Rebalance phases + constraint enforcement (algorithm)
-2. DraftContext cross-domain persist (data integrity)
-3. IPC handler auth guards (security)
-4. HTML export escaping (security)
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-Original metrics above are **stale**. Current suite on `main`:
-
-
-| Metric        | June 10 (audit) | Current             |
-| ------------- | --------------- | ------------------- |
-| Tests passing | 137             | **763**             |
-| Test files    | 12              | **70** vitest + e2e |
-
-
-**Now covered (previously listed as gaps):** IPC handlers, database service, DraftContext save/discard/persist, draftPersist, page components, navigation guards, constraint enforcement, HTML export escaping.
-
-**Remaining gaps:** E2E for draft save/discard/navigation (roadmap 5.3); deeper direct testing of rebalance phases 1–4.
-
-### 6.3 Documentation Accuracy
-
-
-| Claim (README)                   | Reality                                          | File                       |
-| -------------------------------- | ------------------------------------------------ | -------------------------- |
-| "All sensitive data encrypted"   | Goals, debts, budget metadata plaintext          | `README.md` line 64        |
-| "PBKDF2 with 100,000 iterations" | Actual: **310,000** iterations                   | `crypto.service.ts` line 7 |
-| "Export to Google Sheets"        | Integration removed (`google.service.ts` absent) | `README.md` line 16        |
-| "Payment Optimization"           | Heuristic rebalance, not global optimizer        | `scheduler.service.ts`     |
-
-
-**Recommendation:** Update README security and features sections to match implementation.
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| Claim (original audit)           | Status       | Notes                                                                                                |
-| -------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
-| "All sensitive data encrypted"   | **Closed**   | README updated — goals, debts, budget metadata, schedule junction data encrypted (v9/v10 migrations) |
-| "PBKDF2 with 100,000 iterations" | **Closed**   | README documents **310,000** iterations                                                              |
-| "Export to Google Sheets"        | **Closed**   | Google Sheets reference removed from README                                                          |
-| "Payment Optimization" naming    | **Accepted** | README says "rebalance recommendations"; app name unchanged                                          |
-
-
-`CONTRIBUTING.md` now includes a **Draft mode** section documenting persist behavior (PR #55).
-
-### 6.4 UX Consistency
-
-- Settings mixes immediate-persist and draft-persist without clear visual distinction
-- `GlobalDraftBanner` hidden when only one domain dirty (per-page bar only)
-- Reconciliation proposals require understanding of draft schedule domain
-- Export page notes decrypted exports (good) but HTML XSS risk not surfaced to user
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| Item                                       | Status       | Notes                                                              |
-| ------------------------------------------ | ------------ | ------------------------------------------------------------------ |
-| Settings immediate vs draft distinction    | **Closed**   | V-06 — section headers in `SettingsPage.tsx` (PR #55)              |
-| Budgets page details vs contents clarity   | **Closed**   | V-07 — helper text + non-current save toast (PR #55)               |
-| GlobalDraftBanner single-domain visibility | **Accepted** | By design — per-page `DraftSaveBar` when one domain dirty          |
-| Reconciliation schedule-domain literacy    | **Accepted** | Power-user feature; no simplification planned                      |
-| Export XSS user warning                    | **Accepted** | Backend fixed (S-03); user warning redundant for local HTML export |
-
-
-### 6.5 Dependency & Supply Chain Hygiene
-
-`**npm audit` results (June 10, 2026):** 22 vulnerabilities (1 low, 9 moderate, 9 high, 3 critical)
-
-Notable packages:
-
-
-| Package                               | Severity | Context                                             |
-| ------------------------------------- | -------- | --------------------------------------------------- |
-| `vitest` / `@vitest/coverage-v8`      | Critical | Dev dependency only                                 |
-| `electron` / `electron-builder` chain | High     | Build tooling; `@xmldom/xmldom`, `axios` transitive |
-| `esbuild`                             | Moderate | Dev/build transitive                                |
-
-
-**Other gaps:**
-
-- Electron `^28.2.2` behind current stable
-- No `.github/workflows` — no visible CI, Dependabot, or automated `npm audit`
-- No SBOM or documented dependency update cadence
-
-**Recommendation:** Add CI workflow with `npm audit --production`, scheduled Dependabot, and Electron upgrade path.
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-
-| Area                         | Status       | Notes                                                                                        |
-| ---------------------------- | ------------ | -------------------------------------------------------------------------------------------- |
-| CI / automation              | **Closed**   | `.github/workflows/` — PR Gate, Main Stability, Dependabot refresh, auto-merge, merge-freeze |
-| Husky prepush                | **Closed**   | Full CI parity via `scripts/pre-push-quality.sh`                                             |
-| Production audit in pipeline | **Closed**   | `npm audit --prod --audit-level critical` in shared quality workflow                         |
-| Electron version             | **Closed**   | Upgraded to Electron 42; native rebuild + packaging gate verified                            |
-| Dev/build transitive audit   | **Closed**   | Full-tree `pnpm audit:dev` (high+) in quality gate (#61); Electron GHSA allowlist cleared (#90) |
-| SBOM / update cadence        | **Closed**   | CycloneDX SBOM artifact on every quality run; Dependabot weekly cadence (#61, #93) |
-
-
-The original claim of "no `.github/workflows`" is **obsolete**.
+**Why this is the right fix:** Settings encryption and WAL hygiene close real leaks without swapping the storage engine. SQLCipher is the correct *eventual* answer, not the Plan Agent’s first PR.
 
 ---
 
-## Prioritized Remediation Roadmap
+#### S-08 — Medium — Diagnostics and several auth channels skip the unlock guard
 
-Effort key: **S** = hours, **M** = 1–2 days, **L** = 3+ days
+**Where:** `diagnostics:report|get-event|get-bundle|export` have no `withUnlockGuard`. `auth:set-auto-lock` has no guard and does not persist. `app:quit` is ungated. `app:show-open-dialog` is exposed but unused by UI.
 
-### Phase 0 — Release Blockers (1–2 days)
+**Why it matters here:** Diagnostics are scrubbed, but stacks + nav breadcrumbs are still available pre-login (XSS on the login page). `set-auto-lock(0)` disables the in-memory timer until next settings load. `quit` bypasses `PlatformExitGuard` (unsaved draft loss). Open-dialog is extra attack surface for no feature.
 
+**Remediation:** `diagnostics:get-event|get-bundle|export` → `withUnlockGuard`. Keep `diagnostics:report` ungated (errors can happen on the login screen) but keep sanitization. `auth:set-auto-lock` → persist via `database.updateSettings` **or** delete the channel and use `settings:update` only (already guarded). Remove `app:show-open-dialog` from main/preload/types. Leave `app:quit` but have main no-op quit while `allowWindowClose` is false unless the sender is the confirmed-exit path (already the window-close design).
 
-| #   | Item                                              | Effort   | Finding    | Primary files                                                  |
-| --- | ------------------------------------------------- | -------- | ---------- | -------------------------------------------------------------- |
-| 0.1 | Remove all `#region agent log` debug telemetry    | S (2h)   | S-01, V-08 | `scheduler.service.ts`, `SchedulePage.tsx`, `PaycheckView.tsx` |
-| 0.2 | HTML-escape all dynamic strings in export         | S (2h)   | S-03       | `pdf.service.ts`                                               |
-| 0.3 | Add `requireUnlocked()` IPC middleware            | M (4–6h) | S-02       | `handlers.ts`                                                  |
-| 0.4 | Gate `credentials:`* and `export:*` behind unlock | M (4h)   | S-02       | `handlers.ts`                                                  |
-
-
-**Exit criteria:** No debug telemetry in codebase; exports safe to open in browser; sensitive IPC requires active session.
-
-### Phase 1 — Algorithm Correctness (3–5 days)
-
-
-| #   | Item                                                        | Effort   | Finding          | Primary files                          |
-| --- | ----------------------------------------------------------- | -------- | ---------------- | -------------------------------------- |
-| 1.1 | Enforce `MAX_PREPAY_DAYS` in step 2C date-window assignment | S (2h)   | A-01             | `scheduler.service.ts`                 |
-| 1.2 | Validate `assignBill` (never late, ≤14 days early)          | S (2h)   | A-02             | `DraftContext.tsx`, `SchedulePage.tsx` |
-| 1.3 | Add rebalance phase + constraint tests                      | M (1–2d) | A-01, A-02, A-08 | `scheduler.service.test.ts`            |
-| 1.4 | Standardize bill deduplication keys                         | S (2h)   | A-05, D-01       | `scheduler.service.ts`, `handlers.ts`  |
-| 1.5 | Align or remove `schedule:generate` dead path               | M (4h)   | A-04, E-06       | `handlers.ts`, `preload.ts`            |
-| 1.6 | Document or fix income-attached scheduling semantics        | S (2–4h) | A-03             | `scheduler.service.ts`                 |
-
-
-**Exit criteria:** All four constraint columns in compliance matrix show "Yes"; test suite covers monthly cadence edge case and manual assignment rejection.
-
-### Phase 2 — Draft / Volatile Hardening (2–3 days)
-
-
-| #   | Item                                                    | Effort   | Finding | Primary files                                            |
-| --- | ------------------------------------------------------- | -------- | ------- | -------------------------------------------------------- |
-| 2.1 | Navigation guard on all route changes + BudgetPicker    | M (4–6h) | V-01    | `Layout.tsx`, `useUnsavedChangesGuard.tsx`               |
-| 2.2 | Dashboard/Summary/Export react to schedule+budget draft | M (4h)   | V-03    | `DashboardPage.tsx`, `SummaryPage.tsx`, `ExportPage.tsx` |
-| 2.3 | Cross-domain save dependency warnings                   | M (4h)   | V-02    | `draftPersist.ts`, `DraftSaveBar.tsx`                    |
-| 2.4 | DraftContext integration tests                          | M (1d)   | V-04    | `tests/`                                                 |
-
-
-**Exit criteria:** No silent draft loss on navigation; all preview pages reflect schedule draft edits.
-
-### Phase 3 — Efficiency & Bloat (3–5 days)
-
-
-| #   | Item                                             | Effort   | Finding    | Primary files                                          |
-| --- | ------------------------------------------------ | -------- | ---------- | ------------------------------------------------------ |
-| 3.1 | Extract lightweight goal projections             | M (1d)   | E-01       | `scheduler.service.ts`, `handlers.ts`, `GoalsPage.tsx` |
-| 3.2 | `budget:get-snapshot` single IPC                 | M (1d)   | E-03       | `handlers.ts`, `DraftContext.tsx`                      |
-| 3.3 | Debounce + input-hash cache for schedule         | M (4–6h) | E-02       | `DataContext.tsx`, `SchedulePage.tsx`                  |
-| 3.4 | Remove `@react-pdf/renderer`                     | S (1h)   | B-01       | `package.json`                                         |
-| 3.5 | Consolidate `formatCurrency` + `PRIORITY_LABELS` | S (2–4h) | B-02, B-03 | pages, `pdf.service.ts`                                |
-| 3.6 | Route lazy-loading                               | S (2–4h) | E-05       | `App.tsx`                                              |
-| 3.7 | Split DraftContext to reduce re-renders          | M (1d)   | E-04       | `DraftContext.tsx`                                     |
-
-
-**Exit criteria:** Goals page does not invoke full schedule; schedule regen debounced; snapshot reload ≤1 IPC call.
-
-### Phase 4 — Security Hardening (2–4 days)
-
-
-| #   | Item                                                 | Effort   | Finding    | Primary files                                  |
-| --- | ---------------------------------------------------- | -------- | ---------- | ---------------------------------------------- |
-| 4.1 | Fix auto-lock (timer on unlock + activity reset)     | S (2–4h) | S-05       | `auth.service.ts`, `Layout.tsx`                |
-| 4.2 | Encrypt or document plaintext columns                | L (2–3d) | S-04       | `database.service.ts`, migrations              |
-| 4.3 | Settings key allowlist + goal/debt/budget validation | M (1d)   | S-07, S-13 | `validation.service.ts`, `database.service.ts` |
-| 4.4 | Tighten CSP for production                           | S (2h)   | S-06       | `index.html`, `vite.config.ts`                 |
-| 4.5 | Auth rate limiting                                   | M (4h)   | S-08       | `handlers.ts`, `auth.service.ts`               |
-| 4.6 | Upgrade Electron + add CI audit workflow             | M (1d)   | 6.5        | `package.json`, `.github/`                     |
-| 4.7 | Update README security/features accuracy             | S (2h)   | 6.3        | `README.md`                                    |
-
-
-**Exit criteria:** Auto-lock functional; docs match implementation; CI runs `npm audit` on PRs.
-
-### Phase 5 — Longer-Term Quality (optional)
-
-
-| #   | Item                                                   | Effort  | Finding    |
-| --- | ------------------------------------------------------ | ------- | ---------- |
-| 5.1 | Split scheduler into modules                           | M (2d)  | B-05, E-09 |
-| 5.2 | Shared types package (renderer + electron)             | M (2d)  | B-04       |
-| 5.3 | E2E tests for draft save/discard/navigation            | M (2d)  | 6.2        |
-| 5.4 | Consider LP/constraint solver for hard rebalance cases | L (1w+) | A-08 — **Won't-do** (July 2026); exact assignment (#71) covers typical cases |
-
-
-### Current Status
-
-*Updated July 2026 — audit archive complete.*
-
-Phase completion as of this update (original phase rows above unchanged):
-
-
-| Phase                          | Status                                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0 — Release blockers           | **Complete** — 0.1–0.4 closed (telemetry, export escaping, unlock guards)                                                                         |
-| 1 — Algorithm correctness      | **Complete (accepted limitations A-03, A-08)** — 1.1–1.6 done; A-02 confirm dialog; A-03/A-08 accepted; **5.4 Won't-do**                          |
-| 2 — Draft / volatile hardening | **Complete** — PRs [#52](https://github.com/mdavis93/budget_optimizer/pull/52)–[#55](https://github.com/mdavis93/budget_optimizer/pull/55)        |
-| 3 — Efficiency & bloat         | **Complete** — 3.1–3.3, 3.6 done (PR [#26](https://github.com/mdavis93/budget_optimizer/pull/26)); B-04 / B-07–B-09 / E-04 closed in later PRs (#59, #81–#84) |
-| 4 — Security hardening         | **Complete** — 4.1–4.7 done                                                                                                                       |
-| 5 — Longer-term quality        | **Complete** — 5.1–5.3 closed; **5.4 Won't-do** (no living backlog)                                                                               |
-
-
-Key remediation PRs: #26 (efficiency E-01–E-10), #52 (V-01 navigation), #53 (V-03 preview regen), #54 (V-02 cross-domain save), #55 (V-05/V-06/V-07 UX/docs).
+**Why this is the right fix:** Report-on-login is a product need. Read/export of logs is not. One settings write path prevents auto-lock drift.
 
 ---
 
-## Audit Closure Summary
+#### S-09 — Medium — IPC does not bind to the app window
 
-*Originally closed June 15, 2026 (`#56`). Archive finalized July 2026 — **Done, retained for archival purposes only.***
+**Where:** Handlers ignore `event.sender` except progress + credential dialogs. PDF creates a second `webContents`.
 
-Every finding has a **final disposition**: **Closed** (fixed), **Accepted** (intentional limitation), or **Won't-do** (explicitly declined). There is **no** living deferred backlog.
+**Why it matters here:** After S-01, this is belt-and-suspenders. If a second window is ever created (PDF, dialog host in `showTopMessageBox`), a confused-deputy call could invoke budget IPC.
 
-**Resolving refs:** Prefer GitHub PR numbers. Early Phase 0/1 security and algorithm fixes landed as direct commits before the PR-gated workflow; those use short commit SHAs. `#56` documents dispositions; `#95` refreshes living docs.
+**Remediation:** Central `assertAppSender(event)` in `guards.ts`: sender must be `mainWindow.webContents` (or an allowlisted id). Reject others. PDF window has no preload today — keep it that way.
 
-### Security (S)
-
-
-| ID   | Final    | Resolving | Notes                                                                        |
-| ---- | -------- | --------- | ---------------------------------------------------------------------------- |
-| S-01 | Closed   | `cfd0588` | Telemetry removed; CI grep + packaged-app guards                             |
-| S-02 | Closed   | `35d1133` | `requireUnlocked` + gated credentials/export IPC                             |
-| S-03 | Closed   | `35d1133` | `escapeHtml` on PDF/HTML export strings                                      |
-| S-04 | Closed   | `13f8b21` | v9/v10 encryption migrations (goals, debts, metadata, junctions)             |
-| S-05 | Closed   | `6fa05a0` | Auto-lock reset on unlock + activity pings                                   |
-| S-06 | Closed   | `6fa05a0`, `5a1fa68` | Production CSP tightened; stale OAuth origins removed                 |
-| S-07 | Closed   | `6fa05a0` | Settings key allowlist                                                       |
-| S-08 | Closed   | `6fa05a0` | Auth rate limiting + lockout                                                 |
-| S-09 | Closed   | `6fa05a0` | Password change uses `credentials.offerSave()`                               |
-| S-10 | Accepted | `5a1fa68`, `#56` | Per-user recovery salts; legacy accounts without `recoverySalt` blocked |
-| S-11 | Closed   | `13f8b21` | DB file chmod `0o600` on initialize                                          |
-| S-12 | Closed   | `5a1fa68` | DevTools unpackaged-dev only                                                 |
-| S-13 | Closed   | `#57`     | `validateSkippedBill` / `validateBillAssignment` on skip/assign paths        |
-| S-14 | Closed   | `6fa05a0` | `validateDraftOverlay` before schedule computation                           |
-
-
-### Efficiency (E)
-
-
-| ID   | Final  | Resolving     | Notes                                                      |
-| ---- | ------ | ------------- | ---------------------------------------------------------- |
-| E-01 | Closed | `#26`         | Lightweight goal projections skip full rebalance           |
-| E-02 | Closed | `#26`, `#53`  | Debounce + cache + `scheduleInputHash`                     |
-| E-03 | Closed | `#26`         | Single `budget:get-snapshot` IPC                           |
-| E-04 | Closed | `#82`         | `DraftStatusContext` + memoization                         |
-| E-05 | Closed | `#26`         | Route lazy-loading                                         |
-| E-06 | Closed | `#26`, `5a1fa68` | Single `schedule:build` path                            |
-| E-07 | Closed | `#26`         | Shallow copy on reload; discard clones intentional         |
-| E-08 | Closed | `#26`, `#28`  | Lazy chart chunks                                          |
-| E-09 | Closed | `#26`, `#28`  | Scheduler modularized under `electron/services/scheduler/` |
-| E-10 | Closed | `#26`         | Vite `manualChunks`                                        |
-
-
-### Limited bloat (B)
-
-
-| ID   | Final  | Resolving    | Notes                                                     |
-| ---- | ------ | ------------ | --------------------------------------------------------- |
-| B-01 | Closed | pre-audit    | `@react-pdf/renderer` removed (Chromium `printToPDF`)     |
-| B-02 | Closed | `#57`        | Shared `src/utils/formatCurrency.ts`                      |
-| B-03 | Closed | `#57`        | Shared `PRIORITY_LABELS` in `electron/utils/constants.ts` |
-| B-04 | Closed | `#59`        | Shared types module (`shared/`)                           |
-| B-05 | Closed | `#26`, `#28` | Scheduler split into modules                              |
-| B-06 | Closed | `#57`        | Redundant direct deps removed (`uuid`, etc.)              |
-| B-07 | Closed | `#81`, `#84` | Presentational splits + SchedulePage hooks                |
-| B-08 | Closed | `#61`        | BudgetManager current-budget cache                        |
-| B-09 | Closed | `#83`        | DataContext → Draft schedule slice (removed)              |
-| B-10 | Closed | `#57`        | Shared `buildDebtPayoffs()`                               |
-
-
-### Algorithm (A)
-
-
-| ID   | Final    | Resolving        | Notes                                                            |
-| ---- | -------- | ---------------- | ---------------------------------------------------------------- |
-| A-01 | Closed   | `6ddaeb7`        | `MAX_PREPAY_DAYS` enforced on automatic assignment               |
-| A-02 | Closed   | `6ddaeb7`, `#56` | Confirm-before-override on Schedule; documented in CONTRIBUTING  |
-| A-03 | Accepted | `#56`            | Income-attached bills on every matching paycheck (documented)    |
-| A-04 | Closed   | `5a1fa68`        | Single IPC schedule path (`schedule:build`)                      |
-| A-05 | Closed   | `6ddaeb7`        | `billOccurrenceKey` dedup                                        |
-| A-06 | Closed   | `5a1fa68`        | `optimizeSchedule` removed                                       |
-| A-07 | Closed   | `6ddaeb7`        | Glide-path / goal allocation path                                |
-| A-08 | Accepted | `#71`, `#56`     | Exact assignment + post-assignment rebalance; not a global LP; **5.4 Won't-do** |
-
-
-### Volatile / draft (V)
-
-
-| ID   | Final    | Resolving              | Notes                                                      |
-| ---- | -------- | ---------------------- | ---------------------------------------------------------- |
-| V-01 | Closed   | `#52`, `#68`, `#74`, `#78` | Exit/nav guard evolution; Lock preserves draft; PlatformExitGuard |
-| V-02 | Closed   | `#54`                  | Cross-domain save + confirmation                           |
-| V-03 | Closed   | `#53`                  | Preview page regen on schedule draft inputs                |
-| V-04 | Closed   | `#52`–`#55` era        | DraftContext / draftPersist tests                          |
-| V-05 | Closed   | `#55`                  | "Unsaved changes" terminology + CONTRIBUTING               |
-| V-06 | Closed   | `#55`                  | Settings section labels (immediate vs Save)                |
-| V-07 | Accepted | `#55`                  | Budget details editable without Switch                     |
-| V-08 | Closed   | `cfd0588`              | Telemetry removed (= S-01)                                 |
-
-
-### Data integrity (D)
-
-
-| ID   | Final    | Resolving | Notes                                          |
-| ---- | -------- | --------- | ---------------------------------------------- |
-| D-01 | Closed   | `6ddaeb7` | Same as A-05                                   |
-| D-02 | Closed   | `#26`     | Same as E-07                                   |
-| D-03 | Closed   | `#54`     | Cross-domain save                              |
-| D-04 | Accepted | `#56`     | Bill delete cascades debts; dual dirty domains |
-| D-05 | Accepted | `#56`     | Threat-model info only                         |
-
-
-### Section 6 misc
-
-
-| Item                   | Final    | Resolving     | Notes                                   |
-| ---------------------- | -------- | ------------- | --------------------------------------- |
-| 6.2 / 5.3 E2E          | Closed   | `#60`         | Playwright real-vault journeys          |
-| 6.3 README accuracy    | Closed   | `13f8b21`, `#95` | Encryption, PBKDF2, exports, stack   |
-| 6.3 product naming     | Accepted | `#56`         | Rebalance / optimize wording            |
-| 6.4 Settings UX        | Closed   | `#55`         | V-06                                    |
-| 6.4 Budgets UX         | Closed   | `#55`         | V-07                                    |
-| 6.4 GlobalDraftBanner  | Accepted | `#56`         | Single-domain uses per-page Save bar    |
-| 6.4 reconciliation UX  | Accepted | `#56`         | Power-user feature                      |
-| 6.4 export XSS warning | Accepted | `35d1133`     | Backend fixed (S-03); no user warning   |
-| 6.5 CI / Dependabot    | Closed   | `#13`, `#19`, `#44`, `#61` | Workflows + Husky + grouped bots |
-| 6.5 Electron upgrade   | Closed   | `#90`, `#89`  | Electron 42 + always-probe ABI helper   |
-| 6.5 SBOM / audit:dev   | Closed   | `#61`, `#90`  | CycloneDX artifact; empty GHSA allowlist |
-| 5.4 LP solver          | Won't-do | —             | Declined July 2026 until product need   |
-
-
-*This audit is **Done — retained for archival purposes only** (July 2026). Living contributor notes: [CONTRIBUTING.md](CONTRIBUTING.md#post-audit-backlog).*
+**Why this is the right fix:** One window is the product. Sender checks encode that invariant in the IPC layer, which is where the data lives.
 
 ---
 
-## Appendix
+#### S-10 — Medium — Hardened Runtime entitlements are fully open
 
-### A. Key File Index
+**Where:** `build/entitlements.mac.plist` — `allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`.
 
+**Why it matters here:** `package.json` sets `hardenedRuntime: true`, then entitlements undo library validation (dylib injection) and unsigned executable memory. Native modules (`better-sqlite3`, `keytar`) often need some of this; `disable-library-validation` is the dangerous one.
 
-| Area                       | Path                                                                     |
-| -------------------------- | ------------------------------------------------------------------------ |
-| Main process / window      | `electron/main.ts`                                                       |
-| Preload / IPC API          | `electron/preload.ts`                                                    |
-| IPC handlers               | `electron/ipc/handlers.ts`                                               |
-| Auth / crypto              | `electron/services/auth.service.ts`, `crypto.service.ts`                 |
-| Database / validation      | `electron/services/database.service.ts`, `validation.service.ts`         |
-| Scheduler (core algorithm) | `electron/services/scheduler.service.ts`                                 |
-| Export (XSS risk)          | `electron/services/pdf.service.ts`, `spreadsheet.service.ts`             |
-| Credentials                | `electron/services/credentials.service.ts`                               |
-| Draft overlay (backend)    | `electron/services/draft-overlay.service.ts`                             |
-| Draft state (frontend)     | `src/context/DraftContext.tsx`                                           |
-| Draft persist              | `src/utils/draftPersist.ts`, `draftDiff.ts`                              |
-| Schedule UI                | `src/pages/SchedulePage.tsx`, `src/components/schedule/PaycheckView.tsx` |
-| Cadence utils (UI)         | `src/utils/cadence.ts`                                                   |
-| Schedule bill filter (UI)  | `src/utils/scheduleBills.ts`                                             |
-| CSP                        | `index.html`                                                             |
-| Dependencies               | `package.json`                                                           |
+**Remediation:** Build a notarized test without `disable-library-validation`. If keytar/sqlite still load (Electron 42 + current ABI scripts), drop it. Keep JIT if Chromium still requires it. Document whatever remains as accepted Electron cost in this file.
 
+**Why this is the right fix:** Guessing entitlements without a packaged run will break Mac builds. The Plan should include a dedicated `electron:build` verification step, not a blind plist edit.
 
-### B. Test Coverage Map
+---
 
+#### S-11 — Medium — Password generator has modulo bias
 
-| Test file                     | Tests | Covers                                             |
-| ----------------------------- | ----- | -------------------------------------------------- |
-| `scheduler.service.test.ts`   | 43    | Income/bill projection, assignments, goals, ledger |
-| `debt.service.test.ts`        | 24    | Amortization, payoff                               |
-| `paycheck-calculator.test.ts` | 23    | Cadence date math                                  |
-| `credentials.service.test.ts` | 11    | Keychain wrapper                                   |
-| `cadence.test.ts`             | 8     | Monthly multipliers                                |
-| `draftDiff.test.ts`           | 5     | Entity diff, ID remap                              |
-| `dialog.test.ts`              | 6     | Dialog utilities                                   |
-| `scheduleBills.test.ts`       | 3     | UI bill filter                                     |
-| `generatePassword.test.ts`    | 5     | Password generation                                |
-| `SetupPage.test.tsx`          | 4     | Setup flow component                               |
-| `Modal.test.tsx`              | 5     | Modal component                                    |
-| `goals-flow.spec.ts`          | e2e   | Goals user flow                                    |
+**Where:** `src/utils/generatePassword.ts` — `getRandomValues()[0] % pool.length`.
 
+**Why it matters here:** This generator is offered at setup and recovery reset for the **master password**. Bias is small but unnecessary for a crypto-adjacent helper.
 
-**Not tested:** IPC handlers, database service, DraftContext, draftPersist, auth service (beyond credentials), page components (except Setup), rebalance phases, constraint enforcement, navigation guards.
+**Remediation:** Rejection sampling (`while (x >= cutoff)`). Keep Web Crypto; do not use `Math.random`.
 
-### C. Live Audit Results
+**Why this is the right fix:** Same API, correct distribution, tiny diff, existing tests.
 
-**Vitest (`npm run test:run`):**
+---
+
+#### S-12 — Medium — Dual API type surfaces will drift and hide IPC bugs
+
+**Where:** Inline interfaces in `electron/preload.ts` **and** `src/types/electron.d.ts`. `lock()` return types already disagree (preload vs d.ts).
+
+**Why it matters here:** The renderer compiles against `electron.d.ts`; preload is a separate TS project. Drift is how S-02 survived (LoginPage types `password?: string` on get).
+
+**Remediation:** One `shared/electronApi.ts` (or `shared/ipc.ts`) with the `electronAPI` shape. Preload `const api: ElectronAPI = …` and `src/types/electron.d.ts` only `import type` + `Window` augment. No second `ScheduleData` / `DraftOverlayInput` in preload.
+
+**Why this is the right fix:** Shared types already exist for domain models (`shared/types`). IPC is the remaining split brain.
+
+---
+
+#### S-13 — Low — Recovery key and passwords linger in React state
+
+**Where:** `LoginPage`, `SetupPage`, `ChangePasswordModal`, `RecoveryKeyDisplay`.
+
+**Remediation:** After success / unmount, set password fields to `''`. Recovery display should be a one-shot copy from `auth:get-pending-recovery-key` then `clearPendingRecoveryKey` (already exists). Do not keep `newRecoveryKey` in state after confirm.
+
+---
+
+#### S-14 — Low — `secureCompare` pads with `Buffer.from(utf8)`
+
+**Where:** `CryptoService.secureCompare`. Hashes are hex of fixed length, so this is unused complexity. `result && a.length === b.length` after compare is fine for equal-length hashes.
+
+**Remediation:** Compare hex with `timingSafeEqual` on `Buffer.from(a, 'hex')` after verifying both match `/^[0-9a-f]{128}$/`. Drop padding.
+
+---
+
+#### S-15 — Low — Dev `openDevTools()` always on
+
+**Where:** `electron/main.ts` when `VITE_DEV_SERVER_URL`.
+
+**Remediation:** Keep for `pnpm electron:dev`; do not ship. Confirm `app.isPackaged` already skips it (it does). No change required unless a packaged-dev hybrid is added.
+
+---
+
+### 3.2 Architecture — not one system
+
+The intended architecture is clear and good:
 
 ```
-Test Files  11 passed (11)
-     Tests  137 passed (137)
-  Duration  1.61s
+Renderer (draft) → IPC overlay → BudgetManager/DB → serialize → utilityProcess worker → schedule
+                                                              ↘ persist only on Save
 ```
 
-**npm audit:**
+The implementation still has **feature-shaped side doors**.
 
-```
-22 vulnerabilities (1 low, 9 moderate, 9 high, 3 critical)
-```
+#### A-01 — Medium — Reconciliation / Break-Glass apply is two systems
 
-Most critical/high findings are in dev/build transitive dependencies (`vitest`, `electron-builder` chain). Production runtime surface is primarily `electron`, `better-sqlite3`, `keytar`, `exceljs`, `date-fns`, `react`.
+**Where:**
 
-### D. Codebase Metrics
+- IPC `reconciliation:apply-fixes` and `breakGlassAdvisor:apply` **only validate** and persist nothing (`electron/ipc/handlers.ts`).
+- Real apply is `DraftContext.applyReconciliationFixes` / `applyBreakGlassPlan` (draft assignments).
+- `useScheduleMutations.handleApplyFixes` **forks**: Quick Budget calls the no-op IPC then `generateSchedule(..., preferredAssignments)`; saved budgets call draft apply.
 
+**Why it matters here:** Same user action, two code paths, one of which is a vestigial IPC that looks like it writes. Comments even say “do not persist locks.” This is the siloed-feature pattern the app should not have.
 
-| Metric                                | Value                         |
-| ------------------------------------- | ----------------------------- |
-| Production LOC (`src/` + `electron/`) | ~19,487                       |
-| Test LOC                              | ~3,146                        |
-| Test : production ratio               | ~16%                          |
-| Production files                      | ~68                           |
-| Test files                            | 12 (11 vitest + 1 playwright) |
-| IPC channels                          | ~50+                          |
-| Draft domains                         | 6                             |
-| Scheduler service LOC                 | 1,686                         |
-| IPC handlers LOC                      | ~1,190                        |
+**Remediation:** Delete both IPC channels, preload methods, e2e touchpoints, and the Quick Budget branch. One function: mutate draft assignments (and preferred seeds for the next build). Quick Budget already lives in `QuickBudgetService` via BudgetManager for income/bills; preferred assignments should go through the same overlay `schedule:build` already accepts. Tests that invoked IPC apply should assert draft state + a `schedule:build` instead.
 
-
-### E. Audit Limitations
-
-This audit was performed via **static code review** only. The following were not performed:
-
-- Dynamic penetration testing or packaged-binary inspection
-- Performance profiling under realistic dataset sizes (100+ bills, multi-year schedules)
-- User acceptance testing of draft flows
-- Full `npm audit fix` impact analysis (breaking changes)
-- Electron security checklist (e.g., `electron-builder` artifact signing verification)
-
-### Current Status
-
-*Updated June 15, 2026 against `main` @ d5e7624.*
-
-Sections C–E above remain the **June 10, 2026 audit snapshot** for historical reference. Live supplement as of this update:
-
-
-| Metric               | June 10 (audit)                               | Current (`main`)                                             |
-| -------------------- | --------------------------------------------- | ------------------------------------------------------------ |
-| Vitest tests passing | 137                                           | **763**                                                      |
-| Test files           | 12 (11 vitest + 1 playwright)                 | **70 vitest** + e2e                                          |
-| CI workflows         | None documented                               | PR Gate, Main Stability, Dependabot refresh, auto-merge      |
-| Scheduler layout     | Monolithic `scheduler.service.ts` (1,686 LOC) | Modularized under `electron/services/scheduler/` with facade |
-| IPC handlers         | ~1,190 LOC                                    | ~718 LOC; single `schedule:build` path                       |
-
-
-**Coverage now includes:** IPC handlers, database service, DraftContext, draftPersist, navigation guards, page components, constraint enforcement, and HTML export escaping — all areas listed as "Not tested" in §B above.
+**Why this is the right fix:** Compute is already overlay-driven. A validate-only write API is ceremony. One apply path is the draft model the rest of the app uses.
 
 ---
 
-*End of report. Generated as part of the Budget Optimizer functional audit, June 10, 2026.*
+#### A-02 — Medium — Debts and leaves bypass BudgetManager; Quick Budget is a second product
+
+**Where:** Income/bills/goals/skips/assignments/overrides route through `BudgetManager` (DB vs `QuickBudgetService`). Debts/leaves IPC talks to `DatabaseService` and **requires** `budgetId`. Snapshot hardcodes `debts: []`, `leaves: []` in quick mode. Pages special-case `isQuickBudget` (`DebtsPage`, `GoalsPage`, mutations).
+
+**Why it matters here:** Quick Budget was meant as “try the scheduler without a vault.” It is actually a parallel in-memory CRUD clone that only covers some entities. Users hit dead ends (debts/leaves). Every new entity needs a third implementation (DB + QuickBudget + Draft overlay).
+
+**Remediation (pick one; do not keep the hybrid):**
+
+**Preferred:** Make Quick Budget a real ephemeral budget: `BudgetManager.createBudget({ ephemeral: true })` using the same `DatabaseService` against a temp file or in-memory sqlite (`:memory:` + same schema). Delete `QuickBudgetService`. All IPC goes through BudgetManager. Discard = drop the connection.
+
+**Acceptable smaller step:** Add debts/leaves to `QuickBudgetService` **and** route debts/leaves IPC through BudgetManager like goals. Still two stores, but one IPC shape.
+
+Do not add more `if (isQuickBudget)` in pages.
+
+**Why this is the right fix:** The app already has encryption, migrations, and validation on `DatabaseService`. Duplicating them in RAM is how silos start. In-memory sqlite reuses the one store.
+
+---
+
+#### A-03 — Medium — `DraftContext.tsx` (~1,500 lines) is the god object
+
+**Where:** One file owns snapshot load, per-domain CRUD, dirty tracking, persist, schedule generate/debounce/cache/progress, viewport, diagnostics ids. It is split into four React contexts but not four modules.
+
+**Why it matters here:** Schedule bugs, persist bugs, and income CRUD all land in the same PR conflict zone. `generateSchedule` debounce **drops unresolved Promises** when retriggered (see E-01) because the scheduler is buried in CRUD.
+
+**Remediation:** Mechanical extract, no behavior change first:
+
+
+| Module                                   | Owns                                                  |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `src/context/draft/draftStore.ts`        | committed/draft state, dirty domains, overlay builder |
+| `src/context/draft/draftPersist.ts`      | already exists as `src/utils/draftPersist.ts` — keep  |
+| `src/context/draft/useScheduleEngine.ts` | generate, cache, progress, viewport                   |
+| `src/context/DraftContext.tsx`           | providers only                                        |
+
+
+Keep the four context hooks (`useDraftData` etc.) so pages do not churn.
+
+**Why this is the right fix:** The provider split already happened; the file did not. Extracting `useScheduleEngine` is the prerequisite for fixing E-01 without breaking CRUD.
+
+---
+
+#### A-04 — Medium — Canonical constants and formatters are copied, not shared
+
+
+| Concept                            | Copies                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MAX_PREPAY_DAYS = 14`             | `electron/services/scheduler/types.ts`, `src/utils/assignmentConstraints.ts`, comment in `shared/types`                                                                               |
+| `SCHEDULE_CALCULATION_MONTHS = 12` | scheduler `types.ts`, `src/utils/scheduleViewport.ts`                                                                                                                                 |
+| Currency format                    | `src/utils/formatCurrency.ts`, `electron/utils/constants.ts`, `reconciliationCopy.ts`, `goalAchievabilityMessaging.ts`, ad-hoc `$` in `DebtsPage` / `DebtCard` / chart tickFormatters |
+| `PRIORITY_LABELS`                  | `src/types/index.ts`, `electron/utils/constants.ts`                                                                                                                                   |
+| Settings `currency`                | Stored, Settings UI writes it, **no formatter reads it** — always `USD`                                                                                                               |
+
+
+**Why it matters here:** The 14-day rule is a user-visible constraint. Two constants **will** diverge (the June audit was about this class of bug). Currency is a fake setting — architecture theater.
+
+**Remediation:** Move `MAX_PREPAY_DAYS`, `SCHEDULE_CALCULATION_MONTHS`, `SCHEDULE_MAX_CALCULATION_MONTHS`, `PRIORITY_LABELS`, `DEFAULT_*_CASH_ON_HAND` to `shared/constants.ts`. Renderer assignment UI and electron scheduler both import that. One `formatCurrency(amount, currency)` in `shared/formatCurrency.ts` (or renderer-only if electron export must stay CJS-simple — then electron imports the same shared module; Vite already aliases `@shared`). Wire Settings `currency` into that helper **or** remove the setting. Do not keep a dead control.
+
+**Why this is the right fix:** `shared/` is already the SSOT for types and schedule presentation. Constants belong there. A setting that does not change output is bloat.
+
+---
+
+#### A-05 — Low — Preload duplicates the domain model
+
+Covered by S-12. Delete local `IncomeInput` / `ScheduleData` / `AppSettings` in `preload.ts`.
+
+---
+
+#### A-06 — Low — Two Electron Vite plugins
+
+**Where:** `vite.config.ts` uses `vite-plugin-electron/simple` (main+preload) **and** `vite-plugin-electron` (worker) so the worker does not `require("./main.js")`.
+
+**Remediation:** Keep for now; the comment is the reason. Optionally collapse later with an explicit `inlineDynamicImports` worker build. Not a Plan Phase 0 item.
+
+---
+
+#### A-07 — Low — `lazyCharts.tsx` is not lazy
+
+**Where:** Static re-exports + `ChartSuspense` wrapping non-lazy children. Vite already splits `recharts` via `codeSplitting.groups`.
+
+**Remediation:** Either `React.lazy(() => import('./SummaryCharts'))` (and the two default charts) **or** rename to `charts.tsx` and drop the fake Suspense. Prefer real `lazy` so DebtsPage does not pull Summary charts.
+
+**Why this is the right fix:** The filename promises code-splitting the router does not actually have (pages are still eager in `App.tsx`). One or the other, not a costume.
+
+---
+
+#### A-08 — Low — `eslint` only lints `src/`
+
+**Where:** `package.json` `"lint": "eslint src ..."`, `eslint.config.mjs` `files: ['src/**/*.{ts,tsx}']`.
+
+**Remediation:** Lint `electron/**/*.ts` and `shared/**/*.ts` with node globals. Hooks plugin stays renderer-only.
+
+**Why this is the right fix:** Main-process bugs (unguarded IPC, `any`) never fail CI today.
+
+---
+
+### 3.3 Efficiency, leaks, hot paths
+
+#### E-01 — Medium — `generateSchedule` debounce leaks Promises
+
+**Where:** `DraftContext.generateSchedule` — `clearTimeout` without resolving the previous `new Promise`.
+
+**Why it matters here:** Schedule page, export page, and mutations all `await generateSchedule`. Rapid viewport/draft edits accumulate forever-pending Promises and `then` closures over overlay snapshots.
+
+**Remediation:** Single-flight in `useScheduleEngine`: store `{ timer, resolve, reject }` in a ref. On retrigger, `resolve(null)` or `reject(superseded)` the previous promise, then debounce again. Align with the worker’s `superseded` error so UI already knows how to ignore it.
+
+**Why this is the right fix:** The worker already newest-wins. The renderer debounce should too. Do not add a second cache.
+
+---
+
+#### E-02 — Medium — Two schedule hashes; cache key is `JSON.stringify(overlay)`
+
+**Where:** `src/utils/scheduleCache.ts` `buildScheduleCacheKey` stringifies the full overlay. `src/utils/scheduleInputHash.ts` builds a different string for effects. Main uses SHA-256 of serialized worker input (`schedule-compute-serialize.ts`).
+
+**Why it matters here:** Overlay stringify is O(payload) on every generate, unstable key order can miss cache, and the effect hash can disagree with the cache hash → extra 12-month worker jobs (the expensive thing in this app).
+
+**Remediation:** One hash function in `shared/` used by renderer cache **and** (optionally) displayed debug. Worker hash can stay SHA-256 of the serialized IPC payload (that payload is the truth). Renderer should hash the same fields `serializeScheduleComputeInput` cares about, not a parallel ad-hoc join.
+
+**Why this is the right fix:** Duplicate hashing is how “Refresh does nothing” / “stale schedule” bugs return. One definition.
+
+---
+
+#### E-03 — Low — Junction lookups decrypt every row
+
+**Where:** `DatabaseService.findIncomeOverrideId` (and similar skip/assignment finders) `SELECT `* then decrypt-loop.
+
+**Remediation:** When touching those methods, add a ciphertext-unaware index table **or** keep a per-budget in-memory map inside `BudgetManager` after first read (BudgetManager already is the session cache for “current budget”). Do not add SQL on encrypted JSON.
+
+**Why this is the right fix:** You cannot `WHERE` inside GCM blobs. The session already has decrypted entities in RAM after snapshot load — use that.
+
+---
+
+#### E-04 — Low — Pages are eager; recharts chunk exists but routes do not lazy-load
+
+**Where:** `src/App.tsx` static-imports every page. Dashboard/Debts/Summary pull charts.
+
+**Remediation:** `React.lazy` per route. Combine with A-07. Optional; not security.
+
+---
+
+#### E-05 — Note (no leak found) — Event listeners
+
+`Layout` activity ping, `ThemeContext` media query, `DraftContext` `schedule.onProgress`, `onCloseRequested`, `onLocked` all unsubscribe. PDF window is `destroy`ed. `ScheduleComputeHost.dispose` exists. **Do not** “fix” these.
+
+Remaining memory issue is **retention**, not listener leaks: `scheduleCacheRef` + `fullScheduleRef` hold a full horizon schedule until budget switch. That is intended. Clear on lock (already: `isUnlocked` effect nulls schedule).
+
+---
+
+### 3.4 Bloat & dependency hygiene
+
+#### B-01 — Medium — Dual lockfiles
+
+**Where:** `package.json` `"packageManager": "pnpm@9.15.9"` + `pnpm-lock.yaml` + committed `package-lock.json` (npm tree, stale versions e.g. concurrently 8 vs 10).
+
+**Why it matters here:** `pnpm install --frozen-lockfile` in CI is correct; a contributor running `npm i` produces a different tree (and can reintroduce advisories pnpm overrides patched). Dependabot `package-ecosystem: npm` may confuse the two.
+
+**Remediation:** Delete `package-lock.json`. Add `package-lock.json` to `.gitignore`. README already-should say pnpm only (confirm `README.md` / `CONTRIBUTING.md`).
+
+**Why this is the right fix:** One package manager is a security control, not style.
+
+---
+
+#### B-02 — Medium — Unused and mis-classified packages
+
+
+| Package                                                   | Issue                                                                                                                                                                 |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `concurrently`, `wait-on`                                 | In `package.json` scripts: **zero references**. Dead.                                                                                                                 |
+| `exceljs`                                                 | Used at runtime by `spreadsheet.service.ts`, listed as **devDependency**. Bundled by Vite today so the packaged app works; `pnpm audit --prod` does **not** cover it. |
+| `clsx`                                                    | Used widely — keep.                                                                                                                                                   |
+| Inline BIP-39 wordlist (~2k words in `crypto.service.ts`) | Fine vs adding `bip39` (extra dep). Keep inline **or** move to `electron/data/bip39-en.ts`. Do not add a wallet library.                                              |
+
+
+**Remediation:** Remove `concurrently` and `wait-on`. Move `exceljs` to `dependencies` (or `optionalDependencies` if you ever drop xlsx). Re-run `pnpm audit --prod`.
+
+**Why this is the right fix:** Prod audit is the gate you already trust. It must see what ships in `dist-electron`.
+
+---
+
+#### B-03 — Low — Ignored advisories (accepted, track)
+
+`scripts/audit-dev.cjs`:
+
+- `GHSA-mh99-v99m-4gvg` (brace-expansion / minimatch via electron-builder) — no patched 1.x/2.x.
+- `GHSA-qwww-vcr4-c8h2` (react-router RSC CSRF) — this app is HashRouter + Electron, not RSC.
+
+Keep ignores. Revisit when electron-builder or react-router-dom major lands. Do not “upgrade RR to 8” inside a security PR unless that major is already planned.
+
+---
+
+#### B-04 — Low — Repo clutter (not product)
+
+Untracked `AUDIT_REPORT.docx`, `cov_output.txt`. Do not commit. Add `cov_output.txt` / `*.docx` to gitignore if they keep reappearing.
+
+---
+
+## 4. Coding paradigms — verdict
+
+
+| Pattern                                               | Status                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------- |
+| Local-first, main owns secrets, renderer owns UX      | Intended; violated by S-02                               |
+| Draft overlay until Save                              | Intended; violated by A-01 dual apply and A-02 debts IPC |
+| Shared types, electron compute, renderer presentation | Mostly; constants/formatters not shared (A-04)           |
+| Worker quarantine (no DB/fs)                          | Honored                                                  |
+| Guarded IPC + validation at persistence               | Honored for CRUD; not for diagnostics/auto-lock          |
+| One package manager, one lockfile                     | Violated (B-01)                                          |
+
+
+No additional framework, state library, or SQLCipher project should be started to “clean this up.” The Plan is subtractive: delete channels, share constants, stop copying passwords, finish Electron window policy.
+
+---
+
+## 5. Resolution — Plan Agent seed
+
+Attach this file. Use the §6 prompt only. Execute §5 in order. Do not start Phase 2 while Phase 0 is open. Each phase is one PR unless noted.
+
+### Goal
+
+Close High security gaps, make credentials and schedule-apply a single path, then remove duplication so the app is one system: **one window policy, one secret owner (main), one apply path (draft overlay), one constant module, one lockfile**.
+
+### Constraints
+
+- Do not introduce SQLCipher, Redux, a new scheduler, or an LP solver.
+- Do not expand Quick Budget features until A-02 is chosen and implemented.
+- Do not re-open June 2026 closed items (debug telemetry, HTML XSS escape, export path allowlist, worker isolation) except where this report names a remaining hole.
+- Keep contextIsolation + sandbox + parameterized SQL + GCM payloads.
+- Match existing conventional commits (`fix:`, `refactor:`, `chore:`).
+- After each phase: `pnpm typecheck && pnpm typecheck:electron && pnpm lint && pnpm test:run` (and `pnpm verify:csp` if CSP/fonts change).
+
+### Phase 0 — Electron window lock + CSP + temp files (S-01, S-03, S-04)
+
+**PR title:** `fix: lock navigation, self-host fonts, keep PDF HTML out of /tmp`
+
+1. `electron/main.ts` `createWindow`:
+  - `webContents.setWindowOpenHandler(() => ({ action: 'deny' }))`
+  - `will-navigate` / `will-redirect`: `event.preventDefault()` unless URL is the dev server or a `file:` URL under the app `dist` directory.
+  - `session.setPermissionRequestHandler((_, __, cb) => cb(false))`
+  - Tests: extend `tests/unit` around a small helper `isAllowedNavigation(url, { devServerUrl, distDir, packaged })` so the policy is unit-tested without booting Electron.
+2. Self-host fonts **or** system fonts. Remove Google `<link>`s from `index.html`. Tighten `PRODUCTION_CSP` in `vite.config.ts`. Add `session.webRequest.onHeadersReceived` CSP on the app session. Update `scripts/verify-production-csp.cjs` to reject googleapis/gstatic and to require `object-src 'none'`.
+3. `pdf.service.ts`: stop using `os.tmpdir()`. UserData scratch dir `0o700` + file `0o600`, or in-memory load. Keep `javascript: false` and apply the same navigation deny to that window.
+4. Add/adjust unit tests for export path + PDF cleanup (`existsSync` false after success and after throw).
+
+**Done when:** Packaged CSP has no third-party hosts; navigation helper tests cover `https://evil.example` deny; PDF temp is not under `/tmp`.
+
+### Phase 1 — Credentials never enter the renderer (S-02, S-08 partial, S-09, S-12, S-13)
+
+**PR title:** `fix: unlock from keychain in main; single electronAPI types`
+
+1. Implement `auth:unlock-with-saved-credentials` in `AuthService` + handlers. Main: `credentials.getPassword()` → `unlock(password)` → zero local string. Return `{ success }` only.
+2. After create/change/reset **in the handler**, call `credentials.offerSave` with the password main already has. Remove renderer `offerSave(password)` calls from `SetupPage` / `LoginPage`.
+3. Delete `credentials:get|save|offerSave` from handlers, preload, mocks, e2e helpers. Login UI: button “Unlock with saved password” when `credentials.has()` is true.
+4. `LoginPage`/`SetupPage`: clear password state on success and unmount.
+5. `diagnostics:get-event|get-bundle|export` → `withUnlockGuard`. Remove `app:show-open-dialog`. Either delete `auth:set-auto-lock` or make it persist through `settings:update` only (remove duplicate channel).
+6. `assertAppSender` in `guards.ts`; wrap budget/auth-mutating handlers.
+7. Collapse preload inline types into `shared` IPC types (S-12). Preload must typecheck against that interface (`satisfies ElectronAPI`).
+
+**Done when:** Grep has no `credentials.get` / `offerSave(` in `src/`. Login e2e still unlocks (typed password + biometric). New unit tests: locked `credentials:get` gone; unlock-with-saved does not return a password field.
+
+### Phase 2 — One apply path, one budget store (A-01, A-02)
+
+**PR title:** `refactor: draft-only reconciliation apply; debts/leaves through BudgetManager`
+
+1. Delete IPC `reconciliation:apply-fixes` and `breakGlassAdvisor:apply` (handlers, preload, `electron.d.ts`, `touchpoint-inventory.json`, handler tests).
+2. `useScheduleMutations`: remove `isQuickBudget` apply fork; always `applyReconciliationFixes` / `applyBreakGlassPlan` on draft then `generateSchedule({ force: true })`.
+3. **A-02 preferred:** ephemeral sqlite for Quick Budget; delete `quick-budget.service.ts`. All debt/leave/goal methods on BudgetManager. Snapshot no longer special-cases empty debts.
+  - If ephemeral sqlite is too large for one PR, split: PR 2a delete apply IPC; PR 2b BudgetManager owns debts/leaves + QuickBudgetService gains debts/leaves (interim). Do not ship 2a without a follow-up ticket for 2b.
+
+**Done when:** One apply implementation; `rg "applyFixes|breakGlassAdvisor:apply" electron src` is empty; Quick Budget either uses the same service as saved budgets or is explicitly documented as interim with debts/leaves routed identically.
+
+### Phase 3 — Harmony + efficiency (A-03, A-04, A-07, A-08, E-01, E-02, S-05, S-06, S-07, S-11)
+
+**PR title:** `refactor: shared constants, schedule engine module, one currency formatter`
+If too large for one PR, split: 3a extract + hash + constants; 3b lazy/eslint + S-05/S-06/S-07/S-11.
+
+1. Extract `useScheduleEngine` from `DraftContext` (A-03). Debounce single-flight (E-01) is already in DraftContext working tree — keep it through the extract; do not reimplement.
+2. `shared/constants.ts` + single `formatCurrency` (A-04). Wire or remove Settings currency.
+3. One renderer schedule hash (E-02): `shared/scheduleIdentity.ts` already exists uncommitted — land it; do not add a second hash. Confirm cache keys are not `JSON.stringify(overlay)`.
+4. Real `React.lazy` charts/routes or delete `lazyCharts` costume (A-07). Optional route lazy in same PR if types stay clean.
+5. ESLint `electron` + `shared` (A-08).
+6. Password min length 12 in `AuthService`; async KDF (S-05). Recovery hash uses `recoverySalt` (S-06). `CryptoService` key accessor (S-06). Encrypt settings blobs; WAL checkpoint on close (S-07). Rejection sampling in `generatePassword` (S-11).
+
+**Done when:** `MAX_PREPAY_DAYS` has a single definition; `generateSchedule` tests include “rapid retrigger resolves prior promise”; settings round-trip encrypted in `database.service` tests.
+
+### Phase 4 — Hygiene (B-01, B-02, S-10)
+
+**PR title:** `chore: pnpm-only lockfile, drop unused deps, reclassify exceljs`
+
+1. Delete `package-lock.json`; gitignore it.
+2. Remove `concurrently`, `wait-on`. Move `exceljs` to `dependencies`. `pnpm install` and commit `pnpm-lock.yaml`.
+3. Mac entitlements: packaged smoke without `disable-library-validation`; drop if native modules load (S-10). If not, comment in plist + this report as accepted.
+
+**Done when:** Repo has one lockfile; `pnpm audit --prod` still includes exceljs; `rg concurrently` only in lockfile history.
+
+### Test plan (all phases)
+
+- Unit: IPC guards (locked vs unlocked), navigation allowlist, crypto compare, overlay validation, schedule debounce, BudgetManager debts in both modes.
+- Component: Login Keychain button does not put a password in a textbox from IPC; unlock still works with typed password.
+- E2E: auth.spec, schedule accept-reconciliation, export PDF/HTML/xlsx, lock/quit unsaved guard.
+- `pnpm audit:dev` green. `pnpm verify:csp` green.
+
+### Out of scope (explicit)
+
+- LP/constraint solver (June A-08 / 5.4 won’t-do).
+- Replacing better-sqlite3 with SQLCipher in this plan.
+- Rewriting the heuristic scheduler.
+- React Router 8 migration (deferred GHSA).
+- Collapsing the dual Vite Electron plugins (A-06).
+
+---
+
+## 6. Suggested Plan Agent prompt (verbatim)
+
+```
+You are planning implementation for Budget Optimizer v3.0.0 from AUDIT_REPORT.md (2026-08-18).
+
+Treat §5 Resolution as the spec. Phase 0 first, then 1, 2, 3, 4. Do not skip High findings.
+
+Product invariants: local-first Electron finance app; main owns secrets and SQLite; renderer owns draft UX; schedule compute stays in utilityProcess; no new frameworks; no SQLCipher in this effort.
+
+Deliver a plan with: ordered PRs matching phases 0–4, exact files to touch, tests to add, and grep-based done-when checks from the report. Call out anything in the report that is now stale vs the current working tree (including uncommitted changes).
+```
+

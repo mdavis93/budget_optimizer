@@ -8,7 +8,7 @@ import {
   SCHEDULE_DEBOUNCE_MS,
   type ScheduleCacheEntry,
 } from '../../utils/scheduleCache';
-import { buildScheduleInputHash } from '../../utils/scheduleInputHash';
+import { buildScheduleInputHash, toScheduleIdentityInput } from '../../utils/scheduleInputHash';
 import type { ScheduleComputeProgressReport } from '@shared/scheduleComputeProtocol';
 
 const defaultScheduleStartDate = () => format(startOfMonth(new Date()), 'yyyy-MM-dd');
@@ -137,6 +137,8 @@ export function useScheduleEngine({
       buildScheduleInputHash({
         incomes: draft.incomes,
         bills: draft.bills,
+        goals: draft.goals,
+        debts: draft.debts,
         skippedBills: draft.skippedBills,
         billAssignments: draft.billAssignments,
         incomeOverrides: draft.incomeOverrides,
@@ -206,7 +208,24 @@ export function useScheduleEngine({
 
       const overlay = buildDraftOverlay();
       pendingPreferredAssignmentsRef.current = [];
-      const cacheKey = buildScheduleCacheKey(overlay, startDate, months, startingBalance);
+      const cacheKey = buildScheduleCacheKey(
+        toScheduleIdentityInput({
+          incomes: overlay?.incomes ?? draft.incomes,
+          bills: overlay?.bills ?? draft.bills,
+          goals: overlay?.goals ?? draft.goals,
+          debts: overlay?.debts ?? draft.debts,
+          leaves: overlay?.leaves ?? draft.leaves,
+          skippedBills: overlay?.skippedBills ?? draft.skippedBills,
+          billAssignments: overlay?.billAssignments ?? draft.billAssignments,
+          preferredAssignments: overlay?.preferredAssignments,
+          incomeOverrides: overlay?.incomeOverrides ?? draft.incomeOverrides,
+          startDate,
+          startingBalance,
+          targetCashOnHand: overlay?.targetCashOnHand ?? draft.budget?.targetCashOnHand,
+          minCashOnHand: overlay?.minCashOnHand ?? draft.budget?.minCashOnHand,
+          minSavingsPerPaycheck: overlay?.minSavingsPerPaycheck ?? draft.budget?.minSavingsPerPaycheck,
+        })
+      );
       if (scheduleCacheRef.current?.hash === cacheKey) {
         return applyScheduleResult(scheduleCacheRef.current.data, months);
       }
@@ -269,7 +288,7 @@ export function useScheduleEngine({
         }
       }
     },
-    [applyScheduleResult, buildDraftOverlay, pendingPreferredAssignmentsRef]
+    [applyScheduleResult, buildDraftOverlay, draft, pendingPreferredAssignmentsRef]
   );
 
   const generateSchedule = useCallback(
