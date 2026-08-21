@@ -1,4 +1,4 @@
-import { differenceInDays, format, isAfter, isBefore, parseISO, startOfDay } from 'date-fns';
+import { format, parseISO, startOfDay } from 'date-fns';
 import type {
   BreakGlassAdvisorReport,
   BreakGlassPlan,
@@ -18,6 +18,7 @@ import {
 const MAX_ADVISOR_PLANS = 5;
 const MAX_ADVISOR_PLAN_STEPS = 12;
 const MAX_ADVISOR_CASCADE_DEPTH = 8;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface ProposeBreakGlassOptions {
   scheduleStartDate?: string;
@@ -26,6 +27,8 @@ export interface ProposeBreakGlassOptions {
   minCashOnHand?: number;
   /** Manual-locked occurrence keys (`billId-yyyy-MM-dd`); treated as fixed sources. */
   lockedBillKeys?: Set<string>;
+  /** Called once per original Break-Glass target considered (1-based). */
+  onTarget?: (current: number, total: number) => void;
 }
 
 interface SimPaycheck {
@@ -44,6 +47,41 @@ const PRIORITY_RANK: Record<PaycheckBill['priority'], number> = {
   normal: 2,
   low: 3,
 };
+
+interface LegalSlot {
+  index: number;
+  daysEarly: number;
+}
+
+interface AppliedMove {
+  fromIndex: number;
+  toIndex: number;
+  bill: PaycheckBill;
+}
+
+interface SearchCtx {
+  paycheckMs: number[];
+  startMs: number;
+  maxEarlyDays: number;
+  /** Legal paycheck slots per bill due date (date-only; sort uses live balances). */
+  legalSlotsByBillDate: Map<string, LegalSlot[]>;
+}
+
+let advisorSearchVisits = 0;
+
+/** Test-only: reset DFS visit counter. */
+export function resetAdvisorSearchVisits(): void {
+  advisorSearchVisits = 0;
+}
+
+/** Test-only: nodes entered in `ensureReceiveRoom*`. */
+export function getAdvisorSearchVisits(): number {
+  return advisorSearchVisits;
+}
+
+function dayMs(isoDate: string): number {
+  return startOfDay(parseISO(isoDate)).getTime();
+}
 
 function occurrenceKey(billId: string, billDate: string): string {
   return `${billId}-${billDate}`;
@@ -72,6 +110,26 @@ function listBreakGlassDates(
       date: paycheck.date,
       budgetRemaining: paycheck.budgetRemaining,
     }));
+}
+
+function horizonPaychecks(schedule: ScheduleData): PaycheckEntry[] {
+  return schedule.fullPaychecks?.length ? schedule.fullPaychecks : schedule.paychecks;
+}
+
+/** Dates currently in the Break-Glass band on the assigned schedule (no search). */
+export function listBreakGlassPaycheckDates(
+  schedule: ScheduleData,
+  options: ProposeBreakGlassOptions = {}
+): string[] {
+  const paychecks = horizonPaychecks(schedule);
+  if (!paychecks.length) return [];
+  const targetCashOnHand =
+    options.targetCashOnHand ?? schedule.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
+  const minCashOnHand =
+    options.minCashOnHand ?? schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
+  return listBreakGlassDates(cloneSim(paychecks, targetCashOnHand, minCashOnHand)).map(
+    (paycheck) => paycheck.date
+  );
 }
 
 function cloneSim(
@@ -130,6 +188,16 @@ function isMovable(
   return !lockedBillKeys.has(occurrenceKey(bill.billId, bill.billDate));
 }
 
+function targetMovableMass(paycheck: SimPaycheck, lockedBillKeys: Set<string>): number {
+  let sum = 0;
+  for (const bill of paycheck.bills) {
+    if (isMovable(bill, lockedBillKeys, { ignoreLocks: true })) {
+      sum += bill.amount;
+    }
+  }
+  return sum;
+}
+
 /** Destination can absorb `amount` while staying at/above the target CoH. */
 function leavesAtOrAboveTarget(
   rem: number,
@@ -139,25 +207,49 @@ function leavesAtOrAboveTarget(
   return rem - amount >= targetCashOnHand;
 }
 
-function placementLegality(
-  billDate: string,
-  paycheckDate: string,
-  scheduleStartDate: string,
+function placementLegalityMs(
+  dueMs: number,
+  payMs: number,
+  startMs: number,
   maxEarlyDays: number
 ): { ok: true; daysEarly: number } | { ok: false } {
-  const due = startOfDay(parseISO(billDate));
-  const pay = startOfDay(parseISO(paycheckDate));
-  const start = startOfDay(parseISO(scheduleStartDate));
-
-  if (isBefore(pay, start)) return { ok: false };
-  if (isAfter(pay, due)) return { ok: false };
-
-  const daysEarly = differenceInDays(due, pay);
+  if (payMs < startMs) return { ok: false };
+  if (payMs > dueMs) return { ok: false };
+  const daysEarly = Math.round((dueMs - payMs) / MS_PER_DAY);
   if (daysEarly > maxEarlyDays) return { ok: false };
   return { ok: true, daysEarly };
 }
 
-function sortMovable(bills: PaycheckBill[], sort: BillSort): PaycheckBill[] {
+function buildSearchCtx(
+  sim: SimPaycheck[],
+  scheduleStartDate: string,
+  maxEarlyDays: number
+): SearchCtx {
+  const paycheckMs = sim.map((paycheck) => dayMs(paycheck.date));
+  const startMs = dayMs(scheduleStartDate);
+  const legalSlotsByBillDate = new Map<string, LegalSlot[]>();
+  const billDates = new Set<string>();
+  for (const paycheck of sim) {
+    for (const bill of paycheck.bills) {
+      billDates.add(bill.billDate);
+    }
+  }
+  for (const billDate of billDates) {
+    const dueMs = dayMs(billDate);
+    const slots: LegalSlot[] = [];
+    for (let index = 0; index < sim.length; index++) {
+      const legality = placementLegalityMs(dueMs, paycheckMs[index], startMs, maxEarlyDays);
+      if (legality.ok) {
+        slots.push({ index, daysEarly: legality.daysEarly });
+      }
+    }
+    legalSlotsByBillDate.set(billDate, slots);
+  }
+  return { paycheckMs, startMs, maxEarlyDays, legalSlotsByBillDate };
+}
+
+/** Test-only: trial order for a sort strategy. Locks amount-asc vs name-only. */
+export function sortMovable(bills: PaycheckBill[], sort: BillSort): PaycheckBill[] {
   const copy = [...bills];
   if (sort === 'amount-desc') {
     copy.sort((a, b) => b.amount - a.amount || a.creditorName.localeCompare(b.creditorName));
@@ -187,6 +279,24 @@ function applyMove(sim: SimPaycheck[], fromIndex: number, toIndex: number, bill:
   to.budgetRemaining -= bill.amount;
 }
 
+function applyMoveTracked(
+  sim: SimPaycheck[],
+  fromIndex: number,
+  toIndex: number,
+  bill: PaycheckBill,
+  moveStack: AppliedMove[]
+): void {
+  applyMove(sim, fromIndex, toIndex, bill);
+  moveStack.push({ fromIndex, toIndex, bill });
+}
+
+function undoMovesTo(sim: SimPaycheck[], moveStack: AppliedMove[], snapshotLength: number): void {
+  while (moveStack.length > snapshotLength) {
+    const move = moveStack.pop()!;
+    applyMove(sim, move.toIndex, move.fromIndex, move.bill);
+  }
+}
+
 function makeStep(
   bill: PaycheckBill,
   fromPaycheckDate: string,
@@ -214,16 +324,17 @@ function hasShortfall(sim: SimPaycheck[]): boolean {
  * Appends cascade steps and mutates `sim`. Returns false if impossible within caps.
  */
 function ensureReceiveRoom(
+  ctx: SearchCtx,
   sim: SimPaycheck[],
   index: number,
   amountNeeded: number,
-  scheduleStartDate: string,
-  maxEarlyDays: number,
   lockedBillKeys: Set<string>,
   sort: BillSort,
   steps: BreakGlassPlanStep[],
+  moveStack: AppliedMove[],
   depth: number
 ): boolean {
+  advisorSearchVisits += 1;
   if (amountNeeded <= 0) return true;
   if (receiveRoom(sim[index]) >= amountNeeded) {
     return true;
@@ -238,40 +349,33 @@ function ensureReceiveRoom(
   )) {
     if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
 
-    const earlierCandidates: Array<{ index: number; daysEarly: number }> = [];
-    for (let earlier = index - 1; earlier >= 0; earlier--) {
-      const legality = placementLegality(
-        bill.billDate,
-        sim[earlier].date,
-        scheduleStartDate,
-        maxEarlyDays
-      );
-      if (legality.ok) earlierCandidates.push({ index: earlier, daysEarly: legality.daysEarly });
-    }
+    const earlierCandidates = (ctx.legalSlotsByBillDate.get(bill.billDate) ?? [])
+      .filter((slot) => slot.index < index)
+      .sort((a, b) => b.index - a.index);
 
     for (const { index: earlierIndex, daysEarly } of earlierCandidates) {
       const snapshotLength = steps.length;
-      const snapshotSim = cloneSimAsSim(sim);
+      const snapshotMoves = moveStack.length;
 
       if (
         !ensureReceiveRoom(
+          ctx,
           sim,
           earlierIndex,
           bill.amount,
-          scheduleStartDate,
-          maxEarlyDays,
           lockedBillKeys,
           sort,
           steps,
+          moveStack,
           depth + 1
         )
       ) {
-        restoreSim(sim, snapshotSim);
+        undoMovesTo(sim, moveStack, snapshotMoves);
         steps.length = snapshotLength;
         continue;
       }
 
-      applyMove(sim, index, earlierIndex, bill);
+      applyMoveTracked(sim, index, earlierIndex, bill, moveStack);
       steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, daysEarly));
 
       if (receiveRoom(sim[index]) >= amountNeeded) {
@@ -288,16 +392,17 @@ function ensureReceiveRoom(
  * Used when unloading a Break-Glass paycheck onto a later paycheck that itself needs space.
  */
 function ensureReceiveRoomLater(
+  ctx: SearchCtx,
   sim: SimPaycheck[],
   index: number,
   amountNeeded: number,
-  scheduleStartDate: string,
-  maxEarlyDays: number,
   lockedBillKeys: Set<string>,
   sort: BillSort,
   steps: BreakGlassPlanStep[],
+  moveStack: AppliedMove[],
   depth: number
 ): boolean {
+  advisorSearchVisits += 1;
   if (amountNeeded <= 0) return true;
   if (receiveRoom(sim[index]) >= amountNeeded) {
     return true;
@@ -312,40 +417,33 @@ function ensureReceiveRoomLater(
   )) {
     if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
 
-    const laterCandidates: Array<{ index: number; daysEarly: number }> = [];
-    for (let later = index + 1; later < sim.length; later++) {
-      const legality = placementLegality(
-        bill.billDate,
-        sim[later].date,
-        scheduleStartDate,
-        maxEarlyDays
-      );
-      if (legality.ok) laterCandidates.push({ index: later, daysEarly: legality.daysEarly });
-    }
+    const laterCandidates = (ctx.legalSlotsByBillDate.get(bill.billDate) ?? [])
+      .filter((slot) => slot.index > index)
+      .sort((a, b) => a.index - b.index);
 
     for (const { index: laterIndex, daysEarly } of laterCandidates) {
       const snapshotLength = steps.length;
-      const snapshotSim = cloneSimAsSim(sim);
+      const snapshotMoves = moveStack.length;
 
       if (
         !ensureReceiveRoomLater(
+          ctx,
           sim,
           laterIndex,
           bill.amount,
-          scheduleStartDate,
-          maxEarlyDays,
           lockedBillKeys,
           sort,
           steps,
+          moveStack,
           depth + 1
         )
       ) {
-        restoreSim(sim, snapshotSim);
+        undoMovesTo(sim, moveStack, snapshotMoves);
         steps.length = snapshotLength;
         continue;
       }
 
-      applyMove(sim, index, laterIndex, bill);
+      applyMoveTracked(sim, index, laterIndex, bill, moveStack);
       steps.push(makeStep(bill, sim[index].date, sim[laterIndex].date, daysEarly));
 
       if (receiveRoom(sim[index]) >= amountNeeded) {
@@ -357,56 +455,22 @@ function ensureReceiveRoomLater(
   return receiveRoom(sim[index]) >= amountNeeded;
 }
 
-function cloneSimAsSim(sim: SimPaycheck[]): SimPaycheck[] {
-  return sim.map((paycheck) => ({
-    date: paycheck.date,
-    budgetRemaining: paycheck.budgetRemaining,
-    bills: paycheck.bills.map((bill) => ({ ...bill })),
-    targetCashOnHand: paycheck.targetCashOnHand,
-    minCashOnHand: paycheck.minCashOnHand,
-  }));
-}
-
-function restoreSim(target: SimPaycheck[], source: SimPaycheck[]): void {
-  for (let index = 0; index < target.length; index++) {
-    target[index].budgetRemaining = source[index].budgetRemaining;
-    target[index].bills = source[index].bills.map((bill) => ({ ...bill }));
-    target[index].targetCashOnHand = source[index].targetCashOnHand;
-    target[index].minCashOnHand = source[index].minCashOnHand;
-  }
-}
-
 type Landing = { index: number; daysEarly: number; direction: 'earlier' | 'later' };
 
 function collectLandings(
+  ctx: SearchCtx,
   sim: SimPaycheck[],
   targetIndex: number,
-  bill: PaycheckBill,
-  scheduleStartDate: string,
-  maxEarlyDays: number
+  bill: PaycheckBill
 ): Landing[] {
   const landings: Landing[] = [];
-  for (let earlier = targetIndex - 1; earlier >= 0; earlier--) {
-    const legality = placementLegality(
-      bill.billDate,
-      sim[earlier].date,
-      scheduleStartDate,
-      maxEarlyDays
-    );
-    if (legality.ok) {
-      landings.push({ index: earlier, daysEarly: legality.daysEarly, direction: 'earlier' });
-    }
-  }
-  for (let later = targetIndex + 1; later < sim.length; later++) {
-    const legality = placementLegality(
-      bill.billDate,
-      sim[later].date,
-      scheduleStartDate,
-      maxEarlyDays
-    );
-    if (legality.ok) {
-      landings.push({ index: later, daysEarly: legality.daysEarly, direction: 'later' });
-    }
+  for (const slot of ctx.legalSlotsByBillDate.get(bill.billDate) ?? []) {
+    if (slot.index === targetIndex) continue;
+    landings.push({
+      index: slot.index,
+      daysEarly: slot.daysEarly,
+      direction: slot.index < targetIndex ? 'earlier' : 'later',
+    });
   }
   // Prefer: (1) earlier before later, (2) landings that keep destination at/above
   // target CoH (avoid recreating Break-Glass for the next accept), (3) nearest.
@@ -434,15 +498,27 @@ function collectLandings(
 }
 
 function tryClearBreakGlass(
+  ctx: SearchCtx,
   base: SimPaycheck[],
   targetIndex: number,
-  scheduleStartDate: string,
-  maxEarlyDays: number,
   lockedBillKeys: Set<string>,
   sort: BillSort
 ): BreakGlassPlanStep[] | null {
-  const sim = cloneSimAsSim(base);
+  const target = base[targetIndex];
+  const deficit = target.targetCashOnHand - target.budgetRemaining;
+  if (deficit > targetMovableMass(target, lockedBillKeys)) {
+    return null;
+  }
+
+  const sim = base.map((paycheck) => ({
+    date: paycheck.date,
+    budgetRemaining: paycheck.budgetRemaining,
+    bills: paycheck.bills.map((bill) => ({ ...bill })),
+    targetCashOnHand: paycheck.targetCashOnHand,
+    minCashOnHand: paycheck.minCashOnHand,
+  }));
   const steps: BreakGlassPlanStep[] = [];
+  const moveStack: AppliedMove[] = [];
   let guard = 0;
   const targetCashOnHand = sim[targetIndex].targetCashOnHand;
 
@@ -458,49 +534,43 @@ function tryClearBreakGlass(
       ),
       sort
     )) {
-      const landings = collectLandings(
-        sim,
-        targetIndex,
-        bill,
-        scheduleStartDate,
-        maxEarlyDays
-      );
+      const landings = collectLandings(ctx, sim, targetIndex, bill);
 
       for (const { index: landingIndex, daysEarly, direction } of landings) {
         const snapshotLength = steps.length;
-        const snapshotSim = cloneSimAsSim(sim);
+        const snapshotMoves = moveStack.length;
         const roomOk =
           direction === 'earlier'
             ? ensureReceiveRoom(
+                ctx,
                 sim,
                 landingIndex,
                 bill.amount,
-                scheduleStartDate,
-                maxEarlyDays,
                 lockedBillKeys,
                 sort,
                 steps,
+                moveStack,
                 0
               )
             : ensureReceiveRoomLater(
+                ctx,
                 sim,
                 landingIndex,
                 bill.amount,
-                scheduleStartDate,
-                maxEarlyDays,
                 lockedBillKeys,
                 sort,
                 steps,
+                moveStack,
                 0
               );
 
         if (!roomOk) {
-          restoreSim(sim, snapshotSim);
+          undoMovesTo(sim, moveStack, snapshotMoves);
           steps.length = snapshotLength;
           continue;
         }
 
-        applyMove(sim, targetIndex, landingIndex, bill);
+        applyMoveTracked(sim, targetIndex, landingIndex, bill, moveStack);
         steps.push(makeStep(bill, sim[targetIndex].date, sim[landingIndex].date, daysEarly));
         moved = true;
         break;
@@ -584,9 +654,7 @@ export function proposeBreakGlassPlans(
   schedule: ScheduleData,
   options: ProposeBreakGlassOptions = {}
 ): BreakGlassAdvisorReport {
-  const paychecks = schedule.fullPaychecks?.length
-    ? schedule.fullPaychecks
-    : schedule.paychecks;
+  const paychecks = horizonPaychecks(schedule);
   if (!paychecks.length) {
     return { plans: [] };
   }
@@ -600,6 +668,7 @@ export function proposeBreakGlassPlans(
   const lockedBillKeys = options.lockedBillKeys ?? new Set<string>();
 
   const sim = cloneSim(paychecks, targetCashOnHand, minCashOnHand);
+  const ctx = buildSearchCtx(sim, scheduleStartDate, maxEarlyDays);
   const plans: BreakGlassPlan[] = [];
   const unsolvable = new Set<string>();
   const initialBreakGlass = listBreakGlassDates(sim);
@@ -611,6 +680,7 @@ export function proposeBreakGlassPlans(
   const handledBgDates = new Set<string>();
 
   const sorts: BillSort[] = ['amount-desc', 'amount-asc', 'priority-desc'];
+  let targetOrdinal = 0;
 
   while (plans.length < MAX_ADVISOR_PLANS) {
     const index = sim.findIndex(
@@ -627,16 +697,11 @@ export function proposeBreakGlassPlans(
     if (index < 0) break;
 
     const targetDate = sim[index].date;
+    targetOrdinal += 1;
+    options.onTarget?.(targetOrdinal, initialBreakGlass.length);
     let bestSteps: BreakGlassPlanStep[] | null = null;
     for (const sort of sorts) {
-      const candidate = tryClearBreakGlass(
-        sim,
-        index,
-        scheduleStartDate,
-        maxEarlyDays,
-        lockedBillKeys,
-        sort
-      );
+      const candidate = tryClearBreakGlass(ctx, sim, index, lockedBillKeys, sort);
       if (!candidate) continue;
       if (!bestSteps || comparePlans(candidate, bestSteps, targetDate) < 0) {
         bestSteps = candidate;

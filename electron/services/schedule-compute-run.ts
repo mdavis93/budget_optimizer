@@ -8,6 +8,12 @@ import type {
 import { SCHEDULE_COMPUTE_PROTOCOL_VERSION } from '@shared/scheduleComputeProtocol';
 import { deserializeScheduleComputeInput } from './schedule-compute-serialize';
 import { filterBreakGlassPlansByDryRun } from './scheduler/breakGlassDryRun';
+import {
+  assembleAssignedSchedule,
+  assignPreparedHorizon,
+  prepareScheduleHorizon,
+} from './scheduler/scheduleBuild';
+import { listBreakGlassPaycheckDates } from './scheduler/breakGlassAdvisor';
 
 const noopProgress: ScheduleComputeProgressSink = () => undefined;
 
@@ -57,24 +63,28 @@ export function runScheduleCompute(
     };
   }
 
-  onProgress({ stage: 'assigning' });
-  const data = scheduler.generateSchedule(
+  const prepared = prepareScheduleHorizon({
     incomes,
     bills,
-    native.startDate,
-    native.months,
-    native.startingBalance,
-    native.skippedBills,
-    native.manualAssignments,
-    native.targetCashOnHand,
+    startDateStr: native.startDate,
+    startingBalance: native.startingBalance,
+    skippedBills: native.skippedBills,
+    manualAssignments: native.manualAssignments,
+    maxBudgetRemaining: native.targetCashOnHand,
     goals,
-    native.minCashOnHand,
-    native.minSavingsPerPaycheck,
-    native.debtPayoffs,
-    native.incomeOverrides,
+    minCashOnHand: native.minCashOnHand,
+    minSavingsPerPaycheck: native.minSavingsPerPaycheck,
+    debtPayoffs: native.debtPayoffs,
+    incomeOverrides: native.incomeOverrides,
     leaves,
-    native.preferredAssignments
-  );
+  });
+
+  onProgress({ stage: 'assigning' });
+  const paychecks = assignPreparedHorizon(prepared, native.preferredAssignments);
+  const data = assembleAssignedSchedule(prepared, paychecks, {
+    includePresentation: true,
+    now,
+  });
 
   const fullHorizon = {
     ...data,
@@ -82,48 +92,43 @@ export function runScheduleCompute(
   };
   onProgress({ stage: 'reconciling' });
   data.reconciliation = scheduler.analyzeAndProposeFixes(fullHorizon);
-  onProgress({ stage: 'advising' });
-  const proposed = scheduler.proposeBreakGlassPlans(fullHorizon, {
+
+  const advisorOptions = {
     scheduleStartDate: native.startDate,
     targetCashOnHand: native.targetCashOnHand,
     minCashOnHand: native.minCashOnHand,
     lockedBillKeys: new Set(native.manualAssignments.keys()),
-  });
-  const planCount = proposed.plans.length;
-  let dryRunIndex = 0;
-  data.breakGlassAdvisor = filterBreakGlassPlansByDryRun(
-    proposed,
-    fullHorizon,
-    (preferredAssignments) => {
-      dryRunIndex += 1;
-      onProgress({
-        stage: 'validating_plan',
-        current: dryRunIndex,
-        total: planCount,
-      });
-      const trial = scheduler.generateSchedule(
-        incomes,
-        bills,
-        native.startDate,
-        native.months,
-        native.startingBalance,
-        native.skippedBills,
-        native.manualAssignments,
-        native.targetCashOnHand,
-        goals,
-        native.minCashOnHand,
-        native.minSavingsPerPaycheck,
-        native.debtPayoffs,
-        native.incomeOverrides,
-        leaves,
-        preferredAssignments
-      );
-      return {
-        ...trial,
-        paychecks: trial.fullPaychecks ?? trial.paychecks,
-      };
-    }
-  );
+  };
+  const bgDates = listBreakGlassPaycheckDates(fullHorizon, advisorOptions);
+  onProgress({ stage: 'advising', current: 0, total: bgDates.length });
+  if (bgDates.length === 0) {
+    data.breakGlassAdvisor = { plans: [] };
+  } else {
+    const proposed = scheduler.proposeBreakGlassPlans(fullHorizon, {
+      ...advisorOptions,
+      onTarget: (current, total) => {
+        onProgress({ stage: 'advising', current, total });
+      },
+    });
+    const planCount = proposed.plans.length;
+    let dryRunIndex = 0;
+    data.breakGlassAdvisor = filterBreakGlassPlansByDryRun(
+      proposed,
+      fullHorizon,
+      (preferredAssignments) => {
+        dryRunIndex += 1;
+        onProgress({
+          stage: 'validating_plan',
+          current: dryRunIndex,
+          total: planCount,
+        });
+        const trialPaychecks = assignPreparedHorizon(prepared, preferredAssignments);
+        return assembleAssignedSchedule(prepared, trialPaychecks, {
+          includePresentation: false,
+        });
+      }
+    );
+  }
 
   onProgress({ stage: 'finishing' });
   const viewported = scheduler.applyViewportFilter(

@@ -32,7 +32,7 @@ export function scheduleProgressPercent(progress: ScheduleComputeProgressReport)
   }
   const weight = STAGE_WEIGHTS[progress.stage];
   if (
-    progress.stage === 'validating_plan' &&
+    (progress.stage === 'validating_plan' || progress.stage === 'advising') &&
     progress.total &&
     progress.total > 0 &&
     progress.current != null
@@ -44,6 +44,14 @@ export function scheduleProgressPercent(progress: ScheduleComputeProgressReport)
 }
 
 export function scheduleProgressLabel(progress: ScheduleComputeProgressReport): string {
+  if (
+    progress.stage === 'advising' &&
+    progress.current != null &&
+    progress.total != null &&
+    progress.total > 0
+  ) {
+    return `Looking for adjustments ${progress.current} of ${progress.total}…`;
+  }
   if (
     progress.stage === 'validating_plan' &&
     progress.current != null &&

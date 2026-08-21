@@ -6,6 +6,7 @@ import type {
   SerializedDebtPayoff,
 } from '@shared/scheduleComputeProtocol';
 import { assertPayloadSize } from '@shared/scheduleComputeValidate';
+import { scheduleComputeHashBody } from '@shared/scheduleIdentity';
 
 export interface ScheduleComputeNativeInputs {
   incomes: unknown[];
@@ -101,11 +102,11 @@ export function deserializeScheduleComputeInput(
   };
 }
 
-/** Stable hash of op + inputs (excludes jobId). */
+/** Stable hash of op + inputs (excludes jobId, viewport months, and sub-day clock). */
 export function computeScheduleInputHash(
   op: ScheduleComputeOp,
   input: ScheduleComputeInputPayload
 ): string {
-  const canonical = JSON.stringify({ op, input });
+  const canonical = JSON.stringify({ op, input: scheduleComputeHashBody(input) });
   return createHash('sha256').update(canonical).digest('hex');
 }

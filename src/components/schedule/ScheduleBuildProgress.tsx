@@ -76,8 +76,12 @@ export default function ScheduleBuildProgress({
       <p className="text-sm text-(--color-text-secondary) text-center" aria-live="polite">
         {label}
         {elapsedMs >= 1000 ? ` Elapsed ${formatElapsed(elapsedMs)}.` : null}
-        {stageStuck ? ' Still working — long horizons take longer.' : null}
       </p>
+      {stageStuck ? (
+        <p className="text-sm text-(--color-text-secondary) text-center" aria-live="polite">
+          Still working — long horizons take longer.
+        </p>
+      ) : null}
     </div>
   );
 }
