@@ -113,7 +113,8 @@ export class ScheduleComputeHost {
 
   /**
    * Run a compute job. Identical in-flight (op+inputHash) shares one Promise.
-   * A newer distinct job soft-cancels the prior flight with `superseded`.
+   * A newer distinct job soft-cancels the prior flight with `superseded`,
+   * except incoming `goals` never supersedes an in-flight `schedule`.
    */
   runJob(
     request: Omit<ScheduleComputeRequest, 'protocolVersion' | 'jobId'> & {
@@ -147,6 +148,19 @@ export class ScheduleComputeHost {
         this.current.progressListeners.push(options.onProgress);
       }
       return existing;
+    }
+
+    // Goals must never kill an in-flight schedule (newest-wins still applies
+    // schedule→goals and same-op). The Goals page treats `superseded` as [].
+    if (
+      fullRequest.op === 'goals' &&
+      this.current &&
+      !this.current.settled &&
+      this.current.op === 'schedule'
+    ) {
+      return Promise.reject(
+        new ScheduleComputeError('superseded', 'Schedule compute job superseded')
+      );
     }
 
     const promise = this.startFlight(fullRequest, options?.onProgress).finally(() => {

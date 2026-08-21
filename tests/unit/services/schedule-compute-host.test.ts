@@ -149,6 +149,70 @@ describe('ScheduleComputeHost', () => {
     host.dispose();
   });
 
+  it('does not supersede an in-flight schedule when goals arrives', async () => {
+    const child = createMockUtilityProcess();
+    const forkFn = vi.fn(() => child);
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn,
+      timeoutMs: 5_000,
+    });
+
+    const scheduleJob = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-s',
+      input: minimalInput(),
+      jobId: 'job-s',
+    });
+    const goalsJob = host.runJob({
+      op: 'goals',
+      inputHash: 'hash-g',
+      input: minimalInput(),
+      jobId: 'job-g',
+    });
+
+    await expect(goalsJob).rejects.toMatchObject({ code: 'superseded' });
+    expect(forkFn).toHaveBeenCalledTimes(1);
+
+    child.__emitSpawn();
+    child.emit('message', scheduleResult('job-s', 'hash-s'));
+    await expect(scheduleJob).resolves.toMatchObject({ jobId: 'job-s', op: 'schedule' });
+    host.dispose();
+  });
+
+  it('supersedes in-flight goals when a schedule job arrives', async () => {
+    const first = createMockUtilityProcess();
+    const second = createMockUtilityProcess();
+    const children = [first, second];
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => children.shift()!,
+      timeoutMs: 5_000,
+    });
+
+    const goalsJob = host.runJob({
+      op: 'goals',
+      inputHash: 'hash-g',
+      input: minimalInput(),
+      jobId: 'job-g',
+    });
+    const scheduleJob = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-s',
+      input: minimalInput(),
+      jobId: 'job-s',
+    });
+
+    await expect(goalsJob).rejects.toMatchObject({ code: 'superseded' });
+
+    second.__emitSpawn();
+    second.emit('message', scheduleResult('job-s', 'hash-s'));
+    await expect(scheduleJob).resolves.toMatchObject({ jobId: 'job-s' });
+    host.dispose();
+  });
+
   it('times out and settles with timeout error', async () => {
     const child = createMockUtilityProcess();
     const forceKillPid = vi.fn();

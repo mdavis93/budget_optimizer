@@ -62,6 +62,32 @@ describe('schedule compute serialize', () => {
       '2026-06-01T00:00:00.000Z'
     );
     expect(computeScheduleInputHash('schedule', serialized)).toHaveLength(64);
+    expect(serialized.months).toBe(12);
+    expect(serialized.nowIso).toBe('2026-01-10T12:00:00.000Z');
+
+    const monthsChanged = { ...serialized, months: 3 };
+    expect(computeScheduleInputHash('schedule', monthsChanged)).toBe(
+      computeScheduleInputHash('schedule', serialized)
+    );
+
+    const morning = {
+      ...serialized,
+      nowIso: new Date(2026, 7, 20, 8, 15, 30).toISOString(),
+    };
+    const evening = {
+      ...serialized,
+      nowIso: new Date(2026, 7, 20, 21, 45, 10).toISOString(),
+    };
+    const nextDay = {
+      ...serialized,
+      nowIso: new Date(2026, 7, 21, 8, 15, 30).toISOString(),
+    };
+    expect(computeScheduleInputHash('schedule', morning)).toBe(
+      computeScheduleInputHash('schedule', evening)
+    );
+    expect(computeScheduleInputHash('schedule', morning)).not.toBe(
+      computeScheduleInputHash('schedule', nextDay)
+    );
   });
 });
 
@@ -304,7 +330,7 @@ describe('runScheduleCompute', () => {
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
     });
-    const stages: string[] = [];
+    const stages: Array<{ stage: string; current?: number; total?: number }> = [];
     runScheduleCompute(
       {
         protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
@@ -314,13 +340,16 @@ describe('runScheduleCompute', () => {
         input,
       },
       (report) => {
-        stages.push(report.stage);
+        stages.push(report);
       }
     );
-    expect(stages[0]).toBe('assigning');
-    expect(stages).toContain('reconciling');
-    expect(stages).toContain('advising');
-    expect(stages.at(-1)).toBe('finishing');
+    expect(stages[0]?.stage).toBe('assigning');
+    expect(stages.map((s) => s.stage)).toContain('reconciling');
+    expect(stages.map((s) => s.stage)).toContain('advising');
+    const advising = stages.find((s) => s.stage === 'advising');
+    expect(advising).toMatchObject({ stage: 'advising' });
+    expect(advising?.total).toBeTypeOf('number');
+    expect(stages.at(-1)?.stage).toBe('finishing');
   });
 
   it('drops malformed progress without throwing', () => {

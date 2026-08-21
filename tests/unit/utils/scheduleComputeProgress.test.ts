@@ -11,6 +11,13 @@ describe('scheduleComputeProgress', () => {
     expect(scheduleProgressPercent({ stage: 'finishing' })).toBe(92);
   });
 
+  it('interpolates advising using current/total', () => {
+    expect(scheduleProgressPercent({ stage: 'advising', current: 1, total: 2 })).toBe(49);
+    expect(scheduleProgressLabel({ stage: 'advising', current: 2, total: 4 })).toBe(
+      'Looking for adjustments 2 of 4…'
+    );
+  });
+
   it('interpolates validating_plan using current/total', () => {
     expect(scheduleProgressPercent({ stage: 'validating_plan', current: 1, total: 2 })).toBe(74);
     expect(scheduleProgressLabel({ stage: 'validating_plan', current: 2, total: 4 })).toBe(
@@ -23,6 +30,8 @@ describe('scheduleComputeProgress', () => {
       scheduleProgressPercent({ stage: 'not-a-stage' as 'assigning' })
     ).toBe(0);
     expect(scheduleProgressPercent({ stage: 'validating_plan', current: 1, total: 0 })).toBe(55);
+    expect(scheduleProgressPercent({ stage: 'advising' })).toBe(43);
+    expect(scheduleProgressLabel({ stage: 'advising' })).toBe('Looking for adjustments…');
     expect(scheduleProgressPercent({ stage: 'validating_plan', total: 4 })).toBe(55);
     expect(scheduleProgressPercent({ stage: 'validating_plan', current: 9, total: 4 })).toBe(92);
     expect(scheduleProgressLabel({ stage: 'validating_plan' })).toBe('Validating adjustments…');

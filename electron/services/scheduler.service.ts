@@ -8,9 +8,7 @@ import {
 import { Income, Bill, SavingsGoal } from './database.service';
 import type { Leave } from './database.service';
 import { projectIncome, projectBills } from './scheduler/projection';
-import { applyProjectedIncomeAdjustments } from './scheduler/incomeAdjustments';
-import { resolvePaycheckCashOnHand } from './scheduler/cashOnHandOverrides';
-import { assignBillsToPaychecks, getUniquePaycheckDates, findPreferredPaycheck, pruneManualAssignmentsToPaychecks } from './scheduler/assignment';
+import { findPreferredPaycheck } from './scheduler/assignment';
 import {
   convertToLegacyEntries,
   calculateSummary,
@@ -21,14 +19,17 @@ import {
   rebuildReconciliationForViewport,
 } from '@shared/scheduleViewportSlice';
 import { calculateGoalProjections, generateGoalProjections, computeGoalFundingTimeline } from './scheduler/goals';
+import {
+  assembleAssignedSchedule,
+  assignPreparedHorizon,
+  prepareScheduleHorizon,
+} from './scheduler/scheduleBuild';
 import { analyzeAndProposeFixes } from './scheduler/reconciliation';
 import { proposeBreakGlassPlans } from './scheduler/breakGlassAdvisor';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
   SCHEDULE_CALCULATION_MONTHS,
-  resolveCalculationMonths,
-  billOccurrenceKey,
 } from './scheduler/types';
 import type { DebtPayoffInfo, ScheduleData } from './scheduler/types';
 
@@ -83,116 +84,29 @@ export class SchedulerService {
     debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
     incomeOverrides: Map<string, number> = new Map(),
     leaves: Leave[] = [],
-    preferredAssignments: Map<string, string> = new Map()
+    preferredAssignments: Map<string, string> = new Map(),
+    now?: Date
   ): ScheduleData {
-    const startDate = startOfDay(parseISO(startDateStr));
-    // Horizon spans the latest goal deadline (clamped to [12, 60] months) so
-    // goals of any length are paced over their real timeline.
-    const calcMonths = resolveCalculationMonths(startDateStr, goals);
-    const endDate = addMonths(startDate, calcMonths);
-
-    const allIncomes: ReturnType<typeof projectIncome> = [];
-    for (const income of incomes) {
-      allIncomes.push(...projectIncome(income, startDate, endDate));
-    }
-
-    applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
-
-    // Separate income-attached bills from regular bills BEFORE projection
-    // Income-attached bills don't use date-based projection - they attach to every matching paycheck
-    const incomeAttachedBillsRaw = bills.filter(b => b.isIncomeAttached && b.preferredIncomeSourceId);
-    const regularBills = bills.filter(b => !b.isIncomeAttached);
-
-    const allBills: ReturnType<typeof projectBills> = [];
-    for (const bill of regularBills) {
-      const debtInfo = debtPayoffs.get(bill.id);
-      allBills.push(...projectBills(bill, startDate, endDate, debtInfo));
-    }
-
-    allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
-    allBills.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    // Split skipped occurrences (still shown in UI) from bills that need funding
-    const seenBillKeys = new Set<string>();
-    const skippedForDisplay: typeof allBills = [];
-    const uniqueBills = allBills.filter(bill => {
-      const dateStr = format(bill.date, 'yyyy-MM-dd');
-      const skipKey = `${bill.billId}-${dateStr}`;
-      const dedupKey = billOccurrenceKey(bill.billId, bill.date);
-
-      if (seenBillKeys.has(dedupKey)) {
-        return false;
-      }
-      seenBillKeys.add(dedupKey);
-
-      if (skippedBills.has(skipKey)) {
-        skippedForDisplay.push(bill);
-        return false;
-      }
-      return true;
-    });
-
-    const paycheckDates = getUniquePaycheckDates(allIncomes);
-    const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
-      manualAssignments,
-      paycheckDates
-    );
-    const effectivePreferredAssignments = pruneManualAssignmentsToPaychecks(
-      preferredAssignments,
-      paycheckDates
-    );
-    const cashOnHandByDate = resolvePaycheckCashOnHand(
-      paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
-      leaves,
-      maxBudgetRemaining,
-      minCashOnHand
-    );
-
-    const paychecks = assignBillsToPaychecks(
-      paycheckDates,
-      allIncomes,
-      uniqueBills,
+    const prepared = prepareScheduleHorizon({
+      incomes,
+      bills,
+      startDateStr,
       startingBalance,
       skippedBills,
-      effectiveManualAssignments,
-      incomeAttachedBillsRaw,
+      manualAssignments,
       maxBudgetRemaining,
       goals,
       minCashOnHand,
       minSavingsPerPaycheck,
-      skippedForDisplay,
-      cashOnHandByDate,
-      effectivePreferredAssignments
-    );
-
-    const goalProjections = calculateGoalProjections(
-      goals,
-      paychecks,
-      format(endDate, 'yyyy-MM-dd')
-    );
-
-    // Full-horizon squeeze indicator, carried so viewport slicing can keep the
-    // warning even when the squeezed paycheck falls outside the visible window.
-    const savingsSqueezedCount = paychecks.filter(
-      (p) => p.savingsSqueezed && !p.isShortfall
-    ).length;
-
-    const fullSchedule: ScheduleData = {
-      startDate: format(startDate, 'yyyy-MM-dd'),
-      endDate: format(endDate, 'yyyy-MM-dd'),
-      paychecks,
-      fullPaychecks: paychecks,
-      calculationMonths: calcMonths,
-      savingsSqueezedCount,
-      viewportMonths: calcMonths,
-      entries: convertToLegacyEntries(paychecks, startingBalance),
-      summary: calculateSummary(paychecks, startingBalance, maxBudgetRemaining),
-      recommendations: generateRecommendations(paychecks, bills, startingBalance, savingsSqueezedCount),
-      maxBudgetRemaining,
-      minCashOnHand,
-      goalProjections,
-    };
-
+      debtPayoffs,
+      incomeOverrides,
+      leaves,
+    });
+    const paychecks = assignPreparedHorizon(prepared, preferredAssignments);
+    const fullSchedule = assembleAssignedSchedule(prepared, paychecks, {
+      includePresentation: true,
+      now,
+    });
     return this.applyViewportFilter(fullSchedule, months, bills, startingBalance);
   }
 

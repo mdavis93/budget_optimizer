@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { proposeBreakGlassPlans } from '../../../electron/services/scheduler/breakGlassAdvisor';
+import {
+  getAdvisorSearchVisits,
+  proposeBreakGlassPlans,
+  resetAdvisorSearchVisits,
+  sortMovable,
+} from '../../../electron/services/scheduler/breakGlassAdvisor';
 import { rebuildBreakGlassAdvisorForViewport } from '../../../shared/scheduleViewportSlice';
 import type { PaycheckBill, PaycheckEntry, ScheduleData } from '@shared/types';
 
@@ -796,5 +801,77 @@ describe('proposeBreakGlassPlans', () => {
     );
 
     expect(report.plans).toEqual([]);
+  });
+
+  it('fail-fasts without DFS when deficit exceeds target movable mass', () => {
+    resetAdvisorSearchVisits();
+    const report = proposeBreakGlassPlans(
+      scheduleOf([
+        paycheck({ date: '2026-07-03', budgetRemaining: 500, bills: [] }),
+        paycheck({
+          date: '2026-07-17',
+          budgetRemaining: 150,
+          bills: [
+            bill({
+              billId: 'tiny',
+              creditorName: 'Tiny',
+              amount: 40,
+              billDate: '2026-07-20',
+            }),
+            bill({
+              billId: 'attached',
+              creditorName: 'Attached',
+              amount: 400,
+              billDate: '2026-07-20',
+              isIncomeAttached: true,
+            }),
+          ],
+        }),
+      ])
+    );
+    expect(report.plans).toEqual([]);
+    expect(getAdvisorSearchVisits()).toBe(0);
+  });
+
+  it('keeps visit count bounded on a dense unsolvable Break-Glass paycheck', () => {
+    resetAdvisorSearchVisits();
+    const crowdedBills = Array.from({ length: 8 }, (_, index) =>
+      bill({
+        billId: `b${index}`,
+        creditorName: `Bill ${index}`,
+        amount: 30,
+        billDate: '2026-07-20',
+      })
+    );
+    const report = proposeBreakGlassPlans(
+      scheduleOf([
+        paycheck({ date: '2026-07-03', budgetRemaining: 100, bills: [] }),
+        paycheck({
+          date: '2026-07-17',
+          budgetRemaining: 150,
+          bills: crowdedBills,
+        }),
+      ])
+    );
+    expect(report.plans).toEqual([]);
+    expect(getAdvisorSearchVisits()).toBeLessThan(500);
+  });
+});
+
+describe('sortMovable', () => {
+  it('orders amount-asc by amount even when names sort the other way', () => {
+    const bills = [
+      bill({ billId: 'big', creditorName: 'Aaa', amount: 300, billDate: '2026-07-20' }),
+      bill({ billId: 'small', creditorName: 'Zzz', amount: 50, billDate: '2026-07-20' }),
+    ];
+
+    expect(sortMovable(bills, 'amount-asc').map((entry) => entry.billId)).toEqual([
+      'small',
+      'big',
+    ]);
+    expect(sortMovable(bills, 'amount-desc').map((entry) => entry.billId)).toEqual([
+      'big',
+      'small',
+    ]);
   });
 });
