@@ -140,7 +140,7 @@ function cloneSim(
   return paychecks.map((paycheck) => ({
     date: paycheck.date,
     budgetRemaining: paycheck.budgetRemaining,
-    bills: paycheck.bills.map((bill) => ({ ...bill })),
+    bills: paycheck.bills.map((bill: PaycheckBill) => ({ ...bill })),
     targetCashOnHand: paycheck.targetCashOnHand ?? budgetTarget,
     minCashOnHand: paycheck.minCashOnHand ?? budgetMin,
   }));
@@ -513,7 +513,7 @@ function tryClearBreakGlass(
   const sim = base.map((paycheck) => ({
     date: paycheck.date,
     budgetRemaining: paycheck.budgetRemaining,
-    bills: paycheck.bills.map((bill) => ({ ...bill })),
+    bills: paycheck.bills.map((bill: PaycheckBill) => ({ ...bill })),
     targetCashOnHand: paycheck.targetCashOnHand,
     minCashOnHand: paycheck.minCashOnHand,
   }));
