@@ -1,31 +1,31 @@
 import {
   Bill,
   BillAssignment,
+  Debt,
   Income,
   IncomeOverride,
   Leave,
+  SavingsGoal,
   SkippedBill,
 } from '../types';
-import { DraftBudgetFields } from '../types/draft';
+import { DraftBudgetFields, DraftState } from '../types/draft';
+import { buildScheduleIdentity, type ScheduleIdentityInput } from '@shared/scheduleIdentity';
 
 export function buildScheduleOverlayHash(params: {
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
 }): string {
-  const skipped = params.skippedBills
-    .map((sb) => `${sb.billId}-${sb.skipDate}`)
-    .sort()
-    .join('|');
-  const assignments = params.billAssignments
-    .map((a) => `${a.billId}-${a.billDueDate}-${a.paycheckDate}`)
-    .sort()
-    .join('|');
-  const overrides = params.incomeOverrides
-    .map((o) => `${o.incomeId}-${o.paycheckDate}-${o.amount}`)
-    .sort()
-    .join('|');
-  return `${skipped}::${assignments}::${overrides}`;
+  return buildScheduleIdentity({
+    incomes: [],
+    bills: [],
+    skippedBills: params.skippedBills,
+    billAssignments: params.billAssignments,
+    incomeOverrides: params.incomeOverrides,
+    startDate: '',
+    startingBalance: 0,
+    now: new Date(0),
+  });
 }
 
 export function buildScheduleEntityHash(
@@ -33,52 +33,123 @@ export function buildScheduleEntityHash(
   bills: Bill[],
   leaves: Leave[] = []
 ): string {
-  const incomeData = incomes
-    .map((i) => `${i.id}-${i.amount}-${i.sourceName}-${i.cadence}-${i.startDate}-${i.isActive}`)
-    .sort()
-    .join('|');
-  const billData = bills
-    .map((b) => `${b.id}-${b.budgetedAmount}-${b.creditorName}-${b.dueDay}-${b.priority}`)
-    .sort()
-    .join('|');
-  const leaveData = leaves
-    .map(
-      (l) =>
-        `${l.id}-${l.incomeId}-${l.type}-${l.startDate}-${l.endDate}-${l.targetCashOnHand ?? ''}-${l.minCashOnHand ?? ''}`
-    )
-    .sort()
-    .join('|');
-  return `${incomeData}::${billData}::${leaveData}`;
+  return buildScheduleIdentity({
+    incomes,
+    bills,
+    leaves,
+    skippedBills: [],
+    billAssignments: [],
+    incomeOverrides: [],
+    startDate: '',
+    startingBalance: 0,
+    now: new Date(0),
+  });
 }
 
 export function buildBudgetFieldsHash(budgetFields: DraftBudgetFields | null | undefined): string {
   if (!budgetFields) {
     return '';
   }
-  return [
-    budgetFields.startingBalance,
-    budgetFields.targetCashOnHand,
-    budgetFields.minCashOnHand,
-    budgetFields.minSavingsPerPaycheck,
-    budgetFields.scheduleStartDate,
-  ].join('-');
+  return buildScheduleIdentity({
+    incomes: [],
+    bills: [],
+    skippedBills: [],
+    billAssignments: [],
+    incomeOverrides: [],
+    startDate: budgetFields.scheduleStartDate,
+    startingBalance: budgetFields.startingBalance,
+    targetCashOnHand: budgetFields.targetCashOnHand,
+    minCashOnHand: budgetFields.minCashOnHand,
+    minSavingsPerPaycheck: budgetFields.minSavingsPerPaycheck,
+    now: new Date(0),
+  });
+}
+
+export function toScheduleIdentityInput(params: {
+  incomes: Income[];
+  bills: Bill[];
+  goals?: SavingsGoal[];
+  debts?: Debt[];
+  skippedBills: SkippedBill[];
+  billAssignments: BillAssignment[];
+  preferredAssignments?: Array<[string, string]>;
+  incomeOverrides: IncomeOverride[];
+  leaves?: Leave[];
+  startDate?: string;
+  startingBalance?: number;
+  targetCashOnHand?: number | null;
+  minCashOnHand?: number | null;
+  minSavingsPerPaycheck?: number | null;
+  budgetFields?: DraftBudgetFields | null;
+  now?: Date;
+}): ScheduleIdentityInput {
+  const budget = params.budgetFields;
+  return {
+    incomes: params.incomes,
+    bills: params.bills,
+    goals: params.goals,
+    debts: params.debts,
+    leaves: params.leaves,
+    skippedBills: params.skippedBills,
+    billAssignments: params.billAssignments,
+    preferredAssignments: params.preferredAssignments,
+    incomeOverrides: params.incomeOverrides,
+    startDate: params.startDate || budget?.scheduleStartDate || '',
+    startingBalance: params.startingBalance ?? budget?.startingBalance ?? 0,
+    targetCashOnHand: params.targetCashOnHand ?? budget?.targetCashOnHand,
+    minCashOnHand: params.minCashOnHand ?? budget?.minCashOnHand,
+    minSavingsPerPaycheck: params.minSavingsPerPaycheck ?? budget?.minSavingsPerPaycheck,
+    now: params.now,
+  };
+}
+
+export function buildScheduleInputHashFromDraft(
+  draft: DraftState,
+  options: {
+    startDate: string;
+    startingBalance: number;
+    preferredAssignments?: Array<[string, string]>;
+    targetCashOnHand?: number | null;
+    minCashOnHand?: number | null;
+    minSavingsPerPaycheck?: number | null;
+    now?: Date;
+  }
+): string {
+  return buildScheduleIdentity(
+    toScheduleIdentityInput({
+      incomes: draft.incomes,
+      bills: draft.bills,
+      goals: draft.goals,
+      debts: draft.debts,
+      leaves: draft.leaves,
+      skippedBills: draft.skippedBills,
+      billAssignments: draft.billAssignments,
+      preferredAssignments: options.preferredAssignments,
+      incomeOverrides: draft.incomeOverrides,
+      startDate: options.startDate,
+      startingBalance: options.startingBalance,
+      targetCashOnHand: options.targetCashOnHand ?? draft.budget?.targetCashOnHand,
+      minCashOnHand: options.minCashOnHand ?? draft.budget?.minCashOnHand,
+      minSavingsPerPaycheck: options.minSavingsPerPaycheck ?? draft.budget?.minSavingsPerPaycheck,
+      now: options.now,
+    })
+  );
 }
 
 export function buildScheduleInputHash(params: {
   incomes: Income[];
   bills: Bill[];
+  goals?: SavingsGoal[];
+  debts?: Debt[];
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
+  preferredAssignments?: Array<[string, string]>;
   incomeOverrides: IncomeOverride[];
   leaves?: Leave[];
+  startDate?: string;
+  startingBalance?: number;
   budgetFields?: DraftBudgetFields | null;
+  now?: Date;
 }): string {
-  const entityHash = buildScheduleEntityHash(params.incomes, params.bills, params.leaves ?? []);
-  const overlayHash = buildScheduleOverlayHash({
-    skippedBills: params.skippedBills,
-    billAssignments: params.billAssignments,
-    incomeOverrides: params.incomeOverrides,
-  });
-  const budgetHash = buildBudgetFieldsHash(params.budgetFields);
-  return `${entityHash}::${overlayHash}::${budgetHash}`;
+  return buildScheduleIdentity(toScheduleIdentityInput(params));
 }

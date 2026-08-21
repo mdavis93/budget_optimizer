@@ -114,4 +114,59 @@ describe('scheduleInputHash', () => {
 
     expect(withoutCash).not.toBe(withCash);
   });
+
+  it('changes when goals, debts, or isIncomeAttached change', () => {
+    const frozen = new Date(2026, 7, 20, 12, 0, 0);
+    const base = {
+      incomes: [createMockIncome()],
+      bills: [createMockBill()],
+      skippedBills: [] as [],
+      billAssignments: [] as [],
+      incomeOverrides: [] as [],
+      now: frozen,
+    };
+
+    const withoutGoals = buildScheduleInputHash(base);
+    const withGoals = buildScheduleInputHash({
+      ...base,
+      goals: [
+        {
+          id: 'goal-1',
+          budgetId: 'budget-1',
+          name: 'Emergency',
+          targetAmount: 1000,
+          targetDate: '2026-12-01',
+          alreadySaved: 0,
+          priority: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    expect(withoutGoals).not.toBe(withGoals);
+
+    const withoutDebts = buildScheduleInputHash(base);
+    const withDebts = buildScheduleInputHash({
+      ...base,
+      debts: [
+        {
+          id: 'debt-1',
+          budgetId: 'budget-1',
+          billId: 'bill-1',
+          principalBalance: 5000,
+          apr: 0.199,
+          monthlyPayment: 150,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    expect(withoutDebts).not.toBe(withDebts);
+
+    const unattached = buildScheduleInputHash(base);
+    const attached = buildScheduleInputHash({
+      ...base,
+      bills: [createMockBill({ isIncomeAttached: true, preferredIncomeSourceId: 'income-1' })],
+    });
+    expect(unattached).not.toBe(attached);
+  });
 });
