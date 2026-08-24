@@ -874,6 +874,22 @@ describe('DatabaseService', () => {
       expect(() => attacker.initialize()).toThrow();
     });
 
+    it('restores a plaintext backup when encrypted open fails', async () => {
+      const dbPath = path.join(tempRoot, 'restore-me.db');
+      const Database = (await import('better-sqlite3')).default;
+      const plain = new Database(dbPath);
+      plain.exec('CREATE TABLE schema_version (version INTEGER PRIMARY KEY);');
+      plain.close();
+      fs.copyFileSync(dbPath, `${dbPath}.pre-sqlcipher`);
+      fs.writeFileSync(dbPath, Buffer.alloc(64, 7));
+
+      const service = new DatabaseService(await createCrypto(), dbPath);
+      expect(() => service.initialize()).toThrow(/Failed to open the encrypted database/);
+      expect(fs.readFileSync(dbPath).subarray(0, 16).toString('utf8').startsWith('SQLite format 3')).toBe(
+        true
+      );
+    });
+
     it('migrates a plaintext sqlite file and keeps a readable original if export is sabotaged', async () => {
       const plainPath = path.join(tempRoot, 'legacy.db');
       const Database = (await import('better-sqlite3')).default;
