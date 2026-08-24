@@ -39,9 +39,9 @@ pnpm audit:dev             # full-tree audit (high+); GHSA-mh99-v99m-4gvg and GH
 
 Run manually anytime: `pnpm prepush`.
 
-### Native ABI auto-swap (`better-sqlite3`)
+### Native ABI auto-swap (`better-sqlite3` / SQLCipher)
 
-Node unit tests and Electron (`electron:dev` / `test:e2e`) need different `better-sqlite3` ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and always load-probes under the *target* runtime (Node or Electron). On success it refreshes a marker under `.cache/native/`; on failure it copies from a version-keyed cache or recompiles. The marker is for debugging only — it is never trusted alone to skip the probe (rebuilds can overwrite the binary while leaving a stale marker). Expected probe misses stay quiet (a short status line only); probe stderr is printed only when cache/compile recovery fails.
+`better-sqlite3` is aliased to `better-sqlite3-multiple-ciphers` so the on-disk sqlite file can be SQLCipher-encrypted. Node unit tests and Electron (`electron:dev` / `test:e2e`) still need different native ABIs but share one on-disk binary. [`scripts/use-native.cjs`](scripts/use-native.cjs) is chained into those npm scripts and always load-probes under the *target* runtime (Node or Electron). On success it refreshes a marker under `.cache/native/`; on failure it copies from a version-keyed cache or recompiles. The marker is for debugging only — it is never trusted alone to skip the probe (rebuilds can overwrite the binary while leaving a stale marker). Expected probe misses stay quiet (a short status line only); probe stderr is printed only when cache/compile recovery fails.
 
 - Prefer `pnpm test`, `pnpm test:run`, `pnpm electron:dev`, and `pnpm test:e2e` — bare `vitest` / `playwright test` bypass the helper.
 - If the ABI looks stuck, delete `.cache/native/` and re-run the script you need.
@@ -202,7 +202,7 @@ Fix forward with a follow-up PR; do not treat Main Stability as optional for lon
 
 Local and CI `electron:build` / `electron:build:ci` set `CSC_IDENTITY_AUTO_DISCOVERY=false` so electron-builder does not search for a Developer ID certificate. Unsigned builds are expected until you configure Apple code signing for distribution.
 
-Native modules (`better-sqlite3`, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. Electron 42+ no longer ships a package-level `postinstall` that downloads the Electron binary, so the root `postinstall` runs `node node_modules/electron/install.js` first. The `electron:build` / `electron:build:ci` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it. Local day-to-day Node↔Electron flips for tests and `electron:dev` are handled by `scripts/use-native.cjs` (see [Native ABI auto-swap](#native-abi-auto-swap-better-sqlite3)).
+Native modules (`better-sqlite3` / SQLCipher, `keytar`) are rebuilt for Electron via `electron-builder install-app-deps` plus `scripts/rebuild-electron-native.cjs` during `postinstall`. Electron 42+ no longer ships a package-level `postinstall` that downloads the Electron binary, so the root `postinstall` runs `node node_modules/electron/install.js` first. The `electron:build` / `electron:build:ci` scripts rerun that rebuild before packaging so a prior Node test rebuild cannot leak into packaged apps, then run `sync-better-sqlite3-native.cjs` to place the binary where the packaged app expects it. Local day-to-day Node↔Electron flips for tests and `electron:dev` are handled by `scripts/use-native.cjs` (see [Native ABI auto-swap](#native-abi-auto-swap-better-sqlite3--sqlcipher)).
 
 ## Code coverage
 

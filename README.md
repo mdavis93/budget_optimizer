@@ -66,7 +66,7 @@ This will create distributable packages in the `release` directory.
 
 #### "Failed to initialize database" / NODE_MODULE_VERSION mismatch
 
-Native modules (`better-sqlite3`, `keytar`) must be compiled for the bundled Electron ABI (Electron 42 currently uses MODULE_VERSION **146**). If unlock fails with a message about a binary compiled against a different Node.js `NODE_MODULE_VERSION` than Electron expects:
+Native modules (`better-sqlite3` aliased to `better-sqlite3-multiple-ciphers`, `keytar`) must be compiled for the bundled Electron ABI (Electron 42 currently uses MODULE_VERSION **146**). If unlock fails with a message about a binary compiled against a different Node.js `NODE_MODULE_VERSION` than Electron expects:
 
 ```bash
 pnpm install
@@ -87,7 +87,7 @@ After each rebuild, macOS may ask for Keychain access again until you choose **A
 
 ### Data Protection
 
-- **Encryption at rest**: Income payloads, bill payloads, budget metadata, savings goals, debt details, and schedule junction data (bill assignments, skipped bills, income overrides) are encrypted with AES-256-GCM before being written to SQLite
+- **Encryption at rest**: SQLite is SQLCipher-encrypted (SQLCipher 4 compatibility). Income payloads, bill payloads, budget metadata, savings goals, debt details, settings, and schedule junction data are also encrypted with AES-256-GCM inside that file.
 - **Key derivation**: Your master password derives the encryption key via PBKDF2-SHA512 with **310,000** iterations
 - **No password storage**: Your master password is never stored; only a salted hash is kept for verification
 - **Local storage only**: Data stays on your device. The app does not transmit financial data to external servers
