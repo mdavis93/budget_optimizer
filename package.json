@@ -35,16 +35,16 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.1",
+    "better-sqlite3": "npm:better-sqlite3-multiple-ciphers@^13.0.3",
     "clsx": "^2.1.0",
     "date-fns": "^4.4.0",
+    "exceljs": "^4.4.0",
     "keytar": "^7.9.0",
     "lucide-react": "^1.27.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.1",
-    "recharts": "^3.10.1",
-    "exceljs": "^4.4.0"
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",

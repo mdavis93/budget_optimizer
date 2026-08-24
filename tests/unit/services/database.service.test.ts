@@ -14,6 +14,10 @@ vi.mock('../../../electron/services/logger.service', () => ({
   },
 }));
 
+vi.mock('../../../electron/services/diagnostics.service', () => ({
+  diagnostics: { report: vi.fn() },
+}));
+
 let tempRoot = '';
 const mockGetPath = vi.fn((name: string) => {
   if (name === 'userData') {
@@ -39,8 +43,12 @@ describe('DatabaseService', () => {
   let db: DatabaseService;
 
   beforeEach(async () => {
-    tempRoot = path.join(os.tmpdir(), `budget-optimizer-database-test-${process.pid}-${Date.now()}`);
+    tempRoot = path.join(
+      os.tmpdir(),
+      `budget-optimizer-database-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
     fs.mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
+    mockGetPath.mockImplementation(() => tempRoot);
     db = new DatabaseService(await createCrypto());
     db.initialize();
   });
@@ -825,10 +833,13 @@ describe('DatabaseService', () => {
     });
 
     it('throws when database is used before initialize or after close', async () => {
-      const uninitialized = new DatabaseService(await createCrypto());
+      const uninitialized = new DatabaseService(
+        await createCrypto(),
+        path.join(tempRoot, 'uninitialized.db')
+      );
       expect(() => uninitialized.getAllBudgets()).toThrow('Database not initialized');
 
-      const closed = new DatabaseService(await createCrypto());
+      const closed = new DatabaseService(await createCrypto(), path.join(tempRoot, 'closed.db'));
       closed.initialize();
       closed.close();
       expect(() => closed.getAllBudgets()).toThrow('Database not initialized');
@@ -841,6 +852,48 @@ describe('DatabaseService', () => {
         .run('bad-budget', 'not-valid-ciphertext', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
 
       expect(() => db.getBudgetById('bad-budget')).toThrow(/Invalid ciphertext format/);
+    });
+
+    it('writes SQLCipher files without a plaintext sqlite header', () => {
+      const header = fs.readFileSync(db.getDbPath()).subarray(0, 16).toString('utf8');
+      expect(header.startsWith('SQLite format 3')).toBe(false);
+    });
+
+    it('refuses to initialize without a KEK', () => {
+      const locked = new DatabaseService(new CryptoService(), path.join(tempRoot, 'locked.db'));
+      expect(() => locked.initialize()).toThrow('Encryption key not set');
+    });
+
+    it('rejects a SQLCipher file opened with the wrong key', async () => {
+      const dbPath = db.getDbPath();
+      db.createBudget({ name: 'Encrypted Vault' });
+      db.close();
+
+      const wrong = await createCrypto();
+      const attacker = new DatabaseService(wrong, dbPath);
+      expect(() => attacker.initialize()).toThrow();
+    });
+
+    it('migrates a plaintext sqlite file and keeps a readable original if export is sabotaged', async () => {
+      const plainPath = path.join(tempRoot, 'legacy.db');
+      const Database = (await import('better-sqlite3')).default;
+      const plain = new Database(plainPath);
+      plain.close();
+
+      const migrated = new DatabaseService(await createCrypto(), plainPath);
+      migrated.initialize();
+      expect(fs.readFileSync(plainPath).subarray(0, 16).toString('utf8').startsWith('SQLite format 3')).toBe(false);
+      expect(fs.existsSync(`${plainPath}.pre-sqlcipher`)).toBe(false);
+      migrated.close();
+
+      const sabotagedPath = path.join(tempRoot, 'sabotaged.db');
+      const sabotaged = new Database(sabotagedPath);
+      sabotaged.exec('CREATE TABLE schema_version (version INTEGER PRIMARY KEY);');
+      sabotaged.close();
+      fs.mkdirSync(`${sabotagedPath}.new`);
+      const fallback = new DatabaseService(await createCrypto(), sabotagedPath);
+      expect(() => fallback.initialize()).toThrow(/Failed to encrypt the local database/);
+      expect(fs.readFileSync(sabotagedPath).subarray(0, 16).toString('utf8').startsWith('SQLite format 3')).toBe(true);
     });
   });
 });
