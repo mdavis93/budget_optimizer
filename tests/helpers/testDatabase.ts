@@ -4,12 +4,12 @@ import path from 'path';
 import { CryptoService } from '../../electron/services/crypto.service';
 import { DatabaseService } from '../../electron/services/database.service';
 
-export function createTestDatabase(): {
+export async function createTestDatabase(): Promise<{
   db: DatabaseService;
   crypto: CryptoService;
   tempRoot: string;
   cleanup: () => void;
-} {
+}> {
   const tempRoot = path.join(
     os.tmpdir(),
     `budget-optimizer-db-test-${process.pid}-${Date.now()}`
@@ -17,7 +17,9 @@ export function createTestDatabase(): {
   fs.mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
 
   const crypto = new CryptoService();
-  const db = new DatabaseService(crypto);
+  const salt = crypto.generateSalt();
+  crypto.setEncryptionKey(await crypto.deriveKey('test-password', salt));
+  const db = new DatabaseService(crypto, path.join(tempRoot, 'budget-data.db'));
   db.initialize();
 
   return {

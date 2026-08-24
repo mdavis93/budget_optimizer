@@ -145,11 +145,24 @@ runElectronNodeVerify(
   'SQLite',
   `
   try {
+    const fs = require('fs');
+    const os = require('os');
     const path = require('path');
     const bs3 = path.join(process.resourcesPath, 'app.asar/node_modules/better-sqlite3');
     const Database = require(bs3);
-    const db = new Database(':memory:');
+    const file = path.join(os.tmpdir(), 'budget-optimizer-cipher-probe-' + Date.now() + '.db');
+    const db = new Database(file);
+    db.pragma("cipher = 'sqlcipher'");
+    db.pragma('legacy = 4');
+    db.pragma("key = \\"x'0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'\\"");
+    db.exec('CREATE TABLE probe (id INTEGER)');
+    const cipher = db.pragma('cipher', { simple: true });
     db.close();
+    const header = fs.readFileSync(file).subarray(0, 16).toString('utf8');
+    fs.unlinkSync(file);
+    if (!cipher || header.startsWith('SQLite format 3')) {
+      throw new Error('Packaged sqlite is not SQLCipher-linked');
+    }
     console.log('PACKAGED_DB_OK');
     process.exit(0);
   } catch (error) {

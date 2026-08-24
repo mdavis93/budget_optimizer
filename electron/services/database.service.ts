@@ -5,6 +5,14 @@ import fs from 'fs';
 import { CryptoService } from './crypto.service';
 import { validateBill, validateIncome, validateGoal, validateDebt, validateLeave, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
+import { diagnostics } from './diagnostics.service';
+import {
+  dirnameMode700,
+  isPlaintextSqliteFile,
+  migratePlaintextToSqlCipher,
+  openSqlCipherDatabase,
+  restoreFromPreSqlCipherBackup,
+} from '../utils/sqlcipher';
 import type {
   AppSettings,
   Bill,
@@ -158,10 +166,26 @@ const DEFAULT_SETTINGS: AppSettings = {
   savingsAPY: 0,
 };
 
+interface SkipCacheEntry {
+  id: string;
+}
+
+interface AssignmentCacheEntry {
+  id: string;
+  paycheckDate: string;
+}
+
+interface OverrideCacheEntry {
+  id: string;
+}
+
 export class DatabaseService {
   private db: Database.Database | null = null;
   private crypto: CryptoService;
   private dbPath: string;
+  private skipCache = new Map<string, Map<string, SkipCacheEntry>>();
+  private assignmentCache = new Map<string, Map<string, AssignmentCacheEntry>>();
+  private overrideCache = new Map<string, Map<string, OverrideCacheEntry>>();
 
   constructor(crypto: CryptoService, dbPath?: string) {
     this.crypto = crypto;
@@ -177,14 +201,43 @@ export class DatabaseService {
   }
 
   initialize(): void {
-    const dbDir = path.dirname(this.dbPath);
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true, mode: 0o700 });
+    if (!this.crypto.hasEncryptionKey()) {
+      throw new Error('Encryption key not set');
     }
 
-    this.db = new Database(this.dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    dirnameMode700(this.dbPath);
+    this.clearJunctionCaches();
+
+    if (fs.existsSync(this.dbPath) && isPlaintextSqliteFile(this.dbPath)) {
+      const result = migratePlaintextToSqlCipher(this.dbPath, this.crypto, logger);
+      if (!result.migrated) {
+        diagnostics.report({
+          source: 'main:database-sqlcipher-migrate',
+          message: 'SQLCipher migration failed; plaintext sqlite left untouched',
+        });
+        throw new Error(
+          'Failed to encrypt the local database. Your data file was not modified; try unlocking again.'
+        );
+      }
+    }
+
+    try {
+      this.db = openSqlCipherDatabase(this.dbPath, this.crypto);
+    } catch (error) {
+      logger.warn('Encrypted sqlite open failed; attempting plaintext backup restore:', error);
+      if (restoreFromPreSqlCipherBackup(this.dbPath, logger)) {
+        diagnostics.report({
+          source: 'main:database-sqlcipher-restore',
+          message: 'Restored plaintext sqlite backup after encrypted open failure',
+        });
+        throw new Error(
+          'Failed to open the encrypted database. A backup of your previous file was restored; try unlocking again.',
+          { cause: error }
+        );
+      }
+      throw error;
+    }
+
     this.runMigrations();
   }
 
@@ -963,37 +1016,81 @@ export class DatabaseService {
     };
   }
 
-  private findSkippedBillId(budgetId: string, billId: string, skipDate: string): string | null {
-    const rows = this.db!.prepare('SELECT * FROM skipped_bills WHERE budget_id = ?').all(budgetId) as SkippedBillRow[];
-    for (const row of rows) {
-      const mapped = this.mapSkippedBillRow(row);
-      if (mapped.billId === billId && mapped.skipDate === skipDate) {
-        return row.id;
+  private junctionKey(left: string, right: string): string {
+    return `${left}\0${right}`;
+  }
+
+  private clearJunctionCaches(): void {
+    this.skipCache.clear();
+    this.assignmentCache.clear();
+    this.overrideCache.clear();
+  }
+
+  private skipMap(budgetId: string): Map<string, SkipCacheEntry> {
+    let map = this.skipCache.get(budgetId);
+    if (!map) {
+      map = new Map();
+      const rows = this.db!.prepare('SELECT * FROM skipped_bills WHERE budget_id = ?').all(
+        budgetId
+      ) as SkippedBillRow[];
+      for (const row of rows) {
+        const mapped = this.mapSkippedBillRow(row);
+        map.set(this.junctionKey(mapped.billId, mapped.skipDate), { id: row.id });
       }
+      this.skipCache.set(budgetId, map);
     }
-    return null;
+    return map;
+  }
+
+  private assignmentMap(budgetId: string): Map<string, AssignmentCacheEntry> {
+    let map = this.assignmentCache.get(budgetId);
+    if (!map) {
+      map = new Map();
+      const rows = this.db!.prepare('SELECT * FROM bill_assignments WHERE budget_id = ?').all(
+        budgetId
+      ) as BillAssignmentRow[];
+      for (const row of rows) {
+        const mapped = this.mapBillAssignmentRow(row);
+        map.set(this.junctionKey(mapped.billId, mapped.billDueDate), {
+          id: row.id,
+          paycheckDate: mapped.paycheckDate,
+        });
+      }
+      this.assignmentCache.set(budgetId, map);
+    }
+    return map;
+  }
+
+  private overrideMap(budgetId: string): Map<string, OverrideCacheEntry> {
+    let map = this.overrideCache.get(budgetId);
+    if (!map) {
+      map = new Map();
+      const rows = this.db!.prepare('SELECT * FROM income_overrides WHERE budget_id = ?').all(
+        budgetId
+      ) as IncomeOverrideRow[];
+      for (const row of rows) {
+        const mapped = this.mapIncomeOverrideRow(row);
+        map.set(this.junctionKey(mapped.incomeId, mapped.paycheckDate), { id: row.id });
+      }
+      this.overrideCache.set(budgetId, map);
+    }
+    return map;
+  }
+
+  private findSkippedBillId(budgetId: string, billId: string, skipDate: string): string | null {
+    return this.skipMap(budgetId).get(this.junctionKey(billId, skipDate))?.id ?? null;
   }
 
   private findBillAssignmentId(budgetId: string, billId: string, billDueDate: string): string | null {
-    const rows = this.db!.prepare('SELECT * FROM bill_assignments WHERE budget_id = ?').all(budgetId) as BillAssignmentRow[];
-    for (const row of rows) {
-      const mapped = this.mapBillAssignmentRow(row);
-      if (mapped.billId === billId && mapped.billDueDate === billDueDate) {
-        return row.id;
-      }
-    }
-    return null;
+    return this.assignmentMap(budgetId).get(this.junctionKey(billId, billDueDate))?.id ?? null;
   }
 
-  private findIncomeOverrideId(budgetId: string, incomeId: string, paycheckDate: string): string | null {
-    const rows = this.db!.prepare('SELECT * FROM income_overrides WHERE budget_id = ?').all(budgetId) as IncomeOverrideRow[];
-    for (const row of rows) {
-      const mapped = this.mapIncomeOverrideRow(row);
-      if (mapped.incomeId === incomeId && mapped.paycheckDate === paycheckDate) {
-        return row.id;
-      }
-    }
-    return null;
+  private findIncomeOverrideId(
+    budgetId: string,
+    incomeId: string,
+    paycheckDate: string
+  ): string | null {
+    return this.overrideMap(budgetId).get(this.junctionKey(incomeId, paycheckDate))?.id ?? null;
   }
 
   close(): void {
@@ -1006,6 +1103,7 @@ export class DatabaseService {
       this.db.close();
       this.db = null;
     }
+    this.clearJunctionCaches();
     for (const suffix of ['-wal', '-shm'] as const) {
       const sidecar = `${this.dbPath}${suffix}`;
       if (fs.existsSync(sidecar)) {
@@ -1149,6 +1247,12 @@ export class DatabaseService {
     });
     
     const result = deleteBudgetTransaction();
+    this.skipCache.delete(id);
+    this.assignmentCache.delete(id);
+    this.overrideCache.delete(id);
+    this.skipCache.delete(id);
+    this.assignmentCache.delete(id);
+    this.overrideCache.delete(id);
     
     if (result.changes > 0) {
       logger.info('Budget deleted', { id });
@@ -1469,7 +1573,8 @@ export class DatabaseService {
     });
     
     skipBillTransaction();
-    
+    this.skipMap(budgetId).set(this.junctionKey(billId, skipDate), { id });
+
     return {
       id,
       billId,
@@ -1487,7 +1592,11 @@ export class DatabaseService {
     }
 
     const result = this.db.prepare('DELETE FROM skipped_bills WHERE id = ?').run(existingId);
-    return result.changes > 0;
+    if (result.changes > 0) {
+      this.skipMap(budgetId).delete(this.junctionKey(billId, skipDate));
+      return true;
+    }
+    return false;
   }
 
   isSkipped(budgetId: string, billId: string, skipDate: string): boolean {
@@ -1497,21 +1606,28 @@ export class DatabaseService {
 
   clearOldSkippedBills(budgetId: string, beforeDate: string): number {
     if (!this.db) throw new Error('Database not initialized');
-    
-    const rows = this.db.prepare('SELECT * FROM skipped_bills WHERE budget_id = ?').all(budgetId) as SkippedBillRow[];
-    const idsToDelete = rows
-      .filter(row => this.mapSkippedBillRow(row).skipDate < beforeDate)
-      .map(row => row.id);
+
+    const map = this.skipMap(budgetId);
+    const toDelete: Array<{ key: string; id: string }> = [];
+    for (const [key, entry] of map) {
+      const skipDate = key.split('\0')[1];
+      if (skipDate < beforeDate) {
+        toDelete.push({ key, id: entry.id });
+      }
+    }
 
     const deleteStmt = this.db.prepare('DELETE FROM skipped_bills WHERE id = ?');
     const clearTransaction = this.db.transaction(() => {
-      for (const id of idsToDelete) {
-        deleteStmt.run(id);
+      for (const item of toDelete) {
+        deleteStmt.run(item.id);
       }
     });
     clearTransaction();
+    for (const item of toDelete) {
+      map.delete(item.key);
+    }
 
-    return idsToDelete.length;
+    return toDelete.length;
   }
 
   // Bill Assignments Management (budget-scoped)
@@ -1554,6 +1670,10 @@ export class DatabaseService {
     });
     
     assignTransaction();
+    this.assignmentMap(budgetId).set(this.junctionKey(billId, billDueDate), {
+      id,
+      paycheckDate,
+    });
     
     return {
       id,
@@ -1573,7 +1693,11 @@ export class DatabaseService {
     }
 
     const result = this.db.prepare('DELETE FROM bill_assignments WHERE id = ?').run(existingId);
-    return result.changes > 0;
+    if (result.changes > 0) {
+      this.assignmentMap(budgetId).delete(this.junctionKey(billId, billDueDate));
+      return true;
+    }
+    return false;
   }
 
   getBillAssignment(budgetId: string, billId: string, billDueDate: string): BillAssignment | null {
@@ -1590,21 +1714,27 @@ export class DatabaseService {
 
   clearOldBillAssignments(budgetId: string, beforeDate: string): number {
     if (!this.db) throw new Error('Database not initialized');
-    
-    const rows = this.db.prepare('SELECT * FROM bill_assignments WHERE budget_id = ?').all(budgetId) as BillAssignmentRow[];
-    const idsToDelete = rows
-      .filter(row => this.mapBillAssignmentRow(row).paycheckDate < beforeDate)
-      .map(row => row.id);
+
+    const map = this.assignmentMap(budgetId);
+    const toDelete: Array<{ key: string; id: string }> = [];
+    for (const [key, entry] of map) {
+      if (entry.paycheckDate < beforeDate) {
+        toDelete.push({ key, id: entry.id });
+      }
+    }
 
     const deleteStmt = this.db.prepare('DELETE FROM bill_assignments WHERE id = ?');
     const clearTransaction = this.db.transaction(() => {
-      for (const id of idsToDelete) {
-        deleteStmt.run(id);
+      for (const item of toDelete) {
+        deleteStmt.run(item.id);
       }
     });
     clearTransaction();
+    for (const item of toDelete) {
+      map.delete(item.key);
+    }
 
-    return idsToDelete.length;
+    return toDelete.length;
   }
 
   // Income overrides (per projected paycheck date for an income source)
@@ -1643,6 +1773,7 @@ export class DatabaseService {
       `).run(id, budgetId, encryptedData, now);
     });
     tx();
+    this.overrideMap(budgetId).set(this.junctionKey(incomeId, paycheckDate), { id });
 
     return {
       id,
@@ -1662,7 +1793,11 @@ export class DatabaseService {
     }
 
     const result = this.db.prepare('DELETE FROM income_overrides WHERE id = ?').run(existingId);
-    return result.changes > 0;
+    if (result.changes > 0) {
+      this.overrideMap(budgetId).delete(this.junctionKey(incomeId, paycheckDate));
+      return true;
+    }
+    return false;
   }
 
   // Savings Goals Management (budget-scoped)

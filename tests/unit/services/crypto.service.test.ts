@@ -75,10 +75,27 @@ describe('CryptoService', () => {
     expect(crypto.getMasterPasswordHash()).toBeNull();
   });
 
-  it('compares secrets in constant time', () => {
-    expect(crypto.secureCompare('abc', 'abc')).toBe(true);
-    expect(crypto.secureCompare('abc', 'abd')).toBe(false);
+  it('compares SHA-512 hex hashes in constant time', () => {
+    const a = 'a'.repeat(128);
+    const b = `${'a'.repeat(127)}b`;
+    expect(crypto.secureCompare(a, a)).toBe(true);
+    expect(crypto.secureCompare(a.toUpperCase(), a)).toBe(true);
+    expect(crypto.secureCompare(a, b)).toBe(false);
+    expect(crypto.secureCompare('abc', 'abc')).toBe(false);
+    expect(crypto.secureCompare(a, 'not-hex')).toBe(false);
     expect(crypto.secureCompare('short', 'longer')).toBe(false);
+  });
+
+  it('derives a stable 32-byte SQLCipher raw key from the KEK', async () => {
+    expect(() => crypto.deriveSqlCipherRawKey()).toThrow('Encryption key not set');
+
+    const salt = crypto.generateSalt();
+    crypto.setEncryptionKey(await crypto.deriveKey('pw', salt));
+    const first = crypto.deriveSqlCipherRawKey();
+    const second = crypto.deriveSqlCipherRawKey();
+    expect(first).toHaveLength(32);
+    expect(first.equals(second)).toBe(true);
+    expect(crypto.sqlCipherKeyPragma()).toMatch(/^x'[0-9a-f]{64}'$/);
   });
 
   it('hashes passwords and generates ids', async () => {

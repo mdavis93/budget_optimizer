@@ -9,6 +9,8 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 310000;
 const RECOVERY_KEY_WORDS = 12;
+const SHA512_HEX = /^[0-9a-f]{128}$/;
+const SQLCIPHER_HKDF_INFO = 'budget-optimizer-sqlcipher-v1';
 
 const WORD_LIST = [
   'abandon','ability','able','about','above','absent','absorb','abstract','absurd','abuse',
@@ -388,16 +390,31 @@ export class CryptoService {
     return crypto.randomUUID();
   }
 
+  deriveSqlCipherRawKey(): Buffer {
+    if (!this.encryptionKey) {
+      throw new Error('Encryption key not set');
+    }
+    return Buffer.from(
+      crypto.hkdfSync(
+        'sha256',
+        this.encryptionKey,
+        Buffer.alloc(0),
+        SQLCIPHER_HKDF_INFO,
+        KEY_LENGTH
+      )
+    );
+  }
+
+  sqlCipherKeyPragma(): string {
+    return `x'${this.deriveSqlCipherRawKey().toString('hex')}'`;
+  }
+
   secureCompare(a: string, b: string): boolean {
-    // Pad both strings to the same length to avoid timing leaks
-    const maxLength = Math.max(a.length, b.length);
-    const paddedA = a.padEnd(maxLength, '\0');
-    const paddedB = b.padEnd(maxLength, '\0');
-    
-    // Perform timing-safe comparison
-    const result = crypto.timingSafeEqual(Buffer.from(paddedA), Buffer.from(paddedB));
-    
-    // Also check length equality (constant time, after the main comparison)
-    return result && a.length === b.length;
+    const left = a.toLowerCase();
+    const right = b.toLowerCase();
+    if (!SHA512_HEX.test(left) || !SHA512_HEX.test(right)) {
+      return false;
+    }
+    return crypto.timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
   }
 }

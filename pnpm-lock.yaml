@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       better-sqlite3:
-        specifier: ^13.0.1
-        version: 13.0.3
+        specifier: npm:better-sqlite3-multiple-ciphers@^13.0.3
+        version: better-sqlite3-multiple-ciphers@13.0.3
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -1184,8 +1184,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  better-sqlite3@13.0.3:
-    resolution: {integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==}
+  better-sqlite3-multiple-ciphers@13.0.3:
+    resolution: {integrity: sha512-UYabM82r1J84TLWc/SszoHs6XopWpl/2HCg3Nui1JUaFXg/VLswzkPowYiRhK/4CftI8dgtikwyZQecMldrGxQ==}
     engines: {node: '>=22'}
 
   bidi-js@1.0.3:
@@ -4532,7 +4532,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.13: {}
 
-  better-sqlite3@13.0.3:
+  better-sqlite3-multiple-ciphers@13.0.3:
     dependencies:
       node-addon-api: 8.9.2
 
