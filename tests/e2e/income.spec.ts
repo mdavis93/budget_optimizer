@@ -112,4 +112,25 @@ test.describe('Income', () => {
     await expect(window.getByText('Contract Work')).toHaveCount(3);
     await expectNoSpinner(window);
   });
+
+  test('happy: savings-and-goals income is isolated from spendable totals @income.savings-only', async ({ window }) => {
+    await window.getByRole('button', { name: 'Add Income' }).first().click();
+    const dialog = window.getByRole('dialog', { name: 'Add Income Source' });
+    await dialog.locator('#income-source-name').fill('Bonus Pool');
+    await dialog.locator('#income-amount').fill('400');
+    await dialog.locator('#income-cadence').selectOption('monthly');
+    await dialog.locator('#income-start-date').fill(E2E_SCHEDULE_START);
+    await dialog.getByRole('button', { name: 'Savings and goals only' }).click();
+    await dialog.getByRole('button', { name: 'Add Income' }).click();
+    await window.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await expect(window.getByText('Unsaved changes on Income')).toBeHidden();
+
+    await expect(window.getByText(/Not spendable/i)).toBeVisible();
+    await expect(window.getByText(/Reserved for savings and goals/i)).toBeVisible();
+
+    await navigateTo(window, 'Schedule');
+    await pinScheduleStart(window, E2E_SCHEDULE_START);
+    await expect(window.getByText(/Not spendable · savings and goals only/i).first()).toBeVisible();
+    await expectNoSpinner(window);
+  });
 });

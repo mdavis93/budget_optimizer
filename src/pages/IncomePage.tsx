@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Wallet, ToggleLeft, ToggleRight, Palmtree } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wallet, ToggleLeft, ToggleRight, Palmtree, Landmark } from 'lucide-react';
 import { useDraftActions, useDraftData } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { Income, IncomeInput, Leave, LeaveInput, CADENCE_LABELS } from '../types';
-import { getMonthlyIncomeEquivalent } from '../utils/cadence';
+import { getMonthlyIncomeEquivalent, getMonthlyOperatingIncomeTotal } from '../utils/cadence';
+import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
+import type { IncomePurpose } from '../types';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -34,6 +36,9 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
     income?.endDate ? format(parseISO(income.endDate), 'yyyy-MM-dd') : ''
   );
   const [isActive, setIsActive] = useState(income?.isActive ?? true);
+  const [purpose, setPurpose] = useState<IncomePurpose>(
+    income?.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating'
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +49,7 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
       startDate,
       ...(hasEndDate && endDate ? { endDate } : {}),
       isActive,
+      purpose,
     });
   };
 
@@ -148,6 +154,27 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
           )}
         >
           {isActive ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between p-3 rounded-lg bg-(--color-bg-tertiary)">
+        <div>
+          <span className="text-sm">Savings and goals only</span>
+          <p className="mt-1 text-xs text-(--color-text-muted)">
+            Not spendable. Hidden from bills, debts, and income totals. Deposits fund goals and savings only.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPurpose(purpose === 'savingsAndGoals' ? 'operating' : 'savingsAndGoals')}
+          className={clsx(
+            'transition-colors shrink-0 ml-3',
+            purpose === 'savingsAndGoals' ? 'text-cyan-600 dark:text-cyan-400' : 'text-(--color-text-muted)'
+          )}
+          aria-pressed={purpose === 'savingsAndGoals'}
+          aria-label="Savings and goals only"
+        >
+          {purpose === 'savingsAndGoals' ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
         </button>
       </div>
 
@@ -425,8 +452,9 @@ export default function IncomePage() {
 
   const incomeNameById = new Map(incomes.map((income) => [income.id, income.sourceName]));
 
-  const totalMonthlyIncome = incomes
-    .filter(i => i.isActive)
+  const totalMonthlyIncome = getMonthlyOperatingIncomeTotal(incomes);
+  const totalMonthlyReserved = incomes
+    .filter((i) => i.isActive && isSavingsAndGoalsIncome(i))
     .reduce((sum, i) => sum + getMonthlyIncomeEquivalent(i), 0);
 
   return (
@@ -445,13 +473,25 @@ export default function IncomePage() {
       </div>
 
       {incomes.length > 0 && (
-        <div className="card bg-success-50 dark:bg-success-500/10 border-success-200 dark:border-success-800">
-          <div className="flex items-center justify-between">
-            <span className="text-success-700 dark:text-success-400">Total Monthly Income (estimated)</span>
-            <span className="text-2xl font-semibold text-success-600 dark:text-success-500">
-              {formatCurrency(totalMonthlyIncome)}
-            </span>
+        <div className="space-y-3">
+          <div className="card bg-success-50 dark:bg-success-500/10 border-success-200 dark:border-success-800">
+            <div className="flex items-center justify-between">
+              <span className="text-success-700 dark:text-success-400">Total Monthly Income (estimated)</span>
+              <span className="text-2xl font-semibold text-success-600 dark:text-success-500">
+                {formatCurrency(totalMonthlyIncome)}
+              </span>
+            </div>
           </div>
+          {totalMonthlyReserved > 0 && (
+            <div className="card bg-cyan-50 dark:bg-cyan-500/10 border-dashed border-2 border-cyan-300 dark:border-cyan-700">
+              <div className="flex items-center justify-between">
+                <span className="text-cyan-800 dark:text-cyan-300">Reserved for savings and goals (estimated)</span>
+                <span className="text-2xl font-semibold text-cyan-700 dark:text-cyan-400">
+                  {formatCurrency(totalMonthlyReserved)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -472,22 +512,33 @@ export default function IncomePage() {
               key={income.id}
               className={clsx(
                 'card flex items-center justify-between',
-                !income.isActive && 'opacity-60'
+                !income.isActive && 'opacity-60',
+                isSavingsAndGoalsIncome(income) &&
+                  'border-dashed border-2 border-cyan-300 dark:border-cyan-700 bg-cyan-50/60 dark:bg-cyan-500/5'
               )}
             >
               <div className="flex items-center gap-4">
                 <div className={clsx(
                   'p-3 rounded-lg',
-                  income.isActive
-                    ? 'bg-success-100 dark:bg-success-500/20'
-                    : 'bg-(--color-bg-tertiary)'
+                  !income.isActive
+                    ? 'bg-(--color-bg-tertiary)'
+                    : isSavingsAndGoalsIncome(income)
+                      ? 'bg-cyan-100 dark:bg-cyan-500/20'
+                      : 'bg-success-100 dark:bg-success-500/20'
                 )}>
-                  <Wallet className={clsx(
-                    'w-6 h-6',
-                    income.isActive
-                      ? 'text-success-600 dark:text-success-500'
-                      : 'text-(--color-text-muted)'
-                  )} />
+                  {isSavingsAndGoalsIncome(income) ? (
+                    <Landmark className={clsx(
+                      'w-6 h-6',
+                      income.isActive ? 'text-cyan-700 dark:text-cyan-400' : 'text-(--color-text-muted)'
+                    )} />
+                  ) : (
+                    <Wallet className={clsx(
+                      'w-6 h-6',
+                      income.isActive
+                        ? 'text-success-600 dark:text-success-500'
+                        : 'text-(--color-text-muted)'
+                    )} />
+                  )}
                 </div>
                 <div>
                   <h3 className="font-medium">{income.sourceName}</h3>
@@ -497,6 +548,11 @@ export default function IncomePage() {
                       <> • Ending {format(parseISO(income.endDate), 'MMM d, yyyy')}</>
                     )}
                   </p>
+                  {isSavingsAndGoalsIncome(income) && (
+                    <p className="text-xs font-semibold text-cyan-800 dark:text-cyan-300 mt-1">
+                      Not spendable · savings and goals only
+                    </p>
+                  )}
                 </div>
               </div>
 

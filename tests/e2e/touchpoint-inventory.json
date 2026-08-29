@@ -78,6 +78,14 @@
       "description": "Script-like source name renders as inert text (no script execution)"
     },
     {
+      "id": "income.savings-only",
+      "tier": "critical",
+      "domain": "income",
+      "description": "Savings-and-goals-only income is excluded from spendable totals and appears as a non-spendable deposit on the schedule",
+      "routes": ["/income", "/schedule"],
+      "channels": ["income:create", "income:get-all", "schedule:build"]
+    },
+    {
       "id": "bills.create",
       "tier": "critical",
       "domain": "bills",

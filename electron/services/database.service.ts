@@ -1366,7 +1366,23 @@ export class DatabaseService {
     `).run(encryptedData, now, id, budgetId);
     
     logger.info('Income updated', { id, budgetId, sourceName: income.sourceName });
-    
+
+    if (income.purpose === 'savingsAndGoals') {
+      for (const bill of this.getAllBills(budgetId)) {
+        if (bill.preferredIncomeSourceId !== id) continue;
+        this.updateBillEntry(bill.id, budgetId, {
+          creditorName: bill.creditorName,
+          budgetedAmount: bill.budgetedAmount,
+          dueDay: bill.dueDay,
+          category: bill.category,
+          isRecurring: bill.isRecurring,
+          priority: bill.priority,
+          preferredIncomeSourceId: undefined,
+          isIncomeAttached: false,
+        });
+      }
+    }
+
     return {
       id,
       ...income,
@@ -1441,7 +1457,7 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
     
     // Validate input
-    const validation = validateBill(bill);
+    const validation = validateBill(bill, this.getAllIncomes(budgetId));
     assertValid(validation, 'Invalid bill data');
     
     const id = this.crypto.generateId();
@@ -1467,7 +1483,7 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
     
     // Validate input
-    const validation = validateBill(bill);
+    const validation = validateBill(bill, this.getAllIncomes(budgetId));
     assertValid(validation, 'Invalid bill data');
     
     const existing = this.getBillById(id, budgetId);

@@ -37,6 +37,7 @@ export function projectIncome(income: Income, startDate: Date, endDate: Date): P
       sourceId: income.id,
       sourceName: income.sourceName,
       amount: income.amount,
+      purpose: income.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating',
     });
     currentDate = getNextIncomeDate(currentDate, income.cadence);
   }

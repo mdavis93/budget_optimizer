@@ -16,7 +16,7 @@ import { ScheduleBuildProgress } from '../components/schedule';
 import { copyDiagnosticReport } from '../utils/reportError';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
-import { getMonthlyBillEquivalent, getMonthlyIncomeEquivalent } from '../utils/cadence';
+import { getMonthlyBillEquivalent, getMonthlyOperatingIncomeTotal } from '../utils/cadence';
 
 interface StatCardProps {
   label: string;
@@ -89,9 +89,7 @@ export default function DashboardPage() {
   }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
 
   const totalMonthlyIncome = useMemo(() => {
-    return incomes
-      .filter(i => i.isActive)
-      .reduce((sum, income) => sum + getMonthlyIncomeEquivalent(income), 0);
+    return getMonthlyOperatingIncomeTotal(incomes);
   }, [incomes]);
 
   const totalMonthlyBills = useMemo(() => {

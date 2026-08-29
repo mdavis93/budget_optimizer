@@ -11,6 +11,7 @@ import {
   format,
 } from 'date-fns';
 import { Income } from '../services/database.service';
+import { isOperatingIncome } from '@shared/incomePurpose';
 
 export interface PaycheckDate {
   date: Date;
@@ -159,7 +160,7 @@ export function calculateAveragePaycheckIncome(incomes: Income[]): number {
   const paycheckDates = new Set<string>();
   
   for (const income of incomes) {
-    if (!income.isActive) continue;
+    if (!income.isActive || !isOperatingIncome(income)) continue;
     
     const paychecks = getPaycheckDatesForIncome(income, today, threeMonthsLater);
     for (const p of paychecks) {

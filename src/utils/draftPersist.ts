@@ -36,7 +36,8 @@ function incomeEquals(a: Income, b: Income): boolean {
     a.cadence === b.cadence &&
     a.startDate === b.startDate &&
     a.endDate === b.endDate &&
-    a.isActive === b.isActive
+    a.isActive === b.isActive &&
+    (a.purpose ?? 'operating') === (b.purpose ?? 'operating')
   );
 }
 

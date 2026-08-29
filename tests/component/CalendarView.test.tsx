@@ -27,6 +27,25 @@ describe('CalendarView', () => {
       expect(screen.getByText('1 bills')).toBeInTheDocument();
       expect(screen.getByText('$100')).toBeInTheDocument();
     });
+
+    it('renders a distinct chip for savings-and-goals deposit days', () => {
+      render(
+        <CalendarView
+          paychecks={[
+            createMockPaycheck({
+              id: 'sg:2026-01-15',
+              purpose: 'savingsAndGoals',
+              date: '2026-01-15',
+              totalIncome: 400,
+              bills: [],
+              savingsDeposit: 0,
+            }),
+          ]}
+        />
+      );
+      expect(screen.getByText(/Deposit \$400/)).toBeInTheDocument();
+      expect(screen.queryByText('+$400')).not.toBeInTheDocument();
+    });
   });
 
   describe('sad', () => {

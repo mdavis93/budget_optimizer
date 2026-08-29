@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import type { ScheduleData } from './scheduler.service';
 import { PRIORITY_LABELS } from '../utils/constants';
+import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 
 function excelCurrencyNumFmt(currency: string): string {
   const symbol =
@@ -151,7 +152,7 @@ export class SpreadsheetService {
     schedule.paychecks.forEach(paycheck => {
       const row = sheet.addRow([
         format(parseISO(paycheck.date), 'yyyy-MM-dd'),
-        paycheck.incomeSources.map(s => s.name).join(' + '),
+        `${isSavingsAndGoalsIncome(paycheck) ? '[Savings deposit] ' : ''}${paycheck.incomeSources.map(s => s.name).join(' + ')}`,
         paycheck.totalIncome,
         paycheck.totalBills,
         paycheck.totalGoalDeposits,
@@ -221,7 +222,7 @@ export class SpreadsheetService {
       paycheck.incomeSources.forEach(src => {
         const row = sheet.addRow([
           paycheckDateStr,
-          'Income',
+          isSavingsAndGoalsIncome(paycheck) ? 'Savings deposit' : 'Income',
           src.name,
           '',
           '',

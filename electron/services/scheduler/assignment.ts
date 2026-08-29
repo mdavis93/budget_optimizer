@@ -13,6 +13,7 @@ import {
 import type { CashOnHandByDate } from './cashOnHandOverrides';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
+import { isOperatingIncome } from '@shared/incomePurpose';
 
 export function getUniquePaycheckDates(incomes: ProjectedIncome[]): Date[] {
   const dateSet = new Set<number>();
@@ -116,6 +117,44 @@ export function attachSkippedBillsForDisplay(
   }
 }
 
+export function mergeReservedDepositAssignments(
+  operatingAssignments: PaycheckAssignment[],
+  reservedIncomes: ProjectedIncome[]
+): PaycheckAssignment[] {
+  const reservedByDate = new Map<number, ProjectedIncome[]>();
+  for (const income of reservedIncomes) {
+    const stamp = income.date.getTime();
+    const group = reservedByDate.get(stamp) ?? [];
+    group.push(income);
+    reservedByDate.set(stamp, group);
+  }
+
+  const reservedAssignments: PaycheckAssignment[] = [...reservedByDate.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, incomes]) => ({
+      date: incomes[0].date,
+      incomes,
+      bills: [],
+      purpose: 'savingsAndGoals' as const,
+    }));
+
+  const merged: PaycheckAssignment[] = [];
+  let opIndex = 0;
+  let reservedIndex = 0;
+  while (opIndex < operatingAssignments.length || reservedIndex < reservedAssignments.length) {
+    const operating = operatingAssignments[opIndex];
+    const reserved = reservedAssignments[reservedIndex];
+    if (!reserved || (operating && operating.date.getTime() <= reserved.date.getTime())) {
+      merged.push({ ...operating, purpose: operating.purpose ?? 'operating' });
+      opIndex += 1;
+    } else {
+      merged.push(reserved);
+      reservedIndex += 1;
+    }
+  }
+  return merged;
+}
+
 export function assignBillsToPaychecks(
   paycheckDates: Date[],
   allIncomes: ProjectedIncome[],
@@ -130,11 +169,12 @@ export function assignBillsToPaychecks(
   minSavingsPerPaycheck: number = 0,
   skippedForDisplay: ProjectedBill[] = [],
   cashOnHandByDate?: CashOnHandByDate,
-  preferredAssignments: Map<string, string> = new Map()
+  preferredAssignments: Map<string, string> = new Map(),
+  reservedIncomes: ProjectedIncome[] = []
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
-    allIncomes,
+    allIncomes.filter((income) => isOperatingIncome(income)),
     allBills,
     startingBalance,
     {
@@ -151,8 +191,10 @@ export function assignBillsToPaychecks(
   attachSkippedBillsForDisplay(assignments, skippedForDisplay);
   dedupeAssignmentBills(assignments);
 
+  const merged = mergeReservedDepositAssignments(assignments, reservedIncomes);
+
   return buildPaycheckEntries(
-    assignments,
+    merged,
     startingBalance,
     maxBudgetRemaining,
     goals,

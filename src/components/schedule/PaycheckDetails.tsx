@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { getMonth, getYear, parseISO } from 'date-fns';
-import { PiggyBank, Receipt, RefreshCw, Target, TrendingUp, Wallet } from 'lucide-react';
+import { PiggyBank, Receipt, RefreshCw, Target, TrendingUp, Wallet, Landmark } from 'lucide-react';
 import clsx from 'clsx';
 import { BillAssignment, IncomeOverride, PaycheckBill, PaycheckEntry } from '../../types';
 import { filterPaycheckBills } from '../../utils/scheduleBills';
+import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import PaycheckBillRow from './PaycheckBillRow';
 import PaycheckIncomeRow from './PaycheckIncomeRow';
 import type { DraggedBill } from './PaycheckView';
@@ -72,14 +73,15 @@ export default function PaycheckDetails({
   const visibleTotalBills = visibleBills
     .filter(bill => !bill.isUnpayable && !bill.isSkipped)
     .reduce((sum, bill) => sum + bill.amount, 0);
+  const isReserved = isSavingsAndGoalsIncome(paycheck);
 
   return (
     <div className="mt-4 pt-4 border-t border-(--color-border)">
       <div className="space-y-4">
         <div>
           <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
-            <Wallet className="w-4 h-4" />
-            Income
+            {isReserved ? <Landmark className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
+            {isReserved ? 'Savings and goals deposit' : 'Income'}
           </h4>
           <div className="space-y-2">
             {paycheck.incomeSources.map((source) => {
@@ -115,15 +117,18 @@ export default function PaycheckDetails({
               );
             })}
             <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
-              <span>Total Income</span>
-              <span className="font-mono text-success-600 dark:text-success-500">
+              <span>{isReserved ? 'Deposit total' : 'Total Income'}</span>
+              <span className={clsx(
+                'font-mono',
+                isReserved ? 'text-cyan-700 dark:text-cyan-400' : 'text-success-600 dark:text-success-500'
+              )}>
                 +{formatCurrency(paycheck.totalIncome)}
               </span>
             </div>
           </div>
         </div>
 
-        {visibleBills.length > 0 && (
+        {!isReserved && visibleBills.length > 0 && (
           <div>
             <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
               <Receipt className="w-4 h-4" />

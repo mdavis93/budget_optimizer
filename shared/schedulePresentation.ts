@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import type { Bill, PaycheckEntry, ScheduleEntry, ScheduleSummary } from './types';
+import { isOperatingPaycheck, isSavingsAndGoalsIncome } from './incomePurpose';
 
 export function calculateSummary(
   paychecks: PaycheckEntry[],
@@ -11,13 +12,20 @@ export function calculateSummary(
   let totalSavingsDeposits = 0;
   let shortfallCount = 0;
   let balanceSum = 0;
+  let operatingCount = 0;
   let lowestBalance = startingBalance;
   let highestBalance = startingBalance;
 
   for (const paycheck of paychecks) {
+    totalSavingsDeposits += paycheck.savingsDeposit;
+
+    if (!isOperatingPaycheck(paycheck)) {
+      continue;
+    }
+
+    operatingCount += 1;
     totalIncome += paycheck.totalIncome;
     totalExpenses += paycheck.totalBills;
-    totalSavingsDeposits += paycheck.savingsDeposit;
 
     if (paycheck.isShortfall) shortfallCount++;
 
@@ -37,8 +45,8 @@ export function calculateSummary(
     finalSavingsBalance: Math.round(finalSavingsBalance * 100) / 100,
     netBalance: Math.round((totalIncome - totalExpenses) * 100) / 100,
     shortfallCount,
-    averageBalance: paychecks.length > 0
-      ? Math.round((balanceSum / paychecks.length) * 100) / 100
+    averageBalance: operatingCount > 0
+      ? Math.round((balanceSum / operatingCount) * 100) / 100
       : startingBalance,
     lowestBalance: Math.round(lowestBalance * 100) / 100,
     highestBalance: Math.round(highestBalance * 100) / 100,
@@ -53,6 +61,40 @@ export function convertToLegacyEntries(
   let runningBalance = startingBalance;
 
   for (const paycheck of paychecks) {
+    if (isSavingsAndGoalsIncome(paycheck)) {
+      for (const income of paycheck.incomeSources) {
+        entries.push({
+          date: paycheck.date,
+          type: 'savings',
+          description: `Savings deposit: ${income.name}`,
+          amount: income.amount,
+          runningBalance: Math.round(runningBalance * 100) / 100,
+          isShortfall: false,
+        });
+      }
+      for (const goalDeposit of paycheck.goalDeposits) {
+        entries.push({
+          date: paycheck.date,
+          type: 'savings',
+          description: `Goal: ${goalDeposit.goalName}`,
+          amount: goalDeposit.amount,
+          runningBalance: Math.round(runningBalance * 100) / 100,
+          isShortfall: false,
+        });
+      }
+      if (paycheck.savingsDeposit > 0) {
+        entries.push({
+          date: paycheck.date,
+          type: 'savings',
+          description: 'Transfer to Savings',
+          amount: paycheck.savingsDeposit,
+          runningBalance: Math.round(runningBalance * 100) / 100,
+          isShortfall: false,
+        });
+      }
+      continue;
+    }
+
     for (const income of paycheck.incomeSources) {
       runningBalance += income.amount;
       entries.push({
@@ -112,7 +154,7 @@ export function generateRecommendations(
   savingsSqueezedCount?: number
 ): string[] {
   const recommendations: string[] = [];
-  const shortfallPaychecks = paychecks.filter((p) => p.isShortfall);
+  const shortfallPaychecks = paychecks.filter((p) => p.isShortfall && isOperatingPaycheck(p));
 
   if (shortfallPaychecks.length > 0) {
     const firstShortfall = shortfallPaychecks[0];
@@ -123,7 +165,7 @@ export function generateRecommendations(
     );
   } else {
     const rebalancedPaychecks = paychecks.filter(
-      (p) => p.totalBills > p.totalIncome && !p.isShortfall && p.budgetRemaining >= 0
+      (p) => isOperatingPaycheck(p) && p.totalBills > p.totalIncome && !p.isShortfall && p.budgetRemaining >= 0
     );
     if (rebalancedPaychecks.length > 0) {
       recommendations.push(
@@ -158,7 +200,7 @@ export function generateRecommendations(
   }
 
   const heavyPaychecks = paychecks.filter(
-    (p) => p.totalBills > p.totalIncome * 0.9 && p.savingsDeposit === 0
+    (p) => isOperatingPaycheck(p) && p.totalBills > p.totalIncome * 0.9 && p.savingsDeposit === 0
   );
   if (heavyPaychecks.length > 0) {
     recommendations.push(

@@ -4,6 +4,7 @@ import { useDraftData, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { format, parseISO } from 'date-fns';
 import { PaycheckEntry } from '../types';
+import { paycheckKey } from '@shared/incomePurpose';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -160,13 +161,13 @@ export default function SchedulePage() {
     }
   };
 
-  const togglePaycheck = useCallback((date: string) => {
+  const togglePaycheck = useCallback((id: string) => {
     setExpandedPaychecks(prev => {
       const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
+      if (next.has(id)) {
+        next.delete(id);
       } else {
-        next.add(date);
+        next.add(id);
       }
       return next;
     });
@@ -174,7 +175,7 @@ export default function SchedulePage() {
 
   const expandAll = useCallback(() => {
     if (schedule?.paychecks) {
-      setExpandedPaychecks(new Set(schedule.paychecks.map(p => p.date)));
+      setExpandedPaychecks(new Set(schedule.paychecks.map((p) => paycheckKey(p))));
     }
   }, [schedule?.paychecks]);
 

@@ -2,6 +2,7 @@ import { memo, useState, useMemo } from 'react';
 import { format, startOfMonth, isSameDay } from 'date-fns';
 import { PiggyBank } from 'lucide-react';
 import { PaycheckEntry } from '../../types';
+import { isSavingsAndGoalsIncome, paycheckKey } from '@shared/incomePurpose';
 import clsx from 'clsx';
 import { formatCurrency } from '../../utils/formatCurrency';
 
@@ -13,9 +14,11 @@ const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const paychecksByDate = useMemo(() => {
-    const map = new Map<string, PaycheckEntry>();
+    const map = new Map<string, PaycheckEntry[]>();
     for (const paycheck of paychecks) {
-      map.set(paycheck.date, paycheck);
+      const list = map.get(paycheck.date) ?? [];
+      list.push(paycheck);
+      map.set(paycheck.date, list);
     }
     return map;
   }, [paychecks]);
@@ -75,15 +78,16 @@ const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps
           }
           
           const dateKey = format(day, 'yyyy-MM-dd');
-          const paycheck = paychecksByDate.get(dateKey);
+          const dayPaychecks = paychecksByDate.get(dateKey) ?? [];
           const isToday = isSameDay(day, new Date());
+          const hasShortfall = dayPaychecks.some((p) => p.isShortfall && !isSavingsAndGoalsIncome(p));
           
           return (
             <div
               key={index}
               className={clsx(
                 'bg-(--color-bg-primary) p-2 min-h-[100px]',
-                paycheck?.isShortfall && 'bg-danger-50 dark:bg-danger-500/10',
+                hasShortfall && 'bg-danger-50 dark:bg-danger-500/10',
                 isToday && 'ring-2 ring-inset ring-primary-500'
               )}
             >
@@ -93,22 +97,35 @@ const CalendarView = memo(function CalendarView({ paychecks }: CalendarViewProps
               )}>
                 {format(day, 'd')}
               </p>
-              {paycheck && (
+              {dayPaychecks.length > 0 && (
                 <div className="space-y-1">
-                  <div className="text-xs px-1 py-0.5 rounded-sm bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400 truncate">
-                    +{formatWholeCurrency(paycheck.totalIncome)}
-                  </div>
-                  {paycheck.bills.length > 0 && (
-                    <div className="text-xs px-1 py-0.5 rounded-sm bg-danger-100 text-danger-700 dark:bg-danger-500/20 dark:text-danger-400 truncate">
-                      {paycheck.bills.length} bills
-                    </div>
-                  )}
-                  {paycheck.savingsDeposit > 0 && (
-                    <div className="text-xs px-1 py-0.5 rounded-sm bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400 truncate flex items-center gap-0.5">
-                      <PiggyBank className="w-3 h-3" />
-                      {formatWholeCurrency(paycheck.savingsDeposit)}
-                    </div>
-                  )}
+                  {dayPaychecks.map((paycheck) => (
+                    isSavingsAndGoalsIncome(paycheck) ? (
+                      <div
+                        key={paycheckKey(paycheck)}
+                        className="text-xs px-1 py-0.5 rounded-sm border border-dashed border-cyan-400 bg-cyan-50 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-300 truncate"
+                      >
+                        Deposit {formatWholeCurrency(paycheck.totalIncome)}
+                      </div>
+                    ) : (
+                      <div key={paycheckKey(paycheck)} className="space-y-1">
+                        <div className="text-xs px-1 py-0.5 rounded-sm bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400 truncate">
+                          +{formatWholeCurrency(paycheck.totalIncome)}
+                        </div>
+                        {paycheck.bills.length > 0 && (
+                          <div className="text-xs px-1 py-0.5 rounded-sm bg-danger-100 text-danger-700 dark:bg-danger-500/20 dark:text-danger-400 truncate">
+                            {paycheck.bills.length} bills
+                          </div>
+                        )}
+                        {paycheck.savingsDeposit > 0 && (
+                          <div className="text-xs px-1 py-0.5 rounded-sm bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400 truncate flex items-center gap-0.5">
+                            <PiggyBank className="w-3 h-3" />
+                            {formatWholeCurrency(paycheck.savingsDeposit)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  ))}
                 </div>
               )}
             </div>

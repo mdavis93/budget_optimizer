@@ -10,14 +10,19 @@ export interface ValidationResult {
   errors: string[];
 }
 
-export function validateBill(bill: {
-  creditorName: string;
-  budgetedAmount: number;
-  dueDay: number;
-  category?: string;
-  isRecurring: boolean;
-  priority: string;
-}): ValidationResult {
+export function validateBill(
+  bill: {
+    creditorName: string;
+    budgetedAmount: number;
+    dueDay: number;
+    category?: string;
+    isRecurring: boolean;
+    priority: string;
+    preferredIncomeSourceId?: string;
+    isIncomeAttached?: boolean;
+  },
+  incomes: Array<{ id?: string; purpose?: string }> = []
+): ValidationResult {
   const errors: string[] = [];
 
   if (!bill.creditorName || bill.creditorName.trim().length === 0) {
@@ -51,6 +56,13 @@ export function validateBill(bill: {
     errors.push('Priority must be one of: critical, high, normal, low');
   }
 
+  if (bill.preferredIncomeSourceId) {
+    const linked = incomes.find((income) => income.id && income.id === bill.preferredIncomeSourceId);
+    if (linked?.purpose === 'savingsAndGoals') {
+      errors.push('Bills cannot attach to savings-and-goals-only income');
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -63,6 +75,7 @@ export function validateIncome(income: {
   cadence: string;
   startDate: string;
   isActive: boolean;
+  purpose?: string;
 }): ValidationResult {
   const errors: string[] = [];
 
@@ -85,6 +98,10 @@ export function validateIncome(income: {
   const validCadences = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
   if (!validCadences.includes(income.cadence)) {
     errors.push('Cadence must be one of: weekly, biweekly, semimonthly, monthly');
+  }
+
+  if (income.purpose !== undefined && income.purpose !== 'operating' && income.purpose !== 'savingsAndGoals') {
+    errors.push('Purpose must be one of: operating, savingsAndGoals');
   }
 
   // Validate date format (YYYY-MM-DD)
@@ -532,7 +549,7 @@ export function validateDraftOverlay(overlay: {
   });
 
   overlay.bills?.forEach((bill, index) => {
-    const result = validateBill(bill);
+    const result = validateBill(bill, overlay.incomes ?? []);
     if (!result.valid) {
       errors.push(`Bill[${index}]: ${result.errors.join(', ')}`);
     }
