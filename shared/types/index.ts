@@ -37,6 +37,9 @@ export interface BudgetWithStats extends Budget {
   billCount: number;
 }
 
+/** Spendable paycheck income vs deposits reserved for goals/savings only. */
+export type IncomePurpose = 'operating' | 'savingsAndGoals';
+
 export interface Income {
   id: string;
   sourceName: string;
@@ -46,6 +49,8 @@ export interface Income {
   /** Last payment date (inclusive). Omit for open-ended income. */
   endDate?: string;
   isActive: boolean;
+  /** Omit or `operating` for spendable income. Legacy records have no purpose. */
+  purpose?: IncomePurpose;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,6 +62,7 @@ export interface IncomeInput {
   startDate: string;
   endDate?: string;
   isActive: boolean;
+  purpose?: IncomePurpose;
 }
 
 export interface Bill {
@@ -260,6 +266,10 @@ export interface GoalDeposit {
 }
 
 export interface PaycheckEntry {
+  /** Stable accordion/drag identity (`op:YYYY-MM-DD` / `sg:YYYY-MM-DD`). */
+  id?: string;
+  /** Omit or `operating` for spendable paychecks. */
+  purpose?: IncomePurpose;
   date: string;
   incomeSources: {
     id: string;

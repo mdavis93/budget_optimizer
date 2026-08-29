@@ -3,6 +3,7 @@ import {
   getCadenceMonthlyMultiplier,
   getMonthlyBillEquivalent,
   getMonthlyIncomeEquivalent,
+  getMonthlyOperatingIncomeTotal,
 } from '../../../src/utils/cadence';
 import { Bill, Income } from '../../../src/types';
 
@@ -123,6 +124,38 @@ describe('cadence', () => {
 
       expect(total).toBeCloseTo(1085, 2);
       expect(total).not.toBe(500);
+    });
+
+    it('does not scale bills attached to savings-and-goals income', () => {
+      const income = makeIncome({
+        id: 'pay-1',
+        cadence: 'biweekly',
+        purpose: 'savingsAndGoals',
+      });
+      const bill = makeBill({
+        budgetedAmount: 300,
+        isIncomeAttached: true,
+        preferredIncomeSourceId: 'pay-1',
+      });
+      expect(getMonthlyBillEquivalent(bill, [income])).toBe(300);
+    });
+  });
+
+  describe('getMonthlyOperatingIncomeTotal', () => {
+    it('excludes reserved and inactive sources', () => {
+      expect(
+        getMonthlyOperatingIncomeTotal([
+          makeIncome({ amount: 1000, cadence: 'monthly', isActive: true }),
+          makeIncome({
+            id: 'sg',
+            amount: 500,
+            cadence: 'monthly',
+            isActive: true,
+            purpose: 'savingsAndGoals',
+          }),
+          makeIncome({ id: 'off', amount: 900, cadence: 'monthly', isActive: false }),
+        ])
+      ).toBe(1000);
     });
   });
 });

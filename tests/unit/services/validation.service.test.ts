@@ -30,6 +30,17 @@ describe('validation.service', () => {
       expect(result.errors).toHaveLength(0);
     });
 
+    it('accepts savingsAndGoals purpose', () => {
+      expect(validateIncome({
+        sourceName: 'Bonus',
+        amount: 200,
+        cadence: 'monthly',
+        startDate: '2026-01-15',
+        isActive: true,
+        purpose: 'savingsAndGoals',
+      }).valid).toBe(true);
+    });
+
     it('accepts valid bill payload', () => {
       const result = validateBill({
         creditorName: 'Mortgage',
@@ -225,6 +236,23 @@ describe('validation.service', () => {
       }).valid).toBe(false);
     });
 
+    it('rejects bills attached to savings-and-goals income', () => {
+      const result = validateBill(
+        {
+          creditorName: 'Rent',
+          budgetedAmount: 100,
+          dueDay: 1,
+          isRecurring: true,
+          priority: 'normal',
+          preferredIncomeSourceId: 'inc-reserved',
+          isIncomeAttached: true,
+        },
+        [{ id: 'inc-reserved', purpose: 'savingsAndGoals' }]
+      );
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('savings-and-goals'))).toBe(true);
+    });
+
     it('rejects income with oversized name and NaN amount', () => {
       expect(validateIncome({
         sourceName: 'x'.repeat(101),
@@ -240,6 +268,15 @@ describe('validation.service', () => {
         cadence: 'weekly',
         startDate: '2026-01-01',
         isActive: true,
+      }).valid).toBe(false);
+
+      expect(validateIncome({
+        sourceName: 'Bonus',
+        amount: 100,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+        purpose: 'spendable',
       }).valid).toBe(false);
     });
 

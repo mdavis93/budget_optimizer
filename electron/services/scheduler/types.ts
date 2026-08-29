@@ -6,7 +6,7 @@ import {
   isBefore,
   differenceInCalendarMonths,
 } from 'date-fns';
-import type { UnfundableReason } from '@shared/types';
+import type { IncomePurpose, UnfundableReason } from '@shared/types';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
@@ -88,6 +88,7 @@ export interface ProjectedIncome {
   sourceId: string;
   sourceName: string;
   amount: number;
+  purpose?: IncomePurpose;
 }
 
 export interface ProjectedBill {
@@ -109,6 +110,7 @@ export interface PaycheckAssignment {
   date: Date;
   incomes: ProjectedIncome[];
   bills: ProjectedBill[];
+  purpose?: IncomePurpose;
 }
 
 export function billOccurrenceKey(billId: string, date: Date): string {
