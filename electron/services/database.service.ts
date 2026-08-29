@@ -1370,9 +1370,13 @@ export class DatabaseService {
     if (income.purpose === 'savingsAndGoals') {
       for (const bill of this.getAllBills(budgetId)) {
         if (bill.preferredIncomeSourceId !== id) continue;
-        const { id: _billId, createdAt: _created, updatedAt: _updated, ...billData } = bill;
         this.updateBillEntry(bill.id, budgetId, {
-          ...billData,
+          creditorName: bill.creditorName,
+          budgetedAmount: bill.budgetedAmount,
+          dueDay: bill.dueDay,
+          category: bill.category,
+          isRecurring: bill.isRecurring,
+          priority: bill.priority,
           preferredIncomeSourceId: undefined,
           isIncomeAttached: false,
         });
