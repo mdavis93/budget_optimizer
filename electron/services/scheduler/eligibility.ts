@@ -26,12 +26,14 @@ export function getEligiblePaycheckIndices(
 
     if (isAfter(paycheck.date, bill.date)) continue;
 
+    if (paycheck.purpose === 'savingsAndGoals') continue;
+
     const daysEarly = differenceInDays(bill.date, paycheck.date);
     if (daysEarly > MAX_PREPAY_DAYS) continue;
 
     if (bill.preferredIncomeSourceId) {
       const hasIncome = paycheck.incomes.some(
-        (inc) => inc.sourceId === bill.preferredIncomeSourceId
+        (inc) => inc.sourceId === bill.preferredIncomeSourceId && inc.purpose !== 'savingsAndGoals'
       );
       if (!hasIncome) continue;
     }

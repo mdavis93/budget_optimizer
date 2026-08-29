@@ -11,6 +11,7 @@ import {
   getUniquePaycheckDates,
   pruneManualAssignmentsToPaychecks,
 } from './assignment';
+import { isOperatingIncome, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import {
   calculateSummary,
   convertToLegacyEntries,
@@ -42,6 +43,8 @@ export interface PreparedScheduleHorizon {
   goals: SavingsGoal[];
   skippedBills: Set<string>;
   allIncomes: ProjectedIncome[];
+  operatingIncomes: ProjectedIncome[];
+  reservedIncomes: ProjectedIncome[];
   uniqueBills: ProjectedBill[];
   skippedForDisplay: ProjectedBill[];
   paycheckDates: Date[];
@@ -102,8 +105,17 @@ export function prepareScheduleHorizon(
 
   applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
 
+  const operatingIncomes = allIncomes.filter((income) => isOperatingIncome(income));
+  const reservedIncomes = allIncomes.filter((income) => isSavingsAndGoalsIncome(income));
+  const reservedSourceIds = new Set(
+    input.incomes.filter((income) => isSavingsAndGoalsIncome(income)).map((income) => income.id)
+  );
+
   const incomeAttachedBillsRaw = input.bills.filter(
-    (bill) => bill.isIncomeAttached && bill.preferredIncomeSourceId
+    (bill) =>
+      bill.isIncomeAttached &&
+      bill.preferredIncomeSourceId &&
+      !reservedSourceIds.has(bill.preferredIncomeSourceId)
   );
   const regularBills = input.bills.filter((bill) => !bill.isIncomeAttached);
 
@@ -135,7 +147,7 @@ export function prepareScheduleHorizon(
     return true;
   });
 
-  const paycheckDates = getUniquePaycheckDates(allIncomes);
+  const paycheckDates = getUniquePaycheckDates(operatingIncomes);
   const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
     manualAssignments,
     paycheckDates
@@ -160,6 +172,8 @@ export function prepareScheduleHorizon(
     goals,
     skippedBills,
     allIncomes,
+    operatingIncomes,
+    reservedIncomes,
     uniqueBills,
     skippedForDisplay,
     paycheckDates,
@@ -179,7 +193,7 @@ export function assignPreparedHorizon(
   );
   return assignBillsToPaychecks(
     prepared.paycheckDates,
-    prepared.allIncomes,
+    prepared.operatingIncomes,
     prepared.uniqueBills,
     prepared.startingBalance,
     prepared.skippedBills,
@@ -191,7 +205,8 @@ export function assignPreparedHorizon(
     prepared.minSavingsPerPaycheck,
     prepared.skippedForDisplay,
     prepared.cashOnHandByDate,
-    effectivePreferredAssignments
+    effectivePreferredAssignments,
+    prepared.reservedIncomes
   );
 }
 

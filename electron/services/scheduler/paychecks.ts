@@ -16,6 +16,7 @@ import {
   billOccurrenceKey,
 } from './types';
 import { allocateGoalsAndSavings } from './goalSavingsAllocator';
+import { isSavingsAndGoalsIncome, paycheckEntryId } from '@shared/incomePurpose';
 export {
   calculateSummary,
   convertToLegacyEntries,
@@ -35,13 +36,16 @@ export function buildPaycheckEntries(
   let totalSavings = 0;
 
   const meta = assignments.map((assignment, i) => {
+    const isReserved = isSavingsAndGoalsIncome(assignment);
     const seenBills = new Set<string>();
-    const uniqueBills = assignment.bills.filter(bill => {
-      const key = billOccurrenceKey(bill.billId, bill.date);
-      if (seenBills.has(key)) return false;
-      seenBills.add(key);
-      return true;
-    });
+    const uniqueBills = isReserved
+      ? []
+      : assignment.bills.filter(bill => {
+          const key = billOccurrenceKey(bill.billId, bill.date);
+          if (seenBills.has(key)) return false;
+          seenBills.add(key);
+          return true;
+        });
 
     const totalIncome = assignment.incomes.reduce((sum, inc) => sum + inc.amount, 0);
     const fundedBills = uniqueBills.filter(bill => !bill.isUnpayable && !bill.isSkipped);
@@ -50,7 +54,10 @@ export function buildPaycheckEntries(
       .filter(bill => bill.isUnpayable && !bill.isSkipped)
       .reduce((sum, bill) => sum + bill.amount, 0);
     const hasUnpayableBills = unpayableBillsAmount > 0;
-    const ledgerBoost = i === 0 ? startingBalance : 0;
+    const isFirstOperating =
+      !isReserved &&
+      assignments.findIndex((item) => !isSavingsAndGoalsIncome(item)) === i;
+    const ledgerBoost = isFirstOperating ? startingBalance : 0;
     const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
     const effectiveTarget = cashTargetForDate(
       cashOnHandByDate,
@@ -59,18 +66,19 @@ export function buildPaycheckEntries(
     );
     const effectiveMin = cashMinForDate(cashOnHandByDate, paycheckDateStr, minCashOnHand);
 
-    // Payable-only when fully funded; with unpayables, remaining is the obligation
-    // deficit (income − all non-skipped bills) so a surplus is never shown while
-    // bills remain unpaid.
-    const grossRemaining = hasUnpayableBills
-      ? totalIncome - totalBillsAmount - unpayableBillsAmount + ledgerBoost
-      : totalIncome - totalBillsAmount + ledgerBoost;
-
-    const surplus = hasUnpayableBills
+    const grossRemaining = isReserved
       ? 0
-      : grossRemaining >= effectiveTarget
-        ? Math.max(0, grossRemaining - effectiveTarget)
-        : 0;
+      : hasUnpayableBills
+        ? totalIncome - totalBillsAmount - unpayableBillsAmount + ledgerBoost
+        : totalIncome - totalBillsAmount + ledgerBoost;
+
+    const surplus = isReserved
+      ? Math.max(0, totalIncome)
+      : hasUnpayableBills
+        ? 0
+        : grossRemaining >= effectiveTarget
+          ? Math.max(0, grossRemaining - effectiveTarget)
+          : 0;
 
     return {
       assignment,
@@ -82,6 +90,7 @@ export function buildPaycheckEntries(
       effectiveTarget,
       effectiveMin,
       paycheckDateStr,
+      isReserved,
     };
   });
 
@@ -98,6 +107,8 @@ export function buildPaycheckEntries(
     { minSavingsPerPaycheck }
   );
 
+  let lastOperatingRemaining = startingBalance;
+
   for (let assignmentIndex = 0; assignmentIndex < meta.length; assignmentIndex++) {
     const {
       assignment,
@@ -109,6 +120,7 @@ export function buildPaycheckEntries(
       effectiveTarget,
       effectiveMin,
       paycheckDateStr,
+      isReserved,
     } = meta[assignmentIndex];
     const alloc = allocation.paychecks[assignmentIndex];
 
@@ -122,17 +134,23 @@ export function buildPaycheckEntries(
     const savingsSqueezed = alloc.savingsSqueezed;
 
     let budgetRemaining = grossRemaining;
-    if (surplus > 0) {
+    if (isReserved) {
+      budgetRemaining = lastOperatingRemaining;
+      totalSavings += savingsDeposit;
+    } else if (surplus > 0) {
       budgetRemaining = effectiveTarget;
       totalSavings += savingsDeposit;
     }
 
-    const isShortfall = budgetRemaining < effectiveMin;
+    const isShortfall = isReserved ? false : budgetRemaining < effectiveMin;
 
     const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
     const hasUnpayableBills = unpayableCount > 0;
+    const purpose = isReserved ? 'savingsAndGoals' as const : 'operating' as const;
 
     const paycheck: PaycheckEntry = {
+      id: paycheckEntryId(purpose, paycheckDateStr),
+      purpose,
       date: paycheckDateStr,
       incomeSources: assignment.incomes.map(inc => ({
         id: inc.sourceId,
@@ -166,6 +184,10 @@ export function buildPaycheckEntries(
       unpayableCount,
       hasUnpayableBills,
     };
+
+    if (!isReserved) {
+      lastOperatingRemaining = paycheck.budgetRemaining;
+    }
 
     paychecks.push(paycheck);
   }

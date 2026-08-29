@@ -26,16 +26,22 @@ import {
 import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
 import { resolvePaycheckCashOnHand } from './cashOnHandOverrides';
-import { getUniquePaycheckDates, pruneManualAssignmentsToPaychecks } from './assignment';
+import {
+  getUniquePaycheckDates,
+  mergeReservedDepositAssignments,
+  pruneManualAssignmentsToPaychecks,
+} from './assignment';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
+import { isOperatingIncome, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
-  const nonShortfall = paychecks.filter(p => !p.isShortfall);
+  const operating = paychecks.filter((p) => !p.purpose || p.purpose === 'operating');
+  const nonShortfall = operating.filter(p => !p.isShortfall);
   const tightPaycheckCount = nonShortfall.filter(
     p => p.totalBills > p.totalIncome * 0.9 && p.savingsDeposit === 0
   ).length;
-  const shortfallCount = paychecks.filter(p => p.isShortfall).length;
+  const shortfallCount = operating.filter(p => p.isShortfall).length;
   const savingsTotal = paychecks.length > 0
     ? paychecks[paychecks.length - 1].totalSavings
     : 0;
@@ -433,8 +439,6 @@ export function generateGoalProjections(
   }
 
   const startDate = startOfDay(parseISO(startDateStr));
-  // Match generateSchedule: span the latest goal deadline so projections cover
-  // every goal rather than truncating at a fixed 12 months.
   const calcMonths = resolveCalculationMonths(startDateStr, goals);
   const endDate = addMonths(startDate, calcMonths);
 
@@ -445,7 +449,18 @@ export function generateGoalProjections(
 
   applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
 
-  const incomeAttachedBillsRaw = bills.filter(b => b.isIncomeAttached && b.preferredIncomeSourceId);
+  const operatingIncomes = allIncomes.filter((income) => isOperatingIncome(income));
+  const reservedIncomes = allIncomes.filter((income) => isSavingsAndGoalsIncome(income));
+  const reservedSourceIds = new Set(
+    incomes.filter((income) => isSavingsAndGoalsIncome(income)).map((income) => income.id)
+  );
+
+  const incomeAttachedBillsRaw = bills.filter(
+    (b) =>
+      b.isIncomeAttached &&
+      b.preferredIncomeSourceId &&
+      !reservedSourceIds.has(b.preferredIncomeSourceId)
+  );
   const regularBills = bills.filter(b => !b.isIncomeAttached);
 
   const allBills: ReturnType<typeof projectBills> = [];
@@ -472,7 +487,7 @@ export function generateGoalProjections(
     return true;
   });
 
-  const paycheckDates = getUniquePaycheckDates(allIncomes);
+  const paycheckDates = getUniquePaycheckDates(operatingIncomes);
   const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
     manualAssignments,
     paycheckDates
@@ -486,7 +501,7 @@ export function generateGoalProjections(
 
   const assignments = assignBillsExact(
     paycheckDates,
-    allIncomes,
+    operatingIncomes,
     uniqueBills,
     startingBalance,
     {
@@ -499,8 +514,10 @@ export function generateGoalProjections(
     }
   );
 
+  const merged = mergeReservedDepositAssignments(assignments, reservedIncomes);
+
   const paychecks = buildPaycheckEntries(
-    assignments,
+    merged,
     startingBalance,
     maxBudgetRemaining,
     goals,
