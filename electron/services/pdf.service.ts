@@ -6,6 +6,7 @@ import type { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
 import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
+import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 
 export class PdfService {
   constructor(private readonly scratchRoot?: string) {}
@@ -124,11 +125,11 @@ export class PdfService {
     <div class="paycheck ${paycheck.isShortfall ? 'paycheck-shortfall' : ''}">
       <div class="paycheck-overview">
         <div class="paycheck-overview-main">
-          <div class="paycheck-date">${format(paycheckDate, 'EEEE, MMMM d, yyyy')}</div>
+          <div class="paycheck-date">${format(paycheckDate, 'EEEE, MMMM d, yyyy')}${isSavingsAndGoalsIncome(paycheck) ? ' — Not spendable (savings and goals only)' : ''}</div>
           <div class="paycheck-meta">
             <span>${incomeSourceNames}</span>
-            <span class="dot">&bull;</span>
-            <span>${paycheck.bills.length} bill${paycheck.bills.length !== 1 ? 's' : ''}</span>
+            ${isSavingsAndGoalsIncome(paycheck) ? '' : `<span class="dot">&bull;</span>
+            <span>${paycheck.bills.length} bill${paycheck.bills.length !== 1 ? 's' : ''}</span>`}
             ${paycheck.totalGoalDeposits > 0 ? `
               <span class="dot">&bull;</span>
               <span class="meta-goals">${formatCurrency(paycheck.totalGoalDeposits)} to goals</span>
@@ -147,7 +148,7 @@ export class PdfService {
 
       <div class="paycheck-body">
         <div class="row-group">
-          <div class="row-group-title">Income</div>
+          <div class="row-group-title">${isSavingsAndGoalsIncome(paycheck) ? 'Savings and goals deposit' : 'Income'}</div>
           ${paycheck.incomeSources.map(src => `
             <div class="row row-income">
               <span class="row-label">${escapeHtml(src.name)}</span>
