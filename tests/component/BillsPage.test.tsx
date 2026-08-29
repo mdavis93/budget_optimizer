@@ -58,6 +58,30 @@ describe('BillsPage', () => {
       expect(screen.getAllByText('$80.00').length).toBeGreaterThan(0);
       expect(screen.getByText(/Due:\s*5th/)).toBeInTheDocument();
     });
+
+    it('omits savings-and-goals income from preferred source lists', async () => {
+      mockUseData.mockReturnValue({
+        bills: [],
+        incomes: [
+          createMockIncome({ id: 'inc-1', sourceName: 'Salary', isActive: true }),
+          createMockIncome({
+            id: 'inc-sg',
+            sourceName: 'Bonus Pool',
+            isActive: true,
+            purpose: 'savingsAndGoals',
+          }),
+        ],
+        createBill,
+        updateBill,
+        deleteBill,
+      });
+      const user = userEvent.setup();
+      render(<BillsPage />);
+      await user.click(screen.getAllByRole('button', { name: /Add Bill/i })[0]);
+      const preferred = screen.getByLabelText(/Preferred Income Source \(Optional\)/i);
+      expect(preferred).toHaveTextContent('Salary');
+      expect(preferred).not.toHaveTextContent('Bonus Pool');
+    });
   });
 
   describe('sad', () => {

@@ -28,6 +28,7 @@ import {
   SkippedBill,
   ScheduleData,
 } from '../types';
+import { stripBillLinkToIncome } from '@shared/incomePurpose';
 import { useScheduleEngine } from './draft/useScheduleEngine';
 import {
   DraftBudgetFields,
@@ -513,13 +514,20 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
   const updateIncome = useCallback(async (id: string, input: IncomeInput): Promise<boolean> => {
     if (isDraftMode) {
-      updateDraft((prev) => ({
-        ...prev,
-        incomes: prev.incomes.map((income) =>
+      updateDraft((prev) => {
+        const nextIncomes = prev.incomes.map((income) =>
           income.id === id ? { ...income, ...input, updatedAt: nowIso() } : income
-        ),
-      }));
+        );
+        const nextBills =
+          input.purpose === 'savingsAndGoals'
+            ? prev.bills.map((bill) => stripBillLinkToIncome(bill, id))
+            : prev.bills;
+        return { ...prev, incomes: nextIncomes, bills: nextBills };
+      });
       markDirty('income');
+      if (input.purpose === 'savingsAndGoals') {
+        markDirty('bills');
+      }
       return true;
     }
     return false;

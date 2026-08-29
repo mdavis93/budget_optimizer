@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import clsx from 'clsx';
 import { getMonthlyBillEquivalent } from '../utils/cadence';
+import { isOperatingIncome } from '@shared/incomePurpose';
 import { formatCurrency } from '../utils/formatCurrency';
 
 interface BillFormProps {
@@ -26,7 +27,7 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
   const [preferredIncomeSourceId, setPreferredIncomeSourceId] = useState(bill?.preferredIncomeSourceId ?? '');
   const [isIncomeAttached, setIsIncomeAttached] = useState(bill?.isIncomeAttached ?? false);
 
-  const activeIncomes = incomes.filter(inc => inc.isActive);
+  const activeIncomes = incomes.filter(inc => inc.isActive && isOperatingIncome(inc));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

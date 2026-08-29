@@ -86,6 +86,34 @@ describe('IncomePage', () => {
       render(<IncomePage />);
       expect(screen.getByText(/Ending Aug 31, 2026/i)).toBeInTheDocument();
     });
+
+    it('shows savings-and-goals badge and excludes reserved from monthly income total', () => {
+      mockUseData.mockReturnValue({
+        incomes: [
+          createMockIncome({ sourceName: 'Salary', amount: 2000, cadence: 'monthly', isActive: true }),
+          createMockIncome({
+            id: 'inc-sg',
+            sourceName: 'Bonus Pool',
+            amount: 500,
+            cadence: 'monthly',
+            isActive: true,
+            purpose: 'savingsAndGoals',
+          }),
+        ],
+        leaves: [],
+        createIncome,
+        updateIncome,
+        deleteIncome,
+        createLeave,
+        updateLeave,
+        deleteLeave,
+      });
+
+      render(<IncomePage />);
+      expect(screen.getByText(/Not spendable/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reserved for savings and goals/i)).toBeInTheDocument();
+      expect(screen.getByText('Total Monthly Income (estimated)').closest('div')).toHaveTextContent('$2,000.00');
+    });
   });
 
   describe('sad', () => {
