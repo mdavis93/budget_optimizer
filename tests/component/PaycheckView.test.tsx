@@ -68,7 +68,7 @@ describe('PaycheckView', () => {
 
       expect(props.expandAll).toHaveBeenCalledTimes(1);
       expect(props.collapseAll).toHaveBeenCalledTimes(1);
-      expect(props.togglePaycheck).toHaveBeenCalledWith('2026-01-15');
+      expect(props.togglePaycheck).toHaveBeenCalledWith('op:2026-01-15');
     });
 
     it('shows Break-Glass badge when cash is between min and target', () => {
@@ -373,6 +373,35 @@ describe('PaycheckView', () => {
       expect(screen.getByText(/1 unpayable/i)).toBeInTheDocument();
       expect(screen.getByText('Per Paycheck')).toBeInTheDocument();
       expect(screen.getAllByText('$-50.00').length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('savings-and-goals deposits', () => {
+    it('renders reserved chrome and does not invite bill drops', () => {
+      const onDragOver = vi.fn();
+      const onDrop = vi.fn();
+      const { unmount } = renderWithRouter(
+        <PaycheckView
+          {...baseProps()}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          paychecks={[
+            createMockPaycheck({
+              id: 'sg:2026-01-15',
+              purpose: 'savingsAndGoals',
+              date: '2026-01-15',
+              incomeSources: [{ id: 'inc-sg', name: 'Bonus Pool', amount: 400 }],
+              totalIncome: 400,
+              bills: [],
+              totalBills: 0,
+            }),
+          ]}
+        />
+      );
+
+      expect(screen.getByText(/Not spendable/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Expand savings deposit for/i)).toBeInTheDocument();
+      unmount();
     });
   });
 });
