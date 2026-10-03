@@ -138,6 +138,32 @@ describe('GoalsPage', () => {
       expect(screen.getByText('Priority: 1')).toBeInTheDocument();
       expect(screen.getByText('100%')).toBeInTheDocument();
     });
+
+    it('hides Add Goal once five goals exist', async () => {
+      mockDraftContext({
+        goals: [1, 2, 3, 4, 5].map((priority) =>
+          createMockGoal({ id: `goal-${priority}`, name: `Goal ${priority}`, priority })
+        ),
+      });
+      render(<GoalsPage />);
+      expect(await screen.findByText('Goal 1')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Add Goal/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps Add Goal when fewer than five goals exist', async () => {
+      render(<GoalsPage />);
+      expect(await screen.findByRole('button', { name: /Add Goal/i })).toBeInTheDocument();
+    });
+
+    it('opens create form with the next unused priority', async () => {
+      const user = userEvent.setup();
+      mockDraftContext({
+        goals: [createMockGoal({ id: 'goal-1', name: 'Emergency Fund', priority: 1 })],
+      });
+      render(<GoalsPage />);
+      await user.click(await screen.findByRole('button', { name: /Add Goal/i }));
+      expect(screen.getByLabelText('Priority')).toHaveValue('2');
+    });
   });
 
   describe('sad', () => {
