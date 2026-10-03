@@ -1,5 +1,6 @@
 import { isBefore, format, parseISO, differenceInDays } from 'date-fns';
 import { movableBillCapacity } from '@shared/reconciliationSurplus';
+import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
 import { PRIORITY_ORDER } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
@@ -30,8 +31,9 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
   const budgetTargetCashOnHand = schedule.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
   const shortfalls: ShortfallDetail[] = shortfallPaychecks.map(p => ({
     paycheckDate: p.date,
-    deficit: Math.abs(p.budgetRemaining),
+    deficit: shortfallDeficitAmount(p.budgetRemaining, budgetMinCashOnHand),
     budgetRemaining: p.budgetRemaining,
+    minCashOnHand: budgetMinCashOnHand,
     bills: [...p.bills],
   }));
 

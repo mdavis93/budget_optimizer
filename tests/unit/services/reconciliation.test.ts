@@ -133,5 +133,87 @@ describe('analyzeAndProposeFixes', () => {
     const report = analyzeAndProposeFixes(schedule);
     expect(report.proposedFixes).toHaveLength(1);
     expect(report.proposedFixes[0].toPaycheckDate).toBe('2027-01-15');
+    expect(report.shortfalls[0].deficit).toBe(150);
+    expect(report.totalDeficit).toBe(150);
+  });
+
+  it('reports below-min remaining as the gap to the cash floor', () => {
+    const schedule: ScheduleData = {
+      startDate: '2027-01-01',
+      endDate: '2027-12-31',
+      paychecks: [
+        buildPaycheck({
+          date: '2027-02-26',
+          budgetRemaining: 40,
+          minCashOnHand: 100,
+          isShortfall: true,
+        }),
+        buildPaycheck({
+          date: '2027-07-30',
+          budgetRemaining: 65,
+          minCashOnHand: 100,
+          isShortfall: true,
+        }),
+      ],
+      fullPaychecks: [],
+      viewportMonths: 12,
+      entries: [],
+      summary: {
+        totalIncome: 0,
+        totalExpenses: 0,
+        totalSavingsDeposits: 0,
+        finalSavingsBalance: 0,
+        netBalance: 0,
+        shortfallCount: 2,
+        averageBalance: 0,
+        lowestBalance: 0,
+        highestBalance: 0,
+      },
+      recommendations: [],
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+    };
+    schedule.fullPaychecks = schedule.paychecks;
+
+    const report = analyzeAndProposeFixes(schedule);
+    expect(report.shortfalls.map((s) => s.deficit)).toEqual([60, 35]);
+    expect(report.totalDeficit).toBe(95);
+  });
+
+  it('uses the budget minimum for advisor deficit even when leave lowers paycheck min', () => {
+    const schedule: ScheduleData = {
+      startDate: '2027-01-01',
+      endDate: '2027-12-31',
+      paychecks: [
+        buildPaycheck({
+          date: '2027-02-26',
+          budgetRemaining: 40,
+          minCashOnHand: 50,
+          isShortfall: true,
+        }),
+      ],
+      fullPaychecks: [],
+      viewportMonths: 12,
+      entries: [],
+      summary: {
+        totalIncome: 0,
+        totalExpenses: 0,
+        totalSavingsDeposits: 0,
+        finalSavingsBalance: 0,
+        netBalance: 0,
+        shortfallCount: 1,
+        averageBalance: 0,
+        lowestBalance: 0,
+        highestBalance: 0,
+      },
+      recommendations: [],
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+    };
+    schedule.fullPaychecks = schedule.paychecks;
+
+    const report = analyzeAndProposeFixes(schedule);
+    expect(report.shortfalls[0].deficit).toBe(60);
+    expect(report.shortfalls[0].minCashOnHand).toBe(100);
   });
 });

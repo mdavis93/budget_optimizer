@@ -756,6 +756,41 @@ describe('draftPersist', () => {
       );
     });
 
+    it('persists savings-and-goals purpose on create and update', async () => {
+      const committed = makeDraftState({ incomes: [] });
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'draft-income-sg', purpose: 'savingsAndGoals' })],
+      });
+
+      vi.mocked(window.electronAPI.income.create).mockResolvedValueOnce({
+        success: true,
+        data: createMockIncome({ id: 'income-real-sg', purpose: 'savingsAndGoals' }),
+      });
+
+      const createResult = await persistIncomeDomain(committed, draft);
+      expect(createResult.success).toBe(true);
+      expect(window.electronAPI.income.create).toHaveBeenCalledWith(
+        expect.objectContaining({ purpose: 'savingsAndGoals' })
+      );
+
+      const saved = createResult.nextCommitted;
+      const updatedDraft = makeDraftState({
+        incomes: [createMockIncome({ id: 'income-real-sg', purpose: 'operating' })],
+      });
+
+      vi.mocked(window.electronAPI.income.update).mockResolvedValueOnce({
+        success: true,
+        data: createMockIncome({ id: 'income-real-sg', purpose: 'operating' }),
+      });
+
+      const updateResult = await persistIncomeDomain(saved, updatedDraft);
+      expect(updateResult.success).toBe(true);
+      expect(window.electronAPI.income.update).toHaveBeenCalledWith(
+        'income-real-sg',
+        expect.objectContaining({ purpose: 'operating' })
+      );
+    });
+
     it('stops persistDomains when goals domain fails', async () => {
       const committed = makeDraftState();
       const draft = makeDraftState({

@@ -29,6 +29,12 @@ import {
   ScheduleData,
 } from '../types';
 import { stripBillLinkToIncome } from '@shared/incomePurpose';
+import {
+  compactGoalPriorities,
+  goalsWithPrioritySwap,
+  MAX_SAVINGS_GOALS,
+  nextAvailableGoalPriority,
+} from '@shared/goalPriority';
 import { useScheduleEngine } from './draft/useScheduleEngine';
 import {
   DraftBudgetFields,
@@ -718,7 +724,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   }, [isDraftMode, updateDraft, markDirty]);
 
   const createGoal = useCallback((input: SavingsGoalInput): boolean => {
-    if (!currentBudget) return false;
+    if (!currentBudget || !isDraftMode) return false;
+    if (stateRef.current.draft.goals.length >= MAX_SAVINGS_GOALS) return false;
+
     const newGoal: SavingsGoal = {
       id: createDraftId(),
       budgetId: currentBudget.id,
@@ -726,25 +734,44 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       targetAmount: input.targetAmount,
       targetDate: input.targetDate,
       alreadySaved: input.alreadySaved ?? 0,
-      priority: input.priority ?? 1,
+      priority: input.priority ?? nextAvailableGoalPriority(stateRef.current.draft.goals),
       createdAt: nowIso(),
     };
-    if (isDraftMode) {
-      updateDraft((prev) => ({ ...prev, goals: [...prev.goals, newGoal] }));
-      markDirty('goals');
-      return true;
-    }
-    return false;
+    updateDraft((prev) => {
+      if (prev.goals.length >= MAX_SAVINGS_GOALS) return prev;
+      const fromPriority = nextAvailableGoalPriority(prev.goals);
+      return {
+        ...prev,
+        goals: goalsWithPrioritySwap([...prev.goals, newGoal], {
+          movingId: newGoal.id,
+          fromPriority,
+          toPriority: newGoal.priority,
+        }),
+      };
+    });
+    markDirty('goals');
+    return true;
   }, [isDraftMode, currentBudget, updateDraft, markDirty]);
 
   const updateGoal = useCallback((id: string, input: Partial<SavingsGoalInput>): boolean => {
     if (isDraftMode) {
-      updateDraft((prev) => ({
-        ...prev,
-        goals: prev.goals.map((goal) =>
-          goal.id === id ? { ...goal, ...input } : goal
-        ),
-      }));
+      updateDraft((prev) => {
+        const current = prev.goals.find((goal) => goal.id === id);
+        if (!current) return prev;
+        const { priority: nextPriority, ...rest } = input;
+        const swapped =
+          nextPriority !== undefined
+            ? goalsWithPrioritySwap(prev.goals, {
+                movingId: id,
+                fromPriority: current.priority,
+                toPriority: nextPriority,
+              })
+            : prev.goals;
+        return {
+          ...prev,
+          goals: swapped.map((goal) => (goal.id === id ? { ...goal, ...rest } : goal)),
+        };
+      });
       markDirty('goals');
       return true;
     }
@@ -755,7 +782,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     if (isDraftMode) {
       updateDraft((prev) => ({
         ...prev,
-        goals: prev.goals.filter((goal) => goal.id !== id),
+        goals: compactGoalPriorities(prev.goals.filter((goal) => goal.id !== id)),
       }));
       markDirty('goals');
       return true;

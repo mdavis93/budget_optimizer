@@ -82,10 +82,44 @@ describe('ReconciliationPage', () => {
 
       expect(
         screen.getByText(
-          'Bills on Sep 18 reduce cash on-hand to $0.00, which is below the $100.00 minimum.'
+          'Bills on Sep 18 reduce cash on-hand to $0.00, which is $100.00 below the $100.00 minimum.'
         )
       ).toBeInTheDocument();
       expect(screen.queryByText(/exceed this paycheck's income/i)).not.toBeInTheDocument();
+    });
+
+    it('shows remaining cash on the advisor card, not a negated gap to minimum', () => {
+      render(
+        <ReconciliationPage
+          report={{
+            ...baseReport,
+            minCashOnHand: 100,
+            shortfalls: [
+              {
+                paycheckDate: '2027-02-26',
+                deficit: 60,
+                budgetRemaining: 40,
+                bills: [],
+              },
+            ],
+            proposedFixes: [],
+            canBeFullyResolved: false,
+            totalDeficit: 60,
+            estimatedResolution: 0,
+          }}
+          onApplyFixes={vi.fn(async () => {})}
+          onSkip={vi.fn()}
+          isApplying={false}
+        />
+      );
+
+      expect(screen.getByText('$40.00')).toBeInTheDocument();
+      expect(screen.queryByText('-$60.00')).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Bills on Feb 26 reduce cash on-hand to $40.00, which is $60.00 below the $100.00 minimum.'
+        )
+      ).toBeInTheDocument();
     });
   });
 

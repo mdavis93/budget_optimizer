@@ -356,6 +356,8 @@ export interface ShortfallDetail {
   deficit: number;
   /** Remaining after bills; >= 0 means bills were covered but cash is below min. */
   budgetRemaining: number;
+  /** Effective cash floor for this paycheck (may be leave-adjusted). */
+  minCashOnHand?: number;
   bills: PaycheckBill[];
 }
 

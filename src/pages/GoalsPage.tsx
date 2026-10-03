@@ -8,6 +8,7 @@ import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
 import { useDraftData, useDraftStatus, useDraftActions } from '../context/DraftContext';
 import { reportError } from '../utils/reportError';
+import { MAX_SAVINGS_GOALS, nextAvailableGoalPriority } from '@shared/goalPriority';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
   name: '',
@@ -73,7 +74,11 @@ export default function GoalsPage() {
   const handleOpenCreate = () => {
     const defaultDate = new Date();
     defaultDate.setMonth(defaultDate.getMonth() + 6);
-    setFormValues({ ...INITIAL_FORM_VALUES, targetDate: format(defaultDate, 'yyyy-MM-dd') });
+    setFormValues({
+      ...INITIAL_FORM_VALUES,
+      targetDate: format(defaultDate, 'yyyy-MM-dd'),
+      priority: nextAvailableGoalPriority(goals),
+    });
     setShowCreateModal(true);
   };
 
@@ -175,10 +180,12 @@ export default function GoalsPage() {
           </p>
         </div>
 
-        <button onClick={handleOpenCreate} className="btn btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Add Goal
-        </button>
+        {goals.length < MAX_SAVINGS_GOALS && (
+          <button onClick={handleOpenCreate} className="btn btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Add Goal
+          </button>
+        )}
       </div>
 
       {goals.length === 0 ? (
@@ -195,16 +202,18 @@ export default function GoalsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {goals.map((goal) => (
-            <GoalCard
-              key={goal.id}
-              goal={goal}
-              projection={projections.find((projection) => projection.goalId === goal.id)}
-              minCashOnHand={minCashOnHand}
-              onEdit={handleOpenEdit}
-              onDelete={setDeleteConfirm}
-              onViewSchedule={handleViewSchedule}
-            />
+          {[...goals]
+            .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))
+            .map((goal) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                projection={projections.find((projection) => projection.goalId === goal.id)}
+                minCashOnHand={minCashOnHand}
+                onEdit={handleOpenEdit}
+                onDelete={setDeleteConfirm}
+                onViewSchedule={handleViewSchedule}
+              />
           ))}
         </div>
       )}

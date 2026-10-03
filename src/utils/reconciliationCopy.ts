@@ -1,6 +1,7 @@
 import { format, parseISO } from 'date-fns';
 import { ProposedFix, ShortfallDetail, UnfundableReason } from '../types';
 import { formatCurrency } from './formatCurrency';
+import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
 
 export type { UnfundableReason };
 
@@ -130,7 +131,7 @@ export function formatShortfallCopy(
   const paycheckDate = formatPaycheckDate(shortfall.paycheckDate);
   const deficit = formatMoney(shortfall.deficit);
   const unfundableBills = shortfall.bills.filter((b) => b.isUnpayable && b.unfundableReason);
-  const minCashOnHand = options?.minCashOnHand ?? 100;
+  const minCashOnHand = options?.minCashOnHand ?? shortfall.minCashOnHand ?? 100;
   const cashOnHand = shortfall.budgetRemaining;
 
   if (unfundableBills.length > 0) {
@@ -150,10 +151,11 @@ export function formatShortfallCopy(
   if (cashOnHand >= 0) {
     const cashLabel = formatMoney(cashOnHand);
     const minLabel = formatMoney(minCashOnHand);
+    const gapLabel = formatMoney(shortfallDeficitAmount(cashOnHand, minCashOnHand));
     return {
-      headline: `${paycheckDate} shortfall: ${deficit}`,
-      explanation: `Bills on ${paycheckDate} reduce cash on-hand to ${cashLabel}, which is below the ${minLabel} minimum.`,
-      ariaMessage: `${paycheckDate} paycheck ends at ${cashLabel}, below the ${minLabel} minimum cash on hand.`,
+      headline: `${paycheckDate} shortfall: ${gapLabel}`,
+      explanation: `Bills on ${paycheckDate} reduce cash on-hand to ${cashLabel}, which is ${gapLabel} below the ${minLabel} minimum.`,
+      ariaMessage: `${paycheckDate} paycheck ends at ${cashLabel}, ${gapLabel} below the ${minLabel} minimum cash on hand.`,
     };
   }
 

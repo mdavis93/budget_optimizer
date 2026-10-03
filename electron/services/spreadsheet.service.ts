@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import type { ScheduleData } from './scheduler.service';
 import { PRIORITY_LABELS } from '../utils/constants';
-import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
+import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
 
 function excelCurrencyNumFmt(currency: string): string {
   const symbol =
@@ -157,7 +157,7 @@ export class SpreadsheetService {
         paycheck.totalBills,
         paycheck.totalGoalDeposits,
         paycheck.savingsDeposit,
-        paycheck.budgetRemaining,
+        paycheckSpendRemaining(paycheck),
         paycheck.totalSavings,
         paycheck.isShortfall ? 'Yes' : '',
       ]);

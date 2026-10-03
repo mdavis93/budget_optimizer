@@ -5,6 +5,7 @@ import {
   prepareScheduleHorizon,
 } from '../../../electron/services/scheduler/scheduleBuild';
 import { calculateSummary, convertToLegacyEntries } from '@shared/schedulePresentation';
+import { paycheckSpendRemaining } from '@shared/incomePurpose';
 
 const timestamps = {
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -101,6 +102,7 @@ describe('savings-and-goals reserved income', () => {
       const firstReserved = reserved.find((p) => p.date === '2026-01-15');
       const firstOperating = operating.find((p) => p.date === '2026-01-15');
       expect(firstReserved?.budgetRemaining).toBe(firstOperating?.budgetRemaining);
+      expect(paycheckSpendRemaining(firstReserved!)).toBe(0);
       expect(firstReserved!.totalGoalDeposits + firstReserved!.savingsDeposit).toBe(500);
     });
   });

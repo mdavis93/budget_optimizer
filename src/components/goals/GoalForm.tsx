@@ -113,7 +113,7 @@ export default function GoalForm({
         </select>
         {isCreate && (
           <p className="text-xs text-(--color-text-muted) mt-1">
-            Higher priority goals are funded first
+            Higher priority goals are funded first. Choosing a priority already in use swaps with that goal.
           </p>
         )}
       </div>

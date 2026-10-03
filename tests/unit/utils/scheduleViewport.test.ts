@@ -200,7 +200,7 @@ describe('applyScheduleViewport', () => {
       expect(viewport.summary.shortfallCount).toBe(1);
       expect(viewport.reconciliation?.shortfalls).toHaveLength(1);
       expect(viewport.reconciliation?.shortfalls[0].paycheckDate).toBe('2026-08-01');
-      expect(viewport.reconciliation?.totalDeficit).toBe(40);
+      expect(viewport.reconciliation?.totalDeficit).toBe(140);
       expect(viewport.reconciliation?.needsReconciliation).toBe(true);
     });
 

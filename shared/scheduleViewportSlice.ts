@@ -3,6 +3,8 @@ import type {
   PaycheckEntry,
   ReconciliationReport,
 } from './types';
+import { DEFAULT_MIN_CASH_ON_HAND } from './constants';
+import { shortfallDeficitAmount } from './shortfallDeficit';
 
 export function rebuildReconciliationForViewport(
   reconciliation: ReconciliationReport | undefined,
@@ -13,12 +15,16 @@ export function rebuildReconciliationForViewport(
   }
 
   const viewportShortfallPaychecks = viewportPaychecks.filter((paycheck) => paycheck.isShortfall);
-  const viewportShortfalls = viewportShortfallPaychecks.map((paycheck) => ({
-    paycheckDate: paycheck.date,
-    deficit: Math.abs(paycheck.budgetRemaining),
-    budgetRemaining: paycheck.budgetRemaining,
-    bills: [...paycheck.bills],
-  }));
+  const viewportShortfalls = viewportShortfallPaychecks.map((paycheck) => {
+    const min = reconciliation.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
+    return {
+      paycheckDate: paycheck.date,
+      deficit: shortfallDeficitAmount(paycheck.budgetRemaining, min),
+      budgetRemaining: paycheck.budgetRemaining,
+      minCashOnHand: min,
+      bills: [...paycheck.bills],
+    };
+  });
   const recalculatedTotalDeficit = viewportShortfalls.reduce(
     (sum, shortfall) => sum + shortfall.deficit,
     0

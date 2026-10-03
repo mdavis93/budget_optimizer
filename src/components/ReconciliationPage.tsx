@@ -207,6 +207,7 @@ function ShortfallCard({
     () => formatShortfallCopy(shortfall, { minCashOnHand }),
     [shortfall, minCashOnHand]
   );
+  const remainingLabel = formatCurrency(shortfall.budgetRemaining);
 
   return (
     <div className="card border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-900/10">
@@ -217,8 +218,15 @@ function ShortfallCard({
             {format(parseISO(shortfall.paycheckDate), 'EEEE, MMMM d, yyyy')}
           </span>
         </div>
-        <span className="text-danger-600 dark:text-danger-400 font-semibold">
-          -{formatCurrency(shortfall.deficit)}
+        <span
+          className={clsx(
+            'font-semibold',
+            shortfall.budgetRemaining >= 0
+              ? 'text-warning-700 dark:text-warning-400'
+              : 'text-danger-600 dark:text-danger-400'
+          )}
+        >
+          {remainingLabel}
         </span>
       </div>
 

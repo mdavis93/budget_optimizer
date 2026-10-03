@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DraftProvider, useDraft, useDraftOptional, useSchedule } from '../../src/context/DraftContext';
 import { ToastProvider } from '../../src/components/Toast';
-import { createMockElectronAPI, createMockIncome, createMockBill, createMockBudget, createMockSchedule } from '../mocks/electron-api.mock';
+import { createMockElectronAPI, createMockIncome, createMockBill, createMockBudget, createMockGoal, createMockSchedule } from '../mocks/electron-api.mock';
 import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
 
 const mockUseAuth = vi.fn();
@@ -42,6 +42,8 @@ function DraftHarness() {
       <div data-testid="leave-min">{draft.leaves[0]?.minCashOnHand ?? 'none'}</div>
       <div data-testid="leave-type">{draft.leaves[0]?.type ?? ''}</div>
       <div data-testid="goal-count">{draft.goals.length}</div>
+      <div data-testid="goal-priorities">{draft.goals.map((goal) => `${goal.id}:${goal.priority}`).join(',')}</div>
+      <div data-testid="create-goal-ok" />
       <div data-testid="skipped-count">{draft.skippedBills.length}</div>
       <div data-testid="assignment-count">{draft.billAssignments.length}</div>
       <div data-testid="assignment-paycheck">{draft.billAssignments[0]?.paycheckDate ?? ''}</div>
@@ -380,17 +382,30 @@ function DraftHarness() {
         delete-leave-force
       </button>
       <button
-        onClick={() =>
-          draft.createGoal({
+        onClick={() => {
+          const ok = draft.createGoal({
             name: 'Emergency Fund',
             targetAmount: 3000,
             targetDate: '2027-01-01',
             priority: 1,
             alreadySaved: 500,
-          })
-        }
+          });
+          const el = document.querySelector('[data-testid="create-goal-ok"]');
+          if (el) el.textContent = String(ok);
+        }}
       >
         create-goal
+      </button>
+      <button
+        onClick={() => {
+          const first = draft.goals[0];
+          const second = draft.goals[1];
+          if (first && second) {
+            draft.updateGoal(first.id, { priority: second.priority });
+          }
+        }}
+      >
+        swap-goal-priorities
       </button>
       <button
         onClick={() => {
@@ -411,6 +426,16 @@ function DraftHarness() {
         }}
       >
         delete-goal
+      </button>
+      <button
+        onClick={() => {
+          const target = draft.goals.find((goal) => goal.priority === 3);
+          if (target) {
+            draft.deleteGoal(target.id);
+          }
+        }}
+      >
+        delete-priority-3
       </button>
       <button
         onClick={() => {
@@ -1156,6 +1181,96 @@ describe('DraftContext', () => {
         expect(screen.getByTestId('skipped-count')).toHaveTextContent('0');
         expect(screen.getByTestId('dirty-schedule')).toHaveTextContent('false');
       });
+    });
+
+    it('swaps an existing goal when create uses an occupied priority', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-priorities')).toHaveTextContent('goal-1:1');
+      });
+
+      fireEvent.click(screen.getByText('create-goal'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-count')).toHaveTextContent('2');
+      });
+      expect(screen.getByTestId('goal-priorities').textContent).toMatch(/^goal-1:2,draft-.+:1$/);
+      expect(screen.getByTestId('create-goal-ok')).toHaveTextContent('true');
+    });
+
+    it('swaps two goals when an update takes an occupied priority', async () => {
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-priorities')).toHaveTextContent('goal-1:1');
+      });
+
+      fireEvent.click(screen.getByText('create-goal'));
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-count')).toHaveTextContent('2');
+      });
+
+      fireEvent.click(screen.getByText('swap-goal-priorities'));
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-priorities').textContent).toMatch(/^goal-1:1,draft-.+:2$/);
+      });
+    });
+
+    it('rejects a sixth goal without changing the list', async () => {
+      mockAPI.budget.getSnapshot.mockResolvedValue({
+        success: true,
+        data: {
+          incomes: [createMockIncome()],
+          bills: [createMockBill()],
+          goals: [1, 2, 3, 4, 5].map((priority) =>
+            createMockGoal({ id: `goal-${priority}`, name: `Goal ${priority}`, priority })
+          ),
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          debts: [],
+          leaves: [],
+          budget: createMockBudget(),
+        },
+      });
+
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-count')).toHaveTextContent('5');
+      });
+
+      fireEvent.click(screen.getByText('create-goal'));
+      expect(screen.getByTestId('create-goal-ok')).toHaveTextContent('false');
+      expect(screen.getByTestId('goal-count')).toHaveTextContent('5');
+    });
+
+    it('compacts later priorities after deleting a middle goal', async () => {
+      mockAPI.budget.getSnapshot.mockResolvedValue({
+        success: true,
+        data: {
+          incomes: [createMockIncome()],
+          bills: [createMockBill()],
+          goals: [1, 2, 3, 4, 5].map((priority) =>
+            createMockGoal({ id: `goal-${priority}`, name: `Goal ${priority}`, priority })
+          ),
+          skippedBills: [],
+          billAssignments: [],
+          incomeOverrides: [],
+          debts: [],
+          leaves: [],
+          budget: createMockBudget(),
+        },
+      });
+
+      renderProvider();
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-count')).toHaveTextContent('5');
+      });
+
+      fireEvent.click(screen.getByText('delete-priority-3'));
+      await waitFor(() => {
+        expect(screen.getByTestId('goal-count')).toHaveTextContent('4');
+      });
+      expect(screen.getByTestId('goal-priorities')).toHaveTextContent('goal-1:1,goal-2:2,goal-4:3,goal-5:4');
     });
 
     it('clears all bill assignments in draft mode', async () => {

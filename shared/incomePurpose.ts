@@ -18,6 +18,32 @@ export function isSavingsAndGoalsIncome(income: { purpose?: string } | null | un
   return income?.purpose === 'savingsAndGoals';
 }
 
+type PaycheckSpendFields = {
+  purpose?: string;
+  totalIncome: number;
+  totalGoalDeposits?: number;
+  savingsDeposit?: number;
+  budgetRemaining: number;
+};
+
+/** Leftover of this paycheck's own deposit after goals and savings (not operating cash). */
+export function paycheckUnallocatedDeposit(paycheck: PaycheckSpendFields): number {
+  return Math.round(
+    (paycheck.totalIncome - (paycheck.totalGoalDeposits ?? 0) - (paycheck.savingsDeposit ?? 0)) * 100
+  ) / 100;
+}
+
+/**
+ * Remaining that belongs on this paycheck's spend ledger.
+ * Reserved deposits use unallocated deposit; operating paychecks keep cash-on-hand.
+ */
+export function paycheckSpendRemaining(paycheck: PaycheckSpendFields): number {
+  if (isSavingsAndGoalsIncome(paycheck)) {
+    return paycheckUnallocatedDeposit(paycheck);
+  }
+  return paycheck.budgetRemaining;
+}
+
 export function isOperatingPaycheck(entry: { purpose?: string } | null | undefined): boolean {
   return isOperatingIncome(entry);
 }

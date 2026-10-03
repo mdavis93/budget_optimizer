@@ -4,7 +4,7 @@ import { PiggyBank, Receipt, RefreshCw, Target, TrendingUp, Wallet, Landmark } f
 import clsx from 'clsx';
 import { BillAssignment, IncomeOverride, PaycheckBill, PaycheckEntry } from '../../types';
 import { filterPaycheckBills } from '../../utils/scheduleBills';
-import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
+import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
 import PaycheckBillRow from './PaycheckBillRow';
 import PaycheckIncomeRow from './PaycheckIncomeRow';
 import type { DraggedBill } from './PaycheckView';
@@ -74,6 +74,7 @@ export default function PaycheckDetails({
     .filter(bill => !bill.isUnpayable && !bill.isSkipped)
     .reduce((sum, bill) => sum + bill.amount, 0);
   const isReserved = isSavingsAndGoalsIncome(paycheck);
+  const spendRemaining = paycheckSpendRemaining(paycheck);
 
   return (
     <div className="mt-4 pt-4 border-t border-(--color-border)">
@@ -226,13 +227,13 @@ export default function PaycheckDetails({
           <span className="font-semibold">Budget Remaining</span>
           <span className={clsx(
             'text-2xl font-mono font-bold',
-            paycheck.budgetRemaining < 0 || paycheck.hasUnpayableBills
+            spendRemaining < 0 || paycheck.hasUnpayableBills
               ? 'text-danger-500'
               : paycheck.isShortfall
                 ? 'text-warning-600 dark:text-warning-500'
                 : 'text-success-500'
           )}>
-            {formatCurrency(paycheck.budgetRemaining)}
+            {formatCurrency(spendRemaining)}
           </span>
         </div>
 

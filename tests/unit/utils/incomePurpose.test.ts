@@ -5,6 +5,7 @@ import {
   isOperatingPaycheck,
   paycheckEntryId,
   paycheckKey,
+  paycheckSpendRemaining,
   stripBillLinkToIncome,
   isIncomePurpose,
 } from '../../../shared/incomePurpose';
@@ -26,6 +27,23 @@ describe('incomePurpose', () => {
       expect(paycheckEntryId('savingsAndGoals', '2026-01-15')).toBe('sg:2026-01-15');
       expect(paycheckKey({ date: '2026-01-15' })).toBe('op:2026-01-15');
       expect(paycheckKey({ id: 'custom', date: '2026-01-15' })).toBe('custom');
+    });
+
+    it('uses unallocated deposit as remaining for reserved paychecks', () => {
+      expect(paycheckSpendRemaining({
+        purpose: 'savingsAndGoals',
+        totalIncome: 850,
+        totalGoalDeposits: 850,
+        savingsDeposit: 0,
+        budgetRemaining: 200,
+      })).toBe(0);
+      expect(paycheckSpendRemaining({
+        purpose: 'operating',
+        totalIncome: 2000,
+        totalGoalDeposits: 0,
+        savingsDeposit: 0,
+        budgetRemaining: 200,
+      })).toBe(200);
     });
   });
 
