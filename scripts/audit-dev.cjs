@@ -26,9 +26,13 @@ const SEVERITY_RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 // GHSA-qwww-vcr4-c8h2 (react-router): RSC-mode CSRF; this Electron HashRouter SPA
 // does not use RSC. Blocked until react-router-dom publishes a matching 8.x and we
 // migrate in a dedicated PR.
+// GHSA-ch52-4w7c-c8xp (http-cache-semantics): max-stale cache disclosure, no patched
+// release. Reached only through got@11 in @electron/get@3, the build-time Electron
+// download client. Revisit when that client leaves got 11.
 const IGNORED_GHSAS = new Set([
   'GHSA-mh99-v99m-4gvg',
   'GHSA-qwww-vcr4-c8h2',
+  'GHSA-ch52-4w7c-c8xp',
 ]);
 
 function getAuditReport() {
