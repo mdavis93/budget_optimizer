@@ -66,9 +66,25 @@ describe('reconciliationCopy', () => {
 
     const copy = formatShortfallCopy(shortfall, { minCashOnHand: 100 });
     expect(copy.explanation).toBe(
-      'Bills on Sep 18 reduce cash on-hand to $0.00, which is below the $100.00 minimum.'
+      'Bills on Sep 18 reduce cash on-hand to $0.00, which is $100.00 below the $100.00 minimum.'
     );
     expect(copy.explanation).not.toContain('exceed');
+    expect(copy.headline).toBe('Sep 18 shortfall: $100.00');
+  });
+
+  it('uses the gap to min when remaining cash is positive but below the floor', () => {
+    const shortfall: ShortfallDetail = {
+      paycheckDate: '2027-02-26',
+      deficit: 40,
+      budgetRemaining: 40,
+      bills: [],
+    };
+
+    const copy = formatShortfallCopy(shortfall, { minCashOnHand: 100 });
+    expect(copy.explanation).toBe(
+      'Bills on Feb 26 reduce cash on-hand to $40.00, which is $60.00 below the $100.00 minimum.'
+    );
+    expect(copy.headline).toBe('Feb 26 shortfall: $60.00');
   });
 
   it('keeps exceed-income copy when remaining is negative', () => {

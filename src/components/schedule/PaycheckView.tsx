@@ -309,9 +309,10 @@ function PaycheckView({
                 </div>
                 
                 <div className="flex items-center gap-6">
+                  {!isReserved && (
                   <div className="text-right">
                     <p className="text-xs text-(--color-text-muted)">
-                      {isReserved ? 'Operating cash (unchanged)' : 'Budget Remaining'}
+                      Budget Remaining
                     </p>
                     <p className={clsx(
                       'text-xl font-semibold font-mono',
@@ -324,6 +325,7 @@ function PaycheckView({
                       {formatCurrency(paycheck.budgetRemaining)}
                     </p>
                   </div>
+                  )}
                   {warningTooltip && (
                     <IconTooltip label={warningTooltip} side="left">
                       <AlertTriangle

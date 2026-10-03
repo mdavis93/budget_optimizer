@@ -6,7 +6,7 @@ import type { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
 import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
-import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
+import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
 
 export class PdfService {
   constructor(private readonly scratchRoot?: string) {}
@@ -117,7 +117,9 @@ export class PdfService {
       });
 
       const incomeSourceNames = paycheck.incomeSources.map(s => escapeHtml(s.name)).join(' + ');
-      const budgetClass = paycheck.budgetRemaining >= 0 ? 'positive' : 'negative';
+      const spendRemaining = paycheckSpendRemaining(paycheck);
+      const reserved = isSavingsAndGoalsIncome(paycheck);
+      const budgetClass = spendRemaining >= 0 ? 'positive' : 'negative';
 
       const dueDaySuffix = (d: number) => d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
 
@@ -140,10 +142,10 @@ export class PdfService {
             ` : ''}
           </div>
         </div>
-        <div class="paycheck-overview-side">
+        ${reserved ? '' : `<div class="paycheck-overview-side">
           <div class="paycheck-side-label">Budget Remaining</div>
-          <div class="paycheck-side-value ${budgetClass}">${formatCurrency(paycheck.budgetRemaining)}</div>
-        </div>
+          <div class="paycheck-side-value ${budgetClass}">${formatCurrency(spendRemaining)}</div>
+        </div>`}
       </div>
 
       <div class="paycheck-body">
@@ -220,7 +222,7 @@ export class PdfService {
         <div class="paycheck-footer">
           <div class="footer-remaining">
             <span>Budget Remaining</span>
-            <span class="${budgetClass}">${formatCurrency(paycheck.budgetRemaining)}</span>
+            <span class="${budgetClass}">${formatCurrency(spendRemaining)}</span>
           </div>
           <div class="footer-savings-balance">Savings Balance: ${formatCurrency(paycheck.totalSavings)}</div>
         </div>

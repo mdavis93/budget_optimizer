@@ -110,6 +110,7 @@ function toIncomeInput(income: Income): IncomeInput {
     startDate: income.startDate,
     ...(income.endDate ? { endDate: income.endDate } : {}),
     isActive: income.isActive,
+    purpose: income.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating',
   };
 }
 

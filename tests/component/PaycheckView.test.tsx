@@ -403,5 +403,38 @@ describe('PaycheckView', () => {
       expect(screen.getByLabelText(/Expand savings deposit for/i)).toBeInTheDocument();
       unmount();
     });
+
+    it('shows budget remaining as unallocated deposit, not operating cash', () => {
+      renderWithRouter(
+        <PaycheckView
+          {...baseProps()}
+          expandedPaychecks={new Set(['sg:2026-10-09'])}
+          paychecks={[
+            createMockPaycheck({
+              id: 'sg:2026-10-09',
+              purpose: 'savingsAndGoals',
+              date: '2026-10-09',
+              incomeSources: [{ id: 'inc-sg', name: 'ACW Payroll', amount: 850 }],
+              totalIncome: 850,
+              bills: [],
+              totalBills: 0,
+              goalDeposits: [
+                { goalId: 'g1', goalName: 'Christmas in Chicago', amount: 695 },
+                { goalId: 'g2', goalName: 'AdeptiCon', amount: 109 },
+                { goalId: 'g3', goalName: 'Alaska Cruise', amount: 46 },
+              ],
+              totalGoalDeposits: 850,
+              savingsDeposit: 0,
+              budgetRemaining: 200,
+            }),
+          ]}
+        />
+      );
+
+      expect(screen.queryByText('Operating cash')).not.toBeInTheDocument();
+      expect(screen.queryByText('$200.00')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Budget Remaining')).toHaveLength(1);
+      expect(screen.getByText('$0.00')).toBeInTheDocument();
+    });
   });
 });
