@@ -90,9 +90,11 @@ export function useScheduleEngine({
   const scheduleDiagnosticIdRef = useRef<string | null>(null);
   const userViewportOverrideRef = useRef<number | null>(null);
   const [viewportGate] = useState(() => {
-    let resolveReady = () => undefined;
+    let resolveReady = () => {};
     const ready = new Promise<void>((resolve) => {
-      resolveReady = resolve;
+      resolveReady = () => {
+        resolve();
+      };
     });
     return { ready, resolveReady };
   });
