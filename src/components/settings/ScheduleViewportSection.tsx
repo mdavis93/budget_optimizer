@@ -43,8 +43,9 @@ export default function ScheduleViewportSection({
             ))}
           </select>
           <p className="text-sm text-(--color-text-muted) mt-1">
-            Dashboard, Schedule, Summary, and Export open on this window. The solver still funds
-            twelve months and reserves the following month&apos;s bills in the last funded month.
+            Dashboard, Schedule, Summary, and Export open on this window. The solver funds twelve
+            months and can reserve a bill on the last funded paycheck only when that bill is due
+            within the prepay window.
           </p>
         </div>
       </div>

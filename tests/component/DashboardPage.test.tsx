@@ -56,6 +56,7 @@ describe('DashboardPage', () => {
       },
       scheduleStartDate: '2026-01-01',
       scheduleMonths: 3,
+      isViewportReady: true,
       scheduleStartingBalance: 700,
       scheduleInputHash: 'hash-v1',
       setScheduleStartingBalance,
@@ -92,6 +93,7 @@ describe('DashboardPage', () => {
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -115,6 +117,7 @@ describe('DashboardPage', () => {
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -140,6 +143,7 @@ describe('DashboardPage', () => {
         schedule: null,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -167,6 +171,7 @@ describe('DashboardPage', () => {
         schedule: null,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -198,6 +203,7 @@ describe('DashboardPage', () => {
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
         scheduleInputHash: 'hash-v1',
         setScheduleStartingBalance: vi.fn(),
@@ -275,6 +281,7 @@ describe('DashboardPage', () => {
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -296,6 +303,7 @@ describe('DashboardPage', () => {
         schedule: { entries: [], summary: { shortfallCount: 2 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -318,6 +326,7 @@ describe('DashboardPage', () => {
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -339,6 +348,7 @@ describe('DashboardPage', () => {
         schedule: null,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -377,6 +387,7 @@ describe('DashboardPage', () => {
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -403,6 +414,7 @@ describe('DashboardPage', () => {
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -426,6 +438,7 @@ describe('DashboardPage', () => {
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 700,
         setScheduleStartingBalance,
       });
@@ -452,6 +465,7 @@ describe('DashboardPage', () => {
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });

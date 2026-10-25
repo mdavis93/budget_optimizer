@@ -27,6 +27,7 @@ export default function SummaryPage() {
     generateSchedule,
     scheduleStartDate,
     scheduleMonths,
+    isViewportReady,
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleMonths,
@@ -73,7 +74,7 @@ export default function SummaryPage() {
     let isMounted = true;
     
     const loadScheduleData = async () => {
-      if (incomes.length === 0 && bills.length === 0) return;
+      if (!isViewportReady || (incomes.length === 0 && bills.length === 0)) return;
       
       setIsLoading(true);
       try {
@@ -94,7 +95,7 @@ export default function SummaryPage() {
     loadScheduleData();
     
     return () => { isMounted = false; };
-  }, [incomes, bills, scheduleMonths, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
+  }, [incomes, bills, scheduleMonths, isViewportReady, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
 
   const handleAPYChange = async (newAPY: number) => {
     setSavingsAPY(newAPY);

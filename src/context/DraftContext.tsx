@@ -131,6 +131,7 @@ interface ScheduleContextValue {
   scheduleStartDate: string;
   scheduleMonths: number;
   persistedViewportMonths: number;
+  isViewportReady: boolean;
   scheduleStartingBalance: number;
   scheduleInputHash: string;
   setScheduleStartDate: (date: string) => void;

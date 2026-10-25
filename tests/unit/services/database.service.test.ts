@@ -248,6 +248,9 @@ describe('DatabaseService', () => {
       );
       expect(db.getSettings().defaultScheduleMonths).toBe(3);
       expect(databaseLogger.warn).toHaveBeenCalled();
+      databaseLogger.warn.mockClear();
+      expect(db.getSettings().defaultScheduleMonths).toBe(3);
+      expect(databaseLogger.warn).not.toHaveBeenCalled();
     });
 
     it('stores settings as encrypted ciphertext and returns plaintext', () => {
