@@ -62,6 +62,7 @@ export default function DashboardPage() {
     schedule,
     scheduleStartDate,
     scheduleMonths,
+    isViewportReady,
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleStartingBalance,
@@ -82,12 +83,12 @@ export default function DashboardPage() {
       }
     };
     
-    if (incomes.length > 0 || bills.length > 0) {
+    if (isViewportReady && (incomes.length > 0 || bills.length > 0)) {
       loadSchedule();
     }
     
     return () => { isMounted = false; };
-  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleMonths, scheduleStartingBalance, scheduleInputHash]);
+  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleMonths, isViewportReady, scheduleStartingBalance, scheduleInputHash]);
 
   const totalMonthlyIncome = useMemo(() => {
     return getMonthlyOperatingIncomeTotal(incomes);

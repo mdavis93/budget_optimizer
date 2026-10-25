@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   CheckCircle,
   AlertCircle,
@@ -31,9 +31,7 @@ export default function SettingsPage() {
   const { biometricAvailable, biometricEnabled, enableBiometric } = useAuth();
   const { currentBudget, updateBudget } = useBudget();
   const draft = useDraft();
-  const { setScheduleMonths } = useSchedule();
-  const setScheduleMonthsRef = useRef(setScheduleMonths);
-  setScheduleMonthsRef.current = setScheduleMonths;
+  const { setScheduleMonths, persistedViewportMonths } = useSchedule();
   const [currency, setCurrency] = useState('USD');
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
   const [defaultScheduleMonths, setDefaultScheduleMonths] = useState<ScheduleViewportMonths>(
@@ -64,9 +62,6 @@ export default function SettingsPage() {
           setCurrency(nextCurrency);
           setDefaultCurrency(nextCurrency);
           setAutoLockMinutes(result.data.autoLockMinutes ?? 5);
-          const nextViewport = coerceScheduleViewportMonths(result.data.defaultScheduleMonths);
-          setDefaultScheduleMonths(nextViewport);
-          setScheduleMonthsRef.current(nextViewport);
           setSavingsAPY(result.data.savingsAPY ?? 0);
         }
       } catch {
@@ -99,7 +94,6 @@ export default function SettingsPage() {
     currency?: string;
     autoLockMinutes?: number;
     savingsAPY?: number;
-    defaultScheduleMonths?: ScheduleViewportMonths;
   }) => {
     try {
       const result = await window.electronAPI.settings.update(updates);
@@ -130,10 +124,13 @@ export default function SettingsPage() {
     saveSettings({ savingsAPY: clampedValue });
   };
 
+  useEffect(() => {
+    setDefaultScheduleMonths(coerceScheduleViewportMonths(persistedViewportMonths));
+  }, [persistedViewportMonths]);
+
   const handleDefaultScheduleMonthsChange = (value: ScheduleViewportMonths) => {
     setDefaultScheduleMonths(value);
     setScheduleMonths(value);
-    saveSettings({ defaultScheduleMonths: value });
   };
 
   const handleTargetCashOnHandChange = (value: number) => {

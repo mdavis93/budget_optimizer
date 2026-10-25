@@ -29,6 +29,7 @@ export interface ScheduleEngineValue {
   scheduleStartDate: string;
   scheduleMonths: number;
   persistedViewportMonths: number;
+  isViewportReady: boolean;
   scheduleStartingBalance: number;
   scheduleInputHash: string;
   setScheduleStartDate: (date: string) => void;
@@ -77,6 +78,7 @@ export function useScheduleEngine({
   const [persistedViewportMonths, setPersistedViewportMonths] = useState<number>(
     DEFAULT_SCHEDULE_VIEWPORT_MONTHS
   );
+  const [isViewportReady, setIsViewportReady] = useState(false);
   const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
 
   const fullScheduleRef = useRef<ScheduleData | null>(null);
@@ -87,6 +89,15 @@ export function useScheduleEngine({
   const isScheduleLoadingRef = useRef(false);
   const scheduleDiagnosticIdRef = useRef<string | null>(null);
   const userViewportOverrideRef = useRef<number | null>(null);
+  const [viewportGate] = useState(() => {
+    let resolveReady = () => {};
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = () => {
+        resolve();
+      };
+    });
+    return { ready, resolveReady };
+  });
 
   const settleDebounce = useCallback((value: ScheduleData | null) => {
     const flight = debounceFlightRef.current;
@@ -148,11 +159,16 @@ export function useScheduleEngine({
         }
       }
     };
-    void loadViewport();
+    void loadViewport().finally(() => {
+      viewportGate.resolveReady();
+      if (isMounted) {
+        setIsViewportReady(true);
+      }
+    });
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [viewportGate]);
 
   useEffect(() => {
     const subscribe = window.electronAPI?.schedule?.onProgress;
@@ -263,6 +279,7 @@ export function useScheduleEngine({
 
   const generateScheduleImmediate = useCallback(
     async (startDate: string, months: number, startingBalance: number): Promise<ScheduleData | null> => {
+      await viewportGate.ready;
       if (!mountedRef.current) {
         return null;
       }
@@ -349,7 +366,7 @@ export function useScheduleEngine({
         }
       }
     },
-    [applyScheduleResult, buildDraftOverlay, draft, pendingPreferredAssignmentsRef]
+    [applyScheduleResult, buildDraftOverlay, draft, pendingPreferredAssignmentsRef, viewportGate.ready]
   );
 
   const generateSchedule = useCallback(
@@ -402,6 +419,7 @@ export function useScheduleEngine({
     scheduleStartDate,
     scheduleMonths,
     persistedViewportMonths,
+    isViewportReady,
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleStartDate,

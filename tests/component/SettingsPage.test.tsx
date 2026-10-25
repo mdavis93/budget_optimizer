@@ -64,6 +64,7 @@ describe('SettingsPage', () => {
     });
     mockUseSchedule.mockReturnValue({
       setScheduleMonths,
+      persistedViewportMonths: 3,
     });
   });
 
@@ -99,8 +100,8 @@ describe('SettingsPage', () => {
       await user.selectOptions(screen.getByLabelText('Default schedule window'), '12');
       await waitFor(() => {
         expect(setScheduleMonths).toHaveBeenCalledWith(12);
-        expect(mockAPI.settings.update).toHaveBeenCalledWith({ defaultScheduleMonths: 12 });
       });
+      expect(mockAPI.settings.update).not.toHaveBeenCalledWith({ defaultScheduleMonths: 12 });
 
       await user.click(screen.getByRole('button', { name: 'Enable' }));
       await waitFor(() => {
@@ -109,28 +110,21 @@ describe('SettingsPage', () => {
     });
 
     it('loads a persisted 12-month viewport into the settings control', async () => {
-      mockAPI.settings.get.mockResolvedValue({
-        success: true,
-        data: {
-          theme: 'system',
-          autoLockMinutes: 5,
-          currency: 'USD',
-          defaultScheduleMonths: 12,
-          savingsAPY: 0,
-        },
+      mockUseSchedule.mockReturnValue({
+        setScheduleMonths,
+        persistedViewportMonths: 12,
       });
       renderWithRouter(<SettingsPage />, { mockAPI });
       const select = await screen.findByLabelText('Default schedule window');
       await waitFor(() => {
         expect(select).toHaveValue('12');
-        expect(setScheduleMonths).toHaveBeenCalledWith(12);
       });
+      expect(setScheduleMonths).not.toHaveBeenCalled();
     });
   });
 
   describe('sad', () => {
-    it('shows an error when saving the schedule window fails', async () => {
-      mockAPI.settings.update.mockRejectedValueOnce(new Error('write failed'));
+    it('does not write settings from the page when the schedule window changes', async () => {
       const user = userEvent.setup();
       renderWithRouter(<SettingsPage />, { mockAPI });
       const select = await screen.findByLabelText('Default schedule window');
@@ -138,7 +132,9 @@ describe('SettingsPage', () => {
         expect(select).not.toBeDisabled();
       });
       await user.selectOptions(select, '6');
-      expect(await screen.findByText('Failed to save settings')).toBeInTheDocument();
+      expect(setScheduleMonths).toHaveBeenCalledWith(6);
+      expect(mockAPI.settings.update).not.toHaveBeenCalled();
+      expect(screen.queryByText('Failed to save settings')).not.toBeInTheDocument();
     });
 
     it('saves APY updates and clamps out-of-range values', async () => {

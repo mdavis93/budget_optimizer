@@ -20,6 +20,7 @@ export default function ExportPage() {
     generateSchedule, 
     scheduleStartDate: startDate,
     scheduleMonths: months,
+    isViewportReady,
     scheduleStartingBalance: startingBalance,
     scheduleInputHash,
     setScheduleStartDate: setStartDate,
@@ -34,11 +35,11 @@ export default function ExportPage() {
   const [exportingKind, setExportingKind] = useState<ExportKind | null>(null);
 
   useEffect(() => {
-    if ((incomes.length > 0 || bills.length > 0) && !schedule) {
+    if (isViewportReady && (incomes.length > 0 || bills.length > 0) && !schedule) {
       generateSchedule(startDate, months, startingBalance);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
-  }, [incomes, bills, startDate, startingBalance, scheduleInputHash]);
+  }, [incomes, bills, startDate, startingBalance, scheduleInputHash, isViewportReady]);
 
   const runExport = async (kind: ExportKind) => {
     if (!schedule) {

@@ -92,6 +92,7 @@ describe('SummaryPage', () => {
       setScheduleMonths,
       scheduleStartDate: '2026-01-01',
       scheduleMonths: 3,
+      isViewportReady: true,
       scheduleStartingBalance: 1000,
     });
   });
@@ -115,6 +116,7 @@ describe('SummaryPage', () => {
         setScheduleMonths,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
+      isViewportReady: true,
         scheduleStartingBalance: 1000,
       });
 

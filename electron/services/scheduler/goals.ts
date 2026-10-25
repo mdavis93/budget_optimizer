@@ -6,8 +6,6 @@ import {
   parseISO,
   differenceInDays,
   differenceInCalendarMonths,
-  addMonths,
-  startOfDay,
 } from 'date-fns';
 import { Income, Bill, SavingsGoal } from '../database.service';
 import type { Leave } from '../database.service';
@@ -15,24 +13,13 @@ import { formatCurrency, roundCurrency } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
-  resolveCalculationMonths,
-  SCHEDULE_LOOKAHEAD_MONTHS,
   DebtPayoffInfo,
   PaycheckEntry,
   GoalProjection,
   GoalSuggestion,
   GoalScheduleHealth,
-  billOccurrenceKey,
 } from './types';
-import { projectIncome, projectBills } from './projection';
-import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
-import { resolvePaycheckCashOnHand } from './cashOnHandOverrides';
-import {
-  assignBillsToPaychecks,
-  getUniquePaycheckDates,
-  pruneManualAssignmentsToPaychecks,
-} from './assignment';
-import { isOperatingIncome, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
+import { assignPreparedHorizon, prepareScheduleHorizon } from './scheduleBuild';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
   const operating = paychecks.filter((p) => !p.purpose || p.purpose === 'operating');
@@ -437,91 +424,27 @@ export function generateGoalProjections(
     return [];
   }
 
-  const startDate = startOfDay(parseISO(startDateStr));
-  const calcMonths = resolveCalculationMonths(startDateStr, goals);
-  const endDate = addMonths(startDate, calcMonths);
-  const solveEndDate = addMonths(startDate, calcMonths + SCHEDULE_LOOKAHEAD_MONTHS);
-
-  const allIncomes: ReturnType<typeof projectIncome> = [];
-  for (const income of incomes) {
-    allIncomes.push(...projectIncome(income, startDate, solveEndDate));
-  }
-
-  applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
-
-  const operatingIncomes = allIncomes.filter((income) => isOperatingIncome(income));
-  const reservedIncomes = allIncomes.filter((income) => isSavingsAndGoalsIncome(income));
-  const reservedSourceIds = new Set(
-    incomes.filter((income) => isSavingsAndGoalsIncome(income)).map((income) => income.id)
-  );
-
-  const incomeAttachedBillsRaw = bills.filter(
-    (b) =>
-      b.isIncomeAttached &&
-      b.preferredIncomeSourceId &&
-      !reservedSourceIds.has(b.preferredIncomeSourceId)
-  );
-  const regularBills = bills.filter(b => !b.isIncomeAttached);
-
-  const allBills: ReturnType<typeof projectBills> = [];
-  for (const bill of regularBills) {
-    const debtInfo = debtPayoffs.get(bill.id);
-    allBills.push(...projectBills(bill, startDate, solveEndDate, debtInfo));
-  }
-
-  allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
-  allBills.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  const seenBillKeys = new Set<string>();
-  const uniqueBills = allBills.filter(bill => {
-    const dateStr = format(bill.date, 'yyyy-MM-dd');
-    const skipKey = `${bill.billId}-${dateStr}`;
-    if (skippedBills.has(skipKey)) {
-      return false;
-    }
-    const dedupKey = billOccurrenceKey(bill.billId, bill.date);
-    if (seenBillKeys.has(dedupKey)) {
-      return false;
-    }
-    seenBillKeys.add(dedupKey);
-    return true;
-  });
-
-  const paycheckDates = getUniquePaycheckDates(operatingIncomes);
-  const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
-    manualAssignments,
-    paycheckDates
-  );
-  const cashOnHandByDate = resolvePaycheckCashOnHand(
-    paycheckDates.map((d) => format(d, 'yyyy-MM-dd')),
-    leaves,
-    maxBudgetRemaining,
-    minCashOnHand
-  );
-
-  const paychecks = assignBillsToPaychecks(
-    paycheckDates,
-    operatingIncomes,
-    uniqueBills,
+  const prepared = prepareScheduleHorizon({
+    incomes,
+    bills,
+    startDateStr,
     startingBalance,
     skippedBills,
-    effectiveManualAssignments,
-    incomeAttachedBillsRaw,
+    manualAssignments,
     maxBudgetRemaining,
     goals,
     minCashOnHand,
     minSavingsPerPaycheck,
-    [],
-    cashOnHandByDate,
-    new Map(),
-    reservedIncomes,
-    endDate
-  );
+    debtPayoffs,
+    incomeOverrides,
+    leaves,
+  });
+  const paychecks = assignPreparedHorizon(prepared);
 
   return calculateGoalProjections(
     goals,
     paychecks,
-    format(endDate, 'yyyy-MM-dd'),
+    format(prepared.endDate, 'yyyy-MM-dd'),
     now
   );
 }

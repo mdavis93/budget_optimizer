@@ -1538,6 +1538,7 @@ export class DatabaseService {
         used: coercedMonths,
       });
       settings.defaultScheduleMonths = coercedMonths;
+      upsert.run('defaultScheduleMonths', this.crypto.encryptObject(coercedMonths));
     }
     
     return settings;

@@ -1,4 +1,5 @@
 import { addMonths, format, parseISO, startOfDay } from 'date-fns';
+import { billsEligibleOnFundingHorizon, resolveSolveEndDate } from './lookahead';
 import type { Bill, Income, Leave, SavingsGoal } from '../database.service';
 import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
@@ -21,7 +22,6 @@ import { calculateGoalProjections } from './goals';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
-  SCHEDULE_LOOKAHEAD_MONTHS,
   billOccurrenceKey,
   resolveCalculationMonths,
   type DebtPayoffInfo,
@@ -99,7 +99,7 @@ export function prepareScheduleHorizon(
   const startDate = startOfDay(parseISO(input.startDateStr));
   const calcMonths = resolveCalculationMonths(input.startDateStr, goals);
   const endDate = addMonths(startDate, calcMonths);
-  const solveEndDate = addMonths(startDate, calcMonths + SCHEDULE_LOOKAHEAD_MONTHS);
+  const solveEndDate = resolveSolveEndDate(endDate);
 
   const allIncomes: ProjectedIncome[] = [];
   for (const income of input.incomes) {
@@ -151,6 +151,7 @@ export function prepareScheduleHorizon(
   });
 
   const paycheckDates = getUniquePaycheckDates(operatingIncomes);
+  const horizonBills = billsEligibleOnFundingHorizon(uniqueBills, paycheckDates, endDate);
   const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
     manualAssignments,
     paycheckDates
@@ -178,7 +179,7 @@ export function prepareScheduleHorizon(
     allIncomes,
     operatingIncomes,
     reservedIncomes,
-    uniqueBills,
+    uniqueBills: horizonBills,
     skippedForDisplay,
     paycheckDates,
     incomeAttachedBillsRaw,

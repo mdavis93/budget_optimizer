@@ -37,6 +37,7 @@ export default function SchedulePage() {
     scheduleStartDate: startDate,
     scheduleMonths: months,
     persistedViewportMonths,
+    isViewportReady,
     scheduleStartingBalance: startingBalance,
     scheduleInputHash,
     setScheduleStartDate: setStartDate,
@@ -137,11 +138,11 @@ export default function SchedulePage() {
   }, [hasActionableRecommendations]);
 
   useEffect(() => {
-    if (incomes.length > 0 || bills.length > 0) {
+    if (isViewportReady && (incomes.length > 0 || bills.length > 0)) {
       generateSchedule(startDate, months, startingBalance);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: months excluded; viewport changes filter cached schedule
-  }, [startDate, startingBalance, scheduleInputHash]);
+  }, [startDate, startingBalance, scheduleInputHash, isViewportReady]);
 
   const handleRefresh = async () => {
     const result = await generateSchedule(startDate, months, startingBalance, { force: true });

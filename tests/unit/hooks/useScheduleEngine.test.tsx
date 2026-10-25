@@ -266,6 +266,51 @@ describe('useScheduleEngine', () => {
     expect(screen.getByTestId('months')).toHaveTextContent('3');
   });
 
+  it('does not start a generate until the persisted viewport has loaded', async () => {
+    let resolveSettings: (value: { success: boolean; data: Record<string, unknown> }) => void = () => undefined;
+    mockAPI.settings.get.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSettings = resolve;
+      })
+    );
+    render(
+      <EngineHarness
+        draft={{
+          ...createEmptyDraftState(),
+          budget: {
+            name: 'Main',
+            startingBalance: 400,
+            targetCashOnHand: 250,
+            minCashOnHand: 100,
+            minSavingsPerPaycheck: 0,
+            scheduleStartDate: '2026-01-01',
+          },
+        }}
+        currentBudget={createMockBudget()}
+        pendingRef={pendingRef}
+      />
+    );
+    fireEvent.click(screen.getByText('force-generate'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockAPI.schedule.build).not.toHaveBeenCalled();
+
+    resolveSettings({
+      success: true,
+      data: {
+        theme: 'system',
+        autoLockMinutes: 5,
+        currency: 'USD',
+        defaultScheduleMonths: 12,
+        savingsAPY: 0,
+      },
+    });
+    await waitFor(() => {
+      expect(mockAPI.schedule.build).toHaveBeenCalled();
+    });
+  });
+
   it('persists 3/6/12 viewport changes and ignores goal-length views', async () => {
     await renderEngine();
     fireEvent.click(screen.getByText('set-persisted-viewport'));
