@@ -419,6 +419,69 @@ describe('SchedulerService', () => {
       expect(withLargeStart.paychecks[i].isShortfall).toBe(withZero.paychecks[i].isShortfall);
     });
 
+    it('does not carry a paycheck surplus into the next paycheck cycle', () => {
+      const monthlyIncome: Income = {
+        ...income,
+        id: 'income-monthly-400',
+        amount: 400,
+        cadence: 'monthly',
+      };
+      const firstDueBill: Bill = {
+        ...bill,
+        id: 'bill-due-first',
+        budgetedAmount: 800,
+        dueDay: 1,
+      };
+      const overrides = new Map<string, number>([
+        [`${monthlyIncome.id}-2026-01-01`, 5000],
+      ]);
+
+      const control = scheduler.generateSchedule(
+        [monthlyIncome],
+        [firstDueBill],
+        '2026-01-01',
+        2,
+        0
+      );
+      const treatment = scheduler.generateSchedule(
+        [monthlyIncome],
+        [firstDueBill],
+        '2026-01-01',
+        2,
+        0,
+        new Set(),
+        new Map(),
+        250,
+        [],
+        100,
+        0,
+        new Map(),
+        overrides
+      );
+
+      const controlJanuary = control.paychecks.find((p) => p.date === '2026-01-01');
+      const treatmentJanuary = treatment.paychecks.find((p) => p.date === '2026-01-01');
+      const controlFebruary = control.paychecks.find((p) => p.date === '2026-02-01');
+      const treatmentFebruary = treatment.paychecks.find((p) => p.date === '2026-02-01');
+
+      expect(controlJanuary).toBeDefined();
+      expect(treatmentJanuary).toBeDefined();
+      expect(controlFebruary).toBeDefined();
+      expect(treatmentFebruary).toBeDefined();
+
+      expect(treatmentJanuary!.savingsDeposit).toBeGreaterThan(controlJanuary!.savingsDeposit);
+
+      expect(treatmentFebruary!.totalIncome).toBe(controlFebruary!.totalIncome);
+      expect(treatmentFebruary!.totalBills).toBe(controlFebruary!.totalBills);
+      expect(
+        treatmentFebruary!.bills.find((b) => b.billId === firstDueBill.id)?.isUnpayable
+      ).toBe(controlFebruary!.bills.find((b) => b.billId === firstDueBill.id)?.isUnpayable);
+      expect(treatmentFebruary!.budgetRemaining).toBe(controlFebruary!.budgetRemaining);
+      expect(treatmentFebruary!.savingsDeposit).toBe(controlFebruary!.savingsDeposit);
+      expect(treatmentFebruary!.totalGoalDeposits).toBe(controlFebruary!.totalGoalDeposits);
+      expect(treatmentFebruary!.isShortfall).toBe(controlFebruary!.isShortfall);
+    });
+
     it('starting balance on first paycheck can clear a shortfall that would occur without it', () => {
       const tightBill: Bill = {
         ...bill,

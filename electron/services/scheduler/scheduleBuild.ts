@@ -21,6 +21,7 @@ import { calculateGoalProjections } from './goals';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
+  SCHEDULE_LOOKAHEAD_MONTHS,
   billOccurrenceKey,
   resolveCalculationMonths,
   type DebtPayoffInfo,
@@ -34,6 +35,7 @@ export interface PreparedScheduleHorizon {
   startDateStr: string;
   startDate: Date;
   endDate: Date;
+  fundingEndDate: Date;
   calcMonths: number;
   startingBalance: number;
   maxBudgetRemaining: number;
@@ -97,10 +99,11 @@ export function prepareScheduleHorizon(
   const startDate = startOfDay(parseISO(input.startDateStr));
   const calcMonths = resolveCalculationMonths(input.startDateStr, goals);
   const endDate = addMonths(startDate, calcMonths);
+  const solveEndDate = addMonths(startDate, calcMonths + SCHEDULE_LOOKAHEAD_MONTHS);
 
   const allIncomes: ProjectedIncome[] = [];
   for (const income of input.incomes) {
-    allIncomes.push(...projectIncome(income, startDate, endDate));
+    allIncomes.push(...projectIncome(income, startDate, solveEndDate));
   }
 
   applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
@@ -122,7 +125,7 @@ export function prepareScheduleHorizon(
   const allBills: ProjectedBill[] = [];
   for (const bill of regularBills) {
     const debtInfo = debtPayoffs.get(bill.id);
-    allBills.push(...projectBills(bill, startDate, endDate, debtInfo));
+    allBills.push(...projectBills(bill, startDate, solveEndDate, debtInfo));
   }
 
   allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -163,6 +166,7 @@ export function prepareScheduleHorizon(
     startDateStr: input.startDateStr,
     startDate,
     endDate,
+    fundingEndDate: endDate,
     calcMonths,
     startingBalance: input.startingBalance,
     maxBudgetRemaining,
@@ -206,7 +210,8 @@ export function assignPreparedHorizon(
     prepared.skippedForDisplay,
     prepared.cashOnHandByDate,
     effectivePreferredAssignments,
-    prepared.reservedIncomes
+    prepared.reservedIncomes,
+    prepared.fundingEndDate
   );
 }
 

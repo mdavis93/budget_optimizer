@@ -1,4 +1,4 @@
-import { isAfter, format, differenceInDays } from 'date-fns';
+import { isAfter, format, differenceInDays, startOfDay } from 'date-fns';
 import { Bill, SavingsGoal } from '../database.service';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
@@ -14,6 +14,7 @@ import type { CashOnHandByDate } from './cashOnHandOverrides';
 import { assignBillsExact } from './exactAssignment';
 import { buildPaycheckEntries } from './paychecks';
 import { isOperatingIncome } from '@shared/incomePurpose';
+import { dropLookaheadAssignments } from './lookahead';
 
 export function getUniquePaycheckDates(incomes: ProjectedIncome[]): Date[] {
   const dateSet = new Set<number>();
@@ -170,7 +171,8 @@ export function assignBillsToPaychecks(
   skippedForDisplay: ProjectedBill[] = [],
   cashOnHandByDate?: CashOnHandByDate,
   preferredAssignments: Map<string, string> = new Map(),
-  reservedIncomes: ProjectedIncome[] = []
+  reservedIncomes: ProjectedIncome[] = [],
+  fundingEndDate?: Date
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
@@ -191,10 +193,16 @@ export function assignBillsToPaychecks(
   attachSkippedBillsForDisplay(assignments, skippedForDisplay);
   dedupeAssignmentBills(assignments);
 
-  const merged = mergeReservedDepositAssignments(assignments, reservedIncomes);
+  const reservedInHorizon = fundingEndDate
+    ? reservedIncomes.filter((income) => !isAfter(startOfDay(income.date), startOfDay(fundingEndDate)))
+    : reservedIncomes;
+  const merged = mergeReservedDepositAssignments(assignments, reservedInHorizon);
+  const horizonAssignments = fundingEndDate
+    ? dropLookaheadAssignments(merged, fundingEndDate)
+    : merged;
 
   return buildPaycheckEntries(
-    merged,
+    horizonAssignments,
     startingBalance,
     maxBudgetRemaining,
     goals,
