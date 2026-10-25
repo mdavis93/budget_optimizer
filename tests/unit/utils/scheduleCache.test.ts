@@ -52,4 +52,18 @@ describe('scheduleCache', () => {
     const keyB = buildScheduleCacheKey(identityParams({ startDate: '2026-02-01' }));
     expect(keyA).not.toBe(keyB);
   });
+
+  it('changes cache key when income purpose changes', () => {
+    const reserved = buildScheduleCacheKey(
+      identityParams({ incomes: [createMockIncome({ purpose: 'savingsAndGoals' })] })
+    );
+    const operating = buildScheduleCacheKey(
+      identityParams({ incomes: [createMockIncome({ purpose: 'operating' })] })
+    );
+    const legacy = buildScheduleCacheKey(
+      identityParams({ incomes: [createMockIncome()] })
+    );
+    expect(reserved).not.toBe(operating);
+    expect(operating).toBe(legacy);
+  });
 });

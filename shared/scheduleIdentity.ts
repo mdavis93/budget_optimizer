@@ -83,6 +83,7 @@ function incomeIdentity(incomes: Income[]) {
     startDate: income.startDate,
     endDate: income.endDate ?? '',
     isActive: income.isActive,
+    purpose: income.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating',
   }));
 }
 
