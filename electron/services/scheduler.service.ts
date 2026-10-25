@@ -35,7 +35,6 @@ import type { DebtPayoffInfo, ScheduleData } from './scheduler/types';
 
 export {
   SCHEDULE_CALCULATION_MONTHS,
-  SCHEDULE_LOOKAHEAD_MONTHS,
   SCHEDULE_MAX_CALCULATION_MONTHS,
   resolveCalculationMonths,
 } from './scheduler/types';

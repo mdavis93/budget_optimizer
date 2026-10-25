@@ -103,10 +103,10 @@ describe('scheduleBuild', () => {
       ).toBe(true);
       expect(
         prepared.uniqueBills.some((item) => format(item.date, 'yyyy-MM-dd') === '2027-01-25')
-      ).toBe(true);
+      ).toBe(false);
       expect(
         prepared.uniqueBills.some((item) => format(item.date, 'yyyy-MM-dd') === '2027-02-20')
-      ).toBe(true);
+      ).toBe(false);
 
       const paychecks = assignPreparedHorizon(prepared);
       expect(paychecks.every((paycheck) => paycheck.date <= fundingEnd)).toBe(true);
@@ -131,6 +131,62 @@ describe('scheduleBuild', () => {
       const lastBaseline = baseline.at(-1);
       expect(lastWithBills?.date).toBe(lastBaseline?.date);
       expect(lastWithBills?.savingsDeposit ?? 0).toBeLessThan(lastBaseline?.savingsDeposit ?? 0);
+    });
+
+    it('does not let a bill past MAX_PREPAY_DAYS after the funding end change in-horizon totals', () => {
+      const earlyJanuary: Bill = {
+        id: 'bill-early',
+        creditorName: 'HOA',
+        budgetedAmount: 350,
+        dueDay: 5,
+        isRecurring: true,
+        priority: 'normal',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const lateJanuary: Bill = {
+        id: 'bill-late-jan',
+        creditorName: 'Storage',
+        budgetedAmount: 200,
+        dueDay: 25,
+        isRecurring: true,
+        priority: 'normal',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const skipInHorizonLateDates = new Set(
+        Array.from({ length: 12 }, (_, index) => {
+          const month = String(index + 1).padStart(2, '0');
+          return `${lateJanuary.id}-2026-${month}-25`;
+        })
+      );
+      const withLate = assignPreparedHorizon(
+        prepareScheduleHorizon({
+          incomes: [{ ...income, amount: 4000 }],
+          bills: [earlyJanuary, lateJanuary],
+          startDateStr: '2026-01-01',
+          startingBalance: 2000,
+          skippedBills: skipInHorizonLateDates,
+        })
+      );
+      const withoutLate = assignPreparedHorizon(
+        prepareScheduleHorizon({
+          incomes: [{ ...income, amount: 4000 }],
+          bills: [earlyJanuary],
+          startDateStr: '2026-01-01',
+          startingBalance: 2000,
+        })
+      );
+
+      expect(withLate.map((paycheck) => paycheck.date)).toEqual(
+        withoutLate.map((paycheck) => paycheck.date)
+      );
+      expect(withLate.map((paycheck) => paycheck.totalBills)).toEqual(
+        withoutLate.map((paycheck) => paycheck.totalBills)
+      );
+      expect(withLate.map((paycheck) => paycheck.savingsDeposit)).toEqual(
+        withoutLate.map((paycheck) => paycheck.savingsDeposit)
+      );
     });
 
     it('keeps the same in-window assignments across 3-month and 12-month viewports', () => {

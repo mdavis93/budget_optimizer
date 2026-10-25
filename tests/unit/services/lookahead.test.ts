@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseISO } from 'date-fns';
-import { dropLookaheadAssignments } from '../../../electron/services/scheduler/lookahead';
+import { addDays, parseISO } from 'date-fns';
+import { MAX_PREPAY_DAYS } from '@shared/constants';
+import {
+  billsEligibleOnFundingHorizon,
+  dropLookaheadAssignments,
+  resolveSolveEndDate,
+} from '../../../electron/services/scheduler/lookahead';
 import type { PaycheckAssignment, ProjectedBill } from '../../../electron/services/scheduler/types';
 
 function bill(overrides: Partial<ProjectedBill> & Pick<ProjectedBill, 'billId' | 'date'>): ProjectedBill {
@@ -28,7 +33,7 @@ function assignment(
 
 describe('dropLookaheadAssignments', () => {
   describe('happy', () => {
-    it('keeps funding-horizon paychecks and drops the two-month buffer', () => {
+    it('keeps funding-horizon paychecks and drops paychecks after the funding end', () => {
       const kept = dropLookaheadAssignments(
         [
           assignment('2026-12-18', [bill({ billId: 'dec', date: parseISO('2026-12-18') })]),
@@ -64,5 +69,50 @@ describe('dropLookaheadAssignments', () => {
       expect(kept[0].bills).toHaveLength(1);
       expect(kept[1].bills).toEqual([]);
     });
+  });
+});
+
+describe('billsEligibleOnFundingHorizon', () => {
+  describe('happy', () => {
+    it('keeps a bill that can land on the last funded paycheck', () => {
+      const kept = billsEligibleOnFundingHorizon(
+        [
+          bill({ billId: 'early-jan', date: parseISO('2027-01-05') }),
+          bill({ billId: 'late-jan', date: parseISO('2027-01-25') }),
+        ],
+        [parseISO('2026-12-18'), parseISO('2027-01-01'), parseISO('2027-01-15')],
+        parseISO('2027-01-01')
+      );
+      expect(kept.map((item) => item.billId)).toEqual(['early-jan']);
+    });
+  });
+
+  describe('sad', () => {
+    it('keeps an in-horizon bill that has no eligible paycheck', () => {
+      const kept = billsEligibleOnFundingHorizon(
+        [bill({ billId: 'in-horizon', date: parseISO('2026-12-28') })],
+        [parseISO('2026-12-01')],
+        parseISO('2027-01-01')
+      );
+      expect(kept.map((item) => item.billId)).toEqual(['in-horizon']);
+    });
+
+    it('omits a post-horizon bill when no funded paycheck is eligible', () => {
+      const kept = billsEligibleOnFundingHorizon(
+        [bill({ billId: 'late-jan', date: parseISO('2027-01-25') })],
+        [parseISO('2026-12-18'), parseISO('2027-01-01'), parseISO('2027-01-15')],
+        parseISO('2027-01-01')
+      );
+      expect(kept).toEqual([]);
+    });
+  });
+});
+
+describe('resolveSolveEndDate', () => {
+  it('extends the funding end by MAX_PREPAY_DAYS', () => {
+    const fundingEnd = parseISO('2027-01-01');
+    expect(resolveSolveEndDate(fundingEnd).toISOString()).toBe(
+      addDays(fundingEnd, MAX_PREPAY_DAYS).toISOString()
+    );
   });
 });
