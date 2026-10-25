@@ -61,6 +61,7 @@ vi.mock('recharts', () => {
 describe('SummaryPage', () => {
   const mockAPI = createMockElectronAPI();
   const generateSchedule = vi.fn();
+  const setScheduleMonths = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,7 +89,9 @@ describe('SummaryPage', () => {
       incomes: [{ id: 'inc-1' }],
       bills: [{ id: 'bill-1' }],
       generateSchedule,
+      setScheduleMonths,
       scheduleStartDate: '2026-01-01',
+      scheduleMonths: 3,
       scheduleStartingBalance: 1000,
     });
   });
@@ -109,7 +112,9 @@ describe('SummaryPage', () => {
         incomes: [],
         bills: [],
         generateSchedule,
+        setScheduleMonths,
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 1000,
       });
 
@@ -131,20 +136,13 @@ describe('SummaryPage', () => {
       });
 
       await user.click(screen.getByRole('button', { name: '6 Months' }));
-
-      await waitFor(() => {
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 6, 1000);
-      });
+      expect(setScheduleMonths).toHaveBeenCalledWith(6);
 
       await user.click(screen.getByRole('button', { name: '12 Months' }));
-      await waitFor(() => {
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 12, 1000);
-      });
+      expect(setScheduleMonths).toHaveBeenCalledWith(12);
 
       await user.click(screen.getByRole('button', { name: '3 Months' }));
-      await waitFor(() => {
-        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 3, 1000);
-      });
+      expect(setScheduleMonths).toHaveBeenCalledWith(3);
 
       const apyInput = screen.getByLabelText('APY:');
       await user.clear(apyInput);

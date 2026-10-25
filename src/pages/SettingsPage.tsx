@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   CheckCircle,
   AlertCircle,
@@ -6,12 +6,13 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
-import { useDraft } from '../context/DraftContext';
+import { useDraft, useSchedule } from '../context/DraftContext';
 import { APP_VERSION } from '../constants/version';
 import {
   AppearanceSection,
   SecuritySection,
   RegionalSection,
+  ScheduleViewportSection,
   SavingsSection,
   BudgetAllocationSection,
   DiagnosticsSection,
@@ -19,14 +20,25 @@ import {
 } from '../components/settings';
 import clsx from 'clsx';
 import { setDefaultCurrency } from '../utils/formatCurrency';
+import {
+  coerceScheduleViewportMonths,
+  DEFAULT_SCHEDULE_VIEWPORT_MONTHS,
+  type ScheduleViewportMonths,
+} from '@shared/scheduleViewportMonths';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { biometricAvailable, biometricEnabled, enableBiometric } = useAuth();
   const { currentBudget, updateBudget } = useBudget();
   const draft = useDraft();
+  const { setScheduleMonths } = useSchedule();
+  const setScheduleMonthsRef = useRef(setScheduleMonths);
+  setScheduleMonthsRef.current = setScheduleMonths;
   const [currency, setCurrency] = useState('USD');
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
+  const [defaultScheduleMonths, setDefaultScheduleMonths] = useState<ScheduleViewportMonths>(
+    DEFAULT_SCHEDULE_VIEWPORT_MONTHS
+  );
   const [savingsAPY, setSavingsAPY] = useState(0);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +64,9 @@ export default function SettingsPage() {
           setCurrency(nextCurrency);
           setDefaultCurrency(nextCurrency);
           setAutoLockMinutes(result.data.autoLockMinutes ?? 5);
+          const nextViewport = coerceScheduleViewportMonths(result.data.defaultScheduleMonths);
+          setDefaultScheduleMonths(nextViewport);
+          setScheduleMonthsRef.current(nextViewport);
           setSavingsAPY(result.data.savingsAPY ?? 0);
         }
       } catch {
@@ -80,7 +95,12 @@ export default function SettingsPage() {
   }, [currentBudget, draft.budgetFields]);
 
   // Save settings when they change
-  const saveSettings = useCallback(async (updates: { currency?: string; autoLockMinutes?: number; savingsAPY?: number }) => {
+  const saveSettings = useCallback(async (updates: {
+    currency?: string;
+    autoLockMinutes?: number;
+    savingsAPY?: number;
+    defaultScheduleMonths?: ScheduleViewportMonths;
+  }) => {
     try {
       const result = await window.electronAPI.settings.update(updates);
       if (result.success) {
@@ -108,6 +128,12 @@ export default function SettingsPage() {
     const clampedValue = Math.min(100, Math.max(0, value));
     setSavingsAPY(clampedValue);
     saveSettings({ savingsAPY: clampedValue });
+  };
+
+  const handleDefaultScheduleMonthsChange = (value: ScheduleViewportMonths) => {
+    setDefaultScheduleMonths(value);
+    setScheduleMonths(value);
+    saveSettings({ defaultScheduleMonths: value });
   };
 
   const handleTargetCashOnHandChange = (value: number) => {
@@ -202,6 +228,12 @@ export default function SettingsPage() {
         <RegionalSection
           currency={currency}
           onCurrencyChange={handleCurrencyChange}
+          isLoading={isLoading}
+        />
+
+        <ScheduleViewportSection
+          defaultScheduleMonths={defaultScheduleMonths}
+          onDefaultScheduleMonthsChange={handleDefaultScheduleMonthsChange}
           isLoading={isLoading}
         />
 

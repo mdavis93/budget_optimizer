@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { DEFAULT_SCHEDULE_VIEWPORT_MONTHS } from '@shared/scheduleViewportMonths';
 import {
   buildViewportOptions,
   type GoalViewportSource,
 } from '../../utils/scheduleViewportOptions';
-
-const DEFAULT_VIEWPORT_MONTHS = 12;
 
 interface ScheduleControlsProps {
   startDate: string;
   months: number;
   startingBalance: number;
   calculationMonths?: number;
+  fallbackMonths?: number;
   goals?: ReadonlyArray<GoalViewportSource>;
   onStartDateChange: (date: string) => void;
   onMonthsChange: (months: number) => void;
@@ -21,7 +21,8 @@ export default function ScheduleControls({
   startDate,
   months,
   startingBalance,
-  calculationMonths = DEFAULT_VIEWPORT_MONTHS,
+  calculationMonths = 12,
+  fallbackMonths = DEFAULT_SCHEDULE_VIEWPORT_MONTHS,
   goals = [],
   onStartDateChange,
   onMonthsChange,
@@ -37,13 +38,13 @@ export default function ScheduleControls({
   );
 
   // If the current selection no longer maps to an option (e.g. a goal was
-  // deleted or renamed away), fall back to the 12-month default.
+  // deleted or renamed away), fall back to the persisted viewport.
   const selectionIsValid = viewportOptions.some((option) => option.value === months);
   useEffect(() => {
-    if (!selectionIsValid && months !== DEFAULT_VIEWPORT_MONTHS) {
-      onMonthsChange(DEFAULT_VIEWPORT_MONTHS);
+    if (!selectionIsValid && months !== fallbackMonths) {
+      onMonthsChange(fallbackMonths);
     }
-  }, [selectionIsValid, months, onMonthsChange]);
+  }, [selectionIsValid, months, fallbackMonths, onMonthsChange]);
 
   // Keep the uncontrolled input in sync when startDate changes externally,
   // but never while focused — that would close Chromium's month picker.
@@ -85,7 +86,7 @@ export default function ScheduleControls({
           <label htmlFor="schedule-view" className="label">View</label>
           <select
             id="schedule-view"
-            value={selectionIsValid ? months : DEFAULT_VIEWPORT_MONTHS}
+            value={selectionIsValid ? months : fallbackMonths}
             onChange={(e) => onMonthsChange(parseInt(e.target.value))}
             className="input"
           >

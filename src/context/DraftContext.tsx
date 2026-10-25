@@ -130,6 +130,7 @@ interface ScheduleContextValue {
   peekScheduleDiagnosticId: () => string | null;
   scheduleStartDate: string;
   scheduleMonths: number;
+  persistedViewportMonths: number;
   scheduleStartingBalance: number;
   scheduleInputHash: string;
   setScheduleStartDate: (date: string) => void;

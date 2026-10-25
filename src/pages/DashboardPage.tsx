@@ -61,6 +61,7 @@ export default function DashboardPage() {
     generateSchedule,
     schedule,
     scheduleStartDate,
+    scheduleMonths,
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleStartingBalance,
@@ -77,7 +78,7 @@ export default function DashboardPage() {
     
     const loadSchedule = async () => {
       if (isMounted) {
-        await generateSchedule(scheduleStartDate, 3, scheduleStartingBalance);
+        await generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance);
       }
     };
     
@@ -86,7 +87,7 @@ export default function DashboardPage() {
     }
     
     return () => { isMounted = false; };
-  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
+  }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleMonths, scheduleStartingBalance, scheduleInputHash]);
 
   const totalMonthlyIncome = useMemo(() => {
     return getMonthlyOperatingIncomeTotal(incomes);
@@ -136,7 +137,7 @@ export default function DashboardPage() {
         <div>
           <h2 className="text-2xl font-semibold">Dashboard</h2>
           <p className="text-(--color-text-secondary)">
-            Overview of your budget for the next 3 months
+            Overview of your budget for the next {scheduleMonths} months
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -216,7 +217,7 @@ export default function DashboardPage() {
                   className="btn-secondary"
                   onClick={() => {
                     clearError();
-                    void generateSchedule(scheduleStartDate, 3, scheduleStartingBalance, { force: true });
+                    void generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance, { force: true });
                   }}
                 >
                   Try again

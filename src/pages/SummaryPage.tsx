@@ -5,8 +5,7 @@ import { CategoryPieChart, ChartSuspense, IncomeExpensesChart, SavingsAreaChart 
 import { CHART_COLORS } from '../components/charts/chartTheme';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
-
-type TimePeriod = 3 | 6 | 12;
+import { SCHEDULE_VIEWPORT_MONTHS, type ScheduleViewportMonths } from '@shared/scheduleViewportMonths';
 
 const CATEGORY_COLORS: Record<string, string> = {
   Housing: CHART_COLORS.primary,
@@ -24,8 +23,14 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function SummaryPage() {
   const { incomes, bills } = useDraftData();
-  const { generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash } = useSchedule();
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>(3);
+  const {
+    generateSchedule,
+    scheduleStartDate,
+    scheduleMonths,
+    scheduleStartingBalance,
+    scheduleInputHash,
+    setScheduleMonths,
+  } = useSchedule();
   const [scheduleData, setScheduleData] = useState<{
     paychecks: Array<{
       date: string;
@@ -72,7 +77,7 @@ export default function SummaryPage() {
       
       setIsLoading(true);
       try {
-        const result = await generateSchedule(scheduleStartDate, timePeriod, scheduleStartingBalance);
+        const result = await generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance);
         if (isMounted && result) {
           setScheduleData({
             paychecks: result.paychecks,
@@ -89,7 +94,7 @@ export default function SummaryPage() {
     loadScheduleData();
     
     return () => { isMounted = false; };
-  }, [incomes, bills, timePeriod, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
+  }, [incomes, bills, scheduleMonths, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
 
   const handleAPYChange = async (newAPY: number) => {
     setSavingsAPY(newAPY);
@@ -197,13 +202,13 @@ export default function SummaryPage() {
         </div>
         
         <div className="flex items-center gap-1 bg-(--color-bg-tertiary) rounded-lg p-1">
-          {([3, 6, 12] as TimePeriod[]).map((period) => (
+          {(SCHEDULE_VIEWPORT_MONTHS as readonly ScheduleViewportMonths[]).map((period) => (
             <button
               key={period}
-              onClick={() => setTimePeriod(period)}
+              onClick={() => setScheduleMonths(period)}
               className={clsx(
                 'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                timePeriod === period
+                scheduleMonths === period
                   ? 'bg-primary-500 text-white'
                   : 'text-(--color-text-secondary) hover:text-(--color-text-primary)'
               )}

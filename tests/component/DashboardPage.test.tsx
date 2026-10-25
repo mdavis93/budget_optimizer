@@ -55,6 +55,7 @@ describe('DashboardPage', () => {
         recommendations: ['Keep emergency buffer'],
       },
       scheduleStartDate: '2026-01-01',
+      scheduleMonths: 3,
       scheduleStartingBalance: 700,
       scheduleInputHash: 'hash-v1',
       setScheduleStartingBalance,
@@ -70,6 +71,7 @@ describe('DashboardPage', () => {
       );
 
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      expect(screen.getByText('Overview of your budget for the next 3 months')).toBeInTheDocument();
       expect(screen.getByText('Monthly Income')).toBeInTheDocument();
       expect(screen.getByText('Monthly Bills')).toBeInTheDocument();
       expect(screen.getByText('Projected Shortfalls')).toBeInTheDocument();
@@ -89,6 +91,7 @@ describe('DashboardPage', () => {
         generateSchedule,
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
       });
 
@@ -111,6 +114,7 @@ describe('DashboardPage', () => {
         buildStartedAt: Date.now(),
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
       });
 
@@ -135,6 +139,7 @@ describe('DashboardPage', () => {
         clearError: vi.fn(),
         schedule: null,
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
       });
 
@@ -161,6 +166,7 @@ describe('DashboardPage', () => {
         clearError,
         schedule: null,
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
       });
 
@@ -191,6 +197,7 @@ describe('DashboardPage', () => {
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
         scheduleInputHash: 'hash-v1',
         setScheduleStartingBalance: vi.fn(),
@@ -267,6 +274,7 @@ describe('DashboardPage', () => {
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
       });
 
@@ -287,6 +295,7 @@ describe('DashboardPage', () => {
         generateSchedule,
         schedule: { entries: [], summary: { shortfallCount: 2 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -308,6 +317,7 @@ describe('DashboardPage', () => {
         generateSchedule,
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -328,6 +338,7 @@ describe('DashboardPage', () => {
         generateSchedule,
         schedule: null,
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -365,6 +376,7 @@ describe('DashboardPage', () => {
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -390,6 +402,7 @@ describe('DashboardPage', () => {
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -412,6 +425,7 @@ describe('DashboardPage', () => {
         generateSchedule,
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 700,
         setScheduleStartingBalance,
       });
@@ -437,6 +451,7 @@ describe('DashboardPage', () => {
         generateSchedule,
         schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
