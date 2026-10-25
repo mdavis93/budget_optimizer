@@ -425,7 +425,7 @@ export interface ScheduleData {
    * fallback target. Carried so the warning persists regardless of viewport.
    */
   savingsSqueezedCount?: number;
-  viewportMonths: number; // The currently displayed viewport (1, 3, 6, 12, or a goal term)
+  viewportMonths: number; // The currently displayed viewport (3, 6, 12, or a goal term)
   entries: ScheduleEntry[];
   summary: ScheduleSummary;
   recommendations: string[];

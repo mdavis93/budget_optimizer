@@ -210,6 +210,20 @@ describe('validation.service', () => {
   });
 
   describe('hostile', () => {
+    it('rejects defaultScheduleMonths values outside the persisted allow-list', () => {
+      for (const months of [0, 1, 2, 14, 18, 24, 3.5, '12', Number.NaN]) {
+        const result = validateSettings({ defaultScheduleMonths: months });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((error) => error.includes('3, 6, or 12'))).toBe(true);
+      }
+    });
+
+    it('accepts persisted viewport values', () => {
+      expect(validateSettings({ defaultScheduleMonths: 3 }).valid).toBe(true);
+      expect(validateSettings({ defaultScheduleMonths: 6 }).valid).toBe(true);
+      expect(validateSettings({ defaultScheduleMonths: 12 }).valid).toBe(true);
+    });
+
     it('rejects prototype-polluting settings payload', () => {
       const payload = JSON.parse('{"constructor":{"prototype":{"polluted":true}}}');
       const result = validateSettings(payload as Record<string, unknown>);
@@ -476,6 +490,7 @@ describe('validation.service', () => {
         currency: 'TOO-LONG-CURRENCY',
       });
       expect(badSettings.valid).toBe(false);
+      expect(badSettings.errors.some((error) => error.includes('3, 6, or 12'))).toBe(true);
 
       const badOverlay = validateDraftOverlay({
         skippedBills: [{ billId: 'bad', skipDate: '2026/01/01' }],

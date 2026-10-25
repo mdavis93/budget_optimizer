@@ -1,4 +1,5 @@
 import { addMonths, differenceInCalendarMonths, format, isBefore, parseISO } from 'date-fns';
+import { SCHEDULE_VIEWPORT_MONTHS } from '@shared/scheduleViewportMonths';
 
 export interface ViewportOption {
   value: number; // viewport length in months
@@ -10,7 +11,7 @@ export interface GoalViewportSource {
   targetDate: string;
 }
 
-const FIXED_VIEWPORTS = [1, 3, 6, 12];
+const FIXED_VIEWPORTS = SCHEDULE_VIEWPORT_MONTHS;
 
 /** Whole months from start to target, rounded up so the window covers the deadline. */
 function monthsUntil(startDate: string, targetDate: string): number {

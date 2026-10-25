@@ -1,3 +1,5 @@
+import { isScheduleViewportMonths } from '@shared/scheduleViewportMonths';
+
 export class ValidationError extends Error {
   constructor(message: string, public field?: string) {
     super(message);
@@ -463,9 +465,8 @@ export function validateSettings(settings: Record<string, unknown>): ValidationR
   }
 
   if (settings.defaultScheduleMonths !== undefined) {
-    const months = Number(settings.defaultScheduleMonths);
-    if (!Number.isInteger(months) || months < 1 || months > 24) {
-      errors.push('Default schedule months must be an integer between 1 and 24');
+    if (!isScheduleViewportMonths(settings.defaultScheduleMonths)) {
+      errors.push('Default schedule months must be 3, 6, or 12');
     }
   }
 

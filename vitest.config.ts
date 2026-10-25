@@ -17,7 +17,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.ts', 'src/**/*.tsx', 'electron/**/*.ts'],
+      include: ['src/**/*.ts', 'src/**/*.tsx', 'electron/**/*.ts', 'shared/scheduleViewportMonths.ts'],
       exclude: [
         'node_modules',
         'tests',
