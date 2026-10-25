@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { MAX_PREPAY_DAYS } from '@shared/constants';
 import {
   formatProposedFixCopy,
   formatShortfallCopy,
@@ -130,6 +131,7 @@ describe('reconciliationCopy', () => {
     });
     expect(copy.label).toBe('No Eligible Paycheck');
     expect(copy.explanation).toContain('Insurance');
+    expect(copy.explanation).toContain(`${MAX_PREPAY_DAYS}-day window`);
     expect(copy.poolHint).toContain('due date');
   });
 });

@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns';
+import { MAX_PREPAY_DAYS } from './constants';
 import type { Bill, PaycheckEntry, ScheduleEntry, ScheduleSummary } from './types';
 import { isOperatingPaycheck, isSavingsAndGoalsIncome } from './incomePurpose';
 
@@ -188,7 +189,7 @@ export function generateRecommendations(
     const criticalTotal = criticalBills.reduce((sum, b) => sum + b.budgetedAmount, 0);
     recommendations.push(
       `You have ${criticalBills.length} critical bill(s) totaling $${criticalTotal.toFixed(2)}/month. ` +
-      'These are always funded first and may be prepaid up to 14 days early when needed to avoid shortfalls.'
+      `These are always funded first and may be prepaid up to ${MAX_PREPAY_DAYS} days early when needed to avoid shortfalls.`
     );
   }
 

@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns';
+import { MAX_PREPAY_DAYS } from '@shared/constants';
 import { ProposedFix, ShortfallDetail, UnfundableReason } from '../types';
 import { formatCurrency } from './formatCurrency';
 import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
@@ -31,7 +32,7 @@ export const UNFUNDABLE_REASON_COPY: Record<UnfundableReason, UnfundableReasonCo
   no_eligible_paycheck_in_window: {
     label: 'No Eligible Paycheck',
     explanation:
-      'No paycheck falls within the 14-day window on or before {billName}\'s due date.',
+      `No paycheck falls within the ${MAX_PREPAY_DAYS}-day window on or before {billName}'s due date.`,
     poolHint: 'Add income near the due date or adjust the bill due date.',
   },
   all_movable_bills_locked: {

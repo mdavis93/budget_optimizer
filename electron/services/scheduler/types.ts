@@ -11,6 +11,7 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
   MAX_PREPAY_DAYS,
+  MAX_ADVISOR_EARLY_DAYS,
   SCHEDULE_CALCULATION_MONTHS,
   SCHEDULE_MAX_CALCULATION_MONTHS,
 } from '@shared/constants';
@@ -40,14 +41,13 @@ export {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
   MAX_PREPAY_DAYS,
+  MAX_ADVISOR_EARLY_DAYS,
   SCHEDULE_CALCULATION_MONTHS,
   SCHEDULE_MAX_CALCULATION_MONTHS,
 };
 export const SAVINGS_TARGET_PRIMARY = 150;
 /** Fallback per-paycheck savings; below this (when goals consume the surplus) we warn. */
 export const SAVINGS_TARGET_FALLBACK = 100;
-/** Advisor may propose early moves up to this many days; never auto-applied. */
-export const MAX_ADVISOR_EARLY_DAYS = 21;
 
 /**
  * Resolve how many months the schedule should span: enough to cover the

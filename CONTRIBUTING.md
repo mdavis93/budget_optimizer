@@ -81,11 +81,13 @@ These behaviors are intentional — not bugs. They are covered by unit tests whe
 
 ### Income-attached bills (A-03)
 
-Bills marked income-attached (`isIncomeAttached` with `preferredIncomeSourceId`) are placed on **every paycheck** that includes that income source before the exact solver runs. Due-day alignment and the 14-day prepay cap do **not** apply on this path. See `applyIncomeAttachedBills` in `electron/services/scheduler/exactAssignment.ts`.
+Bills marked income-attached (`isIncomeAttached` with `preferredIncomeSourceId`) are placed on **every paycheck** that includes that income source before the exact solver runs. Due-day alignment and the `MAX_PREPAY_DAYS` prepay cap do **not** apply on this path. See `applyIncomeAttachedBills` in `electron/services/scheduler/exactAssignment.ts`.
 
 ### Manual assignment (A-02)
 
-Drag-and-drop on the Schedule page may place a bill late or more than 14 days early. The UI shows a **confirmation dialog** before accepting the placement; the user can proceed after confirming. Hard rejection is not enforced — manual placements lock from auto-rebalance.
+Drag-and-drop on the Schedule page may place a bill late or more than `MAX_PREPAY_DAYS` days early. The UI shows a **confirmation dialog** before accepting the placement; the user can proceed after confirming. Hard rejection is not enforced — manual placements lock from auto-rebalance.
+
+Accepted radii: auto-legal prepay is **20 days** (`MAX_PREPAY_DAYS`); the Break-Glass advisor may search up to **28 days** (`MAX_ADVISOR_EARLY_DAYS`). Confirmation is required only for landings past 20 days. Advisor plans are never auto-applied.
 
 ### Assignment and rebalance (A-08)
 

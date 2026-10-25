@@ -560,7 +560,7 @@ function tryForwardDominoFill(
 
 /**
  * Post-assignment pass: prefer target cash-on-hand on every paycheck, moving
- * movable bills earlier within the 14-day window. Paychecks may land between
+ * movable bills earlier within the MAX_PREPAY_DAYS window. Paychecks may land between
  * min and target (break-glass) when target is infeasible; only load above the
  * min floor triggers further relief.
  */

@@ -380,7 +380,7 @@ export interface BreakGlassPlanStep {
   fromPaycheckDate: string;
   toPaycheckDate: string;
   daysEarly: number;
-  /** True when daysEarly > 14 (auto-legal window); accept still applies as a manual lock. */
+  /** True when daysEarly > MAX_PREPAY_DAYS (auto-legal window); accept still applies as a manual lock. */
   requiresConfirmation: boolean;
 }
 

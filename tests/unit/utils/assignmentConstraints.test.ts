@@ -1,21 +1,27 @@
 import { describe, it, expect } from 'vitest';
+import { addDays, format, parseISO } from 'date-fns';
 import {
   getAssignmentViolation,
   needsAssignmentConfirmation,
   MAX_PREPAY_DAYS,
 } from '../../../src/utils/assignmentConstraints';
 
-describe('assignmentConstraints', () => {
-  it('exports MAX_PREPAY_DAYS as 14', () => {
-    expect(MAX_PREPAY_DAYS).toBe(14);
-  });
+const due = '2026-01-28';
+const dueDate = parseISO(due);
+const edgePaycheck = format(addDays(dueDate, -MAX_PREPAY_DAYS), 'yyyy-MM-dd');
+const tooEarlyPaycheck = format(addDays(dueDate, -(MAX_PREPAY_DAYS + 1)), 'yyyy-MM-dd');
 
+describe('assignmentConstraints', () => {
   describe('getAssignmentViolation', () => {
     it('returns late when paycheck is after due date', () => {
       expect(getAssignmentViolation('2026-01-15', '2026-01-20')).toBe('late');
     });
 
-    it('returns too_early when paycheck is more than 14 days before due date', () => {
+    it('returns too_early when paycheck is more than MAX_PREPAY_DAYS before due date', () => {
+      expect(getAssignmentViolation(due, tooEarlyPaycheck)).toBe('too_early');
+    });
+
+    it('returns too_early for a monthly-style 27-day prepay', () => {
       expect(getAssignmentViolation('2026-01-28', '2026-01-01')).toBe('too_early');
     });
 
@@ -23,11 +29,11 @@ describe('assignmentConstraints', () => {
       expect(getAssignmentViolation('2026-01-15', '2026-01-15')).toBeNull();
     });
 
-    it('returns null when paycheck is exactly 14 days early', () => {
-      expect(getAssignmentViolation('2026-01-15', '2026-01-01')).toBeNull();
+    it('returns null when paycheck is exactly MAX_PREPAY_DAYS early', () => {
+      expect(getAssignmentViolation(due, edgePaycheck)).toBeNull();
     });
 
-    it('returns null when paycheck is within the 14-day window', () => {
+    it('returns null when paycheck is within the MAX_PREPAY_DAYS window', () => {
       expect(getAssignmentViolation('2026-01-28', '2026-01-20')).toBeNull();
     });
   });
@@ -37,13 +43,14 @@ describe('assignmentConstraints', () => {
       expect(needsAssignmentConfirmation('2026-01-15', '2026-01-20')).toBe(true);
     });
 
-    it('returns true for more than 14 days early', () => {
+    it('returns true for more than MAX_PREPAY_DAYS early', () => {
+      expect(needsAssignmentConfirmation(due, tooEarlyPaycheck)).toBe(true);
       expect(needsAssignmentConfirmation('2026-01-28', '2026-01-01')).toBe(true);
     });
 
     it('returns false for assignments within the allowed window', () => {
       expect(needsAssignmentConfirmation('2026-01-28', '2026-01-20')).toBe(false);
-      expect(needsAssignmentConfirmation('2026-01-15', '2026-01-01')).toBe(false);
+      expect(needsAssignmentConfirmation(due, edgePaycheck)).toBe(false);
     });
   });
 });
