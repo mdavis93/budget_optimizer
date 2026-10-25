@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_ADVISOR_EARLY_DAYS, MAX_PREPAY_DAYS } from '@shared/constants';
 import {
   getAdvisorSearchVisits,
   proposeBreakGlassPlans,
@@ -92,7 +93,7 @@ function julyCascadeFixture(): ScheduleData {
 }
 
 describe('proposeBreakGlassPlans', () => {
-  it('proposes a Jul-style backward cascade including a >14-day step', () => {
+  it('proposes a Jul-style backward cascade including a 15-day step', () => {
     const report = proposeBreakGlassPlans(julyCascadeFixture());
     expect(report.plans).toHaveLength(1);
     expect(report.plans[0].id).toBe('break-glass-2026-07-31');
@@ -126,7 +127,7 @@ describe('proposeBreakGlassPlans', () => {
       fromPaycheckDate: '2026-07-31',
       toPaycheckDate: '2026-07-24',
       daysEarly: 15,
-      requiresConfirmation: true,
+      requiresConfirmation: false,
     });
     expect(plan.maxDaysEarly).toBe(15);
     expect(plan.steps.every((step) => step.toPaycheckDate <= step.billDueDate)).toBe(true);
@@ -164,10 +165,10 @@ describe('proposeBreakGlassPlans', () => {
     expect(report.plans).toEqual([]);
   });
 
-  it('caps early moves at 21 days and proposes nothing if only a later landing would work past the cap', () => {
+  it('caps early moves at MAX_ADVISOR_EARLY_DAYS and proposes nothing if only a later landing would work past the cap', () => {
     const report = proposeBreakGlassPlans(
       scheduleOf([
-        paycheck({ date: '2026-07-03', budgetRemaining: 500 }),
+        paycheck({ date: '2026-07-02', budgetRemaining: 500 }),
         paycheck({
           date: '2026-07-31',
           budgetRemaining: 150,
@@ -176,15 +177,62 @@ describe('proposeBreakGlassPlans', () => {
               billId: 'far',
               creditorName: 'Too Early',
               amount: 120,
-              // Only Jul 3 is before due; Jul 31→Jul 3 is 28 days early (>21).
+              // Only Jul 2 is before due; Jul 31→Jul 2 is 29 days early (> MAX_ADVISOR_EARLY_DAYS).
               billDate: '2026-07-31',
             }),
           ],
         }),
-      ]),
-      { maxEarlyDays: 21 }
+      ])
     );
     expect(report.plans).toEqual([]);
+  });
+
+  it('requires confirmation only when a landing is past MAX_PREPAY_DAYS', () => {
+    const autoLegal = proposeBreakGlassPlans(
+      scheduleOf([
+        paycheck({ date: '2026-07-11', budgetRemaining: 500 }),
+        paycheck({
+          date: '2026-07-31',
+          budgetRemaining: 150,
+          bills: [
+            bill({
+              billId: 'auto',
+              creditorName: 'Auto',
+              amount: 120,
+              billDate: '2026-07-31',
+            }),
+          ],
+        }),
+      ])
+    );
+    expect(autoLegal.plans).toHaveLength(1);
+    expect(autoLegal.plans[0].steps[0]).toMatchObject({
+      daysEarly: MAX_PREPAY_DAYS,
+      requiresConfirmation: false,
+    });
+
+    const confirm = proposeBreakGlassPlans(
+      scheduleOf([
+        paycheck({ date: '2026-07-10', budgetRemaining: 500 }),
+        paycheck({
+          date: '2026-07-31',
+          budgetRemaining: 150,
+          bills: [
+            bill({
+              billId: 'confirm',
+              creditorName: 'Confirm',
+              amount: 120,
+              billDate: '2026-07-31',
+            }),
+          ],
+        }),
+      ])
+    );
+    expect(confirm.plans).toHaveLength(1);
+    expect(confirm.plans[0].steps[0]).toMatchObject({
+      daysEarly: MAX_PREPAY_DAYS + 1,
+      requiresConfirmation: true,
+    });
   });
 
   it('stops at scheduleStartDate when earlier paychecks are out of range', () => {
@@ -300,8 +348,8 @@ describe('proposeBreakGlassPlans', () => {
 
     // With Jul 10 + Jul 17 only, nearest legal landing for Aug 7 due is Jul 17 (21 days).
     expect(report.plans).toHaveLength(1);
-    expect(report.plans[0].maxDaysEarly).toBeLessThanOrEqual(21);
-    expect(report.plans[0].steps.every((step) => step.daysEarly <= 21)).toBe(true);
+    expect(report.plans[0].maxDaysEarly).toBeLessThanOrEqual(MAX_ADVISOR_EARLY_DAYS);
+    expect(report.plans[0].steps.every((step) => step.daysEarly <= MAX_ADVISOR_EARLY_DAYS)).toBe(true);
   });
 
   it('returns empty plans for an empty paycheck list', () => {
@@ -565,7 +613,7 @@ describe('proposeBreakGlassPlans', () => {
       fromPaycheckDate: '2026-07-17',
       toPaycheckDate: '2026-07-08',
       daysEarly: 17,
-      requiresConfirmation: true,
+      requiresConfirmation: false,
     });
     expect(report.plans[0].steps).toEqual(
       expect.arrayContaining([
@@ -581,6 +629,8 @@ describe('proposeBreakGlassPlans', () => {
   it('does not move a locked bill sitting on a non-Break-Glass intermediate', () => {
     // Intermediate Jul 10 is at target CoH (not BG), so soft-unlock does not apply.
     // Cascading rent onto Jul 10 requires moving the locked bill — plan must fail closed.
+    // Rent is due Aug 1 so Jul 3 is 29 days early (past MAX_ADVISOR_EARLY_DAYS)
+    // and cannot be used to skip the locked intermediate.
     const locked = proposeBreakGlassPlans(
       scheduleOf([
         paycheck({ date: '2026-07-03', budgetRemaining: 500, bills: [] }),
@@ -593,7 +643,7 @@ describe('proposeBreakGlassPlans', () => {
         paycheck({
           date: '2026-07-24',
           budgetRemaining: 150,
-          bills: [bill({ billId: 'rent', creditorName: 'Rent', amount: 160, billDate: '2026-07-28' })],
+          bills: [bill({ billId: 'rent', creditorName: 'Rent', amount: 160, billDate: '2026-08-01' })],
         }),
       ]),
       { lockedBillKeys: new Set(['locked-2026-07-15']) }
@@ -612,7 +662,7 @@ describe('proposeBreakGlassPlans', () => {
         paycheck({
           date: '2026-07-24',
           budgetRemaining: 150,
-          bills: [bill({ billId: 'rent', creditorName: 'Rent', amount: 160, billDate: '2026-07-28' })],
+          bills: [bill({ billId: 'rent', creditorName: 'Rent', amount: 160, billDate: '2026-08-01' })],
         }),
       ])
     );

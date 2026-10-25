@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
+import { MAX_PREPAY_DAYS } from '@shared/constants';
 import {
   buildEligibleBills,
   getEligiblePaycheckIndices,
@@ -34,10 +35,19 @@ describe('eligibility', () => {
     paycheck('2026-08-21'),
   ];
 
-  it('includes paychecks within 14 days on or before due date', () => {
+  it('includes paychecks within MAX_PREPAY_DAYS on or before due date', () => {
     const b = bill('2026-08-25');
     const indices = getEligiblePaycheckIndices(b, assignments);
-    expect(indices).toEqual([1, 2]);
+    expect(indices).toEqual([0, 1, 2]);
+  });
+
+  it('excludes paychecks more than MAX_PREPAY_DAYS early', () => {
+    const due = '2026-08-25';
+    const tooEarly = format(addDays(parseISO(due), -(MAX_PREPAY_DAYS + 1)), 'yyyy-MM-dd');
+    const assignmentsWithTooEarly = [paycheck(tooEarly), ...assignments];
+    const indices = getEligiblePaycheckIndices(bill(due), assignmentsWithTooEarly);
+    expect(indices).not.toContain(0);
+    expect(indices).toEqual([1, 2, 3]);
   });
 
   it('excludes paychecks after due date', () => {

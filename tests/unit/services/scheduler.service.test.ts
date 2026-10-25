@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { MAX_PREPAY_DAYS } from '@shared/constants';
 import { SchedulerService } from '../../../electron/services/scheduler.service';
 import { Income, Bill, SavingsGoal } from '../../../electron/services/database.service';
 import { parseISO, format, differenceInDays } from 'date-fns';
@@ -651,7 +652,7 @@ describe('SchedulerService', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
 
-      it('does not place day-28 bill on monthly paycheck when more than 14 days early', () => {
+      it('does not place day-28 bill on monthly paycheck when more than MAX_PREPAY_DAYS early', () => {
         const schedule = scheduler.generateSchedule(
           [monthlyIncome],
           [day28Bill],
@@ -668,7 +669,7 @@ describe('SchedulerService', () => {
         expect(jan28Bill!.unfundableReason).toBe('no_eligible_paycheck_in_window');
       });
 
-      it('assigns day-28 bill to latest eligible semi-monthly paycheck within 14 days', () => {
+      it('assigns day-28 bill to latest eligible semi-monthly paycheck within MAX_PREPAY_DAYS', () => {
         const semiMonthlyIncome: Income = {
           ...monthlyIncome,
           id: 'income-semimonthly',
@@ -695,7 +696,7 @@ describe('SchedulerService', () => {
         expect(billOnJan1).toBeUndefined();
       });
 
-      it('rebalance does not move bills more than 14 days early', () => {
+      it('rebalance does not move bills more than MAX_PREPAY_DAYS early', () => {
         const biweeklyIncome: Income = {
           id: 'income-biweekly',
           sourceName: 'Salary',
@@ -740,7 +741,7 @@ describe('SchedulerService', () => {
         for (const paycheck of schedule.paychecks) {
           for (const bill of paycheck.bills) {
             const daysEarly = differenceInDays(parseISO(bill.billDate), parseISO(paycheck.date));
-            expect(daysEarly).toBeLessThanOrEqual(14);
+            expect(daysEarly).toBeLessThanOrEqual(MAX_PREPAY_DAYS);
             expect(parseISO(paycheck.date).getTime()).toBeLessThanOrEqual(parseISO(bill.billDate).getTime());
           }
         }
@@ -894,15 +895,17 @@ describe('SchedulerService', () => {
         0
       );
 
-      const jun19 = schedule.paychecks.find((p) => p.date === '2026-06-19');
       const jun26 = schedule.paychecks.find((p) => p.date === '2026-06-26');
-
-      expect(jun19).toBeDefined();
       expect(jun26).toBeDefined();
 
+      const applePaycheck = schedule.paychecks.find((paycheck) =>
+        paycheck.bills.some((b) => b.billId === 'bill-apple' && b.billDate === '2026-06-30')
+      );
+      expect(applePaycheck).toBeDefined();
+      expect(applePaycheck!.date).not.toBe('2026-06-26');
       expect(
-        jun19!.bills.some((b) => b.billId === 'bill-apple' && b.billDate === '2026-06-30')
-      ).toBe(true);
+        differenceInDays(parseISO('2026-06-30'), parseISO(applePaycheck!.date))
+      ).toBeLessThanOrEqual(MAX_PREPAY_DAYS);
       expect(jun26!.bills.some((b) => b.billId === 'bill-apple')).toBe(false);
       expect(jun26!.totalIncome - jun26!.totalBills).toBeGreaterThanOrEqual(0);
     });
@@ -1954,7 +1957,7 @@ describe('SchedulerService', () => {
           for (const bill of paycheck.bills) {
             occurrenceKeys.push(`${bill.billId}-${bill.billDate}`);
             const daysEarly = differenceInDays(parseISO(bill.billDate), parseISO(paycheck.date));
-            expect(daysEarly).toBeLessThanOrEqual(14);
+            expect(daysEarly).toBeLessThanOrEqual(MAX_PREPAY_DAYS);
           }
         }
         expect(occurrenceKeys.length).toBe(new Set(occurrenceKeys).size);
@@ -3426,7 +3429,7 @@ describe('SchedulerService', () => {
   });
 
   describe('analyzeAndProposeFixes prepay rejection', () => {
-    it('does not propose moves that would prepay bills more than 14 days early', () => {
+    it('does not propose moves that would prepay bills more than MAX_PREPAY_DAYS early', () => {
       const schedule = scheduler.generateSchedule(
         [],
         [],
@@ -3481,7 +3484,7 @@ describe('SchedulerService', () => {
       );
       expect(lateBillMove).toBeUndefined();
       expect(report.proposedFixes.every((f) => f.type === 'move_bill')).toBe(true);
-      expect(differenceInDays(parseISO('2026-01-30'), parseISO('2026-01-01'))).toBeGreaterThan(14);
+      expect(differenceInDays(parseISO('2026-01-30'), parseISO('2026-01-01'))).toBeGreaterThan(MAX_PREPAY_DAYS);
     });
   });
 
@@ -3660,7 +3663,7 @@ describe('SchedulerService', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null when preferred paycheck would prepay more than 14 days early', () => {
+    it('returns null when preferred paycheck would prepay more than MAX_PREPAY_DAYS early', () => {
       const result = (
         scheduler as unknown as {
           findPreferredPaycheck: (

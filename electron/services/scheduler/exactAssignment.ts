@@ -157,7 +157,7 @@ function buildSolvePaychecks(
 
 /**
  * Assign bills to paychecks using the exact windowed solver (due date is
- * source of truth; bidirectional within the 14-day eligibility window).
+ * source of truth; bidirectional within the MAX_PREPAY_DAYS eligibility window).
  */
 export function assignBillsExact(
   paycheckDates: Date[],

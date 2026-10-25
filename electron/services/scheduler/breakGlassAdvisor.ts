@@ -648,7 +648,7 @@ function formatHeadline(targetPaycheckDate: string): string {
 
 /**
  * Propose human-confirmed cascades for residual Break-Glass paychecks after
- * auto rebalance. May use up to `maxEarlyDays` (default 21); never auto-applied.
+ * auto rebalance. May use up to `maxEarlyDays` (default MAX_ADVISOR_EARLY_DAYS); never auto-applied.
  */
 export function proposeBreakGlassPlans(
   schedule: ScheduleData,
