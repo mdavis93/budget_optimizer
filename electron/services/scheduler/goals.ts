@@ -16,6 +16,7 @@ import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
   resolveCalculationMonths,
+  SCHEDULE_LOOKAHEAD_MONTHS,
   DebtPayoffInfo,
   PaycheckEntry,
   GoalProjection,
@@ -27,12 +28,10 @@ import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
 import { resolvePaycheckCashOnHand } from './cashOnHandOverrides';
 import {
+  assignBillsToPaychecks,
   getUniquePaycheckDates,
-  mergeReservedDepositAssignments,
   pruneManualAssignmentsToPaychecks,
 } from './assignment';
-import { assignBillsExact } from './exactAssignment';
-import { buildPaycheckEntries } from './paychecks';
 import { isOperatingIncome, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
@@ -441,10 +440,11 @@ export function generateGoalProjections(
   const startDate = startOfDay(parseISO(startDateStr));
   const calcMonths = resolveCalculationMonths(startDateStr, goals);
   const endDate = addMonths(startDate, calcMonths);
+  const solveEndDate = addMonths(startDate, calcMonths + SCHEDULE_LOOKAHEAD_MONTHS);
 
   const allIncomes: ReturnType<typeof projectIncome> = [];
   for (const income of incomes) {
-    allIncomes.push(...projectIncome(income, startDate, endDate));
+    allIncomes.push(...projectIncome(income, startDate, solveEndDate));
   }
 
   applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
@@ -466,7 +466,7 @@ export function generateGoalProjections(
   const allBills: ReturnType<typeof projectBills> = [];
   for (const bill of regularBills) {
     const debtInfo = debtPayoffs.get(bill.id);
-    allBills.push(...projectBills(bill, startDate, endDate, debtInfo));
+    allBills.push(...projectBills(bill, startDate, solveEndDate, debtInfo));
   }
 
   allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -499,31 +499,23 @@ export function generateGoalProjections(
     minCashOnHand
   );
 
-  const assignments = assignBillsExact(
+  const paychecks = assignBillsToPaychecks(
     paycheckDates,
     operatingIncomes,
     uniqueBills,
     startingBalance,
-    {
-      skippedBills,
-      manualAssignments: effectiveManualAssignments,
-      incomeAttachedBillsRaw,
-      targetCashOnHand: maxBudgetRemaining,
-      minCashOnHand,
-      cashOnHandByDate,
-    }
-  );
-
-  const merged = mergeReservedDepositAssignments(assignments, reservedIncomes);
-
-  const paychecks = buildPaycheckEntries(
-    merged,
-    startingBalance,
+    skippedBills,
+    effectiveManualAssignments,
+    incomeAttachedBillsRaw,
     maxBudgetRemaining,
     goals,
     minCashOnHand,
     minSavingsPerPaycheck,
-    cashOnHandByDate
+    [],
+    cashOnHandByDate,
+    new Map(),
+    reservedIncomes,
+    endDate
   );
 
   return calculateGoalProjections(
