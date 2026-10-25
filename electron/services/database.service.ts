@@ -13,6 +13,7 @@ import {
   openSqlCipherDatabase,
   restoreFromPreSqlCipherBackup,
 } from '../utils/sqlcipher';
+import { coerceScheduleViewportMonths, DEFAULT_SCHEDULE_VIEWPORT_MONTHS } from '@shared/scheduleViewportMonths';
 import type {
   AppSettings,
   Bill,
@@ -162,7 +163,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   autoLockMinutes: 5,
   currency: 'USD',
-  defaultScheduleMonths: 3,
+  defaultScheduleMonths: DEFAULT_SCHEDULE_VIEWPORT_MONTHS,
   savingsAPY: 0,
 };
 
@@ -1527,6 +1528,16 @@ export class DatabaseService {
       if (!parsed.encrypted) {
         upsert.run(row.key, this.crypto.encryptObject(parsed.value));
       }
+    }
+
+    const storedMonths = settings.defaultScheduleMonths;
+    const coercedMonths = coerceScheduleViewportMonths(storedMonths);
+    if (coercedMonths !== storedMonths) {
+      logger.warn('Coerced invalid defaultScheduleMonths to the allowed default', {
+        stored: storedMonths,
+        used: coercedMonths,
+      });
+      settings.defaultScheduleMonths = coercedMonths;
     }
     
     return settings;

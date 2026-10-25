@@ -6,6 +6,11 @@ import { createEmptyDraftState } from '../../../src/types/draft';
 import type { DraftOverlay, DraftState } from '../../../src/types';
 import { createMockBudget, createMockElectronAPI, createMockSchedule } from '../../mocks/electron-api.mock';
 import { SCHEDULE_DEBOUNCE_MS } from '../../../src/utils/scheduleCache';
+import { reportError } from '../../../src/utils/reportError';
+
+vi.mock('../../../src/utils/reportError', () => ({
+  reportError: vi.fn().mockResolvedValue('diag-1'),
+}));
 
 function EngineHarness({
   draft,
@@ -42,6 +47,7 @@ function EngineHarness({
       <div data-testid="error">{engine.error ?? ''}</div>
       <div data-testid="balance">{engine.scheduleStartingBalance}</div>
       <div data-testid="months">{engine.scheduleMonths}</div>
+      <div data-testid="persisted-months">{engine.persistedViewportMonths}</div>
       <div data-testid="paychecks">{engine.schedule?.paychecks.length ?? 0}</div>
       <div data-testid="loading">{String(engine.isLoading)}</div>
       <div data-testid="progress">{engine.progress?.stage ?? ''}</div>
@@ -79,6 +85,8 @@ function EngineHarness({
       </button>
       <button onClick={() => engine.clearError()}>clear-error</button>
       <button onClick={() => engine.setScheduleMonths(2)}>set-viewport</button>
+      <button onClick={() => engine.setScheduleMonths(6)}>set-persisted-viewport</button>
+      <button onClick={() => engine.setScheduleMonths(18)}>set-goal-viewport</button>
       <button onClick={() => engine.setScheduleStartDate('2026-02-01')}>set-start</button>
       <button onClick={() => engine.setScheduleStartingBalance(750)}>set-balance</button>
     </div>
@@ -96,7 +104,7 @@ describe('useScheduleEngine', () => {
     pendingRef = { current: [] };
   });
 
-  function renderEngine(overrides: Partial<Parameters<typeof EngineHarness>[0]> = {}) {
+  async function renderEngine(overrides: Partial<Parameters<typeof EngineHarness>[0]> = {}) {
     const draft = overrides.draft ?? {
       ...createEmptyDraftState(),
       budget: {
@@ -108,7 +116,7 @@ describe('useScheduleEngine', () => {
         scheduleStartDate: '2026-01-01',
       },
     };
-    return render(
+    const view = render(
       <EngineHarness
         draft={draft}
         currentBudget={overrides.currentBudget === undefined ? createMockBudget() : overrides.currentBudget}
@@ -118,15 +126,19 @@ describe('useScheduleEngine', () => {
         pendingRef={pendingRef}
       />
     );
+    await waitFor(() => {
+      expect(mockAPI.settings.get).toHaveBeenCalled();
+    });
+    return view;
   }
 
-  it('uses draft starting balance when present', () => {
-    renderEngine();
+  it('uses draft starting balance when present', async () => {
+    await renderEngine();
     expect(screen.getByTestId('balance')).toHaveTextContent('400');
   });
 
-  it('falls back to current budget starting balance', () => {
-    renderEngine({
+  it('falls back to current budget starting balance', async () => {
+    await renderEngine({
       draft: createEmptyDraftState(),
       currentBudget: createMockBudget({ startingBalance: 880 }),
     });
@@ -134,7 +146,7 @@ describe('useScheduleEngine', () => {
   });
 
   it('force generate stores schedule, then cache hit skips rebuild', async () => {
-    renderEngine({ overlay: { startingBalance: 1000 } });
+    await renderEngine({ overlay: { startingBalance: 1000 } });
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('paychecks')).toHaveTextContent('1');
@@ -150,7 +162,7 @@ describe('useScheduleEngine', () => {
   });
 
   it('seeds preferred assignments before building overlay', async () => {
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-preferred'));
     await waitFor(() => {
       expect(screen.getByTestId('last-result')).toHaveTextContent('ok');
@@ -161,7 +173,7 @@ describe('useScheduleEngine', () => {
 
   it('sets and clears schedule errors', async () => {
     mockAPI.schedule.build.mockResolvedValueOnce({ success: false, error: 'compute failed' });
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('error')).toHaveTextContent('compute failed');
@@ -172,7 +184,7 @@ describe('useScheduleEngine', () => {
 
   it('reports thrown generate failures', async () => {
     mockAPI.schedule.build.mockRejectedValueOnce(new Error('ipc exploded'));
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('error')).toHaveTextContent('ipc exploded');
@@ -182,7 +194,7 @@ describe('useScheduleEngine', () => {
 
   it('stringifies non-Error generate throws', async () => {
     mockAPI.schedule.build.mockRejectedValueOnce('not-an-error');
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('error')).toHaveTextContent('not-an-error');
@@ -195,7 +207,7 @@ describe('useScheduleEngine', () => {
       error: 'superseded',
       errorCode: 'superseded',
     });
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('last-result')).toHaveTextContent('null');
@@ -208,7 +220,7 @@ describe('useScheduleEngine', () => {
       success: true,
       data: createMockSchedule({ viewportMonths: 12, calculationMonths: 12 }),
     });
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('paychecks')).toHaveTextContent('1');
@@ -218,9 +230,79 @@ describe('useScheduleEngine', () => {
     expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
   });
 
+  it('loads the persisted viewport from settings', async () => {
+    mockAPI.settings.get.mockResolvedValue({
+      success: true,
+      data: {
+        theme: 'system',
+        autoLockMinutes: 5,
+        currency: 'USD',
+        defaultScheduleMonths: 12,
+        savingsAPY: 0,
+      },
+    });
+    await renderEngine();
+    await waitFor(() => {
+      expect(screen.getByTestId('months')).toHaveTextContent('12');
+      expect(screen.getByTestId('persisted-months')).toHaveTextContent('12');
+    });
+  });
+
+  it('keeps the 3-month default when settings fail to load', async () => {
+    mockAPI.settings.get.mockRejectedValueOnce(new Error('settings unavailable'));
+    await renderEngine();
+    await waitFor(() => {
+      expect(reportError).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId('months')).toHaveTextContent('3');
+  });
+
+  it('keeps the 3-month default when settings return an unsuccessful payload', async () => {
+    mockAPI.settings.get.mockResolvedValueOnce({ success: false, error: 'locked' });
+    await renderEngine();
+    await waitFor(() => {
+      expect(reportError).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId('months')).toHaveTextContent('3');
+  });
+
+  it('persists 3/6/12 viewport changes and ignores goal-length views', async () => {
+    await renderEngine();
+    fireEvent.click(screen.getByText('set-persisted-viewport'));
+    await waitFor(() => {
+      expect(mockAPI.settings.update).toHaveBeenCalledWith({ defaultScheduleMonths: 6 });
+    });
+    expect(screen.getByTestId('months')).toHaveTextContent('6');
+
+    mockAPI.settings.update.mockClear();
+    fireEvent.click(screen.getByText('set-goal-viewport'));
+    expect(screen.getByTestId('months')).toHaveTextContent('18');
+    expect(mockAPI.settings.update).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed viewport persist without changing the local view', async () => {
+    mockAPI.settings.update.mockResolvedValueOnce({ success: false, error: 'write denied' });
+    await renderEngine();
+    fireEvent.click(screen.getByText('set-persisted-viewport'));
+    await waitFor(() => {
+      expect(reportError).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId('months')).toHaveTextContent('6');
+  });
+
+  it('reports a thrown viewport persist failure', async () => {
+    mockAPI.settings.update.mockRejectedValueOnce(new Error('disk full'));
+    await renderEngine();
+    fireEvent.click(screen.getByText('set-persisted-viewport'));
+    await waitFor(() => {
+      expect(reportError).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId('months')).toHaveTextContent('6');
+  });
+
   it('uses generic error when the failed result omits a message', async () => {
     mockAPI.schedule.build.mockResolvedValueOnce({ success: false });
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('error')).toHaveTextContent('Failed to generate schedule');
@@ -246,7 +328,7 @@ describe('useScheduleEngine', () => {
         })
     );
 
-    renderEngine();
+    await renderEngine();
     fireEvent.click(screen.getByText('force-generate'));
     await waitFor(() => {
       expect(screen.getByTestId('loading')).toHaveTextContent('true');

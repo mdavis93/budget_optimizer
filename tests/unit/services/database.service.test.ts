@@ -4,6 +4,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CryptoService } from '../../../electron/services/crypto.service';
 import { DatabaseService } from '../../../electron/services/database.service';
+import { databaseLogger } from '../../../electron/services/logger.service';
 
 vi.mock('../../../electron/services/logger.service', () => ({
   databaseLogger: {
@@ -234,6 +235,19 @@ describe('DatabaseService', () => {
       expect(updated.theme).toBe('dark');
       expect(updated.savingsAPY).toBe(4.25);
       expect(updated.defaultScheduleMonths).toBe(6);
+    });
+
+    it('coerces a tampered defaultScheduleMonths value back to 3', () => {
+      const crypto = (db as unknown as { crypto: { encryptObject: (value: unknown) => string } }).crypto;
+      const internalDb = (db as unknown as {
+        db: { prepare: (sql: string) => { run: (key: string, value: string) => void } };
+      }).db;
+      internalDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(
+        'defaultScheduleMonths',
+        crypto.encryptObject(14)
+      );
+      expect(db.getSettings().defaultScheduleMonths).toBe(3);
+      expect(databaseLogger.warn).toHaveBeenCalled();
     });
 
     it('stores settings as encrypted ciphertext and returns plaintext', () => {
@@ -700,6 +714,8 @@ describe('DatabaseService', () => {
     it('rejects hostile settings updates and non-finite income overrides', () => {
       const budget = db.createBudget({ name: 'Settings Guard' });
       expect(() => db.updateSettings({ theme: 'neon' })).toThrow(/Invalid settings data/);
+      expect(() => db.updateSettings({ defaultScheduleMonths: 18 })).toThrow(/Invalid settings data/);
+      expect(() => db.updateSettings({ defaultScheduleMonths: 1 })).toThrow(/Invalid settings data/);
       expect(() => db.updateSettings({ rogueKey: 1 } as never)).toThrow(/Invalid settings data/);
       expect(() => db.setIncomeOverride(budget.id, 'income-1', '2026-02-01', Number.NaN)).toThrow(
         'Income override amount must be a non-negative number'

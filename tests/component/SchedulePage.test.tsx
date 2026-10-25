@@ -227,6 +227,7 @@ describe('SchedulePage', () => {
       isLoading: false,
       scheduleStartDate: '2026-01-01',
       scheduleMonths: 3,
+      persistedViewportMonths: 3,
       scheduleStartingBalance: 1000,
       scheduleInputHash: 'test-hash',
       setScheduleStartDate: vi.fn(),

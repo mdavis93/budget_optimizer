@@ -36,6 +36,7 @@ export default function SchedulePage() {
     isLoading,
     scheduleStartDate: startDate,
     scheduleMonths: months,
+    persistedViewportMonths,
     scheduleStartingBalance: startingBalance,
     scheduleInputHash,
     setScheduleStartDate: setStartDate,
@@ -310,6 +311,7 @@ export default function SchedulePage() {
         months={months}
         startingBalance={startingBalance}
         calculationMonths={schedule?.calculationMonths}
+        fallbackMonths={persistedViewportMonths}
         goals={goalViewportSources}
         onStartDateChange={setStartDate}
         onMonthsChange={setMonths}

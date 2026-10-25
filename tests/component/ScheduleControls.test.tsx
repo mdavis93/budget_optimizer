@@ -22,7 +22,7 @@ describe('ScheduleControls', () => {
       expect(option.value).toBe('18');
     });
 
-    it('falls back to 12 when the current selection is no longer a valid option', async () => {
+    it('falls back to the persisted viewport when the current selection is no longer valid', async () => {
       const onMonthsChange = vi.fn();
       render(
         <ScheduleControls
@@ -30,6 +30,7 @@ describe('ScheduleControls', () => {
           months={18} // stale: no goal/horizon supports 18 here
           startingBalance={0}
           calculationMonths={12}
+          fallbackMonths={6}
           goals={[]}
           onStartDateChange={vi.fn()}
           onMonthsChange={onMonthsChange}
@@ -37,7 +38,7 @@ describe('ScheduleControls', () => {
         />
       );
 
-      await waitFor(() => expect(onMonthsChange).toHaveBeenCalledWith(12));
+      await waitFor(() => expect(onMonthsChange).toHaveBeenCalledWith(6));
     });
   });
 

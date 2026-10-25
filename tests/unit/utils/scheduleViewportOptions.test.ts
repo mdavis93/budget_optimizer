@@ -4,17 +4,17 @@ import { buildViewportOptions } from '../../../src/utils/scheduleViewportOptions
 const START = '2026-01-01';
 
 describe('buildViewportOptions', () => {
-  it('returns the fixed 1/3/6/12 options when there are no goals', () => {
+  it('returns the fixed 3/6/12 options when there are no goals', () => {
     const options = buildViewportOptions(12, START, []);
-    expect(options.map((o) => o.value)).toEqual([1, 3, 6, 12]);
-    expect(options.map((o) => o.label)).toEqual(['1 Month', '3 Months', '6 Months', '12 Months']);
+    expect(options.map((o) => o.value)).toEqual([3, 6, 12]);
+    expect(options.map((o) => o.label)).toEqual(['3 Months', '6 Months', '12 Months']);
   });
 
   it('appends a goal shortcut for a longer goal, sorted by length', () => {
     const options = buildViewportOptions(18, START, [
       { goalName: 'Car', targetDate: '2027-07-01' }, // 18 months out
     ]);
-    expect(options.map((o) => o.value)).toEqual([1, 3, 6, 12, 18]);
+    expect(options.map((o) => o.value)).toEqual([3, 6, 12, 18]);
     const longest = options.at(-1);
     expect(longest?.value).toBe(18);
     expect(longest?.label).toBe('Through "Car" (Jul 2027)');
@@ -24,7 +24,7 @@ describe('buildViewportOptions', () => {
     const options = buildViewportOptions(12, START, [
       { goalName: 'Trip', targetDate: '2026-07-01' }, // 6 months -> collides with fixed "6 Months"
     ]);
-    expect(options.map((o) => o.value)).toEqual([1, 3, 6, 12]);
+    expect(options.map((o) => o.value)).toEqual([3, 6, 12]);
     const six = options.find((o) => o.value === 6);
     expect(six?.label).toBe('6 Months');
   });

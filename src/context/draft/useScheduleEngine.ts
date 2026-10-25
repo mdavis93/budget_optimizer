@@ -10,6 +10,11 @@ import {
 } from '../../utils/scheduleCache';
 import { buildScheduleInputHash, toScheduleIdentityInput } from '../../utils/scheduleInputHash';
 import type { ScheduleComputeProgressReport } from '@shared/scheduleComputeProtocol';
+import {
+  coerceScheduleViewportMonths,
+  DEFAULT_SCHEDULE_VIEWPORT_MONTHS,
+  isScheduleViewportMonths,
+} from '@shared/scheduleViewportMonths';
 
 const defaultScheduleStartDate = () => format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
@@ -23,6 +28,7 @@ export interface ScheduleEngineValue {
   peekScheduleDiagnosticId: () => string | null;
   scheduleStartDate: string;
   scheduleMonths: number;
+  persistedViewportMonths: number;
   scheduleStartingBalance: number;
   scheduleInputHash: string;
   setScheduleStartDate: (date: string) => void;
@@ -67,7 +73,10 @@ export function useScheduleEngine({
   const [scheduleDiagnosticId, setScheduleDiagnosticId] = useState<string | null>(null);
   const [scheduleProgress, setScheduleProgress] = useState<ScheduleComputeProgressReport | null>(null);
   const [scheduleBuildStartedAt, setScheduleBuildStartedAt] = useState<number | null>(null);
-  const [scheduleMonths, setScheduleMonthsState] = useState(3);
+  const [scheduleMonths, setScheduleMonthsState] = useState<number>(DEFAULT_SCHEDULE_VIEWPORT_MONTHS);
+  const [persistedViewportMonths, setPersistedViewportMonths] = useState<number>(
+    DEFAULT_SCHEDULE_VIEWPORT_MONTHS
+  );
   const [scheduleStartingBalance, setScheduleStartingBalance] = useState(0);
 
   const fullScheduleRef = useRef<ScheduleData | null>(null);
@@ -77,6 +86,7 @@ export function useScheduleEngine({
   const scheduleRequestGenRef = useRef(0);
   const isScheduleLoadingRef = useRef(false);
   const scheduleDiagnosticIdRef = useRef<string | null>(null);
+  const userViewportOverrideRef = useRef<number | null>(null);
 
   const settleDebounce = useCallback((value: ScheduleData | null) => {
     const flight = debounceFlightRef.current;
@@ -111,6 +121,38 @@ export function useScheduleEngine({
       settleDebounce(null);
     };
   }, [settleDebounce]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadViewport = async () => {
+      try {
+        const result = await window.electronAPI?.settings?.get();
+        if (!isMounted) {
+          return;
+        }
+        if (result?.success && result.data) {
+          const nextViewport = coerceScheduleViewportMonths(result.data.defaultScheduleMonths);
+          setPersistedViewportMonths(nextViewport);
+          if (userViewportOverrideRef.current === null) {
+            setScheduleMonthsState(nextViewport);
+          }
+          return;
+        }
+        void reportError(
+          'renderer:useScheduleEngine.loadViewport',
+          result?.error || 'Failed to load schedule viewport'
+        );
+      } catch (error) {
+        if (isMounted) {
+          void reportError('renderer:useScheduleEngine.loadViewport', error);
+        }
+      }
+    };
+    void loadViewport();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const subscribe = window.electronAPI?.schedule?.onProgress;
@@ -155,9 +197,28 @@ export function useScheduleEngine({
     [updateBudgetFields]
   );
 
+  const persistViewportMonths = useCallback((months: number) => {
+    if (!isScheduleViewportMonths(months)) {
+      return;
+    }
+    setPersistedViewportMonths(months);
+    void window.electronAPI?.settings?.update({ defaultScheduleMonths: months }).then((result) => {
+      if (result && result.success === false) {
+        void reportError(
+          'renderer:useScheduleEngine.persistViewport',
+          result.error || 'Failed to persist schedule viewport'
+        );
+      }
+    }).catch((error) => {
+      void reportError('renderer:useScheduleEngine.persistViewport', error);
+    });
+  }, []);
+
   const setScheduleMonths = useCallback(
     (months: number) => {
+      userViewportOverrideRef.current = months;
       setScheduleMonthsState(months);
+      persistViewportMonths(months);
       if (fullScheduleRef.current) {
         setSchedule(
           applyScheduleViewport(
@@ -169,7 +230,7 @@ export function useScheduleEngine({
         );
       }
     },
-    [draft.bills, scheduleStartingBalance]
+    [draft.bills, persistViewportMonths, scheduleStartingBalance]
   );
 
   const applyScheduleResult = useCallback(
@@ -340,6 +401,7 @@ export function useScheduleEngine({
     peekScheduleDiagnosticId,
     scheduleStartDate,
     scheduleMonths,
+    persistedViewportMonths,
     scheduleStartingBalance,
     scheduleInputHash,
     setScheduleStartDate,

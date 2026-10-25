@@ -9,6 +9,7 @@ const mockUseTheme = vi.fn();
 const mockUseAuth = vi.fn();
 const mockUseBudget = vi.fn();
 const mockUseDraft = vi.fn();
+const mockUseSchedule = vi.fn();
 
 vi.mock('../../src/context/ThemeContext', () => ({
   useTheme: () => mockUseTheme(),
@@ -23,6 +24,7 @@ vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => mockUseDraft(),
   useDraftData: () => mockUseDraft(),
   useDraftActions: () => mockUseDraft(),
+  useSchedule: () => mockUseSchedule(),
 }));
 
 describe('SettingsPage', () => {
@@ -31,6 +33,7 @@ describe('SettingsPage', () => {
   const enableBiometric = vi.fn();
   const updateBudget = vi.fn();
   const updateBudgetFields = vi.fn();
+  const setScheduleMonths = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -59,6 +62,9 @@ describe('SettingsPage', () => {
       budgetFields: null,
       updateBudgetFields,
     });
+    mockUseSchedule.mockReturnValue({
+      setScheduleMonths,
+    });
   });
 
   describe('happy', () => {
@@ -71,6 +77,7 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('heading', { name: 'Requires Save (Budget)' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Appearance' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Security' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Schedule window' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Savings' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
 
@@ -89,14 +96,51 @@ describe('SettingsPage', () => {
         expect(mockAPI.settings.update).toHaveBeenCalledWith({ currency: 'EUR' });
       });
 
+      await user.selectOptions(screen.getByLabelText('Default schedule window'), '12');
+      await waitFor(() => {
+        expect(setScheduleMonths).toHaveBeenCalledWith(12);
+        expect(mockAPI.settings.update).toHaveBeenCalledWith({ defaultScheduleMonths: 12 });
+      });
+
       await user.click(screen.getByRole('button', { name: 'Enable' }));
       await waitFor(() => {
         expect(enableBiometric).toHaveBeenCalled();
       });
     });
+
+    it('loads a persisted 12-month viewport into the settings control', async () => {
+      mockAPI.settings.get.mockResolvedValue({
+        success: true,
+        data: {
+          theme: 'system',
+          autoLockMinutes: 5,
+          currency: 'USD',
+          defaultScheduleMonths: 12,
+          savingsAPY: 0,
+        },
+      });
+      renderWithRouter(<SettingsPage />, { mockAPI });
+      const select = await screen.findByLabelText('Default schedule window');
+      await waitFor(() => {
+        expect(select).toHaveValue('12');
+        expect(setScheduleMonths).toHaveBeenCalledWith(12);
+      });
+    });
   });
 
   describe('sad', () => {
+    it('shows an error when saving the schedule window fails', async () => {
+      mockAPI.settings.update.mockRejectedValueOnce(new Error('write failed'));
+      const user = userEvent.setup();
+      renderWithRouter(<SettingsPage />, { mockAPI });
+      const select = await screen.findByLabelText('Default schedule window');
+      await waitFor(() => {
+        expect(select).not.toBeDisabled();
+      });
+      await user.selectOptions(select, '6');
+      expect(await screen.findByText('Failed to save settings')).toBeInTheDocument();
+    });
+
     it('saves APY updates and clamps out-of-range values', async () => {
       const user = userEvent.setup();
       renderWithRouter(<SettingsPage />, { mockAPI });
