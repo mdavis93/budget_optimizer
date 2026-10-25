@@ -168,7 +168,7 @@ export function useScheduleEngine({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [viewportGate]);
 
   useEffect(() => {
     const subscribe = window.electronAPI?.schedule?.onProgress;
@@ -366,7 +366,7 @@ export function useScheduleEngine({
         }
       }
     },
-    [applyScheduleResult, buildDraftOverlay, draft, pendingPreferredAssignmentsRef]
+    [applyScheduleResult, buildDraftOverlay, draft, pendingPreferredAssignmentsRef, viewportGate.ready]
   );
 
   const generateSchedule = useCallback(
