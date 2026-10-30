@@ -40,4 +40,25 @@ describe('navigationLock', () => {
     handler({}, 'notifications', cb);
     expect(cb).toHaveBeenCalledWith(false);
   });
+
+  it('denies clipboard writes by default', () => {
+    const session = { setPermissionRequestHandler: vi.fn() };
+    denyAllPermissions(session as never);
+    const handler = session.setPermissionRequestHandler.mock.calls[0][0];
+    const cb = vi.fn();
+    handler({}, 'clipboard-sanitized-write', cb);
+    expect(cb).toHaveBeenCalledWith(false);
+  });
+
+  it('allows only explicitly allowed permissions', () => {
+    const session = { setPermissionRequestHandler: vi.fn() };
+    denyAllPermissions(session as never, ['clipboard-sanitized-write']);
+    const handler = session.setPermissionRequestHandler.mock.calls[0][0];
+    const allowed = vi.fn();
+    const denied = vi.fn();
+    handler({}, 'clipboard-sanitized-write', allowed);
+    handler({}, 'media', denied);
+    expect(allowed).toHaveBeenCalledWith(true);
+    expect(denied).toHaveBeenCalledWith(false);
+  });
 });
