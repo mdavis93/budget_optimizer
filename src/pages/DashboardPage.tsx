@@ -13,7 +13,7 @@ import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
 import { BalanceProjectionChart, ChartSuspense } from '../components/charts/lazyCharts';
 import { ScheduleBuildProgress } from '../components/schedule';
-import { copyDiagnosticReport } from '../utils/reportError';
+import { useCopyDiagnosticReport } from '../hooks/useCopyDiagnosticReport';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
 import { getMonthlyBillEquivalent, getMonthlyOperatingIncomeTotal } from '../utils/cadence';
@@ -57,6 +57,7 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
 
 export default function DashboardPage() {
   const { incomes, bills } = useDraftData();
+  const copyReport = useCopyDiagnosticReport();
   const {
     generateSchedule,
     schedule,
@@ -228,7 +229,7 @@ export default function DashboardPage() {
                     type="button"
                     className="btn-secondary"
                     onClick={() => {
-                      void copyDiagnosticReport(diagnosticId);
+                      void copyReport(diagnosticId);
                     }}
                   >
                     Copy report

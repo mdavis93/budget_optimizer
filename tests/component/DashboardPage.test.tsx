@@ -9,6 +9,10 @@ vi.mock('../../src/utils/reportError', () => ({
   copyDiagnosticReport: vi.fn(),
 }));
 
+vi.mock('../../src/components/Toast', () => ({
+  useToast: () => ({ showToast: vi.fn(), dismissToast: vi.fn() }),
+}));
+
 const mockUseData = vi.fn();
 
 vi.mock('../../src/context/DraftContext', () => ({
