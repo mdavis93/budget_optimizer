@@ -18,6 +18,14 @@ import {
 const MAX_ADVISOR_PLANS = 5;
 const MAX_ADVISOR_PLAN_STEPS = 12;
 const MAX_ADVISOR_CASCADE_DEPTH = 8;
+/**
+ * Per search attempt (one target × one sort) visit budget. The cascade search is
+ * exponential (bills × landings per level, depth 8, no memoization); one real
+ * dataset spent 621M visits / ~50s on a single attempt and hit the 60s worker
+ * timeout. Attempts that finished normally used <= ~740k visits, so exhausting
+ * the budget is treated as "no plan for this target" rather than hanging the build.
+ */
+const MAX_ADVISOR_SEARCH_VISITS = 1_000_000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface ProposeBreakGlassOptions {
@@ -65,6 +73,8 @@ interface SearchCtx {
   maxEarlyDays: number;
   /** Legal paycheck slots per bill due date (date-only; sort uses live balances). */
   legalSlotsByBillDate: Map<string, LegalSlot[]>;
+  /** Remaining visits for the current search attempt; reset by `tryClearBreakGlass`. */
+  visitsRemaining: number;
 }
 
 let advisorSearchVisits = 0;
@@ -245,7 +255,13 @@ function buildSearchCtx(
     }
     legalSlotsByBillDate.set(billDate, slots);
   }
-  return { paycheckMs, startMs, maxEarlyDays, legalSlotsByBillDate };
+  return {
+    paycheckMs,
+    startMs,
+    maxEarlyDays,
+    legalSlotsByBillDate,
+    visitsRemaining: MAX_ADVISOR_SEARCH_VISITS,
+  };
 }
 
 /** Test-only: trial order for a sort strategy. Locks amount-asc vs name-only. */
@@ -342,12 +358,13 @@ function ensureReceiveRoom(
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
     return false;
   }
+  if (ctx.visitsRemaining-- <= 0) return false;
 
   for (const bill of sortMovable(
     sim[index].bills.filter((candidate) => isMovable(candidate, lockedBillKeys)),
     sort
   )) {
-    if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
+    if (steps.length >= MAX_ADVISOR_PLAN_STEPS || ctx.visitsRemaining <= 0) break;
 
     const earlierCandidates = (ctx.legalSlotsByBillDate.get(bill.billDate) ?? [])
       .filter((slot) => slot.index < index)
@@ -410,12 +427,13 @@ function ensureReceiveRoomLater(
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
     return false;
   }
+  if (ctx.visitsRemaining-- <= 0) return false;
 
   for (const bill of sortMovable(
     sim[index].bills.filter((candidate) => isMovable(candidate, lockedBillKeys)),
     sort
   )) {
-    if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
+    if (steps.length >= MAX_ADVISOR_PLAN_STEPS || ctx.visitsRemaining <= 0) break;
 
     const laterCandidates = (ctx.legalSlotsByBillDate.get(bill.billDate) ?? [])
       .filter((slot) => slot.index > index)
@@ -519,6 +537,7 @@ function tryClearBreakGlass(
   }));
   const steps: BreakGlassPlanStep[] = [];
   const moveStack: AppliedMove[] = [];
+  ctx.visitsRemaining = MAX_ADVISOR_SEARCH_VISITS;
   let guard = 0;
   const targetCashOnHand = sim[targetIndex].targetCashOnHand;
 
