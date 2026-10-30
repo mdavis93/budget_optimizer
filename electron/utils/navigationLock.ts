@@ -14,8 +14,16 @@ export function attachNavigationLock(webContents: WebContents, opts: NavigationA
   webContents.on('will-redirect', denyUnlessAllowed);
 }
 
-export function denyAllPermissions(session: Session): void {
-  session.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
+/**
+ * Deny every renderer permission request except the explicitly allowed ones.
+ * `navigator.clipboard.writeText` is gated on `clipboard-sanitized-write`, so the
+ * main window must allow it for "Copy report" to work.
+ */
+export function denyAllPermissions(
+  session: Session,
+  allowedPermissions: readonly string[] = []
+): void {
+  session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allowedPermissions.includes(permission));
   });
 }
