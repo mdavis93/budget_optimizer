@@ -42,6 +42,6 @@ export async function completeSetup(window: Page, password: string = E2E_PASSWOR
 export async function unlock(window: Page, password: string = E2E_PASSWORD): Promise<void> {
   await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
   await window.locator('#password').fill(password);
-  await window.getByRole('button', { name: 'Unlock' }).click();
+  await window.getByRole('button', { name: 'Unlock', exact: true }).click();
   await expect(window.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
 }

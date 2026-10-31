@@ -17,7 +17,7 @@ test.describe('Lock and unlock', () => {
     await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
 
     await window.locator('#password').fill(E2E_PASSWORD);
-    await window.getByRole('button', { name: 'Unlock' }).click();
+    await window.getByRole('button', { name: 'Unlock', exact: true }).click();
 
     // Unlocking returns to the app, possibly via the budget picker.
     const picker = window.getByRole('heading', { name: 'Select a Budget' });
@@ -32,7 +32,7 @@ test.describe('Lock and unlock', () => {
     await expect(window.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
 
     await window.locator('#password').fill('definitely-not-the-password');
-    await window.getByRole('button', { name: 'Unlock' }).click();
+    await window.getByRole('button', { name: 'Unlock', exact: true }).click();
 
     // Stays locked: the login screen remains and the app shell never appears.
     await expect(window.getByRole('link', { name: 'Dashboard' })).toBeHidden();
