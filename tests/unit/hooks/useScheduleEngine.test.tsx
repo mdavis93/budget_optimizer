@@ -215,6 +215,21 @@ describe('useScheduleEngine', () => {
     expect(screen.getByTestId('error')).toHaveTextContent('');
   });
 
+  it('ignores a cancelled compute without an error banner or diagnostic', async () => {
+    mockAPI.schedule.build.mockResolvedValueOnce({
+      success: false,
+      error: 'cancelled',
+      errorCode: 'cancelled',
+    });
+    await renderEngine();
+    fireEvent.click(screen.getByText('force-generate'));
+    await waitFor(() => {
+      expect(screen.getByTestId('last-result')).toHaveTextContent('null');
+    });
+    expect(screen.getByTestId('error')).toHaveTextContent('');
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
   it('applies viewport from cached full schedule without rebuilding', async () => {
     mockAPI.schedule.build.mockResolvedValue({
       success: true,

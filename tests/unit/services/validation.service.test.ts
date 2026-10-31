@@ -7,6 +7,7 @@ import {
   validateGoal,
   validateDebt,
   validateLeave,
+  validateScheduleBuildArgs,
   validateBudget,
   validateDraftOverlay,
   validateReconciliationFix,
@@ -347,7 +348,7 @@ describe('validation.service', () => {
       expect(validateDebt({
         billId: 'draft-12345678-abcd',
         principalBalance: 5000,
-        apr: 12.5,
+        apr: 0.125,
         monthlyPayment: 150,
       }).valid).toBe(true);
 
@@ -545,6 +546,60 @@ describe('validation.service', () => {
         paycheckDate: 'also-bad',
       });
       expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('phase 1 hardening', () => {
+    it('rejects hostile schedule:build arguments', () => {
+      expect(validateScheduleBuildArgs('2026-02-31', 3, 0).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 2, 0).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 3, Number.NaN).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 3, Number.POSITIVE_INFINITY).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 3, '10').valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 3, 1e308).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 3, -25).valid).toBe(true);
+    });
+
+    it('keeps strict APR on create and legacy APR on the overlay', () => {
+      const debt = {
+        billId: 'draft-12345678-abcd',
+        principalBalance: 5000,
+        apr: 12.5,
+        monthlyPayment: 150,
+      };
+      expect(validateDebt(debt).valid).toBe(false);
+      expect(validateDebt(debt, 'strict').errors.join(' ')).toContain('between 0 and 1');
+      expect(validateDebt({ ...debt, apr: 0.125 }).valid).toBe(true);
+      expect(validateDraftOverlay({ debts: [debt] }).valid).toBe(true);
+      expect(validateDraftOverlay({ debts: [{ ...debt, apr: 101 }] }).valid).toBe(false);
+    });
+
+    it('rejects overlay caps, non-finite money, and bad preferred keys', () => {
+      const incomes = Array.from({ length: 101 }, () => ({
+        sourceName: 'Job',
+        amount: 100,
+        cadence: 'monthly',
+        startDate: '2026-01-01',
+        isActive: true,
+      }));
+      const overCap = validateDraftOverlay({ incomes });
+      expect(overCap.valid).toBe(false);
+      expect(overCap.errors.join(' ')).toContain('Incomes cannot exceed 100');
+
+      expect(validateDraftOverlay({ startingBalance: Number.POSITIVE_INFINITY }).valid).toBe(false);
+      expect(validateDraftOverlay({ incomeOverrides: [{
+        incomeId: 'income-12345678',
+        paycheckDate: '2026-01-15',
+        amount: Number.NaN,
+      }] }).valid).toBe(false);
+      expect(validateDraftOverlay({
+        scheduleStartDate: '2026-02-31',
+        preferredAssignments: [['nope', '2026-01-01']],
+      }).valid).toBe(false);
+      expect(validateDraftOverlay({
+        scheduleStartDate: '2026-01-01',
+        preferredAssignments: [['income-12345678-2026-02-01', '2026-01-15']],
+      }).valid).toBe(true);
     });
   });
 });

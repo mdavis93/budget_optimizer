@@ -132,6 +132,54 @@ export function assertValid(result: ValidationResult, context: string): void {
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ID_REGEX = /^[a-zA-Z0-9-]{8,64}$/;
 
+/** Absolute ceiling for a single money field. Starting balance may be negative. */
+export const MAX_MONEY = 10_000_000;
+
+export const COLLECTION_LIMITS = {
+  incomes: 100,
+  bills: 1000,
+  goals: 200,
+  debts: 200,
+  leaves: 500,
+  skippedBills: 20_000,
+  billAssignments: 20_000,
+  incomeOverrides: 20_000,
+  preferredAssignments: 1000,
+} as const;
+
+export function collectionLimitError(domain: string, limit: number): string {
+  return `${domain} cannot exceed ${limit}`;
+}
+
+/** Reject a create (`adding`) or an update that would leave the collection over the cap. */
+export function assertCollectionCap(domain: string, count: number, limit: number, adding: boolean): void {
+  if (count + (adding ? 1 : 0) > limit) {
+    throw new ValidationError(collectionLimitError(domain, limit));
+  }
+}
+
+function isMoney(value: unknown, allowNegative: boolean): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= MAX_MONEY &&
+    (allowNegative || value >= 0)
+  );
+}
+
+function isRealCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE_REGEX.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function isPreferredAssignmentKey(key: string): boolean {
+  if (key.length < 19 || key.length > 80 || key[key.length - 11] !== '-') return false;
+  const billId = key.slice(0, -11);
+  return ID_REGEX.test(billId) && isRealCalendarDate(key.slice(-10));
+}
+
 export interface ReconciliationFixInput {
   id: string;
   type: 'move_bill';
@@ -259,15 +307,23 @@ export function validateGoal(goal: {
     errors.push('Goal name must be 100 characters or less');
   }
 
-  if (typeof goal.targetAmount !== 'number' || isNaN(goal.targetAmount) || goal.targetAmount <= 0) {
+  if (typeof goal.targetAmount !== 'number' || !Number.isFinite(goal.targetAmount) || goal.targetAmount <= 0) {
     errors.push('Target amount must be greater than 0');
+  } else if (goal.targetAmount > MAX_MONEY) {
+    errors.push('Target amount cannot exceed 10,000,000');
   }
 
   if (!DATE_REGEX.test(goal.targetDate)) {
     errors.push('Target date must be in YYYY-MM-DD format');
   }
 
-  if (goal.alreadySaved !== undefined && (typeof goal.alreadySaved !== 'number' || goal.alreadySaved < 0)) {
+  if (
+    goal.alreadySaved !== undefined &&
+    (typeof goal.alreadySaved !== 'number' ||
+      !Number.isFinite(goal.alreadySaved) ||
+      goal.alreadySaved < 0 ||
+      goal.alreadySaved > MAX_MONEY)
+  ) {
     errors.push('Already saved must be a non-negative number');
   }
 
@@ -278,27 +334,40 @@ export function validateGoal(goal: {
   return { valid: errors.length === 0, errors };
 }
 
+export type DebtAprMode = 'strict' | 'legacy';
+
 export function validateDebt(debt: {
   billId: string;
   principalBalance: number;
   apr: number;
   monthlyPayment: number;
-}): ValidationResult {
+}, aprMode: DebtAprMode = 'strict'): ValidationResult {
   const errors: string[] = [];
 
   if (!debt.billId || !ID_REGEX.test(debt.billId)) {
     errors.push('Bill ID is invalid');
   }
 
-  if (typeof debt.principalBalance !== 'number' || debt.principalBalance < 0) {
+  if (
+    typeof debt.principalBalance !== 'number' ||
+    !Number.isFinite(debt.principalBalance) ||
+    debt.principalBalance < 0 ||
+    debt.principalBalance > MAX_MONEY
+  ) {
     errors.push('Principal balance must be a non-negative number');
   }
 
-  if (typeof debt.apr !== 'number' || debt.apr < 0 || debt.apr > 100) {
-    errors.push('APR must be between 0 and 100');
+  const aprLimit = aprMode === 'legacy' ? 100 : 1;
+  if (typeof debt.apr !== 'number' || !Number.isFinite(debt.apr) || debt.apr < 0 || debt.apr > aprLimit) {
+    errors.push(aprMode === 'legacy' ? 'APR must be between 0 and 100' : 'APR must be between 0 and 1');
   }
 
-  if (typeof debt.monthlyPayment !== 'number' || debt.monthlyPayment < 0) {
+  if (
+    typeof debt.monthlyPayment !== 'number' ||
+    !Number.isFinite(debt.monthlyPayment) ||
+    debt.monthlyPayment < 0 ||
+    debt.monthlyPayment > MAX_MONEY
+  ) {
     errors.push('Monthly payment must be a non-negative number');
   }
 
@@ -357,18 +426,14 @@ export function validateLeave(leave: {
 
   if (
     hasTargetOverride &&
-    (typeof leave.targetCashOnHand !== 'number' ||
-      isNaN(leave.targetCashOnHand) ||
-      leave.targetCashOnHand < 0)
+    !isMoney(leave.targetCashOnHand, false)
   ) {
     errors.push('targetCashOnHand must be a non-negative number');
   }
 
   if (
     hasMinOverride &&
-    (typeof leave.minCashOnHand !== 'number' ||
-      isNaN(leave.minCashOnHand) ||
-      leave.minCashOnHand < 0)
+    !isMoney(leave.minCashOnHand, false)
   ) {
     errors.push('minCashOnHand must be a non-negative number');
   }
@@ -539,8 +604,26 @@ export function validateDraftOverlay(overlay: {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  scheduleStartDate?: string;
 }): ValidationResult {
   const errors: string[] = [];
+
+  const capped: Array<[string, number | undefined, number]> = [
+    ['Incomes', overlay.incomes?.length, COLLECTION_LIMITS.incomes],
+    ['Bills', overlay.bills?.length, COLLECTION_LIMITS.bills],
+    ['Goals', overlay.goals?.length, COLLECTION_LIMITS.goals],
+    ['Debts', overlay.debts?.length, COLLECTION_LIMITS.debts],
+    ['Leaves', overlay.leaves?.length, COLLECTION_LIMITS.leaves],
+    ['Skipped bills', overlay.skippedBills?.length, COLLECTION_LIMITS.skippedBills],
+    ['Bill assignments', overlay.billAssignments?.length, COLLECTION_LIMITS.billAssignments],
+    ['Income overrides', overlay.incomeOverrides?.length, COLLECTION_LIMITS.incomeOverrides],
+    ['Preferred assignments', overlay.preferredAssignments?.length, COLLECTION_LIMITS.preferredAssignments],
+  ];
+  for (const [domain, count, limit] of capped) {
+    if (count !== undefined && count > limit) {
+      errors.push(collectionLimitError(domain, limit));
+    }
+  }
 
   overlay.incomes?.forEach((income, index) => {
     const result = validateIncome(income);
@@ -564,7 +647,7 @@ export function validateDraftOverlay(overlay: {
   });
 
   overlay.debts?.forEach((debt, index) => {
-    const result = validateDebt(debt);
+    const result = validateDebt(debt, 'legacy');
     if (!result.valid) {
       errors.push(`Debt[${index}]: ${result.errors.join(', ')}`);
     }
@@ -599,7 +682,8 @@ export function validateDraftOverlay(overlay: {
       entry.length !== 2 ||
       typeof entry[0] !== 'string' ||
       typeof entry[1] !== 'string' ||
-      !DATE_REGEX.test(entry[1])
+      !isPreferredAssignmentKey(entry[0]) ||
+      !isRealCalendarDate(entry[1])
     ) {
       errors.push(`PreferredAssignment[${index}] is invalid`);
     }
@@ -610,14 +694,20 @@ export function validateDraftOverlay(overlay: {
       !ID_REGEX.test(override.incomeId) ||
       !DATE_REGEX.test(override.paycheckDate) ||
       typeof override.amount !== 'number' ||
-      override.amount < 0
+      !Number.isFinite(override.amount) ||
+      override.amount < 0 ||
+      override.amount > MAX_MONEY
     ) {
       errors.push(`IncomeOverride[${index}] is invalid`);
     }
   });
 
-  if (overlay.startingBalance !== undefined && (typeof overlay.startingBalance !== 'number' || isNaN(overlay.startingBalance))) {
-    errors.push('Starting balance must be a number');
+  if (overlay.startingBalance !== undefined && !isMoney(overlay.startingBalance, true)) {
+    errors.push('Starting balance must be a finite number of at most 10,000,000');
+  }
+
+  if (overlay.scheduleStartDate !== undefined && !isRealCalendarDate(overlay.scheduleStartDate)) {
+    errors.push('Schedule start date must be a real YYYY-MM-DD date');
   }
 
   for (const [field, value] of [
@@ -625,10 +715,28 @@ export function validateDraftOverlay(overlay: {
     ['minCashOnHand', overlay.minCashOnHand],
     ['minSavingsPerPaycheck', overlay.minSavingsPerPaycheck],
   ] as const) {
-    if (value !== undefined && (typeof value !== 'number' || isNaN(value) || value < 0)) {
+    if (value !== undefined && !isMoney(value, false)) {
       errors.push(`${field} must be a non-negative number`);
     }
   }
 
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateScheduleBuildArgs(
+  startDate: unknown,
+  months: unknown,
+  startingBalance: unknown
+): ValidationResult {
+  const errors: string[] = [];
+  if (!isRealCalendarDate(startDate)) {
+    errors.push('Start date must be a real YYYY-MM-DD date');
+  }
+  if (!isScheduleViewportMonths(months)) {
+    errors.push('Months must be 3, 6, or 12');
+  }
+  if (!isMoney(startingBalance, true)) {
+    errors.push('Starting balance must be a finite number of at most 10,000,000');
+  }
   return { valid: errors.length === 0, errors };
 }

@@ -6,6 +6,7 @@ import { clearApprovedExportPaths } from '../utils/exportPaths';
 export interface LockSideEffectServices {
   budgetManager: BudgetManager | null;
   database: DatabaseService | null;
+  scheduleCompute?: { cancelInFlight(reason: string): void };
 }
 
 export function notifyRendererLocked(): void {
@@ -18,6 +19,7 @@ export function notifyRendererLocked(): void {
 }
 
 export function applyLockSideEffects(services: LockSideEffectServices): void {
+  services.scheduleCompute?.cancelInFlight('locked');
   clearApprovedExportPaths();
   if (services.budgetManager) {
     services.budgetManager.endQuickBudget();

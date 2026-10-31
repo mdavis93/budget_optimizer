@@ -718,7 +718,7 @@ describe('BudgetManager', () => {
       vault.createDebt(named.id, {
         billId: namedBill.id,
         principalBalance: 500,
-        apr: 8,
+        apr: 0.08,
         monthlyPayment: 50,
       });
       const namedIncome = vault.createIncome(named.id, {
@@ -752,7 +752,7 @@ describe('BudgetManager', () => {
       fileManager.createDebt({
         billId: quickBill.id,
         principalBalance: 250,
-        apr: 12,
+        apr: 0.12,
         monthlyPayment: 25,
       });
       const quickIncome = fileManager.createIncome({

@@ -27,13 +27,16 @@ describe('appLock', () => {
   describe('happy', () => {
     it('notifies live windows and clears export/db/budget state', () => {
       const endQuickBudget = vi.fn();
+      const cancelInFlight = vi.fn();
       const services = {
         budgetManager: { endQuickBudget } as never,
         database: { close } as never,
+        scheduleCompute: { cancelInFlight },
       };
 
       applyLockSideEffects(services);
 
+      expect(cancelInFlight).toHaveBeenCalledWith('locked');
       expect(endQuickBudget).toHaveBeenCalled();
       expect(clearApprovedExportPaths).toHaveBeenCalled();
       expect(close).toHaveBeenCalled();

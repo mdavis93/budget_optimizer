@@ -3,7 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { CryptoService } from './crypto.service';
-import { validateBill, validateIncome, validateGoal, validateDebt, validateLeave, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid } from './validation.service';
+import { validateBill, validateIncome, validateGoal, validateDebt, validateLeave, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid, assertCollectionCap, COLLECTION_LIMITS, MAX_MONEY } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
 import { diagnostics } from './diagnostics.service';
 import {
@@ -1323,12 +1323,41 @@ export class DatabaseService {
     };
   }
 
+  private countBudgetRows(
+    table:
+      | 'incomes'
+      | 'bills'
+      | 'goals'
+      | 'debts'
+      | 'leaves'
+      | 'skipped_bills'
+      | 'bill_assignments'
+      | 'income_overrides',
+    budgetId: string
+  ): number {
+    const row = this.db!.prepare(`SELECT COUNT(*) as count FROM ${table} WHERE budget_id = ?`).get(budgetId) as {
+      count: number;
+    };
+    return row.count;
+  }
+
+  private assertWithinCollectionCap(
+    table: Parameters<DatabaseService['countBudgetRows']>[0],
+    budgetId: string,
+    domain: string,
+    limit: number,
+    adding: boolean
+  ): void {
+    assertCollectionCap(domain, this.countBudgetRows(table, budgetId), limit, adding);
+  }
+
   createIncome(budgetId: string, income: Omit<Income, 'id' | 'createdAt' | 'updatedAt'>): Income {
     if (!this.db) throw new Error('Database not initialized');
     
     // Validate input
     const validation = validateIncome(income);
     assertValid(validation, 'Invalid income data');
+    this.assertWithinCollectionCap('incomes', budgetId, 'Incomes', COLLECTION_LIMITS.incomes, true);
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
@@ -1355,6 +1384,7 @@ export class DatabaseService {
     // Validate input
     const validation = validateIncome(income);
     assertValid(validation, 'Invalid income data');
+    this.assertWithinCollectionCap('incomes', budgetId, 'Incomes', COLLECTION_LIMITS.incomes, false);
     
     const existing = this.getIncomeById(id, budgetId);
     if (!existing) return null;
@@ -1460,6 +1490,7 @@ export class DatabaseService {
     // Validate input
     const validation = validateBill(bill, this.getAllIncomes(budgetId));
     assertValid(validation, 'Invalid bill data');
+    this.assertWithinCollectionCap('bills', budgetId, 'Bills', COLLECTION_LIMITS.bills, true);
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
@@ -1486,6 +1517,7 @@ export class DatabaseService {
     // Validate input
     const validation = validateBill(bill, this.getAllIncomes(budgetId));
     assertValid(validation, 'Invalid bill data');
+    this.assertWithinCollectionCap('bills', budgetId, 'Bills', COLLECTION_LIMITS.bills, false);
     
     const existing = this.getBillById(id, budgetId);
     if (!existing) return null;
@@ -1579,6 +1611,15 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
 
     assertValid(validateSkippedBill({ billId, skipDate }), 'Invalid skipped bill');
+    if (!this.findSkippedBillId(budgetId, billId, skipDate)) {
+      this.assertWithinCollectionCap(
+        'skipped_bills',
+        budgetId,
+        'Skipped bills',
+        COLLECTION_LIMITS.skippedBills,
+        true
+      );
+    }
     if (!this.getBillById(billId, budgetId)) {
       throw new Error('Bill not found');
     }
@@ -1676,6 +1717,15 @@ export class DatabaseService {
       validateBillAssignment({ billId, billDueDate, paycheckDate }),
       'Invalid bill assignment'
     );
+    if (!this.findBillAssignmentId(budgetId, billId, billDueDate)) {
+      this.assertWithinCollectionCap(
+        'bill_assignments',
+        budgetId,
+        'Bill assignments',
+        COLLECTION_LIMITS.billAssignments,
+        true
+      );
+    }
     if (!this.getBillById(billId, budgetId)) {
       throw new Error('Bill not found');
     }
@@ -1780,8 +1830,17 @@ export class DatabaseService {
 
   setIncomeOverride(budgetId: string, incomeId: string, paycheckDate: string, amount: number): IncomeOverride {
     if (!this.db) throw new Error('Database not initialized');
-    if (!Number.isFinite(amount) || amount < 0) {
+    if (!Number.isFinite(amount) || amount < 0 || amount > MAX_MONEY) {
       throw new Error('Income override amount must be a non-negative number');
+    }
+    if (!this.findIncomeOverrideId(budgetId, incomeId, paycheckDate)) {
+      this.assertWithinCollectionCap(
+        'income_overrides',
+        budgetId,
+        'Income overrides',
+        COLLECTION_LIMITS.incomeOverrides,
+        true
+      );
     }
 
     const id = this.crypto.generateId();
@@ -1857,6 +1916,7 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
 
     assertValid(validateGoal(input), 'Invalid goal data');
+    this.assertWithinCollectionCap('goals', budgetId, 'Goals', COLLECTION_LIMITS.goals, true);
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
@@ -1898,6 +1958,7 @@ export class DatabaseService {
       priority: input.priority ?? existing.priority,
     };
     assertValid(validateGoal(payload), 'Invalid goal data');
+    this.assertWithinCollectionCap('goals', budgetId, 'Goals', COLLECTION_LIMITS.goals, false);
     const encryptedData = this.crypto.encryptObject(payload);
     
     this.db.prepare(`
@@ -1985,6 +2046,7 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
 
     assertValid(validateDebt(input), 'Invalid debt data');
+    this.assertWithinCollectionCap('debts', budgetId, 'Debts', COLLECTION_LIMITS.debts, true);
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
@@ -2027,6 +2089,7 @@ export class DatabaseService {
       validateDebt({ billId: existing.billId, ...payload }),
       'Invalid debt data'
     );
+    this.assertWithinCollectionCap('debts', budgetId, 'Debts', COLLECTION_LIMITS.debts, false);
     const now = new Date().toISOString();
     const encryptedData = this.crypto.encryptObject(payload);
     
@@ -2088,6 +2151,7 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
 
     assertValid(validateLeave(input), 'Invalid leave data');
+    this.assertWithinCollectionCap('leaves', budgetId, 'Leaves', COLLECTION_LIMITS.leaves, true);
 
     if (!this.getIncomeById(input.incomeId, budgetId)) {
       throw new Error('Income source not found for leave');
@@ -2121,6 +2185,7 @@ export class DatabaseService {
     if (!existing) return null;
 
     assertValid(validateLeave(input), 'Invalid leave data');
+    this.assertWithinCollectionCap('leaves', budgetId, 'Leaves', COLLECTION_LIMITS.leaves, false);
 
     if (!this.getIncomeById(input.incomeId, budgetId)) {
       throw new Error('Income source not found for leave');
