@@ -54,10 +54,11 @@ export function buildPaycheckEntries(
       .filter(bill => bill.isUnpayable && !bill.isSkipped)
       .reduce((sum, bill) => sum + bill.amount, 0);
     const hasUnpayableBills = unpayableBillsAmount > 0;
-    const isFirstOperating =
+    const isFirstRealOperating =
       !isReserved &&
-      assignments.findIndex((item) => !isSavingsAndGoalsIncome(item)) === i;
-    const ledgerBoost = isFirstOperating ? startingBalance : 0;
+      !assignment.unusable &&
+      assignments.findIndex((item) => !isSavingsAndGoalsIncome(item) && !item.unusable) === i;
+    const ledgerBoost = isFirstRealOperating ? startingBalance : 0;
     const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
     const effectiveTarget = cashTargetForDate(
       cashOnHandByDate,
@@ -142,7 +143,14 @@ export function buildPaycheckEntries(
       totalSavings += savingsDeposit;
     }
 
-    const isShortfall = isReserved ? false : budgetRemaining < effectiveMin;
+    const allOperatingBillsUnpayable =
+      uniqueBills.length > 0 &&
+      uniqueBills.every((bill) => bill.isSkipped || bill.isUnpayable);
+    const isShortfall = isReserved
+      ? false
+      : assignment.unusable && allOperatingBillsUnpayable
+        ? true
+        : budgetRemaining < effectiveMin;
 
     const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
     const hasUnpayableBills = unpayableCount > 0;
@@ -170,6 +178,7 @@ export function buildPaycheckEntries(
         isUnpayable: bill.isUnpayable,
         isSkipped: bill.isSkipped,
         unfundableReason: bill.unfundableReason,
+        preferredIncomeSourceId: bill.preferredIncomeSourceId,
       })),
       totalBills: Math.round(totalBillsAmount * 100) / 100,
       goalDeposits,

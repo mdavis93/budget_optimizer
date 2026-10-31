@@ -152,7 +152,8 @@ export function generateRecommendations(
   paychecks: PaycheckEntry[],
   bills: Bill[],
   _startingBalance: number,
-  savingsSqueezedCount?: number
+  savingsSqueezedCount?: number,
+  presumedPaidCount?: number
 ): string[] {
   const recommendations: string[] = [];
   const shortfallPaychecks = paychecks.filter((p) => p.isShortfall && isOperatingPaycheck(p));
@@ -213,5 +214,14 @@ export function generateRecommendations(
     recommendations.push('Your budget looks balanced! Bills are well-distributed across paychecks.');
   }
 
+  if (presumedPaidCount && presumedPaidCount > 0) {
+    recommendations.push(presumedPaidRecommendation(presumedPaidCount));
+  }
+
   return recommendations;
+}
+
+/** Informational only; must not match SchedulePage's actionable-recommendation substrings. */
+export function presumedPaidRecommendation(count: number): string {
+  return `${count} bill payment(s) due before the first paycheck that can cover them are treated as already paid.`;
 }

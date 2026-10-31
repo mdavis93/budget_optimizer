@@ -3,7 +3,10 @@ import { useDraftActions } from '../context/DraftContext';
 import { reportError } from '../utils/reportError';
 import type { PaycheckBill } from '../types';
 import type { DraggedBill } from '../components/schedule';
-import { needsAssignmentConfirmation } from '../utils/assignmentConstraints';
+import {
+  needsAssignmentConfirmation,
+  type AssignmentPaycheckInput,
+} from '../utils/assignmentConstraints';
 
 interface PendingAssignment {
   billId: string;
@@ -11,7 +14,7 @@ interface PendingAssignment {
   paycheckDate: string;
 }
 
-export function useBillDragAssignment() {
+export function useBillDragAssignment(paycheckDates: readonly AssignmentPaycheckInput[] = []) {
   const { assignBill } = useDraftActions();
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export function useBillDragAssignment() {
       sourcePaycheckDate,
       dueDay: bill.dueDay,
       billDate: bill.billDate,
+      preferredIncomeSourceId: bill.preferredIncomeSourceId,
     });
   }, []);
 
@@ -69,7 +73,14 @@ export function useBillDragAssignment() {
     }
 
     const { billId, billDate: billDueDate } = draggedBill;
-    if (needsAssignmentConfirmation(billDueDate, targetPaycheckDate)) {
+    if (
+      needsAssignmentConfirmation(
+        billDueDate,
+        targetPaycheckDate,
+        paycheckDates,
+        draggedBill.preferredIncomeSourceId
+      )
+    ) {
       setPendingAssignment({ billId, billDueDate, paycheckDate: targetPaycheckDate });
       setDraggedBill(null);
       return;
@@ -77,7 +88,7 @@ export function useBillDragAssignment() {
 
     await applyBillAssignment(billId, billDueDate, targetPaycheckDate);
     setDraggedBill(null);
-  }, [applyBillAssignment, draggedBill]);
+  }, [applyBillAssignment, draggedBill, paycheckDates]);
 
   const handleConfirmAssignment = useCallback(async () => {
     if (!pendingAssignment) return;

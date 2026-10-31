@@ -1,7 +1,9 @@
 import { format, isAfter, isEqual } from 'date-fns';
+import { isOperatingIncome } from '@shared/incomePurpose';
 import { Bill } from '../database.service';
 import { toCents } from './money';
 import { buildEligibleBills } from './eligibility';
+import { partitionPresumedPaidBills } from './lookahead';
 import { clusterEligibleBills } from './clusters';
 import { SolveBillInput, SolvePaycheck, solveClusterBounded } from './solve';
 import { rebalancePaycheckAssignments } from './rebalance';
@@ -33,17 +35,22 @@ export interface ExactAssignmentOptions {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   cashOnHandByDate?: CashOnHandByDate;
+  startDate?: Date;
 }
 
 function buildPaycheckSkeleton(
   paycheckDates: Date[],
   allIncomes: ProjectedIncome[]
 ): PaycheckAssignment[] {
-  return paycheckDates.map((paycheckDate) => ({
-    date: paycheckDate,
-    incomes: allIncomes.filter((inc) => isEqual(inc.date, paycheckDate)),
-    bills: [],
-  }));
+  return paycheckDates.map((paycheckDate) => {
+    const incomes = allIncomes.filter((inc) => isEqual(inc.date, paycheckDate));
+    return {
+      date: paycheckDate,
+      incomes,
+      bills: [],
+      unusable: incomes.length > 0 && incomes.every((income) => income.unusable),
+    };
+  });
 }
 
 function applyIncomeAttachedBills(
@@ -135,9 +142,10 @@ function buildSolvePaychecks(
   startingBalanceCents: number,
   targetReserves: number[]
 ): SolvePaycheck[] {
+  const firstRealIndex = assignments.findIndex((item) => !item.unusable);
   return assignments.map((assignment, index) => {
     const incomeCents = assignment.incomes.reduce((sum, inc) => sum + toCents(inc.amount), 0);
-    const ledgerBoost = index === 0 ? startingBalanceCents : 0;
+    const ledgerBoost = index === firstRealIndex ? startingBalanceCents : 0;
     const reserveCents = toCents(targetReserves[index]);
     // Pre-placed income-attached / manual bills already consume capacity.
     const lockedPayableCents = assignment.bills
@@ -208,8 +216,13 @@ export function assignBillsExact(
     { lock: false, lockedKeys }
   );
 
-  const solverBills = allBills.filter(
+  const unplacedBills = allBills.filter(
     (b) => !alreadyPlaced.has(billOccurrenceKey(b.billId, b.date))
+  );
+  const { payableBills: solverBills } = partitionPresumedPaidBills(
+    unplacedBills,
+    allIncomes.filter((income) => isOperatingIncome(income)),
+    options.startDate
   );
 
   const eligible = buildEligibleBills(solverBills, assignments, skippedBills);
@@ -287,6 +300,7 @@ export function assignBillsExact(
         break;
       }
     }
+    // No paycheck on or before the due date. Presumed paid; excluded above.
     if (landing === -1) continue;
 
     assignments[landing].bills.push({

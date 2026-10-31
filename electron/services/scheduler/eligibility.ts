@@ -1,5 +1,10 @@
-import { differenceInDays, format, isAfter } from 'date-fns';
-import { MAX_PREPAY_DAYS, PaycheckAssignment, ProjectedBill, billOccurrenceKey } from './types';
+import { format } from 'date-fns';
+import {
+  dayNumberOfDate,
+  eligiblePaycheckIndices,
+  isFundingPaycheckUsable,
+} from '@shared/billEligibility';
+import { PaycheckAssignment, ProjectedBill, billOccurrenceKey } from './types';
 
 export interface EligibleBill {
   bill: ProjectedBill;
@@ -7,41 +12,66 @@ export interface EligibleBill {
   candidateIndices: number[];
 }
 
+/** Eligible paycheck indices for a bill; results are shared, so callers must not mutate them. */
+export type EligibilityLookup = (bill: ProjectedBill) => readonly number[];
+
+function fundingSourceIds(paycheck: PaycheckAssignment): string[] {
+  return paycheck.incomes
+    .filter((income) => income.purpose !== 'savingsAndGoals')
+    .map((income) => income.sourceId);
+}
+
+/** True when the paycheck may fund the bill, ignoring dates (skips, savings-only, preferred source). */
+function isPaycheckUsable(
+  bill: ProjectedBill,
+  paycheck: PaycheckAssignment,
+  paycheckDateStr: string,
+  skippedBills: Set<string>
+): boolean {
+  if (skippedBills.has(`${bill.billId}-${paycheckDateStr}`)) return false;
+  return isFundingPaycheckUsable(
+    {
+      purpose: paycheck.purpose,
+      unusable: paycheck.unusable,
+      incomeSourceIds: fundingSourceIds(paycheck),
+    },
+    bill.preferredIncomeSourceId
+  );
+}
+
 /**
- * Paychecks on which a bill may be paid: dated in [due - MAX_PREPAY_DAYS, due].
+ * Memoized eligibility for one assignment run. Paycheck dates and skips are
+ * fixed for the run, so each bill occurrence is evaluated once.
  */
+export function createEligibilityLookup(
+  assignments: PaycheckAssignment[],
+  skippedBills: Set<string> = new Set()
+): EligibilityLookup {
+  const paycheckDays = assignments.map((paycheck) => dayNumberOfDate(paycheck.date));
+  const paycheckDateStrs = assignments.map((paycheck) => format(paycheck.date, 'yyyy-MM-dd'));
+  const cache = new Map<string, number[]>();
+
+  return (bill) => {
+    const dueDay = dayNumberOfDate(bill.date);
+    const cacheKey = `${bill.billId}\u0000${dueDay}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    const indices = eligiblePaycheckIndices(dueDay, paycheckDays, (index) =>
+      isPaycheckUsable(bill, assignments[index], paycheckDateStrs[index], skippedBills)
+    );
+    cache.set(cacheKey, indices);
+    return indices;
+  };
+}
+
+/** Paychecks on which a bill may be paid; see `eligiblePaycheckIndices` for the rule. */
 export function getEligiblePaycheckIndices(
   bill: ProjectedBill,
   assignments: PaycheckAssignment[],
   skippedBills: Set<string> = new Set()
 ): number[] {
-  const candidates: number[] = [];
-
-  for (let i = 0; i < assignments.length; i++) {
-    const paycheck = assignments[i];
-    const paycheckDateStr = format(paycheck.date, 'yyyy-MM-dd');
-
-    const skipKey = `${bill.billId}-${paycheckDateStr}`;
-    if (skippedBills.has(skipKey)) continue;
-
-    if (isAfter(paycheck.date, bill.date)) continue;
-
-    if (paycheck.purpose === 'savingsAndGoals') continue;
-
-    const daysEarly = differenceInDays(bill.date, paycheck.date);
-    if (daysEarly > MAX_PREPAY_DAYS) continue;
-
-    if (bill.preferredIncomeSourceId) {
-      const hasIncome = paycheck.incomes.some(
-        (inc) => inc.sourceId === bill.preferredIncomeSourceId && inc.purpose !== 'savingsAndGoals'
-      );
-      if (!hasIncome) continue;
-    }
-
-    candidates.push(i);
-  }
-
-  return candidates;
+  return [...createEligibilityLookup(assignments, skippedBills)(bill)];
 }
 
 export function buildEligibleBills(
@@ -50,16 +80,17 @@ export function buildEligibleBills(
   skippedBills: Set<string> = new Set(),
   excludeKeys: Set<string> = new Set()
 ): EligibleBill[] {
+  const eligibility = createEligibilityLookup(assignments, skippedBills);
   const eligible: EligibleBill[] = [];
 
   for (const bill of bills) {
     const billKey = billOccurrenceKey(bill.billId, bill.date);
     if (excludeKeys.has(billKey)) continue;
 
-    const candidateIndices = getEligiblePaycheckIndices(bill, assignments, skippedBills);
+    const candidateIndices = eligibility(bill);
     if (candidateIndices.length === 0) continue;
 
-    eligible.push({ bill, billKey, candidateIndices });
+    eligible.push({ bill, billKey, candidateIndices: [...candidateIndices] });
   }
 
   // Stable order for determinism

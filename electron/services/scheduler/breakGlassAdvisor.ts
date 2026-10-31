@@ -1,4 +1,9 @@
 import { format, parseISO, startOfDay } from 'date-fns';
+import {
+  dayNumberOfIsoDate,
+  eligiblePaycheckIndices,
+  isFundingPaycheckUsable,
+} from '@shared/billEligibility';
 import type {
   BreakGlassAdvisorReport,
   BreakGlassPlan,
@@ -12,7 +17,6 @@ import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
   MAX_ADVISOR_EARLY_DAYS,
-  MAX_PREPAY_DAYS,
 } from './types';
 
 const MAX_ADVISOR_PLANS = 5;
@@ -45,6 +49,8 @@ interface SimPaycheck {
   bills: PaycheckBill[];
   targetCashOnHand: number;
   minCashOnHand: number;
+  purpose?: string;
+  incomeSourceIds: string[];
 }
 
 type BillSort = 'amount-desc' | 'amount-asc' | 'priority-desc';
@@ -153,6 +159,8 @@ function cloneSim(
     bills: paycheck.bills.map((bill: PaycheckBill) => ({ ...bill })),
     targetCashOnHand: paycheck.targetCashOnHand ?? budgetTarget,
     minCashOnHand: paycheck.minCashOnHand ?? budgetMin,
+    purpose: paycheck.purpose,
+    incomeSourceIds: paycheck.incomeSources.map((source) => source.id),
   }));
 }
 
@@ -313,11 +321,39 @@ function undoMovesTo(sim: SimPaycheck[], moveStack: AppliedMove[], snapshotLengt
   }
 }
 
+/** Operating paychecks a confirmation check may treat as auto-legal. */
+function confirmationPaychecks(sim: SimPaycheck[]): SimPaycheck[] {
+  return sim.filter((paycheck) => paycheck.purpose !== 'savingsAndGoals');
+}
+
+/** True when the landing is outside the shared 20-day window and 31-day fallback. */
+function moveRequiresConfirmation(
+  bill: PaycheckBill,
+  toPaycheckDate: string,
+  operating: readonly SimPaycheck[]
+): boolean {
+  const dueDay = dayNumberOfIsoDate(bill.billDate);
+  const paycheckDays = operating.map((paycheck) => dayNumberOfIsoDate(paycheck.date));
+  const eligibleDays = new Set(
+    eligiblePaycheckIndices(dueDay, paycheckDays, (index) =>
+      isFundingPaycheckUsable(
+        {
+          purpose: operating[index].purpose,
+          incomeSourceIds: operating[index].incomeSourceIds,
+        },
+        bill.preferredIncomeSourceId
+      )
+    ).map((index) => paycheckDays[index])
+  );
+  return !eligibleDays.has(dayNumberOfIsoDate(toPaycheckDate));
+}
+
 function makeStep(
   bill: PaycheckBill,
   fromPaycheckDate: string,
   toPaycheckDate: string,
-  daysEarly: number
+  daysEarly: number,
+  operating: readonly SimPaycheck[]
 ): BreakGlassPlanStep {
   return {
     billId: bill.billId,
@@ -327,7 +363,7 @@ function makeStep(
     fromPaycheckDate,
     toPaycheckDate,
     daysEarly,
-    requiresConfirmation: daysEarly > MAX_PREPAY_DAYS,
+    requiresConfirmation: moveRequiresConfirmation(bill, toPaycheckDate, operating),
   };
 }
 
@@ -393,7 +429,7 @@ function ensureReceiveRoom(
       }
 
       applyMoveTracked(sim, index, earlierIndex, bill, moveStack);
-      steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, daysEarly));
+      steps.push(makeStep(bill, sim[index].date, sim[earlierIndex].date, daysEarly, confirmationPaychecks(sim)));
 
       if (receiveRoom(sim[index]) >= amountNeeded) {
         return true;
@@ -462,7 +498,7 @@ function ensureReceiveRoomLater(
       }
 
       applyMoveTracked(sim, index, laterIndex, bill, moveStack);
-      steps.push(makeStep(bill, sim[index].date, sim[laterIndex].date, daysEarly));
+      steps.push(makeStep(bill, sim[index].date, sim[laterIndex].date, daysEarly, confirmationPaychecks(sim)));
 
       if (receiveRoom(sim[index]) >= amountNeeded) {
         return true;
@@ -534,6 +570,8 @@ function tryClearBreakGlass(
     bills: paycheck.bills.map((bill: PaycheckBill) => ({ ...bill })),
     targetCashOnHand: paycheck.targetCashOnHand,
     minCashOnHand: paycheck.minCashOnHand,
+    purpose: paycheck.purpose,
+    incomeSourceIds: paycheck.incomeSourceIds,
   }));
   const steps: BreakGlassPlanStep[] = [];
   const moveStack: AppliedMove[] = [];
@@ -590,7 +628,7 @@ function tryClearBreakGlass(
         }
 
         applyMoveTracked(sim, targetIndex, landingIndex, bill, moveStack);
-        steps.push(makeStep(bill, sim[targetIndex].date, sim[landingIndex].date, daysEarly));
+        steps.push(makeStep(bill, sim[targetIndex].date, sim[landingIndex].date, daysEarly, confirmationPaychecks(sim)));
         moved = true;
         break;
       }

@@ -21,9 +21,10 @@ export function applyProjectedIncomeAdjustments(
   projected: ProjectedIncome[],
   leaves: Leave[] = [],
   overrides: Map<string, number> = new Map()
-): void {
+): ProjectedIncome[] {
   const unpaidLeaves = leaves.filter((leave) => leave.type === 'unpaid');
   const kept: ProjectedIncome[] = [];
+  const omitted: ProjectedIncome[] = [];
 
   for (const event of projected) {
     const payDate = format(event.date, 'yyyy-MM-dd');
@@ -36,6 +37,7 @@ export function applyProjectedIncomeAdjustments(
       event.amount = overrides.get(key)!;
       // Zero override during leave still means no paycheck for this source.
       if (onUnpaidLeave && event.amount === 0) {
+        omitted.push(event);
         continue;
       }
       kept.push(event);
@@ -43,6 +45,7 @@ export function applyProjectedIncomeAdjustments(
     }
 
     if (onUnpaidLeave) {
+      omitted.push(event);
       continue;
     }
 
@@ -51,4 +54,5 @@ export function applyProjectedIncomeAdjustments(
 
   projected.length = 0;
   projected.push(...kept);
+  return omitted;
 }

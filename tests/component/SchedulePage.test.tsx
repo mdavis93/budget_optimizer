@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import SchedulePage from '../../src/pages/SchedulePage';
-import { createMockElectronAPI, createMockSchedule } from '../mocks/electron-api.mock';
+import { createMockElectronAPI, createMockPaycheck, createMockSchedule } from '../mocks/electron-api.mock';
 import { renderWithRouter } from '../helpers/renderWithProviders';
 import { copyDiagnosticReport } from '../../src/utils/reportError';
 
@@ -853,6 +853,17 @@ describe('SchedulePage', () => {
     });
 
     it('runs skip/restore, drag-drop assignment, and income override handlers', async () => {
+      const jan15 = createMockPaycheck();
+      const jan29 = createMockPaycheck({ date: '2026-01-29', bills: [] });
+      mockUseData.mockReturnValue({
+        ...mockUseData(),
+        schedule: createMockSchedule({
+          paychecks: [jan15, jan29],
+          fullPaychecks: [jan15, jan29],
+          recommendations: [],
+        }),
+      });
+
       renderWithRouter(<SchedulePage />, { mockAPI });
 
       fireEvent.click(screen.getByRole('button', { name: 'mock-skip-bill' }));
@@ -998,6 +1009,16 @@ describe('SchedulePage', () => {
 
     it('assigns bills through draft actions on drop in quick budget mode', async () => {
       mockUseBudget.mockReturnValue({ isQuickBudget: true });
+      const jan15 = createMockPaycheck();
+      const jan29 = createMockPaycheck({ date: '2026-01-29', bills: [] });
+      mockUseData.mockReturnValue({
+        ...mockUseData(),
+        schedule: createMockSchedule({
+          paychecks: [jan15, jan29],
+          fullPaychecks: [jan15, jan29],
+          recommendations: [],
+        }),
+      });
 
       renderWithRouter(<SchedulePage />, { mockAPI });
       fireEvent.click(screen.getByRole('button', { name: 'mock-drag-start' }));

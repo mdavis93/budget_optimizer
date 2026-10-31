@@ -4,7 +4,7 @@ import { useDraftData, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { format, parseISO } from 'date-fns';
 import { PaycheckEntry } from '../types';
-import { paycheckKey } from '@shared/incomePurpose';
+import { isOperatingPaycheck, paycheckKey } from '@shared/incomePurpose';
 import clsx from 'clsx';
 import ReconciliationPage from '../components/ReconciliationPage';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -95,7 +95,18 @@ export default function SchedulePage() {
     handleDragLeave,
     handleDrop,
     handleConfirmAssignment,
-  } = useBillDragAssignment();
+  } = useBillDragAssignment(
+    useMemo(
+      () =>
+        (schedule?.paychecks ?? [])
+          .filter((paycheck) => isOperatingPaycheck(paycheck))
+          .map((paycheck) => ({
+            date: paycheck.date,
+            incomeSourceIds: paycheck.incomeSources.map((source) => source.id),
+          })),
+      [schedule?.paychecks]
+    )
+  );
 
   // Calculate total goal deposits from all paychecks
   const totalGoalDeposits = useMemo(() => {

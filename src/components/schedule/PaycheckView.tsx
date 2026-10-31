@@ -23,6 +23,7 @@ export interface DraggedBill {
   sourcePaycheckDate: string;
   dueDay: number;
   billDate: string;
+  preferredIncomeSourceId?: string;
 }
 
 interface PaycheckViewProps {

@@ -257,6 +257,7 @@ export interface PaycheckBill {
   isUnpayable?: boolean;
   isSkipped?: boolean;
   unfundableReason?: UnfundableReason;
+  preferredIncomeSourceId?: string;
 }
 
 export interface GoalDeposit {
@@ -380,7 +381,7 @@ export interface BreakGlassPlanStep {
   fromPaycheckDate: string;
   toPaycheckDate: string;
   daysEarly: number;
-  /** True when daysEarly > MAX_PREPAY_DAYS (auto-legal window); accept still applies as a manual lock. */
+  /** True when the landing is outside the auto-legal eligibility window; accept still applies as a manual lock. */
   requiresConfirmation: boolean;
 }
 
@@ -425,6 +426,8 @@ export interface ScheduleData {
    * fallback target. Carried so the warning persists regardless of viewport.
    */
   savingsSqueezedCount?: number;
+  /** Occurrences excluded because they fall before the first paycheck that can pay them. */
+  presumedPaidCount?: number;
   viewportMonths: number; // The currently displayed viewport (3, 6, 12, or a goal term)
   entries: ScheduleEntry[];
   summary: ScheduleSummary;
