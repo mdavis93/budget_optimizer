@@ -163,4 +163,15 @@ describe('partitionPresumedPaidBills', () => {
     );
     expect(payableBills).toEqual([preferred]);
   });
+
+  it('presumes a bill due before the schedule start even when a restored $0 slot exists', () => {
+    const beforeStart = bill({ billId: 'rent', date: parseISO('2025-12-20') });
+    const { presumedPaidBills, payableBills } = partitionPresumedPaidBills(
+      [beforeStart],
+      [income('job', '2026-01-02'), income('job', '2026-02-27')],
+      parseISO('2026-01-01')
+    );
+    expect(presumedPaidBills).toEqual([beforeStart]);
+    expect(payableBills).toEqual([]);
+  });
 });

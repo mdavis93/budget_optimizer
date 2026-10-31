@@ -3,6 +3,7 @@ import {
   dayNumberOfDate,
   dayNumberOfIsoDate,
   eligiblePaycheckIndices,
+  isFundingPaycheckUsable,
 } from '@shared/billEligibility';
 import { presumedPaidRecommendation } from '@shared/schedulePresentation';
 
@@ -36,6 +37,27 @@ describe('eligiblePaycheckIndices', () => {
   it('picks only the latest fallback paycheck when none is inside the window', () => {
     const paychecks = days('2025-12-28', '2026-01-02');
     expect(eligiblePaycheckIndices(dayNumberOfIsoDate('2026-01-28'), paychecks)).toEqual([1]);
+  });
+
+  it('skips a savings-only paycheck so the 31-day operating fallback remains', () => {
+    const paychecks = days('2026-01-01', '2026-01-20');
+    expect(
+      eligiblePaycheckIndices(
+        dayNumberOfIsoDate('2026-01-25'),
+        paychecks,
+        (index) => index === 0
+      )
+    ).toEqual([0]);
+  });
+});
+
+describe('isFundingPaycheckUsable', () => {
+  it('rejects savings-only and restored slots, and applies preferred source when ids exist', () => {
+    expect(isFundingPaycheckUsable({ purpose: 'savingsAndGoals' })).toBe(false);
+    expect(isFundingPaycheckUsable({ unusable: true })).toBe(false);
+    expect(isFundingPaycheckUsable({ incomeSourceIds: ['side'] }, 'job')).toBe(false);
+    expect(isFundingPaycheckUsable({ incomeSourceIds: ['job'] }, 'job')).toBe(true);
+    expect(isFundingPaycheckUsable({}, 'job')).toBe(true);
   });
 });
 

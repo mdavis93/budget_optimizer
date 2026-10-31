@@ -48,6 +48,35 @@ describe('assignmentConstraints', () => {
     it('returns null when paycheck is within the MAX_PREPAY_DAYS window', () => {
       expect(getAssignmentViolation('2026-01-28', '2026-01-20', ['2026-01-01', '2026-01-20'])).toBeNull();
     });
+
+    it('returns too_early when the drop date is not already in the operating list', () => {
+      expect(getAssignmentViolation('2026-01-25', '2026-01-20', ['2026-01-01'])).toBe('too_early');
+    });
+
+    it('ignores a non-preferred operating paycheck inside the window for the 31-day fallback', () => {
+      expect(
+        getAssignmentViolation(
+          '2026-01-25',
+          '2026-01-01',
+          [
+            { date: '2026-01-01', incomeSourceIds: ['job'] },
+            { date: '2026-01-20', incomeSourceIds: ['side'] },
+          ],
+          'job'
+        )
+      ).toBeNull();
+      expect(
+        getAssignmentViolation(
+          '2026-01-25',
+          '2026-01-20',
+          [
+            { date: '2026-01-01', incomeSourceIds: ['job'] },
+            { date: '2026-01-20', incomeSourceIds: ['side'] },
+          ],
+          'job'
+        )
+      ).toBe('too_early');
+    });
   });
 
   describe('needsAssignmentConfirmation', () => {

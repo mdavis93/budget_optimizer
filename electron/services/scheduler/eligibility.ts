@@ -1,5 +1,9 @@
 import { format } from 'date-fns';
-import { dayNumberOfDate, eligiblePaycheckIndices } from '@shared/billEligibility';
+import {
+  dayNumberOfDate,
+  eligiblePaycheckIndices,
+  isFundingPaycheckUsable,
+} from '@shared/billEligibility';
 import { PaycheckAssignment, ProjectedBill, billOccurrenceKey } from './types';
 
 export interface EligibleBill {
@@ -11,6 +15,12 @@ export interface EligibleBill {
 /** Eligible paycheck indices for a bill; results are shared, so callers must not mutate them. */
 export type EligibilityLookup = (bill: ProjectedBill) => readonly number[];
 
+function fundingSourceIds(paycheck: PaycheckAssignment): string[] {
+  return paycheck.incomes
+    .filter((income) => income.purpose !== 'savingsAndGoals')
+    .map((income) => income.sourceId);
+}
+
 /** True when the paycheck may fund the bill, ignoring dates (skips, savings-only, preferred source). */
 function isPaycheckUsable(
   bill: ProjectedBill,
@@ -19,10 +29,13 @@ function isPaycheckUsable(
   skippedBills: Set<string>
 ): boolean {
   if (skippedBills.has(`${bill.billId}-${paycheckDateStr}`)) return false;
-  if (paycheck.purpose === 'savingsAndGoals') return false;
-  if (!bill.preferredIncomeSourceId) return true;
-  return paycheck.incomes.some(
-    (inc) => inc.sourceId === bill.preferredIncomeSourceId && inc.purpose !== 'savingsAndGoals'
+  return isFundingPaycheckUsable(
+    {
+      purpose: paycheck.purpose,
+      unusable: paycheck.unusable,
+      incomeSourceIds: fundingSourceIds(paycheck),
+    },
+    bill.preferredIncomeSourceId
   );
 }
 

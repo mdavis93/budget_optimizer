@@ -89,6 +89,8 @@ export interface ProjectedIncome {
   sourceName: string;
   amount: number;
   purpose?: IncomePurpose;
+  /** Restored leading-leave slot: exists so a bill can attach, never funds. */
+  unusable?: boolean;
 }
 
 export interface ProjectedBill {
@@ -111,6 +113,8 @@ export interface PaycheckAssignment {
   incomes: ProjectedIncome[];
   bills: ProjectedBill[];
   purpose?: IncomePurpose;
+  /** Restored leading-leave $0 slot. */
+  unusable?: boolean;
 }
 
 export function billOccurrenceKey(billId: string, date: Date): string {

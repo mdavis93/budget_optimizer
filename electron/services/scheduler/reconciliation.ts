@@ -1,5 +1,9 @@
 import { isBefore, format, parseISO } from 'date-fns';
-import { dayNumberOfIsoDate, eligiblePaycheckIndices } from '@shared/billEligibility';
+import {
+  dayNumberOfIsoDate,
+  eligiblePaycheckIndices,
+  isFundingPaycheckUsable,
+} from '@shared/billEligibility';
 import { movableBillCapacity } from '@shared/reconciliationSurplus';
 import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
 import { PRIORITY_ORDER } from '../../utils/constants';
@@ -80,9 +84,15 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
         .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
 
       const eligibleDays = new Set(
-        eligiblePaycheckIndices(dayNumberOfIsoDate(bill.billDate), paycheckDays).map(
-          (index) => paycheckDays[index]
-        )
+        eligiblePaycheckIndices(dayNumberOfIsoDate(bill.billDate), paycheckDays, (index) =>
+          isFundingPaycheckUsable(
+            {
+              purpose: schedule.paychecks[index].purpose,
+              incomeSourceIds: schedule.paychecks[index].incomeSources.map((source) => source.id),
+            },
+            bill.preferredIncomeSourceId
+          )
+        ).map((index) => paycheckDays[index])
       );
 
       for (const targetPaycheck of earlierPaychecks) {

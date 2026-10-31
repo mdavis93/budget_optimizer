@@ -13,8 +13,10 @@ import type { PaycheckAssignment, ProjectedBill, ProjectedIncome } from './types
  */
 export function partitionPresumedPaidBills(
   bills: ProjectedBill[],
-  operatingIncomes: ProjectedIncome[]
+  operatingIncomes: ProjectedIncome[],
+  startDate?: Date
 ): { payableBills: ProjectedBill[]; presumedPaidBills: ProjectedBill[] } {
+  const startDay = startDate ? dayNumberOfDate(startDate) : -Infinity;
   let firstPaycheckDay = Infinity;
   const firstPaycheckDayBySource = new Map<string, number>();
   for (const income of operatingIncomes) {
@@ -29,11 +31,16 @@ export function partitionPresumedPaidBills(
   const payableBills: ProjectedBill[] = [];
   const presumedPaidBills: ProjectedBill[] = [];
   for (const bill of bills) {
+    const dueDay = dayNumberOfDate(bill.date);
+    if (dueDay < startDay) {
+      presumedPaidBills.push(bill);
+      continue;
+    }
     const sourceFirstDay = bill.preferredIncomeSourceId
       ? firstPaycheckDayBySource.get(bill.preferredIncomeSourceId)
       : undefined;
     const firstUsableDay = sourceFirstDay ?? firstPaycheckDay;
-    if (dayNumberOfDate(bill.date) < firstUsableDay) presumedPaidBills.push(bill);
+    if (dueDay < firstUsableDay) presumedPaidBills.push(bill);
     else payableBills.push(bill);
   }
   return { payableBills, presumedPaidBills };

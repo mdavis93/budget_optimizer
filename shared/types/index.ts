@@ -257,6 +257,7 @@ export interface PaycheckBill {
   isUnpayable?: boolean;
   isSkipped?: boolean;
   unfundableReason?: UnfundableReason;
+  preferredIncomeSourceId?: string;
 }
 
 export interface GoalDeposit {

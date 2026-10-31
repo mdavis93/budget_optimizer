@@ -35,17 +35,22 @@ export interface ExactAssignmentOptions {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   cashOnHandByDate?: CashOnHandByDate;
+  startDate?: Date;
 }
 
 function buildPaycheckSkeleton(
   paycheckDates: Date[],
   allIncomes: ProjectedIncome[]
 ): PaycheckAssignment[] {
-  return paycheckDates.map((paycheckDate) => ({
-    date: paycheckDate,
-    incomes: allIncomes.filter((inc) => isEqual(inc.date, paycheckDate)),
-    bills: [],
-  }));
+  return paycheckDates.map((paycheckDate) => {
+    const incomes = allIncomes.filter((inc) => isEqual(inc.date, paycheckDate));
+    return {
+      date: paycheckDate,
+      incomes,
+      bills: [],
+      unusable: incomes.length > 0 && incomes.every((income) => income.unusable),
+    };
+  });
 }
 
 function applyIncomeAttachedBills(
@@ -137,9 +142,10 @@ function buildSolvePaychecks(
   startingBalanceCents: number,
   targetReserves: number[]
 ): SolvePaycheck[] {
+  const firstRealIndex = assignments.findIndex((item) => !item.unusable);
   return assignments.map((assignment, index) => {
     const incomeCents = assignment.incomes.reduce((sum, inc) => sum + toCents(inc.amount), 0);
-    const ledgerBoost = index === 0 ? startingBalanceCents : 0;
+    const ledgerBoost = index === firstRealIndex ? startingBalanceCents : 0;
     const reserveCents = toCents(targetReserves[index]);
     // Pre-placed income-attached / manual bills already consume capacity.
     const lockedPayableCents = assignment.bills
@@ -215,7 +221,8 @@ export function assignBillsExact(
   );
   const { payableBills: solverBills } = partitionPresumedPaidBills(
     unplacedBills,
-    allIncomes.filter((income) => isOperatingIncome(income))
+    allIncomes.filter((income) => isOperatingIncome(income)),
+    options.startDate
   );
 
   const eligible = buildEligibleBills(solverBills, assignments, skippedBills);

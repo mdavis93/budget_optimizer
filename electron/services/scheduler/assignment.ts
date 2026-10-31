@@ -156,7 +156,8 @@ export function assignBillsToPaychecks(
   cashOnHandByDate?: CashOnHandByDate,
   preferredAssignments: Map<string, string> = new Map(),
   reservedIncomes: ProjectedIncome[] = [],
-  fundingEndDate?: Date
+  fundingEndDate?: Date,
+  startDate?: Date
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
@@ -171,16 +172,20 @@ export function assignBillsToPaychecks(
       targetCashOnHand: maxBudgetRemaining,
       minCashOnHand,
       cashOnHandByDate,
+      startDate,
     }
   );
 
   attachSkippedBillsForDisplay(assignments, skippedForDisplay);
   dedupeAssignmentBills(assignments);
+  const publishedAssignments = assignments.filter(
+    (assignment) => !assignment.unusable || assignment.bills.some((bill) => bill.isUnpayable)
+  );
 
   const reservedInHorizon = fundingEndDate
     ? reservedIncomes.filter((income) => !isAfter(startOfDay(income.date), startOfDay(fundingEndDate)))
     : reservedIncomes;
-  const merged = mergeReservedDepositAssignments(assignments, reservedInHorizon);
+  const merged = mergeReservedDepositAssignments(publishedAssignments, reservedInHorizon);
   const horizonAssignments = fundingEndDate
     ? dropLookaheadAssignments(merged, fundingEndDate)
     : merged;

@@ -112,7 +112,24 @@ export function prepareScheduleHorizon(
     allIncomes.push(...projectIncome(income, startDate, solveEndDate));
   }
 
-  applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
+  const omitted = applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
+  const remainingOperating = allIncomes.filter((income) => isOperatingIncome(income));
+  const firstRemainingMs = remainingOperating.reduce(
+    (earliest, income) => Math.min(earliest, income.date.getTime()),
+    Infinity
+  );
+  const startMs = startDate.getTime();
+  for (const event of omitted) {
+    if (!isOperatingIncome(event)) continue;
+    const eventMs = event.date.getTime();
+    if (eventMs < startMs || eventMs >= firstRemainingMs) continue;
+    allIncomes.push({
+      ...event,
+      amount: 0,
+      purpose: 'operating',
+      unusable: true,
+    });
+  }
 
   const operatingIncomes = allIncomes.filter((income) => isOperatingIncome(income));
   const reservedIncomes = allIncomes.filter((income) => isSavingsAndGoalsIncome(income));
@@ -159,7 +176,8 @@ export function prepareScheduleHorizon(
   const paycheckDates = getUniquePaycheckDates(operatingIncomes);
   const { payableBills, presumedPaidBills } = partitionPresumedPaidBills(
     uniqueBills,
-    operatingIncomes
+    operatingIncomes,
+    startDate
   );
   const horizonBills = billsEligibleOnFundingHorizon(payableBills, paycheckDates, endDate);
   const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
@@ -223,7 +241,8 @@ export function assignPreparedHorizon(
     prepared.cashOnHandByDate,
     effectivePreferredAssignments,
     prepared.reservedIncomes,
-    prepared.fundingEndDate
+    prepared.fundingEndDate,
+    prepared.startDate
   );
 }
 
