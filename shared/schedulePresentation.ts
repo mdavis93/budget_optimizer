@@ -124,7 +124,7 @@ export function convertToLegacyEntries(
         entries.push({
           date: paycheck.date,
           type: 'expense',
-          description: bill.creditorName,
+          description: `${bill.creditorName} (skipped)`,
           amount: bill.amount,
           runningBalance: roundMoney(runningBalance),
           isShortfall: false,
@@ -169,15 +169,17 @@ export function convertToLegacyEntries(
     }
 
     const pettyCash = Math.max(0, paycheck.budgetRemaining);
-    runningBalance -= pettyCash;
-    entries.push({
-      date: paycheck.date,
-      type: 'pettyCash',
-      description: 'Petty cash',
-      amount: roundMoney(pettyCash),
-      runningBalance: roundMoney(runningBalance),
-      isShortfall: false,
-    });
+    if (pettyCash > 0) {
+      runningBalance -= pettyCash;
+      entries.push({
+        date: paycheck.date,
+        type: 'pettyCash',
+        description: 'Petty cash',
+        amount: roundMoney(pettyCash),
+        runningBalance: roundMoney(runningBalance),
+        isShortfall: false,
+      });
+    }
   }
 
   return entries;

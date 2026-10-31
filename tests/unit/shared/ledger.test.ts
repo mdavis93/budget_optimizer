@@ -73,12 +73,12 @@ describe('convertToLegacyEntries', () => {
       0
     );
 
-    const skipped = entries.find((entry) => entry.description === 'Skipped');
+    const skipped = entries.find((entry) => entry.description === 'Skipped (skipped)');
     const unpayable = entries.find((entry) => entry.description === 'Unpayable');
     expect(skipped?.runningBalance).toBe(1000);
     expect(unpayable?.runningBalance).toBe(960);
     expect(unpayable?.isShortfall).toBe(true);
     expect(unpayable?.recommendation).toBe('no_eligible_paycheck_in_window');
-    expect(entries.find((entry) => entry.type === 'pettyCash')?.amount).toBe(0);
+    expect(entries.some((entry) => entry.type === 'pettyCash')).toBe(false);
   });
 });
