@@ -106,6 +106,8 @@ export default function DashboardPage() {
     const nextWeek = addDays(now, 7);
     
     return schedule.entries
+      .filter((entry) => entry.type !== 'pettyCash')
+      .filter((entry) => !entry.description.endsWith(' (skipped)'))
       .filter(entry => {
         const entryDate = parseISO(entry.date);
         return isWithinInterval(entryDate, { start: now, end: nextWeek });

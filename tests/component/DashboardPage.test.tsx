@@ -279,6 +279,22 @@ describe('DashboardPage', () => {
               runningBalance: -100,
               isShortfall: true,
             },
+            {
+              date: inRangeIso,
+              description: 'Petty cash',
+              type: 'pettyCash',
+              amount: 40,
+              runningBalance: 0,
+              isShortfall: false,
+            },
+            {
+              date: inRangeIso,
+              description: 'Utilities (skipped)',
+              type: 'expense',
+              amount: 80,
+              runningBalance: 0,
+              isShortfall: false,
+            },
           ],
           summary: { shortfallCount: 1 },
           recommendations: [],
@@ -296,6 +312,8 @@ describe('DashboardPage', () => {
       );
 
       expect(screen.getByText('Rent Payment')).toBeInTheDocument();
+      expect(screen.queryByText('Petty cash')).not.toBeInTheDocument();
+      expect(screen.queryByText('Utilities (skipped)')).not.toBeInTheDocument();
       expect(screen.getByText(/Projected Shortfalls/i)).toBeInTheDocument();
     });
 
