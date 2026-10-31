@@ -38,7 +38,8 @@ export type ScheduleComputeErrorCode =
   | 'superseded'
   | 'worker_error'
   | 'worker_unavailable'
-  | 'disposed';
+  | 'disposed'
+  | 'cancelled';
 
 export interface SerializedDebtPayoff {
   billId: string;

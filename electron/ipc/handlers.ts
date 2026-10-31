@@ -24,6 +24,7 @@ import {
 } from '@shared/scheduleComputeProtocol';
 import type { GoalProjection, ScheduleData } from '@shared/types';
 import { resolveAppBrowserWindow } from '../utils/dialog';
+import { validateScheduleBuildArgs } from '../services/validation.service';
 import { applyLockSideEffects } from './appLock';
 import {
   withUnlockGuard,
@@ -50,7 +51,7 @@ function reportScheduleFailure(
   error: unknown,
   errorCode: string
 ): string | undefined {
-  if (errorCode === 'superseded') {
+  if (errorCode === 'superseded' || errorCode === 'cancelled') {
     return undefined;
   }
   const reported = diagnostics.report({
@@ -170,7 +171,7 @@ async function runOffloadedCompute<T>(
     return { success: true, data: extract(message) };
   } catch (error) {
     if (isScheduleComputeError(error)) {
-      if (error.code !== 'superseded') {
+      if (error.code !== 'superseded' && error.code !== 'cancelled') {
         ipcLogger.error(`schedule compute ${op} failed:`, error.code, error.message);
       }
       const diagnosticId = reportScheduleFailure(op, error, error.code);
@@ -484,6 +485,7 @@ export function registerIpcHandlers(
   }));
 
   ipcMain.handle('budget:switch', withBudgetGuard(services, async (_, id: string) => {
+    services.scheduleCompute.cancelInFlight('budget-switch');
     const result = await ipcData('budget:switch', () => ready().budgetManager.setCurrentBudget(id));
     if (result.success && !result.data) {
       return { success: false, error: 'Budget not found' };
@@ -693,6 +695,11 @@ export function registerIpcHandlers(
   }));
 
   ipcMain.handle('schedule:build', withBudgetGuard(services, async (event, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {
+    const buildArgs = validateScheduleBuildArgs(startDate, months, startingBalance);
+    if (!buildArgs.valid) {
+      return { success: false, error: buildArgs.errors.join(', ') };
+    }
+
     const { budgetManager, database } = ready();
     const resolved = resolveScheduleInputs(budgetManager, database, overlay);
     const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;

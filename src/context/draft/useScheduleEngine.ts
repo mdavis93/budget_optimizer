@@ -322,7 +322,7 @@ export function useScheduleEngine({
         if (requestGen !== scheduleRequestGenRef.current) {
           return null;
         }
-        if (result.errorCode === 'superseded') {
+        if (result.errorCode === 'superseded' || result.errorCode === 'cancelled') {
           return null;
         }
 

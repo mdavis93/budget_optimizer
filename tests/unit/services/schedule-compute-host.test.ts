@@ -339,6 +339,82 @@ describe('ScheduleComputeHost', () => {
     ).rejects.toMatchObject({ code: 'disposed' });
   });
 
+  it('cancelInFlight rejects with cancelled and leaves no listeners or timers', async () => {
+    const first = createMockUtilityProcess();
+    const second = createMockUtilityProcess();
+    const children = [first, second];
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => {
+        const next = children.shift();
+        if (!next) throw new Error('no mock child');
+        return next;
+      },
+      timeoutMs: 5_000,
+    });
+
+    const pending = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-cancel',
+      input: minimalInput(),
+      jobId: 'job-c',
+    });
+    first.__setPid(99);
+    first.__emitSpawn();
+    host.cancelInFlight('locked');
+
+    await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+    first.emit('exit', 1);
+    expect(first.listenerCount('message')).toBe(0);
+    expect(first.listenerCount('exit')).toBe(0);
+    expect(first.listenerCount('error')).toBe(0);
+    expect(first.listenerCount('spawn')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const again = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-after',
+      input: minimalInput(),
+      jobId: 'job-c2',
+    });
+    second.__emitSpawn();
+    second.emit('message', scheduleResult('job-c2', 'hash-after'));
+    await expect(again).resolves.toMatchObject({ jobId: 'job-c2' });
+    host.dispose();
+  });
+
+  it('escalates cancel to SIGKILL when the child never exits', async () => {
+    const child = createMockUtilityProcess();
+    child.kill = () => true;
+    const forceKillPid = vi.fn();
+    const host = new ScheduleComputeHost({
+      workerPath: '/fake/schedule-worker.js',
+      skipWorkerExistsCheck: true,
+      forkFn: () => child,
+      timeoutMs: 5_000,
+      killEscalationMs: 50,
+      forceKillPid,
+    });
+
+    const pending = host.runJob({
+      op: 'schedule',
+      inputHash: 'hash-kill',
+      input: minimalInput(),
+      jobId: 'job-kill',
+    });
+    child.__setPid(77);
+    child.__emitSpawn();
+    host.cancelInFlight('locked');
+
+    await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+    expect(forceKillPid).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(forceKillPid).toHaveBeenCalledWith(77);
+    expect(child.listenerCount('exit')).toBe(1);
+    host.dispose();
+  });
+
   it('rejects invalid schema results', async () => {
     const child = createMockUtilityProcess();
     const host = new ScheduleComputeHost({

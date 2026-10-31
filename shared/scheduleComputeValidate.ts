@@ -82,6 +82,15 @@ function assertScheduleData(schedule: unknown): void {
   if (!isFiniteNumber(schedule.maxBudgetRemaining) || !isFiniteNumber(schedule.minCashOnHand)) {
     throw new Error('schedule cash-on-hand fields must be finite numbers');
   }
+  if (schedule.presumedPaidCount !== undefined) {
+    if (
+      typeof schedule.presumedPaidCount !== 'number' ||
+      !Number.isInteger(schedule.presumedPaidCount) ||
+      schedule.presumedPaidCount < 0
+    ) {
+      throw new Error('schedule.presumedPaidCount must be a non-negative integer');
+    }
+  }
   assertScheduleSummary(schedule.summary);
 }
 

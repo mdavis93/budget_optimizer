@@ -159,7 +159,7 @@ describe('DatabaseService', () => {
       const debt = db.createDebt(budget.id, {
         billId: bill.id,
         principalBalance: 10000,
-        apr: 12,
+        apr: 0.12,
         monthlyPayment: 300,
       });
       expect(db.getDebtById(debt.id, budget.id)?.billId).toBe(bill.id);
@@ -295,7 +295,7 @@ describe('DatabaseService', () => {
       db.createDebt(budget.id, {
         billId: bill.id,
         principalBalance: 5000,
-        apr: 18,
+        apr: 0.18,
         monthlyPayment: 200,
       });
       db.skipBill(budget.id, bill.id, '2026-03-20');
@@ -450,6 +450,55 @@ describe('DatabaseService', () => {
       ).toThrow(/Invalid budget data/);
     });
 
+    it('rejects a 101st income and still allows updating one at the cap', () => {
+      const budget = db.createBudget({ name: 'Income Cap' });
+      const input = {
+        sourceName: 'Job',
+        amount: 100,
+        cadence: 'monthly' as const,
+        startDate: '2026-01-01',
+        isActive: true,
+      };
+      let firstId = '';
+      for (let index = 0; index < 100; index += 1) {
+        const created = db.createIncome(budget.id, { ...input, sourceName: `Job ${index}` });
+        if (index === 0) firstId = created.id;
+      }
+      expect(() => db.createIncome(budget.id, input)).toThrow(/Incomes cannot exceed 100/);
+      expect(
+        db.updateIncome(firstId, budget.id, { ...input, sourceName: 'Updated' })?.sourceName
+      ).toBe('Updated');
+    });
+
+    it('updates an income after a row is seeded past the collection cap', () => {
+      const budget = db.createBudget({ name: 'Over Cap Update' });
+      const input = {
+        sourceName: 'Job',
+        amount: 100,
+        cadence: 'monthly' as const,
+        startDate: '2026-01-01',
+        isActive: true,
+      };
+      const first = db.createIncome(budget.id, { ...input, sourceName: 'Job 0' });
+      for (let index = 1; index < 100; index += 1) {
+        db.createIncome(budget.id, { ...input, sourceName: `Job ${index}` });
+      }
+
+      const crypto = db.getCryptoService();
+      const internalDb = (db as unknown as {
+        db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } };
+      }).db;
+      const now = new Date().toISOString();
+      internalDb.prepare(
+        'INSERT INTO incomes (id, budget_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      ).run(crypto.generateId(), budget.id, crypto.encryptObject({ ...input, sourceName: 'Seeded' }), now, now);
+
+      expect(
+        db.updateIncome(first.id, budget.id, { ...input, sourceName: 'Updated' })?.sourceName
+      ).toBe('Updated');
+      expect(() => db.createIncome(budget.id, input)).toThrow(/Incomes cannot exceed 100/);
+    });
+
     it('rejects invalid income payload', () => {
       const budget = db.createBudget({ name: 'Guardrails Budget' });
       expect(() =>
@@ -582,7 +631,7 @@ describe('DatabaseService', () => {
       const debt = db.createDebt(budget.id, {
         billId: bill.id,
         principalBalance: 1500,
-        apr: 18,
+        apr: 0.18,
         monthlyPayment: 75,
       });
 
@@ -708,7 +757,7 @@ describe('DatabaseService', () => {
       const debt = db.createDebt(budget.id, {
         billId: bill.id,
         principalBalance: 1000,
-        apr: 10,
+        apr: 0.1,
         monthlyPayment: 50,
       });
       expect(() => db.updateDebt(debt.id, budget.id, { apr: 150 })).toThrow(/Invalid debt data/);

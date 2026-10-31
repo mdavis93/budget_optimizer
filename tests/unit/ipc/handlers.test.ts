@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ScheduleComputeError } from '@shared/scheduleComputeProtocol';
 import { registerIpcHandlers } from '../../../electron/ipc/handlers';
 import { approveExportPath } from '../../../electron/utils/exportPaths';
 import { DatabaseService } from '../../../electron/services/database.service';
@@ -244,6 +245,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
     },
     scheduleCompute: {
       isDisposed: false,
+      cancelInFlight: vi.fn(),
       runJob: vi.fn(async (request: { op: string; inputHash: string; input: { startingBalance: number; startDate: string; months: number } }) => {
         if (request.op === 'goals') {
           return {
@@ -455,7 +457,7 @@ describe('ipc handlers', () => {
       const services = createServices();
       registerHandlers(ipcMain, services);
 
-      const result = await ipcMain.invoke('schedule:build', '2026-01-01', 2, 500);
+      const result = await ipcMain.invoke('schedule:build', '2026-01-01', 3, 500);
 
       expect(result).toMatchObject({ success: true });
       expect(services.scheduleCompute.runJob).toHaveBeenCalledWith(
@@ -463,13 +465,66 @@ describe('ipc handlers', () => {
           op: 'schedule',
           input: expect.objectContaining({
             startDate: '2026-01-01',
-            months: 2,
+            months: 3,
             startingBalance: 1234,
           }),
         }),
         expect.objectContaining({ onProgress: expect.any(Function) })
       );
       expect(services.scheduler.generateSchedule).not.toHaveBeenCalled();
+    });
+
+    it('accepts schedule:build months of 17 and 60', async () => {
+      const services = createServices();
+      registerHandlers(ipcMain, services);
+
+      for (const months of [17, 60]) {
+        const result = await ipcMain.invoke('schedule:build', '2026-01-01', months, 0);
+        expect(result.success).toBe(true);
+      }
+      expect(services.scheduleCompute.runJob).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects hostile schedule:build arguments before a worker starts', async () => {
+      const services = createServices();
+      registerHandlers(ipcMain, services);
+
+      const cases: Array<[unknown, unknown, unknown]> = [
+        ['not-a-date', 3, 0],
+        ['2026-02-31', 3, 0],
+        ['2026-01-01', 3, Number.NaN],
+        ['2026-01-01', 3, Number.POSITIVE_INFINITY],
+        ['2026-01-01', 3, '100'],
+        ['2026-01-01', 3, 1e308],
+        ['2026-01-01', 0, 0],
+        ['2026-01-01', 61, 0],
+        ['2026-01-01', 1.5, 0],
+        ['2026-01-01', Number.NaN, 0],
+        ['2026-01-01', '12', 0],
+      ];
+      for (const [startDate, months, startingBalance] of cases) {
+        const result = await ipcMain.invoke('schedule:build', startDate, months, startingBalance);
+        expect(result.success).toBe(false);
+      }
+      expect(services.scheduleCompute.runJob).not.toHaveBeenCalled();
+    });
+
+    it('files no diagnostic when a schedule build is cancelled', async () => {
+      vi.mocked(diagnostics.report).mockClear();
+      const services = createServices({
+        scheduleCompute: {
+          ...createServices().scheduleCompute,
+          runJob: vi.fn(async () => {
+            throw new ScheduleComputeError('cancelled', 'locked');
+          }),
+        },
+      });
+      registerHandlers(ipcMain, services);
+
+      const result = await ipcMain.invoke('schedule:build', '2026-01-01', 3, 100);
+      expect(result).toMatchObject({ success: false, errorCode: 'cancelled' });
+      expect(result.diagnosticId).toBeUndefined();
+      expect(diagnostics.report).not.toHaveBeenCalled();
     });
 
     it('forwards schedule compute progress to the invoking renderer', async () => {
@@ -515,7 +570,7 @@ describe('ipc handlers', () => {
       });
       registerHandlers(ipcMain, services);
 
-      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      await ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000);
       expect(ipcMain.sender.send).toHaveBeenCalledWith(
         'schedule:progress',
         expect.objectContaining({ type: 'progress', stage: 'assigning' })
@@ -568,18 +623,18 @@ describe('ipc handlers', () => {
       registerHandlers(ipcMain, services);
 
       ipcMain.sender.isDestroyed.mockReturnValue(true);
-      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      await ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000);
       expect(ipcMain.sender.send).not.toHaveBeenCalled();
 
       ipcMain.sender.isDestroyed.mockReturnValue(false);
       vi.mocked(services.auth.getIsUnlocked).mockReturnValueOnce(true).mockReturnValue(false);
-      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      await ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000);
       expect(ipcMain.sender.send).not.toHaveBeenCalled();
 
       vi.mocked(services.auth.getIsUnlocked).mockReturnValue(true);
       const send = ipcMain.sender.send;
       (ipcMain.sender as { send: unknown }).send = undefined;
-      await ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000);
+      await ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000);
       ipcMain.sender.send = send;
       expect(send).not.toHaveBeenCalled();
     });
@@ -668,6 +723,7 @@ describe('ipc handlers', () => {
       const switched = await ipcMain.invoke('budget:switch', 'budget-2');
 
       expect(switched).toEqual({ success: true, data: { id: 'budget-2' } });
+      expect(services.scheduleCompute.cancelInFlight).toHaveBeenCalledWith('budget-switch');
       expect(services.budgetManager.assignBillToPaycheck).not.toHaveBeenCalled();
       expect(services.budgetManager.skipBill).not.toHaveBeenCalled();
     });
@@ -905,7 +961,7 @@ describe('ipc handlers', () => {
         success: true,
         data: [{ id: 'gp-1' }],
       });
-      await expect(ipcMain.invoke('schedule:build', '2026-01-01', 1, 1000)).resolves.toEqual({
+      await expect(ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000)).resolves.toEqual({
         success: true,
         data: expect.objectContaining({ startDate: '2026-01-01' }),
       });

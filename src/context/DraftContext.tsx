@@ -987,7 +987,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const getGoalProjections = useCallback(async (): Promise<GoalProjection[]> => {
     const overlay = buildDraftOverlay();
     const result = await window.electronAPI.goals.getProjections(overlay);
-    if (result.errorCode === 'superseded') {
+    if (result.errorCode === 'superseded' || result.errorCode === 'cancelled') {
       return [];
     }
     if (result.success && result.data) {
