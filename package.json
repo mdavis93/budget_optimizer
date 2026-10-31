@@ -29,6 +29,7 @@
     "test:ui": "node scripts/use-native.cjs node && vitest --ui",
     "test:e2e": "node scripts/use-native.cjs electron && playwright test",
     "test:e2e:touchpoints": "node scripts/e2e-touchpoints.cjs",
+    "bench:scheduler": "node scripts/use-native.cjs node && vitest bench --run tests/perf/scheduler.bench.ts",
     "audit:dev": "node scripts/audit-dev.cjs",
     "sbom": "pnpm dlx @cyclonedx/cdxgen@^11 --type pnpm --output sbom.json --no-recurse",
     "prepush": "bash scripts/pre-push-quality.sh",
