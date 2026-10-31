@@ -38,6 +38,9 @@ export default defineConfig({
         branches: 85,
       },
     },
+    benchmark: {
+      include: ['tests/perf/**/*.bench.ts'],
+    },
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@electron': path.resolve(__dirname, './electron'),
