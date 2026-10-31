@@ -715,7 +715,8 @@ describe('SchedulerService', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
 
-      it('does not place day-28 bill on monthly paycheck when more than MAX_PREPAY_DAYS early', () => {
+      // Intentional Phase 1 change: monthly earners pay via the 31-day fallback instead of going unpayable.
+      it('pays day-28 bill from the monthly paycheck via the MAX_FALLBACK_PREPAY_DAYS fallback', () => {
         const schedule = scheduler.generateSchedule(
           [monthlyIncome],
           [day28Bill],
@@ -728,8 +729,8 @@ describe('SchedulerService', () => {
         expect(jan1Paycheck).toBeDefined();
         const jan28Bill = jan1Paycheck!.bills.find((b) => b.billDate === '2026-01-28');
         expect(jan28Bill).toBeDefined();
-        expect(jan28Bill!.isUnpayable).toBe(true);
-        expect(jan28Bill!.unfundableReason).toBe('no_eligible_paycheck_in_window');
+        expect(jan28Bill!.isUnpayable).toBeFalsy();
+        expect(jan28Bill!.unfundableReason).toBeUndefined();
       });
 
       it('assigns day-28 bill to latest eligible semi-monthly paycheck within MAX_PREPAY_DAYS', () => {
@@ -3726,23 +3727,29 @@ describe('SchedulerService', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null when preferred paycheck would prepay more than MAX_PREPAY_DAYS early', () => {
-      const result = (
-        scheduler as unknown as {
-          findPreferredPaycheck: (
-            bill: { billId: string; preferredIncomeSourceId?: string; date: Date },
-            paycheckAssignments: Array<{ date: Date; incomes: Array<{ sourceId: string }>; bills: unknown[] }>,
-            skippedBills: Set<string>
-          ) => string | null;
-        }
-      ).findPreferredPaycheck(
-        { billId: 'bill-1', preferredIncomeSourceId: 'income-1', date: parseISO('2026-02-01') },
-        [{ date: parseISO('2026-01-01'), incomes: [{ sourceId: 'income-1' }], bills: [] }],
-        new Set()
-      );
+    it.each([
+      ['2026-02-01', '2026-01-01'],
+      ['2026-02-02', null],
+    ])(
+      'with the only preferred paycheck on Jan 1, a bill due %s resolves to %s (31-day fallback cap)',
+      (dueDate, expected) => {
+        const result = (
+          scheduler as unknown as {
+            findPreferredPaycheck: (
+              bill: { billId: string; preferredIncomeSourceId?: string; date: Date },
+              paycheckAssignments: Array<{ date: Date; incomes: Array<{ sourceId: string }>; bills: unknown[] }>,
+              skippedBills: Set<string>
+            ) => string | null;
+          }
+        ).findPreferredPaycheck(
+          { billId: 'bill-1', preferredIncomeSourceId: 'income-1', date: parseISO(dueDate) },
+          [{ date: parseISO('2026-01-01'), incomes: [{ sourceId: 'income-1' }], bills: [] }],
+          new Set()
+        );
 
-      expect(result).toBeNull();
-    });
+        expect(result).toBe(expected);
+      }
+    );
 
     it('keeps skipped bill occurrences visible but unpaid', () => {
       const monthlyIncome: Income = {

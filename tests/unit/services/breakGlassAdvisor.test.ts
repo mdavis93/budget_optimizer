@@ -235,6 +235,34 @@ describe('proposeBreakGlassPlans', () => {
     });
   });
 
+  it('does not require confirmation when the landing is the 31-day fallback', () => {
+    const report = proposeBreakGlassPlans(
+      scheduleOf(
+        [
+          paycheck({
+            date: '2026-06-01',
+            budgetRemaining: 150,
+            bills: [
+              bill({
+                billId: 'rent',
+                creditorName: 'Rent',
+                amount: 400,
+                billDate: '2026-07-06',
+              }),
+            ],
+          }),
+          paycheck({ date: '2026-06-11', budgetRemaining: 800 }),
+        ],
+        '2026-06-01'
+      )
+    );
+    expect(report.plans).toHaveLength(1);
+    expect(report.plans[0].steps[0]).toMatchObject({
+      toPaycheckDate: '2026-06-11',
+      requiresConfirmation: false,
+    });
+  });
+
   it('stops at scheduleStartDate when earlier paychecks are out of range', () => {
     const report = proposeBreakGlassPlans(
       scheduleOf(

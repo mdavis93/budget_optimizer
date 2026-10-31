@@ -1,9 +1,9 @@
-import { isAfter, format, differenceInDays, startOfDay } from 'date-fns';
+import { isAfter, format, startOfDay } from 'date-fns';
 import { Bill, SavingsGoal } from '../database.service';
+import { createEligibilityLookup } from './eligibility';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
-  MAX_PREPAY_DAYS,
   PaycheckEntry,
   PaycheckAssignment,
   ProjectedIncome,
@@ -53,26 +53,10 @@ export function findPreferredPaycheck(
 ): string | null {
   if (!bill.preferredIncomeSourceId) return null;
 
-  const matchingPaychecks = paycheckAssignments.filter((p) =>
-    p.incomes.some((inc) => inc.sourceId === bill.preferredIncomeSourceId)
-  );
-
-  if (matchingPaychecks.length === 0) return null;
-
   let bestPaycheck: PaycheckAssignment | null = null;
-  let bestDistance = Infinity;
-
-  for (const paycheck of matchingPaychecks) {
-    const paycheckDateStr = format(paycheck.date, 'yyyy-MM-dd');
-    const skipKey = `${bill.billId}-${paycheckDateStr}`;
-    if (skippedBills.has(skipKey)) continue;
-    if (isAfter(paycheck.date, bill.date)) continue;
-
-    const daysEarly = differenceInDays(bill.date, paycheck.date);
-    if (daysEarly > MAX_PREPAY_DAYS) continue;
-
-    if (daysEarly < bestDistance) {
-      bestDistance = daysEarly;
+  for (const index of createEligibilityLookup(paycheckAssignments, skippedBills)(bill)) {
+    const paycheck = paycheckAssignments[index];
+    if (!bestPaycheck || paycheck.date.getTime() > bestPaycheck.date.getTime()) {
       bestPaycheck = paycheck;
     }
   }

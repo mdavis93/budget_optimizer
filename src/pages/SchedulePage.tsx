@@ -95,7 +95,9 @@ export default function SchedulePage() {
     handleDragLeave,
     handleDrop,
     handleConfirmAssignment,
-  } = useBillDragAssignment();
+  } = useBillDragAssignment(
+    useMemo(() => schedule?.paychecks.map((paycheck) => paycheck.date) ?? [], [schedule?.paychecks])
+  );
 
   // Calculate total goal deposits from all paychecks
   const totalGoalDeposits = useMemo(() => {

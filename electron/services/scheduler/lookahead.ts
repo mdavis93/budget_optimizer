@@ -1,13 +1,50 @@
-import { addDays, differenceInDays, isAfter, startOfDay } from 'date-fns';
-import { MAX_PREPAY_DAYS } from '@shared/constants';
-import type { PaycheckAssignment, ProjectedBill } from './types';
+import { addDays, isAfter, startOfDay } from 'date-fns';
+import {
+  MAX_FALLBACK_PREPAY_DAYS,
+  dayNumberOfDate,
+  eligiblePaycheckIndices,
+} from '@shared/billEligibility';
+import type { PaycheckAssignment, ProjectedBill, ProjectedIncome } from './types';
 
 /**
- * Project just far enough past the funding end that a bill due within
- * MAX_PREPAY_DAYS can still land on the last funded paycheck.
+ * Bills due before the first operating paycheck they may use are presumed paid
+ * by pre-schedule paychecks and leave the solve. A preferred source with no
+ * operating income falls back to any paycheck, so its bills stay unpayable as before.
+ */
+export function partitionPresumedPaidBills(
+  bills: ProjectedBill[],
+  operatingIncomes: ProjectedIncome[]
+): { payableBills: ProjectedBill[]; presumedPaidBills: ProjectedBill[] } {
+  let firstPaycheckDay = Infinity;
+  const firstPaycheckDayBySource = new Map<string, number>();
+  for (const income of operatingIncomes) {
+    const day = dayNumberOfDate(income.date);
+    firstPaycheckDay = Math.min(firstPaycheckDay, day);
+    const sourceFirstDay = firstPaycheckDayBySource.get(income.sourceId);
+    if (sourceFirstDay === undefined || day < sourceFirstDay) {
+      firstPaycheckDayBySource.set(income.sourceId, day);
+    }
+  }
+
+  const payableBills: ProjectedBill[] = [];
+  const presumedPaidBills: ProjectedBill[] = [];
+  for (const bill of bills) {
+    const sourceFirstDay = bill.preferredIncomeSourceId
+      ? firstPaycheckDayBySource.get(bill.preferredIncomeSourceId)
+      : undefined;
+    const firstUsableDay = sourceFirstDay ?? firstPaycheckDay;
+    if (dayNumberOfDate(bill.date) < firstUsableDay) presumedPaidBills.push(bill);
+    else payableBills.push(bill);
+  }
+  return { payableBills, presumedPaidBills };
+}
+
+/**
+ * Project just far enough past the funding end that a bill eligible for the
+ * last funded paycheck (up to MAX_FALLBACK_PREPAY_DAYS early) is still projected.
  */
 export function resolveSolveEndDate(fundingEndDate: Date): Date {
-  return addDays(startOfDay(fundingEndDate), MAX_PREPAY_DAYS);
+  return addDays(startOfDay(fundingEndDate), MAX_FALLBACK_PREPAY_DAYS);
 }
 
 /**
@@ -19,22 +56,15 @@ export function billsEligibleOnFundingHorizon(
   paycheckDates: Date[],
   fundingEndDate: Date
 ): ProjectedBill[] {
-  const fundingEnd = startOfDay(fundingEndDate);
-  const horizonPaychecks = paycheckDates
-    .map((date) => startOfDay(date))
-    .filter((date) => !isAfter(date, fundingEnd));
+  const fundingEndDay = dayNumberOfDate(fundingEndDate);
+  const paycheckDays = paycheckDates.map(dayNumberOfDate);
 
   return bills.filter((bill) => {
-    const due = startOfDay(bill.date);
-    if (!isAfter(due, fundingEnd)) {
-      return true;
-    }
-    return horizonPaychecks.some((paycheckDate) => {
-      if (isAfter(paycheckDate, due)) {
-        return false;
-      }
-      return differenceInDays(due, paycheckDate) <= MAX_PREPAY_DAYS;
-    });
+    const dueDay = dayNumberOfDate(bill.date);
+    if (dueDay <= fundingEndDay) return true;
+    return eligiblePaycheckIndices(dueDay, paycheckDays).some(
+      (index) => paycheckDays[index] <= fundingEndDay
+    );
   });
 }
 

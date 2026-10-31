@@ -69,7 +69,8 @@ export function applyScheduleViewport(
       viewportPaychecks,
       bills,
       startingBalance,
-      fullSchedule.savingsSqueezedCount
+      fullSchedule.savingsSqueezedCount,
+      fullSchedule.presumedPaidCount
     ),
     reconciliation,
     breakGlassAdvisor,

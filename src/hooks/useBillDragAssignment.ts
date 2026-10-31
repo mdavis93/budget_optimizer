@@ -11,7 +11,7 @@ interface PendingAssignment {
   paycheckDate: string;
 }
 
-export function useBillDragAssignment() {
+export function useBillDragAssignment(paycheckDates: readonly string[] = []) {
   const { assignBill } = useDraftActions();
   const [draggedBill, setDraggedBill] = useState<DraggedBill | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export function useBillDragAssignment() {
     }
 
     const { billId, billDate: billDueDate } = draggedBill;
-    if (needsAssignmentConfirmation(billDueDate, targetPaycheckDate)) {
+    if (needsAssignmentConfirmation(billDueDate, targetPaycheckDate, paycheckDates)) {
       setPendingAssignment({ billId, billDueDate, paycheckDate: targetPaycheckDate });
       setDraggedBill(null);
       return;
@@ -77,7 +77,7 @@ export function useBillDragAssignment() {
 
     await applyBillAssignment(billId, billDueDate, targetPaycheckDate);
     setDraggedBill(null);
-  }, [applyBillAssignment, draggedBill]);
+  }, [applyBillAssignment, draggedBill, paycheckDates]);
 
   const handleConfirmAssignment = useCallback(async () => {
     if (!pendingAssignment) return;

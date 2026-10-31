@@ -1,7 +1,9 @@
 import { format, isAfter, isEqual } from 'date-fns';
+import { isOperatingIncome } from '@shared/incomePurpose';
 import { Bill } from '../database.service';
 import { toCents } from './money';
 import { buildEligibleBills } from './eligibility';
+import { partitionPresumedPaidBills } from './lookahead';
 import { clusterEligibleBills } from './clusters';
 import { SolveBillInput, SolvePaycheck, solveClusterBounded } from './solve';
 import { rebalancePaycheckAssignments } from './rebalance';
@@ -208,8 +210,12 @@ export function assignBillsExact(
     { lock: false, lockedKeys }
   );
 
-  const solverBills = allBills.filter(
+  const unplacedBills = allBills.filter(
     (b) => !alreadyPlaced.has(billOccurrenceKey(b.billId, b.date))
+  );
+  const { payableBills: solverBills } = partitionPresumedPaidBills(
+    unplacedBills,
+    allIncomes.filter((income) => isOperatingIncome(income))
   );
 
   const eligible = buildEligibleBills(solverBills, assignments, skippedBills);
@@ -287,6 +293,7 @@ export function assignBillsExact(
         break;
       }
     }
+    // No paycheck on or before the due date. Presumed paid; excluded above.
     if (landing === -1) continue;
 
     assignments[landing].bills.push({

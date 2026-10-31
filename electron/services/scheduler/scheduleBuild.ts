@@ -1,5 +1,9 @@
 import { addMonths, format, parseISO, startOfDay } from 'date-fns';
-import { billsEligibleOnFundingHorizon, resolveSolveEndDate } from './lookahead';
+import {
+  billsEligibleOnFundingHorizon,
+  partitionPresumedPaidBills,
+  resolveSolveEndDate,
+} from './lookahead';
 import type { Bill, Income, Leave, SavingsGoal } from '../database.service';
 import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
@@ -48,6 +52,8 @@ export interface PreparedScheduleHorizon {
   operatingIncomes: ProjectedIncome[];
   reservedIncomes: ProjectedIncome[];
   uniqueBills: ProjectedBill[];
+  /** Occurrences due before the first paycheck they may use (presumed paid pre-schedule). */
+  presumedPaidCount: number;
   skippedForDisplay: ProjectedBill[];
   paycheckDates: Date[];
   incomeAttachedBillsRaw: Bill[];
@@ -151,7 +157,11 @@ export function prepareScheduleHorizon(
   });
 
   const paycheckDates = getUniquePaycheckDates(operatingIncomes);
-  const horizonBills = billsEligibleOnFundingHorizon(uniqueBills, paycheckDates, endDate);
+  const { payableBills, presumedPaidBills } = partitionPresumedPaidBills(
+    uniqueBills,
+    operatingIncomes
+  );
+  const horizonBills = billsEligibleOnFundingHorizon(payableBills, paycheckDates, endDate);
   const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
     manualAssignments,
     paycheckDates
@@ -180,6 +190,7 @@ export function prepareScheduleHorizon(
     operatingIncomes,
     reservedIncomes,
     uniqueBills: horizonBills,
+    presumedPaidCount: presumedPaidBills.length,
     skippedForDisplay,
     paycheckDates,
     incomeAttachedBillsRaw,
@@ -265,11 +276,13 @@ export function assembleAssignedSchedule(
       prepared.startingBalance,
       prepared.maxBudgetRemaining
     ),
+    presumedPaidCount: prepared.presumedPaidCount,
     recommendations: generateRecommendations(
       paychecks,
       prepared.bills,
       prepared.startingBalance,
-      savingsSqueezedCount
+      savingsSqueezedCount,
+      prepared.presumedPaidCount
     ),
     maxBudgetRemaining: prepared.maxBudgetRemaining,
     minCashOnHand: prepared.minCashOnHand,

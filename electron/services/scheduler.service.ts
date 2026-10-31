@@ -136,7 +136,8 @@ export class SchedulerService {
           paychecks,
           bills,
           startingBalance,
-          fullSchedule.savingsSqueezedCount
+          fullSchedule.savingsSqueezedCount,
+          fullSchedule.presumedPaidCount
         ),
         reconciliation: rebuildReconciliationForViewport(fullSchedule.reconciliation, paychecks),
         breakGlassAdvisor: rebuildBreakGlassAdvisorForViewport(
@@ -171,7 +172,8 @@ export class SchedulerService {
         viewportPaychecks,
         bills,
         startingBalance,
-        fullSchedule.savingsSqueezedCount
+        fullSchedule.savingsSqueezedCount,
+        fullSchedule.presumedPaidCount
       ),
       reconciliation: rebuildReconciliationForViewport(
         fullSchedule.reconciliation,

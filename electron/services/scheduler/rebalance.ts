@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { PRIORITY_ORDER } from '../../utils/constants';
-import { getEligiblePaycheckIndices } from './eligibility';
+import { createEligibilityLookup, type EligibilityLookup } from './eligibility';
 import {
   cashMinForDate,
   cashTargetForDate,
@@ -139,11 +139,11 @@ function tryPlaceBillOnEarlier(
   capacity: number[],
   bill: ProjectedBill,
   fromIndex: number,
-  skippedBills: Set<string>,
+  eligibility: EligibilityLookup,
   lockedBillKeys: Set<string>,
   maxCascadeDepth: number
 ): boolean {
-  const earlierCandidates = getEligiblePaycheckIndices(bill, assignments, skippedBills)
+  const earlierCandidates = eligibility(bill)
     .filter((index) => index < fromIndex)
     .sort((a, b) => b - a);
 
@@ -164,7 +164,7 @@ function tryPlaceBillOnEarlier(
         capacity,
         targetIndex,
         bill.amount,
-        skippedBills,
+        eligibility,
         lockedBillKeys,
         0,
         maxCascadeDepth
@@ -190,7 +190,7 @@ function rescueUnpayableBills(
   targetCapacity: number[],
   minCapacity: number[],
   incomeCapacity: number[],
-  skippedBills: Set<string>,
+  eligibility: EligibilityLookup,
   lockedBillKeys: Set<string>,
   maxCascadeDepth: number
 ): number {
@@ -227,7 +227,7 @@ function rescueUnpayableBills(
           targetCapacity,
           bill,
           index,
-          skippedBills,
+          eligibility,
           lockedBillKeys,
           maxCascadeDepth
         ) ||
@@ -237,7 +237,7 @@ function rescueUnpayableBills(
           minCapacity,
           bill,
           index,
-          skippedBills,
+          eligibility,
           lockedBillKeys,
           maxCascadeDepth
         ) ||
@@ -247,7 +247,7 @@ function rescueUnpayableBills(
           incomeCapacity,
           bill,
           index,
-          skippedBills,
+          eligibility,
           lockedBillKeys,
           maxCascadeDepth
         )
@@ -352,7 +352,7 @@ function freeCapacityOnPaycheck(
   capacity: number[],
   targetIndex: number,
   amountNeeded: number,
-  skippedBills: Set<string>,
+  eligibility: EligibilityLookup,
   lockedBillKeys: Set<string>,
   depth: number,
   maxCascadeDepth: number
@@ -362,7 +362,7 @@ function freeCapacityOnPaycheck(
   if (depth >= maxCascadeDepth) return false;
 
   for (const bill of movableBillsOnPaycheck(assignments[targetIndex], lockedBillKeys)) {
-    const earlierCandidates = getEligiblePaycheckIndices(bill, assignments, skippedBills)
+    const earlierCandidates = eligibility(bill)
       .filter((index) => index < targetIndex)
       .sort((a, b) => b - a);
 
@@ -375,7 +375,7 @@ function freeCapacityOnPaycheck(
           capacity,
           earlierIndex,
           bill.amount,
-          skippedBills,
+          eligibility,
           lockedBillKeys,
           depth + 1,
           maxCascadeDepth
@@ -403,7 +403,7 @@ function tryRelieveOverload(
   targetCapacity: number[],
   minCapacity: number[],
   overloadedIndex: number,
-  skippedBills: Set<string>,
+  eligibility: EligibilityLookup,
   lockedBillKeys: Set<string>,
   maxCascadeDepth: number
 ): boolean {
@@ -429,7 +429,7 @@ function tryRelieveOverload(
         targetCapacity,
         bill,
         overloadedIndex,
-        skippedBills,
+        eligibility,
         lockedBillKeys,
         maxCascadeDepth
       ) ||
@@ -439,7 +439,7 @@ function tryRelieveOverload(
         minCapacity,
         bill,
         overloadedIndex,
-        skippedBills,
+        eligibility,
         lockedBillKeys,
         maxCascadeDepth
       )
@@ -458,7 +458,7 @@ function tryDecongestBreakGlass(
   targetCapacity: number[],
   minCapacity: number[],
   congestedIndex: number,
-  skippedBills: Set<string>,
+  eligibility: EligibilityLookup,
   lockedBillKeys: Set<string>,
   maxCascadeDepth: number
 ): boolean {
@@ -494,7 +494,7 @@ function tryDecongestBreakGlass(
         targetCapacity,
         bill,
         congestedIndex,
-        skippedBills,
+        eligibility,
         lockedBillKeys,
         maxCascadeDepth
       ) ||
@@ -504,7 +504,7 @@ function tryDecongestBreakGlass(
         minCapacity,
         bill,
         congestedIndex,
-        skippedBills,
+        eligibility,
         lockedBillKeys,
         maxCascadeDepth
       );
@@ -526,7 +526,7 @@ function tryForwardDominoFill(
   assignments: PaycheckAssignment[],
   load: number[],
   targetCapacity: number[],
-  skippedBills: Set<string>,
+  eligibility: EligibilityLookup,
   lockedBillKeys: Set<string>
 ): boolean {
   let changed = false;
@@ -541,7 +541,7 @@ function tryForwardDominoFill(
         const candidates = movableBillsOnPaycheck(assignments[later], lockedBillKeys).reverse();
         for (const bill of candidates) {
           if (spareCapacity(load, targetCapacity, earlier) < bill.amount) continue;
-          const eligible = getEligiblePaycheckIndices(bill, assignments, skippedBills);
+          const eligible = eligibility(bill);
           if (!eligible.includes(earlier)) continue;
 
           moveBill(assignments, bill, later, earlier, load);
@@ -569,7 +569,7 @@ export function rebalancePaycheckAssignments(
   startingBalance: number,
   options: RebalanceOptions = {}
 ): void {
-  const skippedBills = options.skippedBills ?? new Set();
+  const eligibility = createEligibilityLookup(assignments, options.skippedBills);
   const lockedBillKeys = options.lockedBillKeys ?? new Set();
   const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
@@ -607,7 +607,7 @@ export function rebalancePaycheckAssignments(
         assignments,
         load,
         targetCapacity,
-        skippedBills,
+        eligibility,
         lockedBillKeys
       )
     ) {
@@ -628,7 +628,7 @@ export function rebalancePaycheckAssignments(
           targetCapacity,
           minCapacity,
           index,
-          skippedBills,
+          eligibility,
           lockedBillKeys,
           maxCascadeDepth
         )
@@ -646,7 +646,7 @@ export function rebalancePaycheckAssignments(
           targetCapacity,
           minCapacity,
           index,
-          skippedBills,
+          eligibility,
           lockedBillKeys,
           maxCascadeDepth
         )
@@ -664,7 +664,7 @@ export function rebalancePaycheckAssignments(
     targetCapacity,
     minCapacity,
     incomeCapacity,
-    skippedBills,
+    eligibility,
     lockedBillKeys,
     maxCascadeDepth
   );

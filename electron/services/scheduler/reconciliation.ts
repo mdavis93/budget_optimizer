@@ -1,11 +1,11 @@
-import { isBefore, format, parseISO, differenceInDays } from 'date-fns';
+import { isBefore, format, parseISO } from 'date-fns';
+import { dayNumberOfIsoDate, eligiblePaycheckIndices } from '@shared/billEligibility';
 import { movableBillCapacity } from '@shared/reconciliationSurplus';
 import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
 import { PRIORITY_ORDER } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
-  MAX_PREPAY_DAYS,
   ScheduleData,
   ReconciliationReport,
   ShortfallDetail,
@@ -57,6 +57,7 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
   }
 
   const proposedBillMoves = new Set<string>();
+  const paycheckDays = schedule.paychecks.map((paycheck) => dayNumberOfIsoDate(paycheck.date));
 
   for (const shortfall of shortfalls) {
     const shortfallPaycheck = schedule.paychecks.find(p => p.date === shortfall.paycheckDate);
@@ -78,15 +79,19 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
         })
         .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
 
+      const eligibleDays = new Set(
+        eligiblePaycheckIndices(dayNumberOfIsoDate(bill.billDate), paycheckDays).map(
+          (index) => paycheckDays[index]
+        )
+      );
+
       for (const targetPaycheck of earlierPaychecks) {
         const availableSurplus = paycheckSurplus.get(targetPaycheck.date) || 0;
 
         if (availableSurplus >= bill.amount) {
-          const billDueDate = parseISO(bill.billDate);
           const targetDate = parseISO(targetPaycheck.date);
-          const daysEarly = differenceInDays(billDueDate, targetDate);
 
-          if (daysEarly <= MAX_PREPAY_DAYS) {
+          if (eligibleDays.has(dayNumberOfIsoDate(targetPaycheck.date))) {
             const targetMin = targetPaycheck.minCashOnHand ?? budgetMinCashOnHand;
             const remainingAfterMove = targetPaycheck.budgetRemaining - bill.amount;
             if (remainingAfterMove < targetMin) {
