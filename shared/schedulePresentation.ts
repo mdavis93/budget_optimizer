@@ -54,12 +54,20 @@ export function calculateSummary(
   };
 }
 
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/**
+ * One row per paycheck event. Each operating paycycle starts fresh (the first
+ * one includes the starting balance). Petty cash spends whatever cash is left.
+ */
 export function convertToLegacyEntries(
   paychecks: PaycheckEntry[],
   startingBalance: number
 ): ScheduleEntry[] {
   const entries: ScheduleEntry[] = [];
-  let runningBalance = startingBalance;
+  let appliedOpeningBalance = false;
 
   for (const paycheck of paychecks) {
     if (isSavingsAndGoalsIncome(paycheck)) {
@@ -69,7 +77,7 @@ export function convertToLegacyEntries(
           type: 'savings',
           description: `Savings deposit: ${income.name}`,
           amount: income.amount,
-          runningBalance: Math.round(runningBalance * 100) / 100,
+          runningBalance: 0,
           isShortfall: false,
         });
       }
@@ -79,7 +87,7 @@ export function convertToLegacyEntries(
           type: 'savings',
           description: `Goal: ${goalDeposit.goalName}`,
           amount: goalDeposit.amount,
-          runningBalance: Math.round(runningBalance * 100) / 100,
+          runningBalance: 0,
           isShortfall: false,
         });
       }
@@ -89,12 +97,15 @@ export function convertToLegacyEntries(
           type: 'savings',
           description: 'Transfer to Savings',
           amount: paycheck.savingsDeposit,
-          runningBalance: Math.round(runningBalance * 100) / 100,
+          runningBalance: 0,
           isShortfall: false,
         });
       }
       continue;
     }
+
+    let runningBalance = appliedOpeningBalance ? 0 : startingBalance;
+    appliedOpeningBalance = true;
 
     for (const income of paycheck.incomeSources) {
       runningBalance += income.amount;
@@ -103,20 +114,33 @@ export function convertToLegacyEntries(
         type: 'income',
         description: income.name,
         amount: income.amount,
-        runningBalance: Math.round(runningBalance * 100) / 100,
+        runningBalance: roundMoney(runningBalance),
         isShortfall: runningBalance < 0,
       });
     }
 
     for (const bill of paycheck.bills) {
+      if (bill.isSkipped) {
+        entries.push({
+          date: paycheck.date,
+          type: 'expense',
+          description: bill.creditorName,
+          amount: bill.amount,
+          runningBalance: roundMoney(runningBalance),
+          isShortfall: false,
+        });
+        continue;
+      }
+
       runningBalance -= bill.amount;
       entries.push({
         date: paycheck.date,
         type: 'expense',
         description: bill.creditorName,
         amount: bill.amount,
-        runningBalance: Math.round(runningBalance * 100) / 100,
-        isShortfall: runningBalance < 0,
+        runningBalance: roundMoney(runningBalance),
+        isShortfall: Boolean(bill.isUnpayable) || runningBalance < 0,
+        recommendation: bill.isUnpayable ? bill.unfundableReason : undefined,
       });
     }
 
@@ -127,7 +151,7 @@ export function convertToLegacyEntries(
         type: 'savings',
         description: `Goal: ${goalDeposit.goalName}`,
         amount: goalDeposit.amount,
-        runningBalance: Math.round(runningBalance * 100) / 100,
+        runningBalance: roundMoney(runningBalance),
         isShortfall: false,
       });
     }
@@ -139,10 +163,21 @@ export function convertToLegacyEntries(
         type: 'savings',
         description: 'Transfer to Savings',
         amount: paycheck.savingsDeposit,
-        runningBalance: Math.round(runningBalance * 100) / 100,
+        runningBalance: roundMoney(runningBalance),
         isShortfall: false,
       });
     }
+
+    const pettyCash = Math.max(0, paycheck.budgetRemaining);
+    runningBalance -= pettyCash;
+    entries.push({
+      date: paycheck.date,
+      type: 'pettyCash',
+      description: 'Petty cash',
+      amount: roundMoney(pettyCash),
+      runningBalance: roundMoney(runningBalance),
+      isShortfall: false,
+    });
   }
 
   return entries;

@@ -237,7 +237,7 @@ export type UnfundableReason =
 
 export interface ScheduleEntry {
   date: string;
-  type: 'income' | 'expense' | 'savings';
+  type: 'income' | 'expense' | 'savings' | 'pettyCash';
   description: string;
   amount: number;
   runningBalance: number;
