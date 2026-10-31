@@ -117,7 +117,7 @@ function createWindow() {
   });
 
   attachNavigationLock(mainWindow.webContents, appNavOpts);
-  denyAllPermissions(mainWindow.webContents.session);
+  denyAllPermissions(mainWindow.webContents.session, ['clipboard-sanitized-write']);
 
   if (app.isPackaged) {
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {

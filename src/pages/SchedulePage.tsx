@@ -23,7 +23,7 @@ import { formatCurrency } from '../utils/formatCurrency';
 import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
 import { useScheduleMutations } from '../hooks/useScheduleMutations';
 import { useToast } from '../components/Toast';
-import { copyDiagnosticReport } from '../utils/reportError';
+import { useCopyDiagnosticReport } from '../hooks/useCopyDiagnosticReport';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -53,6 +53,7 @@ export default function SchedulePage() {
   const { currentBudget } = useBudget();
   const { incomes, bills, billAssignments, incomeOverrides } = useDraftData();
   const { showToast } = useToast();
+  const copyReport = useCopyDiagnosticReport();
   const [viewMode, setViewMode] = useState<ViewMode>('paycheck');
   const [expandedPaychecks, setExpandedPaychecks] = useState<Set<string>>(new Set());
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
@@ -155,7 +156,7 @@ export default function SchedulePage() {
           ? {
               label: 'Copy report',
               onClick: () => {
-                void copyDiagnosticReport(diagnosticId);
+                void copyReport(diagnosticId);
               },
             }
           : undefined,
@@ -297,7 +298,7 @@ export default function SchedulePage() {
                 type="button"
                 className="btn-secondary"
                 onClick={() => {
-                  void copyDiagnosticReport(diagnosticId);
+                  void copyReport(diagnosticId);
                 }}
               >
                 Copy report

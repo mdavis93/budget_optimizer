@@ -50,7 +50,7 @@ import {
 import { useAuth } from './AuthContext';
 import { useBudget } from './BudgetContext';
 import { useToast } from '../components/Toast';
-import { copyDiagnosticReport } from '../utils/reportError';
+import { useCopyDiagnosticReport } from '../hooks/useCopyDiagnosticReport';
 import {
   computeDirtyDomains,
   getRequiredSaveDomains,
@@ -162,6 +162,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const { isUnlocked } = useAuth();
   const { currentBudget, hasBudgetSelected, refreshCurrentBudget, loadBudgets } = useBudget();
   const { showToast } = useToast();
+  const copyReport = useCopyDiagnosticReport();
 
   const [committed, setCommitted] = useState<DraftState>(createEmptyDraftState());
   const [draft, setDraft] = useState<DraftState>(createEmptyDraftState());
@@ -396,7 +397,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
             ? {
                 label: 'Copy report',
                 onClick: () => {
-                  void copyDiagnosticReport(diagnosticId);
+                  void copyReport(diagnosticId);
                 },
               }
             : undefined,
@@ -414,7 +415,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSaving(false);
     }
-  }, [showToast, finalizeSave]);
+  }, [showToast, copyReport, finalizeSave]);
 
   const saveDomain = useCallback(async (domain: DraftDomain): Promise<boolean> => {
     const { dirtyDomains: domains } = stateRef.current;
@@ -447,7 +448,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
             ? {
                 label: 'Copy report',
                 onClick: () => {
-                  void copyDiagnosticReport(diagnosticId);
+                  void copyReport(diagnosticId);
                 },
               }
             : undefined,
@@ -461,7 +462,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSaving(false);
     }
-  }, [showToast, finalizeSave]);
+  }, [showToast, copyReport, finalizeSave]);
 
   const discardDomain = useCallback((domain: DraftDomain) => {
     const { isDraftMode: draftMode, committed: saved } = stateRef.current;
