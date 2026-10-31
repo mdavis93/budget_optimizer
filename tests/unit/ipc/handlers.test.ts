@@ -474,6 +474,17 @@ describe('ipc handlers', () => {
       expect(services.scheduler.generateSchedule).not.toHaveBeenCalled();
     });
 
+    it('accepts schedule:build months of 17 and 60', async () => {
+      const services = createServices();
+      registerHandlers(ipcMain, services);
+
+      for (const months of [17, 60]) {
+        const result = await ipcMain.invoke('schedule:build', '2026-01-01', months, 0);
+        expect(result.success).toBe(true);
+      }
+      expect(services.scheduleCompute.runJob).toHaveBeenCalledTimes(2);
+    });
+
     it('rejects hostile schedule:build arguments before a worker starts', async () => {
       const services = createServices();
       registerHandlers(ipcMain, services);
@@ -485,7 +496,11 @@ describe('ipc handlers', () => {
         ['2026-01-01', 3, Number.POSITIVE_INFINITY],
         ['2026-01-01', 3, '100'],
         ['2026-01-01', 3, 1e308],
-        ['2026-01-01', 1, 0],
+        ['2026-01-01', 0, 0],
+        ['2026-01-01', 61, 0],
+        ['2026-01-01', 1.5, 0],
+        ['2026-01-01', Number.NaN, 0],
+        ['2026-01-01', '12', 0],
       ];
       for (const [startDate, months, startingBalance] of cases) {
         const result = await ipcMain.invoke('schedule:build', startDate, months, startingBalance);

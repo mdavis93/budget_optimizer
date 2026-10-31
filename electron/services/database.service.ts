@@ -1384,7 +1384,6 @@ export class DatabaseService {
     // Validate input
     const validation = validateIncome(income);
     assertValid(validation, 'Invalid income data');
-    this.assertWithinCollectionCap('incomes', budgetId, 'Incomes', COLLECTION_LIMITS.incomes, false);
     
     const existing = this.getIncomeById(id, budgetId);
     if (!existing) return null;
@@ -1517,7 +1516,6 @@ export class DatabaseService {
     // Validate input
     const validation = validateBill(bill, this.getAllIncomes(budgetId));
     assertValid(validation, 'Invalid bill data');
-    this.assertWithinCollectionCap('bills', budgetId, 'Bills', COLLECTION_LIMITS.bills, false);
     
     const existing = this.getBillById(id, budgetId);
     if (!existing) return null;
@@ -1958,7 +1956,6 @@ export class DatabaseService {
       priority: input.priority ?? existing.priority,
     };
     assertValid(validateGoal(payload), 'Invalid goal data');
-    this.assertWithinCollectionCap('goals', budgetId, 'Goals', COLLECTION_LIMITS.goals, false);
     const encryptedData = this.crypto.encryptObject(payload);
     
     this.db.prepare(`
@@ -2089,7 +2086,6 @@ export class DatabaseService {
       validateDebt({ billId: existing.billId, ...payload }),
       'Invalid debt data'
     );
-    this.assertWithinCollectionCap('debts', budgetId, 'Debts', COLLECTION_LIMITS.debts, false);
     const now = new Date().toISOString();
     const encryptedData = this.crypto.encryptObject(payload);
     
@@ -2185,7 +2181,6 @@ export class DatabaseService {
     if (!existing) return null;
 
     assertValid(validateLeave(input), 'Invalid leave data');
-    this.assertWithinCollectionCap('leaves', budgetId, 'Leaves', COLLECTION_LIMITS.leaves, false);
 
     if (!this.getIncomeById(input.incomeId, budgetId)) {
       throw new Error('Income source not found for leave');

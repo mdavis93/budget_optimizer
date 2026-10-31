@@ -8,6 +8,7 @@ import {
   validateDebt,
   validateLeave,
   validateScheduleBuildArgs,
+  assertCollectionCap,
   validateBudget,
   validateDraftOverlay,
   validateReconciliationFix,
@@ -552,12 +553,26 @@ describe('validation.service', () => {
   describe('phase 1 hardening', () => {
     it('rejects hostile schedule:build arguments', () => {
       expect(validateScheduleBuildArgs('2026-02-31', 3, 0).valid).toBe(false);
-      expect(validateScheduleBuildArgs('2026-01-01', 2, 0).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 0, 0).valid).toBe(false);
+      expect(validateScheduleBuildArgs('2026-01-01', 61, 0).valid).toBe(false);
       expect(validateScheduleBuildArgs('2026-01-01', 3, Number.NaN).valid).toBe(false);
       expect(validateScheduleBuildArgs('2026-01-01', 3, Number.POSITIVE_INFINITY).valid).toBe(false);
       expect(validateScheduleBuildArgs('2026-01-01', 3, '10').valid).toBe(false);
       expect(validateScheduleBuildArgs('2026-01-01', 3, 1e308).valid).toBe(false);
       expect(validateScheduleBuildArgs('2026-01-01', 3, -25).valid).toBe(true);
+    });
+
+    it('accepts calculation months from 1 through 60', () => {
+      expect(validateScheduleBuildArgs('2026-01-01', 1, 0).valid).toBe(true);
+      expect(validateScheduleBuildArgs('2026-01-01', 2, 0).valid).toBe(true);
+      expect(validateScheduleBuildArgs('2026-01-01', 17, 0).valid).toBe(true);
+      expect(validateScheduleBuildArgs('2026-01-01', 60, 0).valid).toBe(true);
+    });
+
+    it('covers the update-side collection cap branch', () => {
+      expect(() => assertCollectionCap('Incomes', 100, 100, false)).not.toThrow();
+      expect(() => assertCollectionCap('Incomes', 101, 100, false)).toThrow(/Incomes cannot exceed 100/);
+      expect(() => assertCollectionCap('Incomes', 100, 100, true)).toThrow(/Incomes cannot exceed 100/);
     });
 
     it('keeps strict APR on create and legacy APR on the overlay', () => {
@@ -568,7 +583,7 @@ describe('validation.service', () => {
         monthlyPayment: 150,
       };
       expect(validateDebt(debt).valid).toBe(false);
-      expect(validateDebt(debt, 'strict').errors.join(' ')).toContain('between 0 and 1');
+      expect(validateDebt(debt, 'strict').errors.join(' ')).toContain('between 0% and 100%');
       expect(validateDebt({ ...debt, apr: 0.125 }).valid).toBe(true);
       expect(validateDraftOverlay({ debts: [debt] }).valid).toBe(true);
       expect(validateDraftOverlay({ debts: [{ ...debt, apr: 101 }] }).valid).toBe(false);

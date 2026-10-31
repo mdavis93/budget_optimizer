@@ -470,6 +470,35 @@ describe('DatabaseService', () => {
       ).toBe('Updated');
     });
 
+    it('updates an income after a row is seeded past the collection cap', () => {
+      const budget = db.createBudget({ name: 'Over Cap Update' });
+      const input = {
+        sourceName: 'Job',
+        amount: 100,
+        cadence: 'monthly' as const,
+        startDate: '2026-01-01',
+        isActive: true,
+      };
+      const first = db.createIncome(budget.id, { ...input, sourceName: 'Job 0' });
+      for (let index = 1; index < 100; index += 1) {
+        db.createIncome(budget.id, { ...input, sourceName: `Job ${index}` });
+      }
+
+      const crypto = db.getCryptoService();
+      const internalDb = (db as unknown as {
+        db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } };
+      }).db;
+      const now = new Date().toISOString();
+      internalDb.prepare(
+        'INSERT INTO incomes (id, budget_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      ).run(crypto.generateId(), budget.id, crypto.encryptObject({ ...input, sourceName: 'Seeded' }), now, now);
+
+      expect(
+        db.updateIncome(first.id, budget.id, { ...input, sourceName: 'Updated' })?.sourceName
+      ).toBe('Updated');
+      expect(() => db.createIncome(budget.id, input)).toThrow(/Incomes cannot exceed 100/);
+    });
+
     it('rejects invalid income payload', () => {
       const budget = db.createBudget({ name: 'Guardrails Budget' });
       expect(() =>

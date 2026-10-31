@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import SchedulePage from '../../src/pages/SchedulePage';
-import { createMockElectronAPI, createMockPaycheck, createMockSchedule } from '../mocks/electron-api.mock';
+import { createMockElectronAPI, createMockGoalProjection, createMockPaycheck, createMockSchedule } from '../mocks/electron-api.mock';
 import { renderWithRouter } from '../helpers/renderWithProviders';
 import { copyDiagnosticReport } from '../../src/utils/reportError';
+import { validateScheduleBuildArgs } from '../../electron/services/validation.service';
+
+const scheduleControlsMode = vi.hoisted(() => ({ useReal: false }));
 
 vi.mock('../../src/utils/reportError', () => ({
   copyDiagnosticReport: vi.fn(),
@@ -27,8 +31,14 @@ vi.mock('../../src/components/Toast', () => ({
   useToast: () => ({ showToast: vi.fn(), dismissToast: vi.fn() }),
 }));
 
-vi.mock('../../src/components/schedule', () => ({
-  ScheduleControls: () => <div>Mock Schedule Controls</div>,
+vi.mock('../../src/components/schedule', async () => {
+  const actual = await vi.importActual<typeof import('../../src/components/schedule')>(
+    '../../src/components/schedule'
+  );
+  return {
+    ...actual,
+  ScheduleControls: (props: React.ComponentProps<typeof actual.ScheduleControls>) =>
+    scheduleControlsMode.useReal ? <actual.ScheduleControls {...props} /> : <div>Mock Schedule Controls</div>,
   PaycheckView: ({
     paychecks,
     onSkipBill,
@@ -165,7 +175,8 @@ vi.mock('../../src/components/schedule', () => ({
       <p>{heading}</p>
     </div>
   ),
-}));
+  };
+});
 
 vi.mock('../../src/components/ReconciliationPage', () => ({
   default: ({ onApplyFixes, onSkip }: { onApplyFixes: (fixes: Array<{ id: string }>) => void; onSkip: () => void }) => (
@@ -199,6 +210,7 @@ describe('SchedulePage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    scheduleControlsMode.useReal = false;
     window.electronAPI = mockAPI as unknown as Window['electronAPI'];
     mockUseBudget.mockReturnValue({ isQuickBudget: false });
     mockUseDraftActions.mockReturnValue({
@@ -1028,6 +1040,53 @@ describe('SchedulePage', () => {
         expect(assignBill).toHaveBeenCalled();
       });
       expect(mockAPI.billAssignments.assign).not.toHaveBeenCalled();
+    });
+
+    it('refreshes a Through-goal viewport of 17 months through validateScheduleBuildArgs', async () => {
+      scheduleControlsMode.useReal = true;
+      generateSchedule.mockImplementation((startDate, months, startingBalance) => {
+        expect(validateScheduleBuildArgs(startDate, months, startingBalance).valid).toBe(true);
+        return Promise.resolve(true);
+      });
+      mockUseData.mockImplementation(() => {
+        const [scheduleMonths, setScheduleMonths] = useState(3);
+        return {
+          incomes: [{ id: 'inc-1' }],
+          bills: [{ id: 'bill-1' }],
+          billAssignments: [],
+          incomeOverrides: [],
+          schedule: createMockSchedule({
+            calculationMonths: 18,
+            goalProjections: [
+              createMockGoalProjection({
+                goalName: 'Car',
+                targetDate: '2027-06-01',
+              }),
+            ],
+            recommendations: [],
+          }),
+          generateSchedule,
+          isLoading: false,
+          scheduleStartDate: '2026-01-01',
+          scheduleMonths,
+          persistedViewportMonths: 3,
+          isViewportReady: true,
+          scheduleStartingBalance: 1000,
+          scheduleInputHash: 'test-hash',
+          setScheduleStartDate: vi.fn(),
+          setScheduleMonths,
+          setScheduleStartingBalance: vi.fn(),
+        };
+      });
+
+      renderWithRouter(<SchedulePage />, { mockAPI });
+      fireEvent.change(screen.getByLabelText('View'), { target: { value: '17' } });
+      fireEvent.click(screen.getByRole('button', { name: /Refresh/i }));
+
+      await waitFor(() => {
+        expect(generateSchedule).toHaveBeenCalledWith('2026-01-01', 17, 1000, { force: true });
+      });
+      await expect(generateSchedule('2026-01-01', 17, 1000, { force: true })).resolves.toBe(true);
     });
   });
 });

@@ -129,6 +129,47 @@ describe('schedule compute validate', () => {
     expect(estimatePayloadBytes(message)).toBeGreaterThan(0);
   });
 
+  it('rejects a hostile presumedPaidCount and still accepts an omitted field', () => {
+    const expected = { jobId: 'j1', inputHash: 'h1', op: 'schedule' as const };
+    const base = {
+      type: 'result' as const,
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: 'j1',
+      inputHash: 'h1',
+      op: 'schedule' as const,
+      schedule: {
+        startDate: '2026-01-01',
+        endDate: '2026-01-31',
+        paychecks: [],
+        fullPaychecks: [],
+        viewportMonths: 1,
+        entries: [],
+        summary: {
+          totalIncome: 0,
+          totalExpenses: 0,
+          netBalance: 0,
+          shortfallCount: 0,
+        },
+        recommendations: [],
+        maxBudgetRemaining: 250,
+        minCashOnHand: 100,
+      },
+    };
+
+    expect(() => assertScheduleComputeSuccessMessage(base, expected)).not.toThrow();
+    for (const presumedPaidCount of [-1, 1.5, Number.NaN, '0']) {
+      expect(() =>
+        assertScheduleComputeSuccessMessage(
+          {
+            ...base,
+            schedule: { ...base.schedule, presumedPaidCount },
+          },
+          expected
+        )
+      ).toThrow(/presumedPaidCount/);
+    }
+  });
+
   it('rejects mismatched jobId', () => {
     expect(() =>
       assertScheduleComputeSuccessMessage(

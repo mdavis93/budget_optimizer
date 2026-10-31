@@ -326,6 +326,11 @@ export class ScheduleComputeHost {
       };
 
       const onExit = (code: number) => {
+        if (flight.killEscalateHandle) {
+          clearTimeout(flight.killEscalateHandle);
+          flight.killEscalateHandle = null;
+        }
+        child.removeListener('exit', onExit);
         if (flight.settled) {
           return;
         }
@@ -383,7 +388,6 @@ export class ScheduleComputeHost {
       child.on('spawn', onSpawn);
       flight.detachListeners = () => {
         child.removeListener('message', onMessage);
-        child.removeListener('exit', onExit);
         child.removeListener('error', onError);
       };
       flight.detachSpawn = () => {
@@ -422,6 +426,7 @@ export class ScheduleComputeHost {
       flight.killAfterSpawn = true;
       return;
     }
+    const pid = child.pid;
     try {
       child.kill();
     } catch {
@@ -430,7 +435,6 @@ export class ScheduleComputeHost {
     if (flight.killEscalateHandle) {
       clearTimeout(flight.killEscalateHandle);
     }
-    const pid = child.pid;
     flight.killEscalateHandle = setTimeout(() => {
       if (pid != null) {
         this.forceKillPid(pid);
@@ -473,10 +477,6 @@ export class ScheduleComputeHost {
       if (pidBeforeKill != null) {
         flight.detachSpawn?.();
         flight.detachSpawn = null;
-      }
-      if (error.code === 'cancelled' && flight.killEscalateHandle) {
-        clearTimeout(flight.killEscalateHandle);
-        flight.killEscalateHandle = null;
       }
     } else {
       flight.detachSpawn?.();

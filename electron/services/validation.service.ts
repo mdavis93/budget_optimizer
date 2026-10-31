@@ -1,3 +1,4 @@
+import { SCHEDULE_MAX_CALCULATION_MONTHS } from '@shared/constants';
 import { isScheduleViewportMonths } from '@shared/scheduleViewportMonths';
 
 export class ValidationError extends Error {
@@ -359,7 +360,7 @@ export function validateDebt(debt: {
 
   const aprLimit = aprMode === 'legacy' ? 100 : 1;
   if (typeof debt.apr !== 'number' || !Number.isFinite(debt.apr) || debt.apr < 0 || debt.apr > aprLimit) {
-    errors.push(aprMode === 'legacy' ? 'APR must be between 0 and 100' : 'APR must be between 0 and 1');
+    errors.push(aprMode === 'legacy' ? 'APR must be between 0 and 100' : 'APR must be between 0% and 100%');
   }
 
   if (
@@ -732,8 +733,13 @@ export function validateScheduleBuildArgs(
   if (!isRealCalendarDate(startDate)) {
     errors.push('Start date must be a real YYYY-MM-DD date');
   }
-  if (!isScheduleViewportMonths(months)) {
-    errors.push('Months must be 3, 6, or 12');
+  if (
+    typeof months !== 'number' ||
+    !Number.isInteger(months) ||
+    months < 1 ||
+    months > SCHEDULE_MAX_CALCULATION_MONTHS
+  ) {
+    errors.push(`Months must be an integer between 1 and ${SCHEDULE_MAX_CALCULATION_MONTHS}`);
   }
   if (!isMoney(startingBalance, true)) {
     errors.push('Starting balance must be a finite number of at most 10,000,000');
