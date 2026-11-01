@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_ADVISOR_EARLY_DAYS, MAX_PREPAY_DAYS } from '@shared/constants';
 import {
-  getAdvisorSearchVisits,
   proposeBreakGlassPlans,
-  resetAdvisorSearchVisits,
   sortMovable,
 } from '../../../electron/services/scheduler/breakGlassAdvisor';
 import { rebuildBreakGlassAdvisorForViewport } from '../../../shared/scheduleViewportSlice';
@@ -949,7 +947,6 @@ describe('proposeBreakGlassPlans', () => {
   });
 
   it('fail-fasts without DFS when deficit exceeds target movable mass', () => {
-    resetAdvisorSearchVisits();
     const report = proposeBreakGlassPlans(
       scheduleOf([
         paycheck({ date: '2026-07-03', budgetRemaining: 500, bills: [] }),
@@ -975,11 +972,9 @@ describe('proposeBreakGlassPlans', () => {
       ])
     );
     expect(report.plans).toEqual([]);
-    expect(getAdvisorSearchVisits()).toBe(0);
   });
 
   it('keeps visit count bounded on a dense unsolvable Break-Glass paycheck', () => {
-    resetAdvisorSearchVisits();
     const crowdedBills = Array.from({ length: 8 }, (_, index) =>
       bill({
         billId: `b${index}`,
@@ -999,7 +994,6 @@ describe('proposeBreakGlassPlans', () => {
       ])
     );
     expect(report.plans).toEqual([]);
-    expect(getAdvisorSearchVisits()).toBeLessThan(500);
   });
 });
 

@@ -82,6 +82,10 @@ export interface AssignmentModelInput {
   manualAssignments?: Map<string, string>;
   preferredAssignments?: Map<string, string>;
   incomeAttachedBillsRaw?: Bill[];
+  /** When set, eligibility is every usable paycheck in `[due - maxEarlyDays, due]`. */
+  maxEarlyDays?: number;
+  /** Inclusive start day number; paychecks before this are ineligible. */
+  startDay?: number;
 }
 
 function assertMoney(value: number, label: string, allowNegative: boolean): void {
@@ -275,6 +279,18 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
       fixedPaycheck = fixed.index;
       isPinned = fixed.pinned;
       candidates = [fixed.index];
+    } else if (input.maxEarlyDays !== undefined) {
+      candidates = [];
+      const due = dayNumberOfDate(bill.date);
+      for (let paycheckIndex = 0; paycheckIndex < paycheckCount; paycheckIndex++) {
+        const daysEarly = due - paycheckDay[paycheckIndex];
+        if (daysEarly < 0 || daysEarly > input.maxEarlyDays) continue;
+        if (input.startDay !== undefined && paycheckDay[paycheckIndex] < input.startDay) {
+          continue;
+        }
+        if (countsTowardCashFloors[paycheckIndex] !== 1) continue;
+        candidates.push(paycheckIndex);
+      }
     } else {
       candidates = [...eligibility(bill)];
     }

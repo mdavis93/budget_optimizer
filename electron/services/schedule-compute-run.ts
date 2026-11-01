@@ -15,6 +15,7 @@ import {
   prepareScheduleHorizon,
 } from './scheduler/scheduleBuild';
 import { listBreakGlassPaycheckDates } from './scheduler/breakGlassAdvisor';
+import { GreedySolver } from './scheduler/solvers/greedySolver';
 
 const noopProgress: ScheduleComputeProgressSink = () => undefined;
 
@@ -81,12 +82,14 @@ export function runScheduleCompute(
   });
 
   onProgress({ stage: 'assigning' });
+  const solver = new GreedySolver();
   let computeMeta: ScheduleComputeMeta = {
     solver: 'greedy',
     timings: { modelMs: 0, solveMs: 0, materializeMs: 0 },
     ignoredPins: 0,
   };
   const paychecks = assignPreparedHorizon(prepared, native.preferredAssignments, {
+    solver,
     onComputeMeta: (meta) => {
       computeMeta = meta;
     },
@@ -108,6 +111,7 @@ export function runScheduleCompute(
     targetCashOnHand: native.targetCashOnHand,
     minCashOnHand: native.minCashOnHand,
     lockedBillKeys: new Set(native.manualAssignments.keys()),
+    solver,
   };
   const bgDates = listBreakGlassPaycheckDates(fullHorizon, advisorOptions);
   onProgress({ stage: 'advising', current: 0, total: bgDates.length });
@@ -132,7 +136,9 @@ export function runScheduleCompute(
           current: dryRunIndex,
           total: planCount,
         });
-        const trialPaychecks = assignPreparedHorizon(prepared, preferredAssignments);
+        const trialPaychecks = assignPreparedHorizon(prepared, preferredAssignments, {
+          solver,
+        });
         return assembleAssignedSchedule(prepared, trialPaychecks, {
           includePresentation: false,
         });
