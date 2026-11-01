@@ -21,6 +21,7 @@ describe('scheduleCompute.worker handleMessage', () => {
 
   afterEach(() => {
     delete (process as NodeJS.Process & { parentPort?: unknown }).parentPort;
+    delete process.env.SCHEDULE_HIGHS_SPIKE;
   });
 
   it('replies with an error and exits when the message is not an object', async () => {
@@ -35,6 +36,22 @@ describe('scheduleCompute.worker handleMessage', () => {
       })
     );
     expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('loads HiGHS on ping when SCHEDULE_HIGHS_SPIKE=1', async () => {
+    process.env.SCHEDULE_HIGHS_SPIKE = '1';
+    vi.doMock('../../../electron/services/scheduler/solvers/loadHighs', () => ({
+      loadHighs: vi.fn(async () => ({
+        solve: () => ({ Status: 'Optimal' }),
+      })),
+    }));
+    const { handleMessage } = await import('../../../electron/workers/scheduleCompute.worker');
+    handleMessage({ type: 'ping', jobId: 'spike' });
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith({ type: 'pong', jobId: 'spike', solver: 'highs' });
+    });
+    expect(exit).toHaveBeenCalledWith(0);
+    delete process.env.SCHEDULE_HIGHS_SPIKE;
   });
 
   it('replies pong to ping and exits cleanly', async () => {

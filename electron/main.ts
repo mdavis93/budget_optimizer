@@ -232,6 +232,20 @@ app.whenReady().then(async () => {
     app.setName('budget-optimizer');
   }
 
+  // 2a only: prove the packaged utilityProcess can load HiGHS. Removed in 2e.
+  if (process.env.SCHEDULE_HIGHS_SPIKE === '1') {
+    process.env.SCHEDULE_WORKER_SMOKE = '1';
+    try {
+      await runScheduleWorkerSmoke();
+      process.stdout.write('SCHEDULE_HIGHS_SPIKE_OK\n');
+      app.exit(0);
+    } catch (error) {
+      logger.error('highs spike smoke failed:', error);
+      app.exit(1);
+    }
+    return;
+  }
+
   // Initialize services after app is ready
   services = {
     auth: new AuthService(),

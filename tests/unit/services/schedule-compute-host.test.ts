@@ -644,12 +644,18 @@ describe('ScheduleComputeHost', () => {
 
 describe('runScheduleWorkerSmoke', () => {
   const originalSmoke = process.env.SCHEDULE_WORKER_SMOKE;
+  const originalHighsSpike = process.env.SCHEDULE_HIGHS_SPIKE;
 
   afterEach(() => {
     if (originalSmoke === undefined) {
       delete process.env.SCHEDULE_WORKER_SMOKE;
     } else {
       process.env.SCHEDULE_WORKER_SMOKE = originalSmoke;
+    }
+    if (originalHighsSpike === undefined) {
+      delete process.env.SCHEDULE_HIGHS_SPIKE;
+    } else {
+      process.env.SCHEDULE_HIGHS_SPIKE = originalHighsSpike;
     }
   });
 
@@ -683,6 +689,34 @@ describe('runScheduleWorkerSmoke', () => {
       [],
       expect.objectContaining({ serviceName: 'budget-optimizer-schedule' })
     );
+  });
+
+  it('rejects a pong that is missing solver=highs when the spike is on', async () => {
+    process.env.SCHEDULE_WORKER_SMOKE = '1';
+    process.env.SCHEDULE_HIGHS_SPIKE = '1';
+    vi.useRealTimers();
+    const child = createMockUtilityProcess();
+    const pending = runScheduleWorkerSmoke({
+      workerPath: '/fake/schedule-worker.js',
+      forkFn: () => child,
+    });
+    child.__emitSpawn();
+    child.emit('message', { type: 'pong', jobId: 'smoke' });
+    await expect(pending).rejects.toThrow('highs spike smoke expected solver=highs');
+  });
+
+  it('accepts solver=highs on the spike pong', async () => {
+    process.env.SCHEDULE_WORKER_SMOKE = '1';
+    process.env.SCHEDULE_HIGHS_SPIKE = '1';
+    vi.useRealTimers();
+    const child = createMockUtilityProcess();
+    const pending = runScheduleWorkerSmoke({
+      workerPath: '/fake/schedule-worker.js',
+      forkFn: () => child,
+    });
+    child.__emitSpawn();
+    child.emit('message', { type: 'pong', jobId: 'smoke', solver: 'highs' });
+    await expect(pending).resolves.toBeUndefined();
   });
 
   it('forwards validated progress and ignores malformed packets', async () => {

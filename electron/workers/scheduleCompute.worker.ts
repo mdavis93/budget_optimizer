@@ -20,6 +20,48 @@ function reply(message: unknown): void {
   parentPort?.postMessage(message);
 }
 
+const HIGHS_SPIKE_LP = `Minimize
+ obj: v0
+Subject To
+ c0: v0 >= 0
+Bounds
+ 0 <= v0 <= 1
+Binary
+ v0
+End`;
+
+/** 2a only: prove packaged utilityProcess can load and solve with HiGHS. Removed in 2e. */
+async function replyHighsSpikePong(jobId: string): Promise<void> {
+  try {
+    const { loadHighs } = await import('../services/scheduler/solvers/loadHighs');
+    const { HIGHS_SOLVE_OPTIONS } = await import('../services/scheduler/solvers/highsSolver');
+    const highs = await loadHighs();
+    const result = highs.solve(HIGHS_SPIKE_LP, HIGHS_SOLVE_OPTIONS);
+    if (result.Status !== 'Optimal') {
+      reply({
+        type: 'error',
+        protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+        jobId,
+        inputHash: '',
+        error: `highs spike ${result.Status}`,
+      });
+      process.exit(1);
+      return;
+    }
+    reply({ type: 'pong', jobId, solver: 'highs' });
+    process.exit(0);
+  } catch (error) {
+    reply({
+      type: 'error',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId,
+      inputHash: '',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exit(1);
+  }
+}
+
 /** Exported for unit tests of the worker protocol contract. */
 export function handleMessage(data: unknown): void {
   if (!data || typeof data !== 'object') {
@@ -37,7 +79,12 @@ export function handleMessage(data: unknown): void {
   const msg = data as { type?: string; jobId?: string };
 
   if (msg.type === 'ping') {
-    reply({ type: 'pong', jobId: msg.jobId ?? 'ping' });
+    const jobId = msg.jobId ?? 'ping';
+    if (process.env.SCHEDULE_HIGHS_SPIKE === '1') {
+      void replyHighsSpikePong(jobId);
+      return;
+    }
+    reply({ type: 'pong', jobId });
     process.exit(0);
     return;
   }

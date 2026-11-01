@@ -536,7 +536,9 @@ export async function runScheduleWorkerSmoke(
     serviceName: SCHEDULE_COMPUTE_SERVICE_NAME,
     stdio: 'pipe',
     allowLoadingUnsignedLibraries: false,
+    env: { ...process.env },
   });
+  const requireHighs = process.env.SCHEDULE_HIGHS_SPIKE === '1';
 
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -557,6 +559,16 @@ export async function runScheduleWorkerSmoke(
         typeof message === 'object' &&
         (message as { type?: string }).type === 'pong'
       ) {
+        if (requireHighs && (message as { solver?: string }).solver !== 'highs') {
+          clearTimeout(timeout);
+          try {
+            child.kill();
+          } catch {
+            // ignore
+          }
+          reject(new Error('highs spike smoke expected solver=highs'));
+          return;
+        }
         clearTimeout(timeout);
         try {
           child.kill();

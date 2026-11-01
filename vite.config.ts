@@ -18,6 +18,9 @@ const mainExternals = [
   'date-fns',
 ];
 
+/** Worker-only: HiGHS WASM stays unbundled so the packaged utilityProcess can load it. */
+const workerExternals = [...mainExternals, 'highs'];
+
 /** Shared by renderer and electron main/preload builds (plugin does not inherit root aliases). */
 const aliases = {
   '@': path.resolve(__dirname, './src'),
@@ -118,7 +121,7 @@ export default defineConfig(async ({ mode }) => {
             fileName: () => 'schedule-worker.js',
           },
           rolldownOptions: {
-            external: mainExternals,
+            external: workerExternals,
             output: {
               format: 'cjs',
               codeSplitting: false,
