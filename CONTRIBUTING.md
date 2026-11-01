@@ -91,7 +91,7 @@ Accepted radii: auto-legal prepay is **20 days** (`MAX_PREPAY_DAYS`); the Break-
 
 ### Assignment and rebalance (A-08)
 
-Schedule generation uses an **exact windowed solver** (`exactAssignment` / `solve`) to assign bills within due-date eligibility windows, then a **post-assignment rebalance** (`rebalance.ts`) that prefers each paycheck’s target cash-on-hand and only dips toward the minimum (break-glass) floor when needed. It is not a global LP optimizer — shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation. A full LP/constraint solver (**5.4**) is **Won't-do** unless product need resurfaces.
+Schedule generation builds an integer-cents assignment model (`exactAssignment`) and places bills with the greedy solver (`greedySolver`): latest affordable paycheck in the eligibility window, then one improvement pass and one later-shift pass. Preferred, locked, and income-attached placements stay fixed for the run. Shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
 
 ## Post-Audit Backlog
 

@@ -1014,3 +1014,83 @@ describe('sortMovable', () => {
     ]);
   });
 });
+
+describe('Break-Glass advisor invariants', () => {
+  it('never pays late, stays within 28 days early, and holds the schedule start', () => {
+    const startDate = '2026-07-01';
+    const report = proposeBreakGlassPlans(julyCascadeFixture());
+    expect(report.plans.length).toBeGreaterThan(0);
+    for (const plan of report.plans) {
+      expect(plan.steps.length).toBeGreaterThan(0);
+      expect(plan.steps.length).toBeLessThanOrEqual(12);
+      const seen = new Set<string>();
+      for (const step of plan.steps) {
+        expect(step.toPaycheckDate <= step.billDueDate).toBe(true);
+        expect(step.toPaycheckDate >= startDate).toBe(true);
+        expect(step.daysEarly).toBeLessThanOrEqual(MAX_ADVISOR_EARLY_DAYS);
+        const key = `${step.billId}-${step.billDueDate}`;
+        expect(seen.has(key)).toBe(false);
+        seen.add(key);
+      }
+    }
+  });
+
+  it('emits at most one plan per target and matches Phase 1 eligibility for confirmation', () => {
+    const report = proposeBreakGlassPlans(julyCascadeFixture());
+    const targets = report.plans.map((plan) => plan.targetPaycheckDate);
+    expect(new Set(targets).size).toBe(targets.length);
+    for (const plan of report.plans) {
+      expect(plan.id).toBe(`break-glass-${plan.targetPaycheckDate}`);
+      for (const step of plan.steps) {
+        if (step.daysEarly <= MAX_PREPAY_DAYS) {
+          expect(step.requiresConfirmation).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('excludes income-attached, skipped, and unpayable bills from moves', () => {
+    const report = proposeBreakGlassPlans(
+      scheduleOf([
+        paycheck({ date: '2026-07-03', budgetRemaining: 500, bills: [] }),
+        paycheck({
+          date: '2026-07-17',
+          budgetRemaining: 150,
+          bills: [
+            bill({
+              billId: 'attached',
+              creditorName: 'Attached',
+              amount: 120,
+              billDate: '2026-07-20',
+              isIncomeAttached: true,
+            }),
+            bill({
+              billId: 'skipped',
+              creditorName: 'Skipped',
+              amount: 120,
+              billDate: '2026-07-20',
+              isSkipped: true,
+            }),
+            bill({
+              billId: 'unpayable',
+              creditorName: 'Unpayable',
+              amount: 120,
+              billDate: '2026-07-20',
+              isUnpayable: true,
+            }),
+            bill({
+              billId: 'rent',
+              creditorName: 'Rent',
+              amount: 120,
+              billDate: '2026-07-20',
+            }),
+          ],
+        }),
+      ])
+    );
+    const moved = report.plans.flatMap((plan) => plan.steps.map((step) => step.billId));
+    expect(moved).not.toContain('attached');
+    expect(moved).not.toContain('skipped');
+    expect(moved).not.toContain('unpayable');
+  });
+});
