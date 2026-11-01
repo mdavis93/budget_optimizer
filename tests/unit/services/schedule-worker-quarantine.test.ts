@@ -44,4 +44,24 @@ describe('schedule worker import quarantine', () => {
 
     expect(hits).toEqual([]);
   });
+
+  it('does not mention a .wasm path except by importing highs', () => {
+    const root = path.resolve(__dirname, '../../..');
+    const hits: string[] = [];
+
+    for (const relative of WORKER_FACADES) {
+      const file = path.join(root, relative);
+      const source = fs.readFileSync(file, 'utf8');
+      const hasHighsImport = /(?:from|require\()\s*['"]highs['"]/.test(source);
+      const hardcodedWasmPaths = source.match(/['"][^'"]*\.wasm['"]/g) ?? [];
+      if (hardcodedWasmPaths.length > 0) {
+        hits.push(`${relative} hardcodes wasm path ${hardcodedWasmPaths.join(', ')}`);
+      }
+      if (/\.wasm\b/.test(source) && !hasHighsImport) {
+        hits.push(`${relative} mentions .wasm without importing highs`);
+      }
+    }
+
+    expect(hits).toEqual([]);
+  });
 });

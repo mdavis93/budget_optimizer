@@ -18,6 +18,7 @@ import {
   SCHEDULE_COMPUTE_SERVICE_NAME,
   SCHEDULE_COMPUTE_TIMEOUT_MS,
   ScheduleComputeError,
+  type ScheduleComputeInputPayload,
   type ScheduleComputeOp,
   type ScheduleComputeProgressMessage,
   type ScheduleComputeRequest,
@@ -518,9 +519,53 @@ export class ScheduleComputeHost {
   }
 }
 
+/** Hardcoded synthetic job for the packaged worker smoke. No user data. */
+export const SCHEDULE_WORKER_SMOKE_INPUT: ScheduleComputeInputPayload = {
+  incomes: [
+    {
+      id: 'smoke-income',
+      sourceName: 'Smoke Pay',
+      amount: 2000,
+      cadence: 'biweekly',
+      startDate: '2026-01-02',
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ],
+  bills: [
+    {
+      id: 'smoke-rent',
+      creditorName: 'Smoke Rent',
+      budgetedAmount: 800,
+      dueDay: 5,
+      isRecurring: true,
+      priority: 'critical',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ],
+  startDate: '2026-01-01',
+  months: 2,
+  startingBalance: 1000,
+  skippedBills: [],
+  manualAssignments: [],
+  targetCashOnHand: 250,
+  goals: [],
+  minCashOnHand: 100,
+  minSavingsPerPaycheck: 0,
+  debtPayoffs: [],
+  incomeOverrides: [],
+  leaves: [],
+  nowIso: '2026-01-01T00:00:00.000Z',
+};
+
+export const SCHEDULE_WORKER_SMOKE_TOKEN_PREFIX = 'SCHEDULE_WORKER_SMOKE_OK solver=';
+
 /**
- * Dev-only smoke: fork worker, ping/pong, exit.
+ * Packaged-app smoke: run one synthetic schedule job through ScheduleComputeHost.
  * Gated by SCHEDULE_WORKER_SMOKE=1 — never a production always-on path.
+ * Writes `SCHEDULE_WORKER_SMOKE_OK solver=<name>` to stdout.
  */
 export async function runScheduleWorkerSmoke(
   hostOptions: ScheduleComputeHostOptions = {}
@@ -529,60 +574,21 @@ export async function runScheduleWorkerSmoke(
     return;
   }
 
-  const workerPath = hostOptions.workerPath ?? resolveScheduleWorkerPath();
-  const forkFn =
-    hostOptions.forkFn ??
-    ((modulePath: string, args?: string[], forkOptions?: object) =>
-      utilityProcess.fork(
-        modulePath,
-        args,
-        forkOptions as Parameters<typeof utilityProcess.fork>[2]
-      ));
-  const child = forkFn(workerPath, [], {
-    serviceName: SCHEDULE_COMPUTE_SERVICE_NAME,
-    stdio: 'pipe',
-    allowLoadingUnsignedLibraries: false,
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      try {
-        child.kill();
-      } catch {
-        // ignore
-      }
-      reject(new Error('schedule worker smoke timed out'));
-    }, 10_000);
-
-    child.on('spawn', () => {
-      child.postMessage({ type: 'ping', jobId: 'smoke' });
+  const host = new ScheduleComputeHost(hostOptions);
+  try {
+    const result = await host.runJob({
+      op: 'schedule',
+      jobId: 'smoke',
+      inputHash: 'smoke',
+      input: SCHEDULE_WORKER_SMOKE_INPUT,
     });
-    child.on('message', (message: unknown) => {
-      if (
-        message &&
-        typeof message === 'object' &&
-        (message as { type?: string }).type === 'pong'
-      ) {
-        clearTimeout(timeout);
-        try {
-          child.kill();
-        } catch {
-          // ignore
-        }
-        resolve();
-      }
-    });
-    child.on('exit', () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-    child.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
-
-  logger.info('schedule-compute smoke ok');
+    if (result.op !== 'schedule') {
+      throw new Error('schedule worker smoke returned unexpected op');
+    }
+    process.stdout.write(`${SCHEDULE_WORKER_SMOKE_TOKEN_PREFIX}${result.computeMeta.solver}\n`);
+  } finally {
+    host.dispose();
+  }
 }
 
 /** Minimal EventEmitter stand-in for unit tests (Electron UtilityProcess shape). */

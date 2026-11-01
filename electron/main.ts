@@ -232,6 +232,17 @@ app.whenReady().then(async () => {
     app.setName('budget-optimizer');
   }
 
+  if (process.env.SCHEDULE_WORKER_SMOKE === '1') {
+    try {
+      await runScheduleWorkerSmoke();
+      app.exit(0);
+    } catch (error) {
+      logger.error('schedule worker smoke failed:', error);
+      app.exit(1);
+    }
+    return;
+  }
+
   // Initialize services after app is ready
   services = {
     auth: new AuthService(),
@@ -260,12 +271,6 @@ app.whenReady().then(async () => {
   app.on('child-process-gone', (_event, details) => {
     services.scheduleCompute.notifyChildProcessGone(details.name);
   });
-
-  if (process.env.SCHEDULE_WORKER_SMOKE === '1') {
-    void runScheduleWorkerSmoke().catch((error) => {
-      logger.error('schedule worker smoke failed:', error);
-    });
-  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

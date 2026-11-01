@@ -204,3 +204,41 @@ runElectronNodeVerify(
   `,
   'PACKAGED_KEYTAR_OK'
 );
+
+function runScheduleWorkerSmokeVerify() {
+  const env = {
+    ...process.env,
+    NODE_PATH: '',
+    SCHEDULE_WORKER_SMOKE: '1',
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
+
+  const result = spawnSync(binary, [], {
+    encoding: 'utf8',
+    timeout: 60000,
+    cwd: os.tmpdir(),
+    env,
+  });
+
+  const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
+  const token = 'SCHEDULE_WORKER_SMOKE_OK solver=greedy';
+
+  if (result.status !== 0 || !output.includes(token)) {
+    console.error('Packaged schedule worker smoke verification failed.');
+    if (result.signal) {
+      console.error(`Process terminated by signal: ${result.signal}`);
+    }
+    if (result.status != null && result.status !== 0) {
+      console.error(`Exit code: ${result.status}`);
+    }
+    if (output) console.error(output);
+    else if (!result.signal && result.status == null) {
+      console.error('No output from packaged schedule worker smoke.');
+    }
+    process.exit(1);
+  }
+
+  console.log('Packaged schedule worker smoke verification passed.');
+}
+
+runScheduleWorkerSmokeVerify();
