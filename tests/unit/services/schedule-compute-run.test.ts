@@ -91,6 +91,12 @@ describe('schedule compute serialize', () => {
   });
 });
 
+const COMPUTE_META = {
+  solver: 'greedy' as const,
+  timings: { modelMs: 1, solveMs: 1, materializeMs: 1 },
+  ignoredPins: 0,
+};
+
 describe('schedule compute validate', () => {
   it('accepts a minimal valid schedule result', () => {
     const message = {
@@ -99,6 +105,7 @@ describe('schedule compute validate', () => {
       jobId: 'j1',
       inputHash: 'h1',
       op: 'schedule' as const,
+      computeMeta: COMPUTE_META,
       schedule: {
         startDate: '2026-01-01',
         endDate: '2026-01-31',
@@ -137,6 +144,7 @@ describe('schedule compute validate', () => {
       jobId: 'j1',
       inputHash: 'h1',
       op: 'schedule' as const,
+      computeMeta: COMPUTE_META,
       schedule: {
         startDate: '2026-01-01',
         endDate: '2026-01-31',
@@ -179,6 +187,7 @@ describe('schedule compute validate', () => {
           jobId: 'other',
           inputHash: 'h1',
           op: 'schedule',
+          computeMeta: COMPUTE_META,
           schedule: {
             startDate: '2026-01-01',
             endDate: '2026-01-31',
@@ -200,6 +209,38 @@ describe('schedule compute validate', () => {
         { jobId: 'j1', inputHash: 'h1', op: 'schedule' }
       )
     ).toThrow(/jobId/);
+  });
+
+  it('requires computeMeta on schedule results', () => {
+    expect(() =>
+      assertScheduleComputeSuccessMessage(
+        {
+          type: 'result',
+          protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+          jobId: 'j1',
+          inputHash: 'h1',
+          op: 'schedule',
+          schedule: {
+            startDate: '2026-01-01',
+            endDate: '2026-01-31',
+            paychecks: [],
+            fullPaychecks: [],
+            viewportMonths: 1,
+            entries: [],
+            summary: {
+              totalIncome: 0,
+              totalExpenses: 0,
+              netBalance: 0,
+              shortfallCount: 0,
+            },
+            recommendations: [],
+            maxBudgetRemaining: 250,
+            minCashOnHand: 100,
+          },
+        },
+        { jobId: 'j1', inputHash: 'h1', op: 'schedule' }
+      )
+    ).toThrow(/computeMeta/);
   });
 });
 
@@ -261,6 +302,8 @@ describe('runScheduleCompute', () => {
     expect(result.op).toBe('schedule');
     if (result.op === 'schedule') {
       expect((result.schedule as { paychecks: unknown[] }).paychecks.length).toBeGreaterThan(0);
+      expect(result.computeMeta.solver).toBe('greedy');
+      expect(result.computeMeta.ignoredPins).toBeGreaterThanOrEqual(0);
     }
   });
 

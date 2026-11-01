@@ -16,6 +16,7 @@ import {
   getUniquePaycheckDates,
   pruneManualAssignmentsToPaychecks,
 } from './assignment';
+import type { ExactAssignmentOptions } from './exactAssignment';
 import { isOperatingIncome, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import {
   calculateSummary,
@@ -219,7 +220,8 @@ export function prepareScheduleHorizon(
 
 export function assignPreparedHorizon(
   prepared: PreparedScheduleHorizon,
-  preferredAssignments: Map<string, string> = new Map()
+  preferredAssignments: Map<string, string> = new Map(),
+  assignmentOptions: { solver?: ExactAssignmentOptions['solver']; onComputeMeta?: ExactAssignmentOptions['onComputeMeta'] } = {}
 ): PaycheckEntry[] {
   const effectivePreferredAssignments = pruneManualAssignmentsToPaychecks(
     preferredAssignments,
@@ -242,7 +244,8 @@ export function assignPreparedHorizon(
     effectivePreferredAssignments,
     prepared.reservedIncomes,
     prepared.fundingEndDate,
-    prepared.startDate
+    prepared.startDate,
+    assignmentOptions
   );
 }
 

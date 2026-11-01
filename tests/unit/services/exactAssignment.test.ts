@@ -105,7 +105,7 @@ describe('assignBillsExact', () => {
     expect(pets?.isIncomeAttached).toBe(true);
     expect(pets?.isUnpayable).toBeFalsy();
     expect(cell?.isUnpayable).toBe(true);
-    expect(cell?.unfundableReason).toBe('insufficient_income_in_window');
+    expect(cell?.unfundableReason).toBe('all_movable_bills_locked');
 
     const payableLoad = placed
       .filter((b) => !b.isUnpayable && !b.isSkipped)

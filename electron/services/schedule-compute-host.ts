@@ -484,11 +484,17 @@ export class ScheduleComputeHost {
     }
 
     const durationMs = Date.now() - flight.startedAt;
+    const computeMeta =
+      success && success.op === 'schedule' ? success.computeMeta : undefined;
     logger.info('schedule-compute', {
       jobId: flight.jobId,
       op: flight.op,
       durationMs,
       outcome: error ? error.code : 'ok',
+      solver: computeMeta?.solver,
+      fallbackReason: computeMeta?.fallbackReason,
+      timings: computeMeta?.timings,
+      ignoredPins: computeMeta?.ignoredPins,
     });
 
     if (this.current === flight) {
