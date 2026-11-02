@@ -235,8 +235,9 @@ const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
 
       {messaging.margin && (
         <p className={clsx('mt-2 text-xs font-mono tabular-nums truncate', tierStyle.text, 'opacity-80')}>
-          Margin {formatSignedCurrency(messaging.margin.perPaycheckDelta)}/paycheck vs needed (
-          {formatCurrency(messaging.margin.requiredPerPaycheck)} req ·{' '}
+          Margin {formatSignedCurrency(messaging.margin.perPaycheckDelta)}/paycheck vs needed
+          per paycheck to stay on deadline (
+          {formatCurrency(messaging.margin.requiredPerPaycheck)} needed ·{' '}
           {formatCurrency(messaging.margin.averageAllocatedPerPaycheck)} avg)
         </p>
       )}

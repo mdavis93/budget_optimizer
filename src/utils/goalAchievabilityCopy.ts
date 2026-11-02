@@ -96,13 +96,13 @@ export const GOAL_COPY: Record<GoalComfortTier, GoalCopyEntry> = {
   partial: {
     headline: 'Partially Funded On Current Path',
     body:
-      "At today's pace, you'll save about {allocatedAmount} toward your {targetAmount} goal for {goalName} by {targetDate}. That's {achievabilityPercent}% of your target.",
+      "You'll save about {allocatedAmount} toward your {targetAmount} goal for {goalName} by {targetDate}. That's {achievabilityPercent}% of your target.",
     marginFact: "You're on track to fall {weeksLate} weeks short of full funding at current rates.",
     badge: 'Partial',
     cta: 'See suggestions to close the gap.',
     showSuggestions: true,
     ariaMessage:
-      "Partially Funded On Current Path. At today's pace, you'll save about {allocatedAmount} toward your {targetAmount} goal for {goalName} by {targetDate}. That's {achievabilityPercent} percent of your target. You're on track to fall {weeksLate} weeks short of full funding at current rates.",
+      "Partially Funded On Current Path. You'll save about {allocatedAmount} toward your {targetAmount} goal for {goalName} by {targetDate}. That's {achievabilityPercent} percent of your target. You're on track to fall {weeksLate} weeks short of full funding at current rates.",
   },
   projected: {
     headline: 'Long-Term Estimate Only',

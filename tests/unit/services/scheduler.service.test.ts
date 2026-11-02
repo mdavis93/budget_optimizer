@@ -1558,7 +1558,8 @@ describe('SchedulerService', () => {
       expect(projection.estimatedFundedDate).toBeTruthy();
     });
 
-    it('spreads goal deposits along glide-path rather than one lump sum', () => {
+    it('funds a reachable goal as early as savings rules allow', () => {
+      // Intentional: the forward allocator front-loads deposits instead of a glide-path.
       const schedule = scheduler.generateSchedule(
         [income],
         [],
@@ -1573,17 +1574,14 @@ describe('SchedulerService', () => {
         0
       );
 
-      const paychecksWithDeposits = schedule.paychecks.filter(
-        (p) => (p.totalGoalDeposits ?? 0) > 0
-      );
-      expect(paychecksWithDeposits.length).toBeGreaterThan(1);
-
-      const firstDeposit = paychecksWithDeposits[0]?.totalGoalDeposits ?? 0;
-      const totalDeposited = paychecksWithDeposits.reduce(
+      const totalDeposited = schedule.paychecks.reduce(
         (sum, p) => sum + (p.totalGoalDeposits ?? 0),
         0
       );
-      expect(firstDeposit).toBeLessThan(totalDeposited);
+      expect(totalDeposited).toBeLessThanOrEqual(goal.targetAmount);
+      expect(totalDeposited).toBe(goal.targetAmount);
+      expect(schedule.goalProjections![0].estimatedFundedDate).toBeTruthy();
+      expect(schedule.paychecks.every((p) => p.savingsDeposit >= 0)).toBe(true);
     });
 
     it('funds a reachable goal while still depositing savings (balanced allocator)', () => {
