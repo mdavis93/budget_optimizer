@@ -91,7 +91,8 @@ function budgetSettingsEquals(a: DraftBudgetFields, b: DraftBudgetFields): boole
     a.startingBalance === b.startingBalance &&
     a.targetCashOnHand === b.targetCashOnHand &&
     a.minCashOnHand === b.minCashOnHand &&
-    a.minSavingsPerPaycheck === b.minSavingsPerPaycheck
+    a.minSavingsPerPaycheck === b.minSavingsPerPaycheck &&
+    a.accelerateDebtPayoff === b.accelerateDebtPayoff
   );
 }
 

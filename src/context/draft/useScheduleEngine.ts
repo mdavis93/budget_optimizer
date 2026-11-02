@@ -302,6 +302,7 @@ export function useScheduleEngine({
           targetCashOnHand: overlay?.targetCashOnHand ?? draft.budget?.targetCashOnHand,
           minCashOnHand: overlay?.minCashOnHand ?? draft.budget?.minCashOnHand,
           minSavingsPerPaycheck: overlay?.minSavingsPerPaycheck ?? draft.budget?.minSavingsPerPaycheck,
+          accelerateDebtPayoff: overlay?.accelerateDebtPayoff ?? draft.budget?.accelerateDebtPayoff,
         })
       );
       if (scheduleCacheRef.current?.hash === cacheKey) {

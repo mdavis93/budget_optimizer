@@ -113,6 +113,7 @@ describe('useScheduleEngine', () => {
         targetCashOnHand: 250,
         minCashOnHand: 100,
         minSavingsPerPaycheck: 0,
+        accelerateDebtPayoff: false,
         scheduleStartDate: '2026-01-01',
       },
     };
@@ -298,6 +299,7 @@ describe('useScheduleEngine', () => {
             targetCashOnHand: 250,
             minCashOnHand: 100,
             minSavingsPerPaycheck: 0,
+            accelerateDebtPayoff: false,
             scheduleStartDate: '2026-01-01',
           },
         }}

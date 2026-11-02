@@ -37,6 +37,7 @@ function makeDraftState(overrides: Partial<DraftState> = {}): DraftState {
       targetCashOnHand: budget.targetCashOnHand,
       minCashOnHand: budget.minCashOnHand,
       minSavingsPerPaycheck: budget.minSavingsPerPaycheck,
+      accelerateDebtPayoff: budget.accelerateDebtPayoff,
       scheduleStartDate: budget.scheduleStartDate,
     },
     ...overrides,

@@ -62,7 +62,8 @@ export interface ScheduleComputeInputPayload {
   goals: unknown[];
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
-  debtPayoffs: SerializedDebtPayoff[];
+  debts: unknown[];
+  accelerateDebtPayoff: boolean;
   incomeOverrides: Array<[string, number]>;
   leaves: unknown[];
   /** ISO timestamp for deterministic beyond-horizon goal projection. */

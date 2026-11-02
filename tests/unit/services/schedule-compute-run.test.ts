@@ -28,16 +28,8 @@ describe('schedule compute serialize', () => {
       goals: [],
       minCashOnHand: 100,
       minSavingsPerPaycheck: 25,
-      debtPayoffs: new Map([
-        [
-          'bill-1',
-          {
-            billId: 'bill-1',
-            payoffDate: new Date('2026-06-01T00:00:00.000Z'),
-            finalPaymentAmount: 40,
-          },
-        ],
-      ]),
+      debts: [{ id: 'debt-1', billId: 'bill-1', principalBalance: 400, apr: 0.12, monthlyPayment: 40 }],
+      accelerateDebtPayoff: false,
       incomeOverrides: new Map([['inc-1-2026-01-15', 0]]),
       leaves: [
         {
@@ -58,9 +50,10 @@ describe('schedule compute serialize', () => {
     expect(restored.manualAssignments.get('bill-1-2026-02-01')).toBe('2026-01-31');
     expect(restored.preferredAssignments.get('bill-2-2026-03-01')).toBe('2026-02-28');
     expect(restored.incomeOverrides.get('inc-1-2026-01-15')).toBe(0);
-    expect(restored.debtPayoffs.get('bill-1')?.payoffDate.toISOString()).toBe(
-      '2026-06-01T00:00:00.000Z'
-    );
+    expect(restored.debts).toEqual([
+      { id: 'debt-1', billId: 'bill-1', principalBalance: 400, apr: 0.12, monthlyPayment: 40 },
+    ]);
+    expect(restored.accelerateDebtPayoff).toBe(false);
     expect(computeScheduleInputHash('schedule', serialized)).toHaveLength(64);
     expect(serialized.months).toBe(12);
     expect(serialized.nowIso).toBe('2026-01-10T12:00:00.000Z');
@@ -280,7 +273,8 @@ describe('runScheduleCompute', () => {
       goals: [],
       minCashOnHand: 100,
       minSavingsPerPaycheck: 0,
-      debtPayoffs: new Map(),
+      debts: [],
+      accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
@@ -352,7 +346,8 @@ describe('runScheduleCompute', () => {
       goals: [goal],
       minCashOnHand: 100,
       minSavingsPerPaycheck: 0,
-      debtPayoffs: new Map(),
+      debts: [],
+      accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
@@ -408,7 +403,8 @@ describe('runScheduleCompute', () => {
       goals: [],
       minCashOnHand: 100,
       minSavingsPerPaycheck: 0,
-      debtPayoffs: new Map(),
+      debts: [],
+      accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
@@ -479,7 +475,8 @@ describe('runScheduleCompute', () => {
       goals: [],
       minCashOnHand: 100,
       minSavingsPerPaycheck: 0,
-      debtPayoffs: new Map(),
+      debts: [],
+      accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',

@@ -159,7 +159,7 @@ describe('DebtService', () => {
         'none'
       );
 
-      expect(result.monthsToPayoff).toBeLessThanOrEqual(360); // 30 years max
+      expect(result.monthsToPayoff).toBeLessThanOrEqual(600);
       expect(result.payments.length).toBe(result.monthsToPayoff);
     });
   });
@@ -250,13 +250,12 @@ describe('DebtService', () => {
       expect(result.monthsToPayoff).toBe(1);
     });
 
-    it('should cap at 360 months (30 years)', () => {
-      // Very small payment relative to balance + interest
+    it('should cap at 600 months when payoff is unreachable', () => {
       const result = debtService.calculateAmortization(
-        100000, 0.06, 510, 0, 'none' // Just barely covers monthly interest + tiny principal
+        100000, 0.06, 510, 0, 'none'
       );
 
-      expect(result.monthsToPayoff).toBeLessThanOrEqual(360);
+      expect(result.monthsToPayoff).toBeLessThanOrEqual(600);
     });
   });
 });

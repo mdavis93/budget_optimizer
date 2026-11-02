@@ -6,7 +6,7 @@ import {
   isAfter,
 } from 'date-fns';
 import { Income, Bill, SavingsGoal } from './database.service';
-import type { Leave } from './database.service';
+import type { Debt, Leave } from './database.service';
 import { projectIncome, projectBills } from './scheduler/projection';
 import { findPreferredPaycheck } from './scheduler/assignment';
 import {
@@ -85,7 +85,9 @@ export class SchedulerService {
     incomeOverrides: Map<string, number> = new Map(),
     leaves: Leave[] = [],
     preferredAssignments: Map<string, string> = new Map(),
-    now?: Date
+    now?: Date,
+    debts: Debt[] = [],
+    accelerateDebtPayoff: boolean = false
   ): ScheduleData {
     const prepared = prepareScheduleHorizon({
       incomes,
@@ -101,6 +103,8 @@ export class SchedulerService {
       debtPayoffs,
       incomeOverrides,
       leaves,
+      debts,
+      accelerateDebtPayoff,
     });
     const paychecks = assignPreparedHorizon(prepared, preferredAssignments);
     const fullSchedule = assembleAssignedSchedule(prepared, paychecks, {

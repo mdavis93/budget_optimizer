@@ -30,6 +30,7 @@ export const SCHEDULE_IDENTITY_FIELDS = [
   'targetCashOnHand',
   'minCashOnHand',
   'minSavingsPerPaycheck',
+  'accelerateDebtPayoff',
   'clockDate',
 ] as const;
 
@@ -50,6 +51,7 @@ export interface ScheduleIdentityInput {
   targetCashOnHand?: number | null;
   minCashOnHand?: number | null;
   minSavingsPerPaycheck?: number | null;
+  accelerateDebtPayoff?: boolean | null;
   /** Injected in tests; production uses the local clock. */
   now?: Date;
 }
@@ -189,6 +191,7 @@ export function buildScheduleIdentity(input: ScheduleIdentityInput): string {
     targetCashOnHand: input.targetCashOnHand ?? '',
     minCashOnHand: input.minCashOnHand ?? '',
     minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? '',
+    accelerateDebtPayoff: input.accelerateDebtPayoff === true,
     clockDate: localCalendarDate(input.now ?? new Date()),
   };
   return JSON.stringify(canonical);
@@ -214,7 +217,8 @@ export function scheduleComputeHashBody(input: ScheduleComputeInputPayload): Omi
     goals: input.goals,
     minCashOnHand: input.minCashOnHand,
     minSavingsPerPaycheck: input.minSavingsPerPaycheck,
-    debtPayoffs: input.debtPayoffs,
+    debts: input.debts,
+    accelerateDebtPayoff: input.accelerateDebtPayoff === true,
     incomeOverrides: input.incomeOverrides,
     leaves: input.leaves,
     clockDate: localCalendarDate(new Date(input.nowIso)),

@@ -238,6 +238,18 @@ export class BudgetManager {
     }
   }
 
+  getAccelerateDebtPayoff(): boolean {
+    return this.getCurrentBudgetRecord()?.accelerateDebtPayoff === true;
+  }
+
+  setAccelerateDebtPayoff(enabled: boolean): void {
+    if (this.currentBudgetId) {
+      this.currentBudget = this.activeDb().updateBudget(this.currentBudgetId, {
+        accelerateDebtPayoff: enabled,
+      });
+    }
+  }
+
   getScheduleStartDate(): string {
     const budget = this.getCurrentBudgetRecord();
     if (!budget) {

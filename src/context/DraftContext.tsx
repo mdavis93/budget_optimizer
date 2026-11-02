@@ -372,6 +372,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       targetCashOnHand: currentDraft.budget?.targetCashOnHand,
       minCashOnHand: currentDraft.budget?.minCashOnHand,
       minSavingsPerPaycheck: currentDraft.budget?.minSavingsPerPaycheck,
+      accelerateDebtPayoff: currentDraft.budget?.accelerateDebtPayoff,
       scheduleStartDate: currentDraft.budget?.scheduleStartDate,
       ...(hasPreferred ? { preferredAssignments: preferred } : {}),
     };

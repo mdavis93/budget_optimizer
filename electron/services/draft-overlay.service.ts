@@ -26,6 +26,7 @@ export interface DraftOverlayInput {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  accelerateDebtPayoff?: boolean;
   scheduleStartDate?: string;
 }
 
@@ -43,6 +44,7 @@ export interface ResolvedScheduleInputs {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  accelerateDebtPayoff: boolean;
   scheduleStartDate: string;
 }
 
@@ -72,6 +74,8 @@ export function resolveScheduleInputs(
   const minCashOnHand = overlay?.minCashOnHand ?? budgetManager.getMinCashOnHand();
   const minSavingsPerPaycheck =
     overlay?.minSavingsPerPaycheck ?? budgetManager.getMinSavingsPerPaycheck();
+  const accelerateDebtPayoff =
+    overlay?.accelerateDebtPayoff ?? budgetManager.getAccelerateDebtPayoff();
   const scheduleStartDate = overlay?.scheduleStartDate ?? budgetManager.getScheduleStartDate();
 
   return {
@@ -88,6 +92,7 @@ export function resolveScheduleInputs(
     targetCashOnHand,
     minCashOnHand,
     minSavingsPerPaycheck,
+    accelerateDebtPayoff,
     scheduleStartDate,
   };
 }

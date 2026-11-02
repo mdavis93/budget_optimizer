@@ -3,7 +3,6 @@ import { AuthService } from '../services/auth.service';
 import { CryptoService } from '../services/crypto.service';
 import { DatabaseService, DebtInput, LeaveInput } from '../services/database.service';
 import { SchedulerService } from '../services/scheduler.service';
-import type { DebtPayoffInfo } from '../services/scheduler.service';
 import { PdfService } from '../services/pdf.service';
 import { SpreadsheetService } from '../services/spreadsheet.service';
 import { BudgetManager } from '../services/budget-manager.service';
@@ -69,12 +68,10 @@ interface ScheduleMaps {
   manualAssignments: Map<string, string>;
   preferredAssignments: Map<string, string>;
   incomeOverridesMap: Map<string, number>;
-  debtPayoffs: Map<string, DebtPayoffInfo>;
 }
 
 function buildScheduleMaps(
-  resolved: ReturnType<typeof resolveScheduleInputs>,
-  debtService: DebtService
+  resolved: ReturnType<typeof resolveScheduleInputs>
 ): ScheduleMaps {
   return {
     skippedSet: new Set(
@@ -87,41 +84,7 @@ function buildScheduleMaps(
     incomeOverridesMap: new Map(
       resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
     ),
-    debtPayoffs: buildDebtPayoffs(resolved.debts, resolved.bills, debtService),
   };
-}
-
-function buildDebtPayoffs(
-  debts: ReturnType<typeof resolveScheduleInputs>['debts'],
-  bills: ReturnType<typeof resolveScheduleInputs>['bills'],
-  debtService: DebtService
-): Map<string, DebtPayoffInfo> {
-  const debtPayoffs = new Map<string, DebtPayoffInfo>();
-
-  for (const debt of debts) {
-    const linkedBill = bills.find((b) => b.id === debt.billId);
-    if (linkedBill) {
-      const extra = Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment);
-      const amortization = debtService.calculateAmortization(
-        debt.principalBalance,
-        debt.apr,
-        debt.monthlyPayment,
-        extra,
-        extra > 0 ? 'monthly' : 'none'
-      );
-
-      if (amortization.monthsToPayoff > 0) {
-        const lastPayment = amortization.payments[amortization.payments.length - 1];
-        debtPayoffs.set(debt.billId, {
-          billId: debt.billId,
-          payoffDate: new Date(amortization.payoffDate),
-          finalPaymentAmount: lastPayment?.payment || linkedBill.budgetedAmount,
-        });
-      }
-    }
-  }
-
-  return debtPayoffs;
 }
 
 interface Services {
@@ -662,8 +625,8 @@ export function registerIpcHandlers(
     const resolved = resolveScheduleInputs(budgetManager, database, overlay);
     const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
 
-    const { skippedSet, manualAssignments, preferredAssignments, incomeOverridesMap: incomeOverridesMapOpt, debtPayoffs } =
-      buildScheduleMaps(resolved, services.debt);
+    const { skippedSet, manualAssignments, preferredAssignments, incomeOverridesMap: incomeOverridesMapOpt } =
+      buildScheduleMaps(resolved);
 
     return runOffloadedCompute(
       services,
@@ -681,7 +644,8 @@ export function registerIpcHandlers(
         goals: resolved.goals,
         minCashOnHand: resolved.minCashOnHand,
         minSavingsPerPaycheck: resolved.minSavingsPerPaycheck,
-        debtPayoffs,
+        debts: resolved.debts,
+        accelerateDebtPayoff: resolved.accelerateDebtPayoff,
         incomeOverrides: incomeOverridesMapOpt,
         leaves: resolved.leaves,
         nowIso: new Date().toISOString(),
@@ -831,12 +795,15 @@ export function registerIpcHandlers(
       const bills = budgetManager.getAllBills();
       const linkedBill = bills.find((b) => b.id === debt.billId);
       const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
+      const startDate = new Date(`${budgetManager.getScheduleStartDate()}T00:00:00`);
       return services.debt.calculateAmortization(
         debt.principalBalance,
         debt.apr,
         debt.monthlyPayment,
         extra,
-        extra > 0 ? 'monthly' : 'none'
+        extra > 0 ? 'monthly' : 'none',
+        startDate,
+        linkedBill?.dueDay
       );
     });
   }));
@@ -853,12 +820,15 @@ export function registerIpcHandlers(
       return resolved.debts.map((debt) => {
         const linkedBill = resolved.bills.find((b) => b.id === debt.billId);
         const extra = linkedBill ? Math.max(0, linkedBill.budgetedAmount - debt.monthlyPayment) : 0;
+        const startDate = new Date(`${resolved.scheduleStartDate}T00:00:00`);
         const amortization = services.debt.calculateAmortization(
           debt.principalBalance,
           debt.apr,
           debt.monthlyPayment,
           extra,
-          extra > 0 ? 'monthly' : 'none'
+          extra > 0 ? 'monthly' : 'none',
+          startDate,
+          linkedBill?.dueDay
         );
         return { debt, bill: linkedBill || null, amortization };
       });
