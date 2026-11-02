@@ -246,6 +246,56 @@ describe('useScheduleEngine', () => {
     expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
   });
 
+  it('loads the persisted viewport after unlock instead of keeping the locked default', async () => {
+    mockAPI.settings.get.mockResolvedValue({
+      success: true,
+      data: {
+        theme: 'system',
+        autoLockMinutes: 5,
+        currency: 'USD',
+        defaultScheduleMonths: 12,
+        savingsAPY: 0,
+      },
+    });
+    const draft = {
+      ...createEmptyDraftState(),
+      budget: {
+        name: 'Main',
+        startingBalance: 400,
+        targetCashOnHand: 250,
+        minCashOnHand: 100,
+        minSavingsPerPaycheck: 0,
+        accelerateDebtPayoff: false,
+        scheduleStartDate: '2026-01-01',
+      },
+    };
+    const view = render(
+      <EngineHarness
+        draft={draft}
+        currentBudget={createMockBudget()}
+        isUnlocked={false}
+        pendingRef={pendingRef}
+      />
+    );
+    expect(mockAPI.settings.get).not.toHaveBeenCalled();
+    expect(screen.getByTestId('months')).toHaveTextContent('3');
+    expect(screen.getByTestId('persisted-months')).toHaveTextContent('3');
+
+    view.rerender(
+      <EngineHarness
+        draft={draft}
+        currentBudget={createMockBudget()}
+        isUnlocked
+        pendingRef={pendingRef}
+      />
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('months')).toHaveTextContent('12');
+      expect(screen.getByTestId('persisted-months')).toHaveTextContent('12');
+    });
+    expect(mockAPI.settings.get).toHaveBeenCalledTimes(1);
+  });
+
   it('loads the persisted viewport from settings', async () => {
     mockAPI.settings.get.mockResolvedValue({
       success: true,

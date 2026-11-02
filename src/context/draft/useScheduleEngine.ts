@@ -134,6 +134,11 @@ export function useScheduleEngine({
   }, [settleDebounce]);
 
   useEffect(() => {
+    // Settings IPC is rejected until unlock, and this engine mounts on the login
+    // screen. A locked read must not count as the final viewport load.
+    if (!isUnlocked) {
+      return;
+    }
     let isMounted = true;
     const loadViewport = async () => {
       try {
@@ -168,7 +173,7 @@ export function useScheduleEngine({
     return () => {
       isMounted = false;
     };
-  }, [viewportGate]);
+  }, [viewportGate, isUnlocked]);
 
   useEffect(() => {
     const subscribe = window.electronAPI?.schedule?.onProgress;
