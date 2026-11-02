@@ -97,8 +97,6 @@ export interface CashFlowSnapshot {
   readonly fallbackReserveCents: number;
   readonly goals: readonly SnapshotGoal[];
   readonly protectedIndices: readonly number[];
-  readonly leftoverIndices: readonly number[];
-  readonly unadmittedIndices: readonly number[];
 }
 
 function wholeDollarsAbove(surplusCents: number, reserveCents: number): number {
@@ -148,21 +146,13 @@ function admitProtectedSet(
   paycheckDays: Int32Array,
   floorCapacity: Int32Array,
   lastPaycheckDay: number
-): { protectedIndices: number[]; leftoverIndices: number[]; unadmittedIndices: number[] } {
+): number[] {
   const inHorizon: number[] = [];
-  const leftoverIndices: number[] = [];
-  const unadmittedIndices: number[] = [];
   const order = goals.map((_, index) => index).sort((a, b) => compareGoals(goals[a], goals[b]));
   for (const index of order) {
     const goal = goals[index];
-    if (goal.remainingDollars <= 0) {
-      leftoverIndices.push(index);
-      continue;
-    }
-    if (goal.lastPaycheckIndex < 0 || goal.deadlineDay > lastPaycheckDay) {
-      leftoverIndices.push(index);
-      continue;
-    }
+    if (goal.remainingDollars <= 0) continue;
+    if (goal.lastPaycheckIndex < 0 || goal.deadlineDay > lastPaycheckDay) continue;
     inHorizon.push(index);
   }
 
@@ -171,13 +161,9 @@ function admitProtectedSet(
     const candidate = [...protectedIndices, index];
     if (protectedSetFeasible(candidate, goals, paycheckDays, floorCapacity)) {
       protectedIndices.push(index);
-    } else {
-      unadmittedIndices.push(index);
     }
   }
-  leftoverIndices.sort((a, b) => compareGoals(goals[a], goals[b]));
-  unadmittedIndices.sort((a, b) => compareGoals(goals[a], goals[b]));
-  return { protectedIndices, leftoverIndices, unadmittedIndices };
+  return protectedIndices;
 }
 
 function planAlapDips(
@@ -367,7 +353,7 @@ export function createCashFlowSnapshot(
   for (let i = 0; i < n; i++) {
     floorCapacity[i] = wholeDollarsAbove(surplusCents[i], floorCents);
   }
-  const { protectedIndices, leftoverIndices, unadmittedIndices } = admitProtectedSet(
+  const protectedIndices = admitProtectedSet(
     snapshotGoals,
     paycheckDays,
     floorCapacity,
@@ -387,8 +373,6 @@ export function createCashFlowSnapshot(
     fallbackReserveCents,
     goals: snapshotGoals,
     protectedIndices,
-    leftoverIndices,
-    unadmittedIndices,
   };
 }
 
