@@ -4,7 +4,8 @@ import { SAVINGS_TARGET_FALLBACK, SAVINGS_TARGET_PRIMARY } from './types';
 
 /**
  * Forward cash-flow allocator: protected goals, ALAP savings dips, greedy
- * deposits with a slack guard. Dollars enter at the boundary; the engine
+ * deposits in priority order. A slack guard only reserves capacity for
+ * higher-priority protected goals. Dollars enter at the boundary; the engine
  * works in integer cents. Goal deposits are whole dollars; savings takes
  * leftover cents. No module-level buffers — each run owns its typed arrays.
  */
@@ -232,6 +233,29 @@ function planAlapDips(
   return dips;
 }
 
+/** Higher-priority protected goals that may reserve capacity against `goalIndex`. */
+function constrainingProtectedIndices(
+  goalIndex: number,
+  protectedIndices: readonly number[],
+  goals: readonly SnapshotGoal[]
+): number[] {
+  return protectedIndices.filter(
+    (protectedIndex) => compareGoals(goals[protectedIndex], goals[goalIndex]) < 0
+  );
+}
+
+function windowCapacity(
+  remainingAllocable: Int32Array,
+  paycheckDays: Int32Array,
+  deadline: number
+): number {
+  let capacity = 0;
+  for (let i = 0; i < remainingAllocable.length; i++) {
+    if (paycheckDays[i] <= deadline) capacity += remainingAllocable[i];
+  }
+  return capacity;
+}
+
 function protectedFeasibleAfterTake(
   goalIndex: number,
   paycheckIndex: number,
@@ -243,16 +267,15 @@ function protectedFeasibleAfterTake(
   paycheckDays: Int32Array
 ): boolean {
   for (const protectedIndex of protectedIndices) {
-    const residualNeed =
-      remainingNeed[protectedIndex] - (protectedIndex === goalIndex ? take : 0);
+    if (protectedIndex === goalIndex) continue;
+    const residualNeed = remainingNeed[protectedIndex];
     if (residualNeed <= 0) continue;
-    let residualCap = 0;
     const deadline = goals[protectedIndex].deadlineDay;
-    for (let i = 0; i < remainingAllocable.length; i++) {
-      if (paycheckDays[i] > deadline) continue;
-      residualCap += remainingAllocable[i];
-      if (i === paycheckIndex) residualCap -= take;
-    }
+    const currentCap = windowCapacity(remainingAllocable, paycheckDays, deadline);
+    // Already short of a full fill — do not block leftover deposits.
+    if (currentCap < residualNeed) continue;
+    let residualCap = currentCap;
+    if (paycheckDays[paycheckIndex] <= deadline) residualCap -= take;
     if (residualCap < residualNeed) return false;
   }
   return true;
@@ -398,13 +421,20 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
     allocByGoal[goalIndex][paycheckIndex] += amount;
   };
 
+  const depositOrder = snapshot.goals
+    .map((_, index) => index)
+    .sort((a, b) => compareGoals(snapshot.goals[a], snapshot.goals[b]));
+  const constrainingByGoal = snapshot.goals.map((_, goalIndex) =>
+    constrainingProtectedIndices(goalIndex, snapshot.protectedIndices, snapshot.goals)
+  );
+
   for (let i = 0; i < n; i++) {
-    for (const goalIndex of snapshot.protectedIndices) {
+    for (const goalIndex of depositOrder) {
       if (snapshot.paycheckDays[i] > snapshot.goals[goalIndex].deadlineDay) continue;
       const take = maxFeasibleTake(
         goalIndex,
         i,
-        snapshot.protectedIndices,
+        constrainingByGoal[goalIndex],
         snapshot.goals,
         remainingNeed,
         remainingAllocable,
@@ -412,25 +442,6 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
       );
       deposit(goalIndex, i, take);
     }
-  }
-
-  const depositLeftover = (goalIndex: number, paycheckIndex: number) => {
-    if (snapshot.paycheckDays[paycheckIndex] > snapshot.goals[goalIndex].deadlineDay) return;
-    const take = maxFeasibleTake(
-      goalIndex,
-      paycheckIndex,
-      snapshot.protectedIndices,
-      snapshot.goals,
-      remainingNeed,
-      remainingAllocable,
-      snapshot.paycheckDays
-    );
-    deposit(goalIndex, paycheckIndex, take);
-  };
-
-  for (let i = 0; i < n; i++) {
-    for (const goalIndex of snapshot.unadmittedIndices) depositLeftover(goalIndex, i);
-    for (const goalIndex of snapshot.leftoverIndices) depositLeftover(goalIndex, i);
   }
 
   const fallbackDollars = snapshot.fallbackCents / CENTS_PER_DOLLAR;
