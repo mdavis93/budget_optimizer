@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CreditCard, Plus, ChevronDown } from 'lucide-react';
-import { useDraftData, useDraftActions } from '../context/DraftContext';
+import { useDraftActions, useDraftData, useDraftStatus, useSchedule } from '../context/DraftContext';
+import { useBudget } from '../context/BudgetContext';
 import { reportError } from '../utils/reportError';
 import { formatCurrency } from '../utils/formatCurrency';
 import { Bill, DebtInput, DebtWithAmortization } from '../types';
@@ -21,13 +22,31 @@ import {
 } from '../components/debts';
 
 export default function DebtsPage() {
-  const { debts, bills } = useDraftData();
+  const { debts, bills, budgetFields } = useDraftData();
+  const { isDraftMode } = useDraftStatus();
+  const { schedule } = useSchedule();
+  const { currentBudget, updateBudget } = useBudget();
   const {
     getDebtsWithAmortization,
     createDebt,
     updateDebt,
     deleteDebt: removeDebt,
+    updateBudgetFields,
   } = useDraftActions();
+  const debtPlan = schedule?.debtPlan;
+  const accelerateDebtPayoff = budgetFields
+    ? budgetFields.accelerateDebtPayoff === true
+    : currentBudget?.accelerateDebtPayoff === true;
+
+  const setAccelerateDebtPayoff = (enabled: boolean) => {
+    if (isDraftMode) {
+      updateBudgetFields({ accelerateDebtPayoff: enabled });
+      return;
+    }
+    if (currentBudget) {
+      void updateBudget(currentBudget.id, { accelerateDebtPayoff: enabled });
+    }
+  };
   const [debtsWithAmortization, setDebtsWithAmortization] = useState<DebtWithAmortization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(12);
@@ -209,6 +228,27 @@ export default function DebtsPage() {
         </div>
       )}
 
+      {debtPlan && debtPlan.totalInterestSaved > 0 && !accelerateDebtPayoff && (
+        <div className="card p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-medium">Accelerated payoff would save {formatCurrency(debtPlan.totalInterestSaved)}</p>
+            <p className="text-sm text-(--color-text-muted)">Turn it on to apply extra debt payments in the schedule.</p>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => setAccelerateDebtPayoff(true)}>
+            Turn on accelerated payoff
+          </button>
+        </div>
+      )}
+
+      {accelerateDebtPayoff && (
+        <div className="card p-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="font-medium">Accelerated payoff is on</p>
+          <button type="button" className="btn-secondary" onClick={() => setAccelerateDebtPayoff(false)}>
+            Turn off accelerated payoff
+          </button>
+        </div>
+      )}
+
       {debtsWithAmortization.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -330,6 +370,8 @@ export default function DebtsPage() {
                           key={debtData.debt.id}
                           debtData={debtData}
                           timePeriod={timePeriod}
+                          planDebt={debtPlan?.debts.find((row) => row.debtId === debtData.debt.id)}
+                          excludedReason={debtPlan?.excluded.find((row) => row.debtId === debtData.debt.id)?.reason}
                           onEdit={() => setEditingDebt(debtData)}
                           onDelete={() => setDeleteDebt(debtData)}
                         />

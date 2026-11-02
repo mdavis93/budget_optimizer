@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [targetCashOnHand, setTargetCashOnHand] = useState(250);
   const [minCashOnHand, setMinCashOnHand] = useState(100);
   const [minSavingsPerPaycheck, setMinSavingsPerPaycheck] = useState(0);
+  const [accelerateDebtPayoff, setAccelerateDebtPayoff] = useState(false);
 
   // Load settings on mount
   useEffect(() => {
@@ -82,10 +83,12 @@ export default function SettingsPage() {
       setTargetCashOnHand(draft.budgetFields.targetCashOnHand);
       setMinCashOnHand(draft.budgetFields.minCashOnHand);
       setMinSavingsPerPaycheck(draft.budgetFields.minSavingsPerPaycheck);
+      setAccelerateDebtPayoff(draft.budgetFields.accelerateDebtPayoff === true);
     } else if (currentBudget) {
       setTargetCashOnHand(currentBudget.targetCashOnHand);
       setMinCashOnHand(currentBudget.minCashOnHand);
       setMinSavingsPerPaycheck(currentBudget.minSavingsPerPaycheck);
+      setAccelerateDebtPayoff(currentBudget.accelerateDebtPayoff === true);
     }
   }, [currentBudget, draft.budgetFields]);
 
@@ -163,6 +166,16 @@ export default function SettingsPage() {
       draft.updateBudgetFields({ minSavingsPerPaycheck: clampedValue });
     } else {
       void updateBudget(currentBudget.id, { minSavingsPerPaycheck: clampedValue });
+    }
+  };
+
+  const handleAccelerateDebtPayoffChange = (enabled: boolean) => {
+    if (!currentBudget) return;
+    setAccelerateDebtPayoff(enabled);
+    if (draft.isDraftMode) {
+      draft.updateBudgetFields({ accelerateDebtPayoff: enabled });
+    } else {
+      void updateBudget(currentBudget.id, { accelerateDebtPayoff: enabled });
     }
   };
 
@@ -256,9 +269,11 @@ export default function SettingsPage() {
             targetCashOnHand={targetCashOnHand}
             minCashOnHand={minCashOnHand}
             minSavingsPerPaycheck={minSavingsPerPaycheck}
+            accelerateDebtPayoff={accelerateDebtPayoff}
             onTargetCashOnHandChange={handleTargetCashOnHandChange}
             onMinCashOnHandChange={handleMinCashOnHandChange}
             onMinSavingsPerPaycheckChange={handleMinSavingsPerPaycheckChange}
+            onAccelerateDebtPayoffChange={handleAccelerateDebtPayoffChange}
           />
         </section>
       )}

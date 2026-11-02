@@ -3,18 +3,27 @@ import { format, parseISO } from 'date-fns';
 import { CreditCard, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent } from 'lucide-react';
 import { DebtAmortizationChart, ChartSuspense } from '../charts/lazyCharts';
 import { CHART_COLORS } from '../charts/chartTheme';
-import { DebtWithAmortization } from '../../types';
+import { DebtPlanDebt, DebtWithAmortization } from '../../types';
 import { formatCurrency } from '../../utils/formatCurrency';
 import type { TimePeriod } from './debtSorting';
 
 interface DebtCardProps {
   debtData: DebtWithAmortization;
   timePeriod: TimePeriod;
+  planDebt?: DebtPlanDebt;
+  excludedReason?: string;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete }: DebtCardProps) {
+const DebtCard = memo(function DebtCard({
+  debtData,
+  timePeriod,
+  planDebt,
+  excludedReason,
+  onEdit,
+  onDelete,
+}: DebtCardProps) {
   const { debt, bill, amortization } = debtData;
   
   if (!bill || !amortization) {
@@ -110,6 +119,33 @@ const DebtCard = memo(function DebtCard({ debtData, timePeriod, onEdit, onDelete
           </p>
         </div>
       </div>
+
+      {excludedReason && (
+        <p className="text-sm text-warning-400">Excluded: {excludedReason}</p>
+      )}
+
+      {planDebt && (
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-(--color-text-muted)">Baseline payoff</p>
+            <p className="font-medium">
+              {planDebt.baselinePayoffDate
+                ? format(parseISO(planDebt.baselinePayoffDate), 'MMM yyyy')
+                : '—'}
+            </p>
+            <p className="text-(--color-text-muted)">Baseline interest {formatCurrency(planDebt.baselineInterest)}</p>
+          </div>
+          <div>
+            <p className="text-(--color-text-muted)">Accelerated payoff</p>
+            <p className="font-medium">
+              {planDebt.acceleratedPayoffDate
+                ? format(parseISO(planDebt.acceleratedPayoffDate), 'MMM yyyy')
+                : '—'}
+            </p>
+            <p className="text-(--color-text-muted)">Accelerated interest {formatCurrency(planDebt.acceleratedInterest)}</p>
+          </div>
+        </div>
+      )}
 
       <div className="pt-4 border-t border-(--color-border)">
         <div className="flex items-center justify-between mb-4">

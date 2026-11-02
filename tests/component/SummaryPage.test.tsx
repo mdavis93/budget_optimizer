@@ -98,6 +98,45 @@ describe('SummaryPage', () => {
   });
 
   describe('happy', () => {
+    it('renders debt plan figures when acceleration is enabled', async () => {
+      generateSchedule.mockResolvedValue({
+        paychecks: [
+          {
+            date: '2026-01-15',
+            totalIncome: 2000,
+            totalBills: 1200,
+            budgetRemaining: 800,
+            savingsDeposit: 150,
+            totalSavings: 150,
+            bills: [{ category: 'Housing', amount: 900 }],
+          },
+        ],
+        summary: {
+          totalIncome: 2000,
+          totalExpenses: 1200,
+          totalSavingsDeposits: 150,
+          finalSavingsBalance: 150,
+        },
+        debtPlan: {
+          enabled: true,
+          strategy: 'avalanche',
+          variant: 'standard',
+          debts: [],
+          excluded: [],
+          debtFreeDate: '2028-04-15',
+          totalInterestSaved: 640,
+          freedMonthlyCash: 180,
+        },
+      });
+      renderWithRouter(<SummaryPage />, { mockAPI });
+      expect(await screen.findByText('Debt-free date')).toBeInTheDocument();
+      expect(screen.getByText('2028-04-15')).toBeInTheDocument();
+      expect(screen.getByText('Interest saved')).toBeInTheDocument();
+      expect(screen.getByText('$640.00')).toBeInTheDocument();
+      expect(screen.getByText('Freed monthly cash')).toBeInTheDocument();
+      expect(screen.getByText('$180.00')).toBeInTheDocument();
+    });
+
     it('renders chart section headings when schedule data exists', async () => {
       renderWithRouter(<SummaryPage />, { mockAPI });
 

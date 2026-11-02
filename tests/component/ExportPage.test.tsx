@@ -40,6 +40,36 @@ describe('ExportPage', () => {
   });
 
   describe('happy', () => {
+    it('shows interest saved next to the goals total when the plan is enabled', () => {
+      mockUseData.mockReturnValue({
+        schedule: createMockSchedule({
+          debtPlan: {
+            enabled: true,
+            strategy: 'avalanche',
+            variant: 'standard',
+            debts: [],
+            excluded: [],
+            debtFreeDate: '2028-04-15',
+            totalInterestSaved: 640,
+            freedMonthlyCash: 180,
+          },
+        }),
+        generateSchedule,
+        incomes: [{ id: 'i1' }],
+        bills: [{ id: 'b1' }],
+        scheduleStartDate: '2026-01-01',
+        scheduleMonths: 3,
+        isViewportReady: true,
+        scheduleStartingBalance: 900,
+        scheduleInputHash: 'hash',
+        setScheduleStartDate,
+        setScheduleMonths,
+        setScheduleStartingBalance,
+      });
+      renderWithRouter(<ExportPage />, { mockAPI });
+      expect(screen.getByText('Interest saved: $640.00')).toBeInTheDocument();
+    });
+
     it('refreshes and runs all export flows', async () => {
       const user = userEvent.setup();
       renderWithRouter(<ExportPage />, { mockAPI });

@@ -430,6 +430,7 @@ export default function SchedulePage() {
           formatCurrency={formatCurrency}
           maxBudgetRemaining={schedule?.maxBudgetRemaining ?? currentBudget?.targetCashOnHand ?? 250}
           minCashOnHand={schedule?.minCashOnHand ?? currentBudget?.minCashOnHand ?? 100}
+          debtPlanEnabled={schedule?.debtPlan?.enabled === true}
           onSkipBill={handleSkipBill}
           onUnskipBill={handleUnskipBill}
           skippingBill={skippingBill}

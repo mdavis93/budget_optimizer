@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import DebtsPage from '../../src/pages/DebtsPage';
 import { renderWithRouter } from '../helpers/renderWithProviders';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
@@ -8,6 +9,8 @@ import { delayedResolve, unstableDraftMock } from '../helpers/unstableDraftMock'
 const mockUseData = vi.fn();
 const mockUseDraftData = vi.fn();
 const mockUseDraftActions = vi.fn();
+const mockUseDraftStatus = vi.fn();
+const mockUseSchedule = vi.fn();
 const mockUseBudget = vi.fn();
 const mockShowToast = vi.fn();
 
@@ -15,6 +18,8 @@ vi.mock('../../src/context/DraftContext', () => ({
   useDraft: () => ({ ...mockUseDraftData(), ...mockUseDraftActions() }),
   useDraftData: () => ({ ...mockUseDraftData(), bills: mockUseData().bills }),
   useDraftActions: () => mockUseDraftActions(),
+  useDraftStatus: () => mockUseDraftStatus(),
+  useSchedule: () => mockUseSchedule(),
 }));
 vi.mock('../../src/context/BudgetContext', () => ({
   useBudget: () => mockUseBudget(),
@@ -112,7 +117,9 @@ describe('DebtsPage', () => {
         },
       ],
     });
-    mockUseBudget.mockReturnValue({ isQuickBudget: false });
+    mockUseBudget.mockReturnValue({ isQuickBudget: false, currentBudget: null, updateBudget: vi.fn() });
+    mockUseDraftStatus.mockReturnValue({ isDraftMode: true });
+    mockUseSchedule.mockReturnValue({ schedule: null });
     getDebtsWithAmortization.mockResolvedValue([debtFixture]);
     mockDraftContext();
   });
@@ -136,6 +143,49 @@ describe('DebtsPage', () => {
   });
 
   describe('happy', () => {
+    it('turns accelerated payoff on and off from the debts plan', async () => {
+      const updateBudgetFields = vi.fn();
+      mockUseDraftActions.mockReturnValue({
+        ...baseDraftActions,
+        updateBudgetFields,
+      });
+      mockUseSchedule.mockReturnValue({
+        schedule: {
+          debtPlan: {
+            enabled: false,
+            strategy: 'avalanche',
+            variant: 'standard',
+            debts: [{
+              debtId: 'debt-1',
+              billId: 'bill-1',
+              creditorName: 'CardOne: Platinum',
+              baselinePayoffDate: '2027-01-15',
+              acceleratedPayoffDate: '2026-08-15',
+              baselineInterest: 400,
+              acceleratedInterest: 120,
+            }],
+            excluded: [{ debtId: 'debt-x', reason: 'apr_above_one' }],
+            debtFreeDate: '2026-08-15',
+            totalInterestSaved: 280,
+            freedMonthlyCash: 120,
+          },
+        },
+      });
+      renderWithRouter(<DebtsPage />, { mockAPI });
+      expect(await screen.findByText('Baseline payoff')).toBeInTheDocument();
+      expect(screen.getByText(/Baseline interest/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Turn on accelerated payoff' }));
+      expect(updateBudgetFields).toHaveBeenCalledWith({ accelerateDebtPayoff: true });
+
+      mockUseDraftData.mockReturnValue({
+        ...baseDraftData,
+        budgetFields: { accelerateDebtPayoff: true },
+      });
+      renderWithRouter(<DebtsPage />, { mockAPI });
+      await userEvent.click(await screen.findByRole('button', { name: 'Turn off accelerated payoff' }));
+      expect(updateBudgetFields).toHaveBeenCalledWith({ accelerateDebtPayoff: false });
+    });
+
     it('renders tracked debt list from draft amortization results', async () => {
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();

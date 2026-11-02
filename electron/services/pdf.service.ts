@@ -209,6 +209,18 @@ export class PdfService {
         </div>
         ` : ''}
 
+        ${(paycheck.debtPayments ?? []).length > 0 ? `
+        <div class="row-group">
+          <div class="row-group-title">Debt paydown (${(paycheck.debtPayments ?? []).length})</div>
+          ${(paycheck.debtPayments ?? []).map((payment) => `
+            <div class="row">
+              <span class="row-label">Debt: ${escapeHtml(payment.creditorName)}</span>
+              <span class="row-amount expense">-${formatCurrency(payment.amount)}</span>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+
         ${paycheck.savingsDeposit > 0 ? `
         <div class="row-group">
           <div class="row-group-title">Savings Transfer</div>
@@ -623,6 +635,20 @@ export class PdfService {
     <div class="summary-card accent-goals">
       <div class="label">Goals Total</div>
       <div class="value goals">${formatCurrency(totalGoalDeposits)}</div>
+    </div>
+    ` : ''}
+    ${schedule.debtPlan?.enabled ? `
+    <div class="summary-card">
+      <div class="label">Debt-free date</div>
+      <div class="value">${escapeHtml(schedule.debtPlan.debtFreeDate ?? '—')}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Interest saved</div>
+      <div class="value">${escapeHtml(formatCurrency(schedule.debtPlan.totalInterestSaved))}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Freed monthly cash</div>
+      <div class="value">${escapeHtml(formatCurrency(schedule.debtPlan.freedMonthlyCash))}</div>
     </div>
     ` : ''}
     <div class="summary-card">

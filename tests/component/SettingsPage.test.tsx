@@ -190,6 +190,18 @@ describe('SettingsPage', () => {
       });
     });
 
+    it('turns accelerated debt payoff on and off through the budget update', async () => {
+      const user = userEvent.setup();
+      renderWithRouter(<SettingsPage />, { mockAPI });
+      const toggle = screen.getByLabelText('Accelerate debt payoff');
+      await user.click(toggle);
+      await user.click(toggle);
+      await waitFor(() => {
+        expect(updateBudget).toHaveBeenCalledWith('budget-1', { accelerateDebtPayoff: true });
+        expect(updateBudget).toHaveBeenCalledWith('budget-1', { accelerateDebtPayoff: false });
+      });
+    });
+
     it('shows change-password error when auth update fails', async () => {
       const user = userEvent.setup();
       mockAPI.auth.changePassword.mockResolvedValueOnce({ success: false, error: 'Wrong current password' });

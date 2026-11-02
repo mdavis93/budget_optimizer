@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO } from 'date-fns';
+import { formatCurrency } from '../utils/formatCurrency';
 import clsx from 'clsx';
 
 type ExportKind = 'pdf' | 'html' | 'spreadsheet';
@@ -115,6 +116,12 @@ export default function ExportPage() {
   };
 
   const totalGoalDeposits = schedule?.paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0) ?? 0;
+  const totalDebtPaydown = schedule?.paychecks.reduce((sum, paycheck) => sum + (paycheck.totalDebtPayments ?? 0), 0) ?? 0;
+  const debtPreview = schedule?.debtPlan?.enabled
+    ? schedule.debtPlan.totalInterestSaved > 0
+      ? `Interest saved: ${formatCurrency(schedule.debtPlan.totalInterestSaved)}`
+      : `Debt paydown: ${formatCurrency(totalDebtPaydown)}`
+    : null;
 
   return (
     <div className="space-y-6">
@@ -228,12 +235,19 @@ export default function ExportPage() {
               <p className="font-medium">{schedule.paychecks.length}</p>
             </div>
           </div>
-          {totalGoalDeposits > 0 && (
-            <div className="mt-3 pt-3 border-t border-(--color-border) text-sm">
-              <span className="text-(--color-text-muted)">Goals Total: </span>
-              <span className="font-medium text-success-500">
-                ${totalGoalDeposits.toLocaleString()}
-              </span>
+          {(totalGoalDeposits > 0 || debtPreview) && (
+            <div className="mt-3 pt-3 border-t border-(--color-border) text-sm flex flex-wrap gap-4">
+              {totalGoalDeposits > 0 && (
+                <span>
+                  <span className="text-(--color-text-muted)">Goals Total: </span>
+                  <span className="font-medium text-success-500">
+                    ${totalGoalDeposits.toLocaleString()}
+                  </span>
+                </span>
+              )}
+              {debtPreview && (
+                <span className="font-medium text-danger-500">{debtPreview}</span>
+              )}
             </div>
           )}
         </div>
