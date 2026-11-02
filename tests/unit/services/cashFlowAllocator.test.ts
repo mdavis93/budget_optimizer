@@ -82,8 +82,8 @@ describe('allocateGoalsAndSavings', () => {
     const unfunded = result.goals[0];
     expect(unfunded.funded).toBe(false);
     expect(unfunded.atRisk).toBe(true);
-    expect(unfunded.shortfall).toBe(300);
-    expect(unfunded.totalAllocated).toBe(200);
+    expect(unfunded.shortfall).toBe(500);
+    expect(unfunded.totalAllocated).toBe(0);
   });
 
   it('only draws from paychecks on or before the deadline', () => {
@@ -113,7 +113,7 @@ describe('allocateGoalsAndSavings', () => {
     expect(a.funded).toBe(true);
     expect(a.totalAllocated).toBe(80);
     expect(b.atRisk).toBe(true);
-    expect(b.totalAllocated).toBe(20);
+    expect(b.totalAllocated).toBe(0);
   });
 
   it('never dips below a configured hard savings floor', () => {
@@ -269,5 +269,33 @@ describe('cashFlowAllocator oracle', () => {
       (p) => p.goalDeposits.find((d) => d.goalId === 'far')?.amount ?? 0
     );
     expect(farDeposits.some((amount) => amount > 0)).toBe(true);
+  });
+
+  it('keeps savings at or above $150 when an unadmitted in-horizon goal cannot meet its deadline', () => {
+    const result = allocateGoalsAndSavings(
+      [
+        paycheck('2026-01-15', 400),
+        paycheck('2026-02-15', 400),
+        paycheck('2026-03-15', 400),
+        paycheck('2026-04-15', 400),
+      ],
+      [
+        goal({ id: 'fit', name: 'Fit', priority: 1, targetAmount: 200, targetDate: '2026-04-15' }),
+        goal({
+          id: 'impossible',
+          name: 'Impossible',
+          priority: 2,
+          targetAmount: 10000,
+          targetDate: '2026-04-15',
+        }),
+      ]
+    );
+    const fit = result.goals.find((g) => g.goalId === 'fit')!;
+    const impossible = result.goals.find((g) => g.goalId === 'impossible')!;
+    expect(fit.funded).toBe(true);
+    expect(fit.totalAllocated).toBe(200);
+    expect(impossible.funded).toBe(false);
+    expect(impossible.totalAllocated).toBe(800);
+    expect(result.paychecks.map((p) => p.savingsDeposit)).toEqual([150, 150, 150, 150]);
   });
 });

@@ -433,16 +433,6 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
     for (const goalIndex of snapshot.leftoverIndices) depositLeftover(goalIndex, i);
   }
 
-  for (let i = 0; i < n; i++) {
-    const aboveFloor = wholeDollarsAbove(snapshot.surplusCents[i], snapshot.floorCents);
-    const reserved = snapshot.abovePrimary[i] + dips[i];
-    remainingAllocable[i] += Math.max(0, aboveFloor - reserved);
-  }
-
-  for (let i = 0; i < n; i++) {
-    for (const goalIndex of snapshot.unadmittedIndices) depositLeftover(goalIndex, i);
-  }
-
   const fallbackDollars = snapshot.fallbackCents / CENTS_PER_DOLLAR;
   const paycheckResults: PaycheckAllocation[] = [];
   for (let i = 0; i < n; i++) {
