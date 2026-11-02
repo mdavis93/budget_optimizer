@@ -79,13 +79,9 @@ export interface ScheduleComputeRequest {
   input: ScheduleComputeInputPayload;
 }
 
-export type ScheduleComputeSolver = 'greedy' | 'highs';
+export type ScheduleComputeSolver = 'greedy';
 
-export type ScheduleComputeFallbackReason =
-  | 'size_guard'
-  | 'load_rejected'
-  | 'non_optimal'
-  | 'limit_hit';
+export type ScheduleComputeFallbackReason = 'limit_hit';
 
 export interface ScheduleComputeTimings {
   modelMs: number;

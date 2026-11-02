@@ -1,7 +1,7 @@
 import { addMonths, format, isAfter, parseISO, startOfDay } from 'date-fns';
 import {
   calculateSummary,
-  convertToLegacyEntries,
+  buildLedgerEntries,
   generateRecommendations,
 } from '@shared/schedulePresentation';
 import {
@@ -29,7 +29,7 @@ function filterPaychecksByViewport(
 }
 
 /**
- * Slice a full 12-month schedule to the requested viewport without recalculating assignments.
+ * Slice the full calculation horizon to the requested viewport without recalculating assignments.
  */
 export function applyScheduleViewport(
   fullSchedule: ScheduleData,
@@ -63,7 +63,7 @@ export function applyScheduleViewport(
     endDate: viewportEndDate,
     paychecks: viewportPaychecks,
     viewportMonths,
-    entries: convertToLegacyEntries(viewportPaychecks, startingBalance),
+    entries: buildLedgerEntries(viewportPaychecks, startingBalance),
     summary: calculateSummary(viewportPaychecks, startingBalance, fullSchedule.maxBudgetRemaining),
     recommendations: generateRecommendations(
       viewportPaychecks,

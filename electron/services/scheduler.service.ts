@@ -10,7 +10,7 @@ import type { Debt, Leave } from './database.service';
 import { projectIncome, projectBills } from './scheduler/projection';
 import { findPreferredPaycheck } from './scheduler/assignment';
 import {
-  convertToLegacyEntries,
+  buildLedgerEntries,
   calculateSummary,
   generateRecommendations,
 } from './scheduler/paychecks';
@@ -115,7 +115,7 @@ export class SchedulerService {
   }
 
   /**
-   * Slice a full 12-month schedule to the requested viewport without recalculating assignments.
+   * Slice the full calculation horizon to the requested viewport without recalculating assignments.
    */
   applyViewportFilter(
     fullSchedule: ScheduleData,
@@ -130,7 +130,7 @@ export class SchedulerService {
         ...fullSchedule,
         paychecks,
         viewportMonths,
-        entries: convertToLegacyEntries(paychecks, startingBalance),
+        entries: buildLedgerEntries(paychecks, startingBalance),
         summary: calculateSummary(
           paychecks,
           startingBalance,
@@ -166,7 +166,7 @@ export class SchedulerService {
       endDate: viewportEnd,
       paychecks: viewportPaychecks,
       viewportMonths,
-      entries: convertToLegacyEntries(viewportPaychecks, startingBalance),
+      entries: buildLedgerEntries(viewportPaychecks, startingBalance),
       summary: calculateSummary(
         viewportPaychecks,
         startingBalance,

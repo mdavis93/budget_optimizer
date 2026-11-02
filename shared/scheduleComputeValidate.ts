@@ -208,15 +208,15 @@ export function assertScheduleComputeSuccessMessage(
   assertComputeMeta(message.computeMeta);
 }
 
-const SOLVER_SET = new Set(['greedy', 'highs']);
-const FALLBACK_SET = new Set(['size_guard', 'load_rejected', 'non_optimal', 'limit_hit']);
+const SOLVER_SET = new Set(['greedy']);
+const FALLBACK_SET = new Set(['limit_hit']);
 
 function assertComputeMeta(value: unknown): void {
   if (!isRecord(value)) {
     throw new Error('computeMeta must be an object');
   }
   if (typeof value.solver !== 'string' || !SOLVER_SET.has(value.solver)) {
-    throw new Error('computeMeta.solver must be greedy or highs');
+    throw new Error('computeMeta.solver must be greedy');
   }
   if (value.fallbackReason !== undefined) {
     if (typeof value.fallbackReason !== 'string' || !FALLBACK_SET.has(value.fallbackReason)) {

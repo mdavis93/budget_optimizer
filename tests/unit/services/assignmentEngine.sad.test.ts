@@ -2,7 +2,7 @@
  * @vitest-environment node
  */
 import { describe, expect, it } from 'vitest';
-import { assignBillsExact } from '../../../electron/services/scheduler/exactAssignment';
+import { assignBills } from '../../../electron/services/scheduler/assignBills';
 import { buildAssignmentModel } from '../../../electron/services/scheduler/model/assignmentModel';
 import { GreedySolver } from '../../../electron/services/scheduler/solvers/greedySolver';
 import type { ProjectedBill, ProjectedIncome } from '../../../electron/services/scheduler/types';
@@ -29,7 +29,7 @@ function bill(
 
 describe('assignment engine sad paths', () => {
   it('leaves every bill unpaid when income is zero', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00')],
       [income('2026-01-02', 0)],
       [bill({ billId: 'rent', amount: 800, date: new Date('2026-01-10T00:00:00'), dueDay: 10 })],
@@ -40,7 +40,7 @@ describe('assignment engine sad paths', () => {
   });
 
   it('keeps locked bills on their paycheck when they overflow income', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 100), income('2026-01-16', 2000)],
       [bill({ billId: 'rent', amount: 800, date: new Date('2026-01-20T00:00:00'), dueDay: 20 })],
@@ -52,7 +52,7 @@ describe('assignment engine sad paths', () => {
   });
 
   it('uses all_movable_bills_locked when every other bill on the paycheck is pinned', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00')],
       [income('2026-01-02', 500)],
       [

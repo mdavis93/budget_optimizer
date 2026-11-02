@@ -1,5 +1,5 @@
 /**
- * Bill-move capacity for reconciliation — mirrors rebalance target/min tiers.
+ * Bill-move capacity for reconciliation — target vs minimum cash for bill moves.
  */
 export function movableBillCapacity(
   budgetRemaining: number,

@@ -8,6 +8,14 @@ import { escapeHtml } from '../utils/escapeHtml';
 import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
 import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function displayIsoDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  if (!ISO_DAY.test(value)) return value;
+  return format(parseISO(value), 'MMM d, yyyy');
+}
+
 export class PdfService {
   constructor(private readonly scratchRoot?: string) {}
 
@@ -640,7 +648,7 @@ export class PdfService {
     ${schedule.debtPlan?.enabled ? `
     <div class="summary-card">
       <div class="label">Debt-free date</div>
-      <div class="value">${escapeHtml(schedule.debtPlan.debtFreeDate ?? '—')}</div>
+      <div class="value">${escapeHtml(displayIsoDate(schedule.debtPlan.debtFreeDate))}</div>
     </div>
     <div class="summary-card">
       <div class="label">Interest saved</div>

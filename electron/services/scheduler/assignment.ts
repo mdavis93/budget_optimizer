@@ -11,7 +11,7 @@ import {
   billOccurrenceKey,
 } from './types';
 import type { CashOnHandByDate } from './cashOnHandOverrides';
-import { assignBillsExact, type ExactAssignmentOptions } from './exactAssignment';
+import { assignBills, type AssignBillsOptions } from './assignBills';
 import { isOperatingIncome } from '@shared/incomePurpose';
 import { dropLookaheadAssignments } from './lookahead';
 import { runDebtAcceleration } from './debt/debtAcceleration';
@@ -159,7 +159,7 @@ export function assignBillsToPaychecks(
   reservedIncomes: ProjectedIncome[] = [],
   fundingEndDate?: Date,
   startDate?: Date,
-  assignmentOptions: Pick<ExactAssignmentOptions, 'solver' | 'onComputeMeta'> & {
+  assignmentOptions: Pick<AssignBillsOptions, 'solver' | 'onComputeMeta'> & {
     debts?: Debt[];
     bills?: Bill[];
     accelerateDebtPayoff?: boolean;
@@ -167,7 +167,7 @@ export function assignBillsToPaychecks(
     onDebtPlan?: (plan: DebtPlan, ignoredPins: number) => void;
   } = {}
 ): PaycheckEntry[] {
-  const assignments = assignBillsExact(
+  const assignments = assignBills(
     paycheckDates,
     allIncomes.filter((income) => isOperatingIncome(income)),
     allBills,

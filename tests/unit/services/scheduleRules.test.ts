@@ -32,7 +32,7 @@ function bill(overrides: Partial<Bill> & Pick<Bill, 'id' | 'dueDay'>): Bill {
   };
 }
 
-describe('Phase 1 schedule rules', () => {
+describe('Schedule rules', () => {
   it('presumes a bill due before the first paycheck is already paid', () => {
     const schedule = scheduler.generateSchedule(
       [income({ id: 'job', cadence: 'monthly', startDate: '2026-01-15' })],

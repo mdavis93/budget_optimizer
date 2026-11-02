@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { format } from 'date-fns';
-import { assignBillsExact } from '../../../electron/services/scheduler/exactAssignment';
+import { assignBills } from '../../../electron/services/scheduler/assignBills';
 import { GreedySolver } from '../../../electron/services/scheduler/solvers/greedySolver';
 import type { AssignmentSolver } from '../../../electron/services/scheduler/solvers/types';
 import { runScenario } from '../../helpers/scheduleFixtures';
@@ -40,7 +40,7 @@ function projectedBill(
 
 describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => {
   it('never pays a bill after its due date', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 2000), income('2026-01-16', 2000)],
       [
@@ -59,7 +59,7 @@ describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => 
   });
 
   it('pays rent before gym when income is tight', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00')],
       [income('2026-01-02', 1000)],
       [
@@ -96,7 +96,7 @@ describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => 
   });
 
   it('keeps a pinned unpaid bill on its paycheck', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 100), income('2026-01-16', 1000)],
       [projectedBill('2026-01-20', 'rent', 800, 'critical')],
@@ -113,7 +113,7 @@ describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => 
   });
 
   it('is deterministic across two solves', () => {
-    const first = assignBillsExact(
+    const first = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 2000), income('2026-01-16', 2000)],
       [
@@ -123,7 +123,7 @@ describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => 
       50,
       { solver }
     );
-    const second = assignBillsExact(
+    const second = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 2000), income('2026-01-16', 2000)],
       [
@@ -137,7 +137,7 @@ describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => 
   });
 
   it('spends petty cash before paying more days early', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 400), income('2026-01-16', 400)],
       [projectedBill('2026-01-20', 'phone', 300, 'normal')],
@@ -151,7 +151,7 @@ describe.each(solvers)('assignment engine conformance (%s)', (_name, solver) => 
   });
 
   it('does not prepay when the later paycheck can pay', () => {
-    const assignments = assignBillsExact(
+    const assignments = assignBills(
       [new Date('2026-01-02T00:00:00'), new Date('2026-01-16T00:00:00')],
       [income('2026-01-02', 2000), income('2026-01-16', 2000)],
       [projectedBill('2026-01-20', 'phone', 90, 'normal')],

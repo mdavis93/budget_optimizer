@@ -563,7 +563,7 @@ describe('proposeBreakGlassPlans', () => {
     expect(filtered?.plans[0].id).toBe('a');
   });
 
-  it('does not propose a cascade that would create secondary Break-Glass', () => {
+  it('does not propose a plan that would create secondary Break-Glass', () => {
     // Jul 3 has only $10 above target — not enough to absorb the cascade without
     // dipping a healthy paycheck into the BG band.
     const report = proposeBreakGlassPlans(
@@ -590,7 +590,7 @@ describe('proposeBreakGlassPlans', () => {
     expect(report.plans).toEqual([]);
   });
 
-  it('reverse-trickles Aug-due bills onto a later paycheck when earlier cascade cannot clear', () => {
+  it('reverse-trickles Aug-due bills onto a later paycheck when an earlier plan cannot clear', () => {
     // Mimics: schedule starts mid-July (no Jul 3 surplus), Jul 24 silo can't take
     // $800 Rent, but Aug 7 has spare for Aug-due Jeep — reverse trickle clears BG.
     const report = proposeBreakGlassPlans(
@@ -962,7 +962,7 @@ describe('proposeBreakGlassPlans', () => {
     expect(report.plans).toEqual([]);
   });
 
-  it('fail-fasts without DFS when deficit exceeds target movable mass', () => {
+  it('fail-fasts when deficit exceeds target movable mass', () => {
     const report = proposeBreakGlassPlans(
       scheduleOf([
         paycheck({ date: '2026-07-03', budgetRemaining: 500, bills: [] }),
@@ -1055,7 +1055,7 @@ describe('Break-Glass advisor invariants', () => {
     expectAdvisorInvariants(report, schedule);
   });
 
-  it('uses the provided solver and drops a non-optimal result', () => {
+  it('uses the provided solver and drops a result that exceeded the work cap', () => {
     const schedule = scheduleOf([
       paycheck({ date: '2026-07-11', budgetRemaining: 500 }),
       paycheck({
@@ -1084,7 +1084,7 @@ describe('Break-Glass advisor invariants', () => {
         placement: new Int32Array(),
         workCount: 1,
         solver: 'greedy',
-        optimal: false,
+        withinWorkCap: false,
         fallbackReason: 'limit_hit',
       }),
     };
@@ -1109,7 +1109,7 @@ describe('Break-Glass advisor invariants', () => {
       solve: (model) => {
         const placement = Int32Array.from(model.advisorBaseline?.placement ?? []);
         placement.fill(0);
-        return { placement, workCount: placement.length, solver: 'greedy', optimal: true };
+        return { placement, workCount: placement.length, solver: 'greedy', withinWorkCap: true };
       },
     };
     const options: ProposeBreakGlassOptions = { solver };

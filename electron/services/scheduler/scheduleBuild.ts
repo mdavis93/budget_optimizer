@@ -17,11 +17,11 @@ import {
   getUniquePaycheckDates,
   pruneManualAssignmentsToPaychecks,
 } from './assignment';
-import type { ExactAssignmentOptions } from './exactAssignment';
+import type { AssignBillsOptions } from './assignBills';
 import { isOperatingIncome, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import {
   calculateSummary,
-  convertToLegacyEntries,
+  buildLedgerEntries,
   generateRecommendations,
 } from './paychecks';
 import { calculateGoalProjections } from './goals';
@@ -235,8 +235,8 @@ export function assignPreparedHorizon(
   prepared: PreparedScheduleHorizon,
   preferredAssignments: Map<string, string> = new Map(),
   assignmentOptions: {
-    solver?: ExactAssignmentOptions['solver'];
-    onComputeMeta?: ExactAssignmentOptions['onComputeMeta'];
+    solver?: AssignBillsOptions['solver'];
+    onComputeMeta?: AssignBillsOptions['onComputeMeta'];
     forcedVariant?: DebtPlanVariant;
   } = {}
 ): PaycheckEntry[] {
@@ -320,7 +320,7 @@ export function assembleAssignedSchedule(
     calculationMonths: prepared.calcMonths,
     savingsSqueezedCount,
     viewportMonths: prepared.calcMonths,
-    entries: convertToLegacyEntries(paychecks, prepared.startingBalance),
+    entries: buildLedgerEntries(paychecks, prepared.startingBalance),
     summary: calculateSummary(
       paychecks,
       prepared.startingBalance,

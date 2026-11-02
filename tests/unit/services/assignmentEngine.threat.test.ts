@@ -97,6 +97,6 @@ describe('assignment engine threat', () => {
     });
     const result = new GreedySolver().solve(model);
     expect(result.workCount).toBeLessThan(GREEDY_MAX_WORK);
-    expect(result.optimal).toBe(true);
+    expect(result.withinWorkCap).toBe(true);
   });
 });

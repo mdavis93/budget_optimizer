@@ -56,7 +56,7 @@ export function resolveSolveEndDate(fundingEndDate: Date): Date {
 
 /**
  * Bills that have no eligible paycheck on or before the funding end stay out
- * of the solver so they cannot join in-horizon clusters.
+ * of the solver.
  */
 export function billsEligibleOnFundingHorizon(
   bills: ProjectedBill[],
@@ -76,7 +76,7 @@ export function billsEligibleOnFundingHorizon(
 }
 
 /**
- * After assign/rebalance, drop paychecks past the funding horizon so surplus,
+ * After assignment, drop paychecks past the funding horizon so surplus,
  * savings, and goals run on the funded months only. Bills the solver already
  * placed on an in-horizon paycheck stay. Bills that landed on lookahead
  * paychecks are discarded with those paychecks.
