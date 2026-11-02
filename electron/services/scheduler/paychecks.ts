@@ -15,7 +15,7 @@ import {
   GoalDeposit,
   billOccurrenceKey,
 } from './types';
-import { allocateGoalsAndSavings } from './goalSavingsAllocator';
+import { allocateGoalsAndSavings } from './cashFlowAllocator';
 import { isSavingsAndGoalsIncome, paycheckEntryId } from '@shared/incomePurpose';
 export {
   calculateSummary,

@@ -173,7 +173,8 @@ export default function GoalsPage() {
         <div>
           <h2 className="text-2xl font-semibold">Savings Goals</h2>
           <p className="text-(--color-text-secondary)">
-            See whether your goals fit your real paycheck schedule — and how much room you have left.
+            Goals are funded as early as savings rules allow. The per-paycheck figure is
+            what you need to stay on deadline.
           </p>
         </div>
 

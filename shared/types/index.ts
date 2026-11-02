@@ -319,6 +319,7 @@ export interface GoalProjection {
   remainingAmount: number;
   targetDate: string;
   paycheckCount: number;
+  /** Amount needed per paycheck to stay on deadline (remaining need / paychecks on or before the deadline). */
   requiredPerPaycheck: number;
   adjustedRequiredPerPaycheck: number;
   availablePerPaycheck: number;

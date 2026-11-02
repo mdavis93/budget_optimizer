@@ -360,6 +360,7 @@ export function calculateGoalProjections(
       status = 'impossible';
     }
 
+    // Needed per paycheck to stay on deadline, not a description of actual deposits.
     const requiredPerPaycheck = paycheckCount > 0 ? remainingAmount / paycheckCount : 0;
     // Calculate available per paycheck based on total goal deposits
     const totalPaychecksInSchedule = paychecks.filter(p => !p.isShortfall).length;
