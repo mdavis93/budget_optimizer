@@ -757,6 +757,28 @@ describe('draftPersist', () => {
       );
     });
 
+    it('persists a cleared income endDate by omitting it on update', async () => {
+      const committed = makeDraftState({
+        incomes: [createMockIncome({ id: 'income-real-3', endDate: '2026-03-31' })],
+      });
+      const draft = makeDraftState({
+        incomes: [createMockIncome({ id: 'income-real-3' })],
+      });
+
+      vi.mocked(window.electronAPI.income.update).mockResolvedValueOnce({
+        success: true,
+        data: createMockIncome({ id: 'income-real-3' }),
+      });
+
+      const result = await persistIncomeDomain(committed, draft);
+      expect(result.success).toBe(true);
+      expect(window.electronAPI.income.update).toHaveBeenCalledWith(
+        'income-real-3',
+        expect.not.objectContaining({ endDate: expect.anything() })
+      );
+      expect(result.nextDraft.incomes[0].endDate).toBeUndefined();
+    });
+
     it('persists savings-and-goals purpose on create and update', async () => {
       const committed = makeDraftState({ incomes: [] });
       const draft = makeDraftState({
