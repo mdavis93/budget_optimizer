@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SchedulerService } from '../../../electron/services/scheduler.service';
-import { classifyDebts } from '../../../electron/services/scheduler/debt/debtAcceleration';
+import { classifyDebts, runDebtAcceleration } from '../../../electron/services/scheduler/debt/debtAcceleration';
 import { DEBT_MAX_WORK, DebtWorkCounter } from '../../../electron/services/scheduler/debt/debtSimulator';
+import type { PaycheckAssignment, ProjectedBill } from '../../../electron/services/scheduler/types';
+import { billOccurrenceKey } from '../../../electron/services/scheduler/types';
 import type { Bill, Debt, Income, SavingsGoal } from '@shared/types';
 
 const income: Income = {
@@ -41,15 +43,57 @@ function debt(overrides: Partial<Debt> & Pick<Debt, 'id' | 'billId'>): Debt {
   };
 }
 
+function onDate(iso: string): Date {
+  return new Date(`${iso}T00:00:00`);
+}
+
+function projectedBill(
+  partial: Partial<ProjectedBill> & Pick<ProjectedBill, 'billId' | 'amount' | 'date'>
+): ProjectedBill {
+  return {
+    creditorName: partial.creditorName ?? partial.billId,
+    dueDay: partial.dueDay ?? partial.date.getDate(),
+    priority: partial.priority ?? 'normal',
+    ...partial,
+  };
+}
+
+function paycheck(iso: string, amount: number, bills: ProjectedBill[]): PaycheckAssignment {
+  return {
+    date: onDate(iso),
+    incomes: [{ date: onDate(iso), sourceId: 'inc', sourceName: 'Job', amount }],
+    bills,
+  };
+}
+
+const cardBill = bill({ id: 'debt', creditorName: 'Card', budgetedAmount: 100, dueDay: 15 });
+
+function fourPaychecks(): PaycheckAssignment[] {
+  return ['2026-01-15', '2026-02-15', '2026-03-15', '2026-04-15'].map((iso) =>
+    paycheck(iso, 500, [
+      projectedBill({ billId: 'debt', amount: 100, date: onDate(iso), dueDay: 15, creditorName: 'Card' }),
+    ])
+  );
+}
+
+const hundredGoal: SavingsGoal = {
+  id: 'g',
+  budgetId: 'budget-1',
+  name: 'Trip',
+  targetAmount: 100,
+  alreadySaved: 0,
+  targetDate: '2026-04-15',
+  priority: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
 describe('debtAcceleration', () => {
   it('pays the higher APR debt first', () => {
     const high = debt({ id: 'd-high', billId: 'b-high', apr: 0.29, principalBalance: 400 });
     const low = debt({ id: 'd-low', billId: 'b-low', apr: 0.08, principalBalance: 400 });
-    const bills = [bill({ id: 'b-high' }), bill({ id: 'b-low' })];
-    const scheduler = new SchedulerService();
-    const schedule = scheduler.generateSchedule(
+    const schedule = new SchedulerService().generateSchedule(
       [income],
-      bills,
+      [bill({ id: 'b-high' }), bill({ id: 'b-low' })],
       '2026-01-01',
       12,
       2000,
@@ -67,161 +111,279 @@ describe('debtAcceleration', () => {
       [high, low],
       true
     );
-    const firstExtra = schedule.paychecks.find((paycheck) => (paycheck.totalDebtPayments ?? 0) > 0);
-    expect(firstExtra?.debtPayments?.[0]?.debtId).toBe('d-high');
+    const withPayments = schedule.paychecks.filter((paycheck) => paycheck.totalDebtPayments > 0);
+    expect(withPayments.length).toBeGreaterThan(0);
+    expect(withPayments[0].debtPayments[0].debtId).toBe('d-high');
   });
 
-  it('leaves debtPayments empty when the flag is off and still fills a preview plan', () => {
-    const tracked = debt({ id: 'd-1', billId: 'b-1' });
-    const scheduler = new SchedulerService();
-    const schedule = scheduler.generateSchedule(
-      [income],
-      [bill({ id: 'b-1' })],
-      '2026-01-01',
-      12,
-      2000,
-      new Set(),
-      new Map(),
-      250,
-      [],
-      100,
-      0,
-      new Map(),
-      new Map(),
-      [],
-      new Map(),
-      undefined,
-      [tracked],
-      false
-    );
-    expect(schedule.paychecks.every((paycheck) => !paycheck.debtPayments?.length)).toBe(true);
-    expect(schedule.debtPlan?.enabled).toBe(false);
-    expect(schedule.debtPlan?.variant).toMatch(/disabled|standard|deep/);
-    expect(schedule.debtPlan?.debts[0]?.baselineInterest).toBeGreaterThanOrEqual(0);
-  });
-
-  it('does not send surplus to goals, savings, or debt when a paycheck still has an unpaid bill', () => {
-    const tightIncome: Income = { ...income, amount: 100 };
-    const expensive = bill({ id: 'rent', budgetedAmount: 2000, creditorName: 'Rent', category: 'housing' });
-    const tracked = debt({ id: 'd-1', billId: 'b-1', principalBalance: 500 });
-    const scheduler = new SchedulerService();
-    const schedule = scheduler.generateSchedule(
-      [tightIncome],
-      [expensive, bill({ id: 'b-1' })],
-      '2026-01-01',
-      3,
-      0,
-      new Set(),
-      new Map(),
-      250,
-      [],
-      100,
-      0,
-      new Map(),
-      new Map(),
-      [],
-      new Map(),
-      undefined,
-      [tracked],
-      true
-    );
-    const unpaid = schedule.paychecks.find((paycheck) => paycheck.hasUnpayableBills);
-    expect(unpaid).toBeTruthy();
-    if (unpaid) {
-      expect(unpaid.totalGoalDeposits).toBe(0);
-      expect(unpaid.savingsDeposit).toBe(0);
-      expect(unpaid.totalDebtPayments ?? 0).toBe(0);
-    }
-  });
-
-  it('uses minSavingsPerPaycheck as the floor when it is above $100', () => {
-    const tracked = debt({ id: 'd-1', billId: 'b-1', principalBalance: 2000, monthlyPayment: 50 });
-    const scheduler = new SchedulerService();
-    const schedule = scheduler.generateSchedule(
-      [income],
-      [bill({ id: 'b-1', budgetedAmount: 50 })],
-      '2026-01-01',
-      6,
-      500,
-      new Set(),
-      new Map(),
-      250,
-      [],
-      100,
-      150,
-      new Map(),
-      new Map(),
-      [],
-      new Map(),
-      undefined,
-      [tracked],
-      true
-    );
-    for (const paycheck of schedule.paychecks) {
-      if (paycheck.isShortfall || paycheck.purpose === 'savingsAndGoals') continue;
-      expect(paycheck.savingsDeposit).toBeGreaterThanOrEqual(150);
-    }
-  });
-
-  it('does not fund any goal later than the flag-off assigned schedule', () => {
-    const goal: SavingsGoal = {
-      id: 'g-1',
-      budgetId: 'budget-1',
-      name: 'Trip',
-      targetAmount: 400,
-      alreadySaved: 0,
-      targetDate: '2026-06-01',
-      priority: 1,
-      createdAt: '2026-01-01T00:00:00.000Z',
+  it('keeps debtPayments empty and occurrence locks in force when acceleration is off', () => {
+    const febBill = projectedBill({
+      billId: 'debt',
+      amount: 100,
+      date: onDate('2026-02-15'),
+      dueDay: 15,
+      creditorName: 'Card',
+    });
+    const assignments = [
+      paycheck('2026-01-15', 500, [
+        projectedBill({ billId: 'debt', amount: 100, date: onDate('2026-01-15'), dueDay: 15, creditorName: 'Card' }),
+      ]),
+      paycheck('2026-02-15', 500, [febBill]),
+    ];
+    const manuals = new Map([[billOccurrenceKey(febBill.billId, febBill.date), '2026-02-15']]);
+    const input = {
+      assignments,
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 100, apr: 0, monthlyPayment: 100 })],
+      bills: [cardBill],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      manualAssignments: manuals,
+      accelerateDebtPayoff: false,
     };
-    const tracked = debt({ id: 'd-1', billId: 'b-1', principalBalance: 400 });
-    const bills = [bill({ id: 'b-1' })];
-    const scheduler = new SchedulerService();
-    const off = scheduler.generateSchedule(
-      [income],
-      bills,
-      '2026-01-01',
-      12,
-      2000,
-      new Set(),
-      new Map(),
-      250,
-      [goal],
-      100,
-      0,
-      new Map(),
-      new Map(),
-      [],
-      new Map(),
-      undefined,
-      [tracked],
-      false
-    );
-    const on = scheduler.generateSchedule(
-      [income],
-      bills,
-      '2026-01-01',
-      12,
-      2000,
-      new Set(),
-      new Map(),
-      250,
-      [goal],
-      100,
-      0,
-      new Map(),
-      new Map(),
-      [],
-      new Map(),
-      undefined,
-      [tracked],
-      true
-    );
-    const offDate = off.goalProjections?.[0]?.estimatedFundedDate;
-    const onDate = on.goalProjections?.[0]?.estimatedFundedDate;
-    if (offDate && onDate) {
-      expect(onDate <= offDate).toBe(true);
-    }
+    const off = runDebtAcceleration(input);
+    expect(off.paychecks.every((paycheck) => paycheck.debtPayments === undefined)).toBe(true);
+    expect(off.paychecks[1].bills.map((item) => item.billId)).toEqual(['debt']);
+    expect(off.ignoredPins).toBe(0);
+    expect(off.debtPlan.enabled).toBe(false);
+
+    const on = runDebtAcceleration({ ...input, accelerateDebtPayoff: true });
+    expect(on.paychecks[1].bills.map((item) => item.billId)).toEqual([]);
+    expect(on.ignoredPins).toBe(1);
+  });
+
+  it('fills the would-be variant with baseline and accelerated figures while the flag is off', () => {
+    const input = {
+      assignments: fourPaychecks(),
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 220, apr: 0.18, monthlyPayment: 100 })],
+      bills: [cardBill],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      goals: [hundredGoal],
+      accelerateDebtPayoff: false,
+    };
+    const off = runDebtAcceleration(input);
+    expect(off.debtPlan.enabled).toBe(false);
+    expect(off.debtPlan.variant).toBe('deep');
+    expect(off.debtPlan.debts[0]).toEqual({
+      debtId: 'd',
+      billId: 'debt',
+      creditorName: 'Card',
+      baselinePayoffDate: '2026-03-15',
+      acceleratedPayoffDate: '2026-02-15',
+      baselineInterest: 5.53,
+      acceleratedInterest: 3.65,
+    });
+    expect(off.debtPlan.totalInterestSaved).toBe(1.88);
+    expect(off.paychecks.map((paycheck) => paycheck.totalGoalDeposits)).toEqual([0, 0, 50, 50]);
+  });
+
+  it('reports baseline figures and zero interest saved when the chosen variant is disabled', () => {
+    const input = {
+      assignments: fourPaychecks(),
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 220, apr: 0.18, monthlyPayment: 100 })],
+      bills: [cardBill],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      goals: [hundredGoal],
+      accelerateDebtPayoff: false,
+      forcedVariant: 'disabled' as const,
+    };
+    const result = runDebtAcceleration(input);
+    const row = result.debtPlan.debts[0];
+    expect(result.debtPlan.variant).toBe('disabled');
+    expect(result.debtPlan.enabled).toBe(false);
+    expect(result.debtPlan.totalInterestSaved).toBe(0);
+    expect(result.debtPlan.freedMonthlyCash).toBe(0);
+    expect(row.acceleratedPayoffDate).toBe(row.baselinePayoffDate);
+    expect(row.acceleratedInterest).toBe(row.baselineInterest);
+  });
+
+  it('sends nothing to goals, savings, or debt when a paycheck still has an unpaid bill', () => {
+    const result = runDebtAcceleration({
+      assignments: [
+        paycheck('2026-01-15', 100, [
+          projectedBill({
+            billId: 'rent',
+            amount: 2000,
+            date: onDate('2026-01-20'),
+            dueDay: 20,
+            creditorName: 'Rent',
+            priority: 'critical',
+            isUnpayable: true,
+            unfundableReason: 'insufficient_income_in_window',
+          }),
+          projectedBill({
+            billId: 'debt',
+            amount: 50,
+            date: onDate('2026-01-15'),
+            dueDay: 15,
+            creditorName: 'Card',
+          }),
+        ]),
+      ],
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 500, apr: 0.2, monthlyPayment: 50 })],
+      bills: [cardBill, bill({ id: 'rent', creditorName: 'Rent', budgetedAmount: 2000, category: 'housing' })],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      goals: [hundredGoal],
+      accelerateDebtPayoff: true,
+    });
+    expect(result.paychecks[0].hasUnpayableBills).toBe(true);
+    expect(result.paychecks[0].totalGoalDeposits).toBe(0);
+    expect(result.paychecks[0].savingsDeposit).toBe(0);
+    expect(result.paychecks[0].totalDebtPayments).toBe(0);
+    expect(result.paychecks[0].debtPayments).toEqual([]);
+  });
+
+  it('repairs an unpaid bill only on an eligible paycheck', () => {
+    const rent = projectedBill({
+      billId: 'rent',
+      amount: 40,
+      date: onDate('2026-02-01'),
+      dueDay: 1,
+      creditorName: 'Rent',
+      priority: 'high',
+      isUnpayable: true,
+      unfundableReason: 'insufficient_income_in_window',
+    });
+    const result = runDebtAcceleration({
+      assignments: [
+        paycheck('2026-01-01', 800, [
+          projectedBill({ billId: 'debt', amount: 100, date: onDate('2026-01-01'), dueDay: 1, creditorName: 'Card' }),
+        ]),
+        paycheck('2026-01-20', 800, [
+          projectedBill({ billId: 'debt', amount: 100, date: onDate('2026-01-20'), dueDay: 1, creditorName: 'Card' }),
+        ]),
+        paycheck('2026-02-15', 800, [rent]),
+      ],
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 100, apr: 0, monthlyPayment: 100 })],
+      bills: [bill({ id: 'debt', creditorName: 'Card', budgetedAmount: 100, dueDay: 1 })],
+      startIso: '2026-01-01',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      accelerateDebtPayoff: true,
+    });
+    expect(result.paychecks[0].bills.map((item) => item.billId)).toEqual(['debt']);
+    expect(result.paychecks[1].bills.map((item) => item.billId)).toEqual(['rent']);
+    expect(result.paychecks[1].bills[0].isUnpayable).toBe(false);
+    expect(result.paychecks[2].bills).toEqual([]);
+  });
+
+  it('rolls a freed minimum to the next debt without reducing savings', () => {
+    const result = runDebtAcceleration({
+      assignments: [
+        paycheck('2026-01-15', 500, [
+          projectedBill({ billId: 'high', amount: 100, date: onDate('2026-01-15'), dueDay: 15, creditorName: 'High' }),
+          projectedBill({ billId: 'low', amount: 40, date: onDate('2026-01-15'), dueDay: 15, creditorName: 'Low' }),
+        ]),
+        paycheck('2026-02-15', 500, [
+          projectedBill({ billId: 'high', amount: 100, date: onDate('2026-02-15'), dueDay: 15, creditorName: 'High' }),
+          projectedBill({ billId: 'low', amount: 40, date: onDate('2026-02-15'), dueDay: 15, creditorName: 'Low' }),
+        ]),
+      ],
+      debts: [
+        debt({ id: 'high', billId: 'high', principalBalance: 100, apr: 0.2, monthlyPayment: 100 }),
+        debt({ id: 'low', billId: 'low', principalBalance: 200, apr: 0.05, monthlyPayment: 40 }),
+      ],
+      bills: [
+        bill({ id: 'high', creditorName: 'High', budgetedAmount: 100, dueDay: 15 }),
+        bill({ id: 'low', creditorName: 'Low', budgetedAmount: 40, dueDay: 15 }),
+      ],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      accelerateDebtPayoff: true,
+    });
+    const february = result.paychecks[1];
+    expect(february.bills.map((item) => item.billId)).toEqual(['low']);
+    expect(february.savingsDeposit).toBe(100);
+    expect(february.debtPayments).toEqual([
+      { debtId: 'low', billId: 'low', creditorName: 'Low', amount: 110 },
+    ]);
+    expect(february.totalGoalDeposits + february.savingsDeposit + february.totalDebtPayments).toBe(210);
+  });
+
+  it('does not fund a goal later than the flag-off schedule', () => {
+    const input = {
+      assignments: fourPaychecks(),
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 220, apr: 0.18, monthlyPayment: 100 })],
+      bills: [cardBill],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      goals: [hundredGoal],
+      accelerateDebtPayoff: true,
+    };
+    const on = runDebtAcceleration(input);
+    const off = runDebtAcceleration({ ...input, accelerateDebtPayoff: false });
+    expect(off.paychecks.map((paycheck) => paycheck.totalGoalDeposits)).toEqual([0, 0, 50, 50]);
+    expect(on.paychecks.map((paycheck) => paycheck.totalGoalDeposits)).toEqual([0, 0, 100, 0]);
+    expect(on.paychecks[2].date < off.paychecks[3].date).toBe(true);
+  });
+
+  it('accepts deep only when a goal is funded on an earlier paycheck than with acceleration off', () => {
+    const early = {
+      assignments: fourPaychecks(),
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 220, apr: 0.18, monthlyPayment: 100 })],
+      bills: [cardBill],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      goals: [hundredGoal],
+      accelerateDebtPayoff: true,
+    };
+    const movedEarlier = runDebtAcceleration(early);
+    expect(movedEarlier.debtPlan.variant).toBe('deep');
+    expect(movedEarlier.paychecks[2].goalDeposits).toEqual([
+      { goalId: 'g', goalName: 'Trip', amount: 100 },
+    ]);
+
+    const notEarlier = runDebtAcceleration({
+      ...early,
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 400, apr: 0.18, monthlyPayment: 100 })],
+    });
+    expect(notEarlier.debtPlan.variant).toBe('standard');
+    expect(notEarlier.paychecks.map((paycheck) => paycheck.totalGoalDeposits)).toEqual([0, 0, 50, 50]);
+  });
+
+  it('keeps savings at the minSavingsPerPaycheck floor when that floor is above $100', () => {
+    const result = runDebtAcceleration({
+      assignments: [
+        paycheck('2026-01-15', 2000, [
+          projectedBill({ billId: 'debt', amount: 100, date: onDate('2026-01-15'), dueDay: 15, creditorName: 'Card' }),
+        ]),
+      ],
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 5000, apr: 0.2, monthlyPayment: 100 })],
+      bills: [cardBill],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 150,
+      accelerateDebtPayoff: true,
+    });
+    expect(result.paychecks[0].savingsDeposit).toBe(150);
+    expect(result.paychecks[0].totalDebtPayments).toBe(1500);
   });
 
   it('excludes APR above 1, missing bills, and duplicate bill links', () => {
@@ -234,15 +396,17 @@ describe('debtAcceleration', () => {
       ],
       [bill({ id: 'shared' })]
     );
-    const reasons = excluded.map((item) => item.reason).sort();
-    expect(reasons).toContain('apr_above_one');
-    expect(reasons).toContain('missing_bill');
-    expect(reasons.filter((reason) => reason === 'duplicate_bill').length).toBeGreaterThanOrEqual(1);
-    expect(eligible.find((item) => item.debt.billId === 'shared')).toBeUndefined();
+    expect(excluded).toEqual([
+      { debtId: 'apr', reason: 'apr_above_one' },
+      { debtId: 'missing', reason: 'missing_bill' },
+      { debtId: 'dup-b', reason: 'duplicate_bill' },
+      { debtId: 'dup-a', reason: 'duplicate_bill' },
+    ]);
+    expect(eligible).toEqual([]);
   });
 
   it('rejects non-finite and huge principal before the loop', () => {
-    const { eligible, excluded } = classifyDebts(
+    const { eligible } = classifyDebts(
       [
         debt({ id: 'nan', billId: 'b-1', principalBalance: Number.NaN }),
         debt({ id: 'huge', billId: 'b-1', principalBalance: 50_000_000 }),
@@ -250,8 +414,7 @@ describe('debtAcceleration', () => {
       ],
       [bill({ id: 'b-1' })]
     );
-    expect(excluded.find((item) => item.debtId === 'nan' || item.debtId === 'huge')).toBeUndefined();
-    expect(eligible.some((item) => item.debt.id === 'ok')).toBe(true);
+    expect(eligible.map((item) => item.debt.id)).toEqual(['ok']);
   });
 });
 

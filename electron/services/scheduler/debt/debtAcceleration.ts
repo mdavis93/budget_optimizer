@@ -7,10 +7,12 @@ import type {
   DebtPlan,
   DebtPlanExcluded,
   DebtPlanVariant,
+  GoalDeposit,
   PaycheckEntry,
   SavingsGoal,
 } from '@shared/types';
-import { allocateGoalsAndSavings } from '../cashFlowAllocator';
+import { allocateFromSnapshot, createCashFlowSnapshot } from '../cashFlowAllocator';
+import { paycheckEntryId, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import {
   cashMinForDate,
   cashTargetForDate,
@@ -26,7 +28,6 @@ import {
   type PaycheckAssignment,
   type ProjectedBill,
 } from '../types';
-import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import {
   DebtAccount,
   DebtWorkCounter,
@@ -153,13 +154,6 @@ interface VariantRun {
   accepted: boolean;
 }
 
-function savingsFloorCents(minSavingsPerPaycheck: number, variant: DebtPlanVariant, finishesThisMonth: boolean): number {
-  const hard = toCents(minSavingsPerPaycheck);
-  if (variant === 'deep') return Math.max(hard, toCents(50));
-  if (finishesThisMonth) return Math.max(hard, toCents(50));
-  return Math.max(hard, toCents(SAVINGS_TARGET_FALLBACK));
-}
-
 function runDisabled(
   assignments: PaycheckAssignment[],
   startingBalance: number,
@@ -178,6 +172,16 @@ function runDisabled(
     minSavingsPerPaycheck,
     cashOnHandByDate
   );
+}
+
+function addGoalDeposit(deposits: GoalDeposit[], goalId: string, goalName: string, amount: number): void {
+  if (amount <= 0) return;
+  const existing = deposits.find((deposit) => deposit.goalId === goalId);
+  if (existing) {
+    existing.amount += amount;
+    return;
+  }
+  deposits.push({ goalId, goalName, amount });
 }
 
 function runPayingVariant(
@@ -212,12 +216,16 @@ function runPayingVariant(
   const paycheckDays = assignments.map((assignment) => dayNumberOfDate(assignment.date));
   const freedCents = new Int32Array(assignments.length);
   let ignoredPins = 0;
-  const extraByPaycheck: DebtPayment[][] = assignments.map(() => []);
   const allocatedByGoal = new Map(goals.map((goal) => [goal.id, 0]));
-
+  const paychecks: PaycheckEntry[] = [];
+  let totalSavingsDollars = 0;
+  let lastOperatingRemaining = startingBalance;
   const firstOperating = assignments.findIndex(
     (assignment) => !isSavingsAndGoalsIncome(assignment) && !assignment.unusable
   );
+  const hardFloorCents = Math.max(0, toCents(minSavingsPerPaycheck));
+  const fiftyCents = Math.max(hardFloorCents, toCents(50));
+  const hundredCents = Math.max(hardFloorCents, toCents(SAVINGS_TARGET_FALLBACK));
 
   const removeLaterOccurrences = (billId: string, afterIndex: number) => {
     for (let later = afterIndex + 1; later < assignments.length; later++) {
@@ -236,42 +244,71 @@ function runPayingVariant(
     }
   };
 
+  const nextDebt = () => accounts.find((account) => !account.paidOff);
+
+  const recordPayment = (payments: DebtPayment[], account: DebtAccount, amountCents: number) => {
+    if (amountCents <= 0) return;
+    const amount = fromCents(amountCents);
+    const existing = payments.find((payment) => payment.debtId === account.debtId);
+    if (existing) {
+      existing.amount = fromCents(toCents(existing.amount) + amountCents);
+      return;
+    }
+    payments.push({
+      debtId: account.debtId,
+      billId: account.billId,
+      creditorName: account.creditorName,
+      amount,
+    });
+  };
+
+  const regularPositionCents = (index: number, freed: number): number => {
+    const assignment = assignments[index];
+    const incomeCents = toCents(assignment.incomes.reduce((sum, income) => sum + income.amount, 0));
+    const boost = index === firstOperating ? toCents(startingBalance) : 0;
+    const funded = uniqueBills(assignment)
+      .filter((bill) => !bill.isUnpayable && !bill.isSkipped)
+      .reduce((sum, bill) => sum + toCents(bill.amount), 0);
+    return incomeCents - funded + boost - freed;
+  };
+
   for (let i = 0; i < assignments.length; i++) {
     work.tick();
     const assignment = assignments[i];
     const dateIso = format(assignment.date, 'yyyy-MM-dd');
-    if (isSavingsAndGoalsIncome(assignment) || assignment.unusable) continue;
+    const isReserved = isSavingsAndGoalsIncome(assignment);
+    const bills = isReserved ? [] : uniqueBills(assignment);
+    const totalIncome = assignment.incomes.reduce((sum, income) => sum + income.amount, 0);
+    const effectiveTarget = cashTargetForDate(cashOnHandByDate, dateIso, maxBudgetRemaining);
+    const effectiveMin = cashMinForDate(cashOnHandByDate, dateIso, minCashOnHand);
+    const purpose = isReserved ? ('savingsAndGoals' as const) : ('operating' as const);
 
-    for (const account of accounts) {
-      account.accrueThrough(dateIso, work);
-    }
+    if (!isReserved && !assignment.unusable && applyExtras) {
+      for (const account of accounts) account.accrueThrough(dateIso, work);
+      for (const bill of bills) {
+        if (bill.isSkipped || bill.isUnpayable) continue;
+        const account = accountByBill.get(bill.billId);
+        if (!account || account.paidOff) continue;
+        account.applyPayment(toCents(bill.amount), dateIso);
+        if (account.paidOff) removeLaterOccurrences(bill.billId, i);
+      }
 
-    for (const bill of uniqueBills(assignment)) {
-      if (bill.isSkipped || bill.isUnpayable) continue;
-      const account = accountByBill.get(bill.billId);
-      if (!account || account.paidOff) continue;
-      account.applyPayment(toCents(bill.amount), dateIso);
-      if (account.paidOff && applyExtras) removeLaterOccurrences(bill.billId, i);
-    }
-
-    let freed = freedCents[i];
-    const unpaid = assignments.flatMap((item, index) =>
-      uniqueBills(item)
-        .filter(
-          (bill) =>
-            bill.isUnpayable &&
-            !bill.isSkipped &&
-            bill.unfundableReason === 'insufficient_income_in_window'
-        )
-        .map((bill) => ({ bill, index }))
-    );
-    unpaid.sort((a, b) => {
-      const rank = (PRIORITY_RANK[a.bill.priority] ?? 9) - (PRIORITY_RANK[b.bill.priority] ?? 9);
-      if (rank !== 0) return rank;
-      return format(a.bill.date, 'yyyy-MM-dd').localeCompare(format(b.bill.date, 'yyyy-MM-dd'));
-    });
-
-    if (applyExtras) {
+      let freed = freedCents[i];
+      const unpaid = assignments.flatMap((item, index) =>
+        uniqueBills(item)
+          .filter(
+            (bill) =>
+              bill.isUnpayable &&
+              !bill.isSkipped &&
+              bill.unfundableReason === 'insufficient_income_in_window'
+          )
+          .map((bill) => ({ bill, index }))
+      );
+      unpaid.sort((left, right) => {
+        const rank = (PRIORITY_RANK[left.bill.priority] ?? 9) - (PRIORITY_RANK[right.bill.priority] ?? 9);
+        if (rank !== 0) return rank;
+        return format(left.bill.date, 'yyyy-MM-dd').localeCompare(format(right.bill.date, 'yyyy-MM-dd'));
+      });
       for (const item of unpaid) {
         work.tick();
         const dueDay = dayNumberOfIsoDate(format(item.bill.date, 'yyyy-MM-dd'));
@@ -281,8 +318,7 @@ function runPayingVariant(
         });
         if (!eligibleIdx.includes(i)) continue;
         const key = billOccurrenceKey(item.bill.billId, item.bill.date);
-        const pinned = manualAssignments.has(key);
-        if (pinned && item.index !== i) continue;
+        if (manualAssignments.has(key) && item.index !== i) continue;
         const cost = toCents(item.bill.amount);
         if (freed < cost) continue;
         freed -= cost;
@@ -293,146 +329,191 @@ function runPayingVariant(
           assignment.bills.push(item.bill);
         }
       }
+      freedCents[i] = freed;
     }
 
-    const billsNow = uniqueBills(assignment);
-    const hasUnpaid = billsNow.some((bill) => bill.isUnpayable && !bill.isSkipped);
-    const totalIncome = assignment.incomes.reduce((sum, income) => sum + income.amount, 0);
-    const fundedAmount = billsNow
-      .filter((bill) => !bill.isUnpayable && !bill.isSkipped)
-      .reduce((sum, bill) => sum + bill.amount, 0);
-    const unpayableAmount = billsNow
-      .filter((bill) => bill.isUnpayable && !bill.isSkipped)
-      .reduce((sum, bill) => sum + bill.amount, 0);
-    const ledgerBoost = i === firstOperating ? startingBalance : 0;
-    const effectiveTarget = cashTargetForDate(cashOnHandByDate, dateIso, maxBudgetRemaining);
-    const remainingAfterBills = totalIncome - fundedAmount - (hasUnpaid ? unpayableAmount : 0) + ledgerBoost;
-
-    if (applyExtras && freed > 0) {
-      const minCash = cashMinForDate(cashOnHandByDate, dateIso, minCashOnHand);
-      const needMin = Math.max(0, toCents(minCash - remainingAfterBills));
-      const usedMin = Math.min(freed, needMin);
-      freed -= usedMin;
-      const afterMin = remainingAfterBills + fromCents(usedMin);
-      const needTarget = Math.max(0, toCents(effectiveTarget - afterMin));
-      const usedTarget = Math.min(freed, needTarget);
-      freed -= usedTarget;
-    }
-
-    if (hasUnpaid) {
-      continue;
-    }
-
-    const suffixPaychecks = [];
-    const suffixGoals = goals.map((goal) => ({
-      ...goal,
-      alreadySaved: goal.alreadySaved + (allocatedByGoal.get(goal.id) ?? 0),
-    }));
-    for (let j = i; j < assignments.length; j++) {
-      const slot = assignments[j];
-      const slotIso = format(slot.date, 'yyyy-MM-dd');
-      const slotBills = uniqueBills(slot);
-      const slotUnpaid = slotBills.some((bill) => bill.isUnpayable && !bill.isSkipped);
-      const slotIncome = slot.incomes.reduce((sum, income) => sum + income.amount, 0);
-      const slotFunded = slotBills
-        .filter((bill) => !bill.isUnpayable && !bill.isSkipped)
-        .reduce((sum, bill) => sum + bill.amount, 0);
-      const slotBoost = j === firstOperating ? startingBalance : 0;
-      const slotTarget = cashTargetForDate(cashOnHandByDate, slotIso, maxBudgetRemaining);
-      const gross = slotIncome - slotFunded + slotBoost;
-      const surplus =
-        isSavingsAndGoalsIncome(slot) || slot.unusable
-          ? 0
-          : slotUnpaid
-            ? 0
-            : Math.max(0, gross - slotTarget);
-      suffixPaychecks.push({ date: slotIso, surplus });
-    }
-    const allocation = allocateGoalsAndSavings(suffixPaychecks, suffixGoals, { minSavingsPerPaycheck });
-    const thisAlloc = allocation.paychecks[0];
-    for (const deposit of thisAlloc.goalDeposits) {
-      allocatedByGoal.set(deposit.goalId, (allocatedByGoal.get(deposit.goalId) ?? 0) + deposit.amount);
-    }
-
-    let savingsCents = toCents(thisAlloc.savingsDeposit);
-    if (!applyExtras) continue;
-
-    const nextDebt = () => accounts.find((account) => !account.paidOff);
-    const finishesWith = (account: DebtAccount, extraCents: number) => {
-      return extraCents > 0 && extraCents >= account.principalCents;
-    };
-
-    const tryPayDebt = (budgetCents: number, floorCents: number): number => {
-      const account = nextDebt();
-      if (!account || budgetCents <= floorCents) return 0;
-      let available = budgetCents - floorCents;
-      if (available <= 0) return 0;
-      if (finishesWith(account, available) === false && variant === 'standard') {
-        const standardFloor = savingsFloorCents(minSavingsPerPaycheck, 'standard', false);
-        available = Math.min(available, Math.max(0, budgetCents - standardFloor));
+    const currentBills = isReserved ? [] : uniqueBills(assignment);
+    const fundedBills = currentBills.filter((bill) => !bill.isUnpayable && !bill.isSkipped);
+    const unpayableBills = currentBills.filter((bill) => bill.isUnpayable && !bill.isSkipped);
+    const hasUnpaid = unpayableBills.length > 0;
+    const totalBillsAmount = fromCents(fundedBills.reduce((sum, bill) => sum + toCents(bill.amount), 0));
+    const freedAfterRepair = freedCents[i];
+    const positionBeforeTopUp = isReserved || assignment.unusable
+      ? 0
+      : regularPositionCents(i, freedAfterRepair) -
+        (hasUnpaid ? unpayableBills.reduce((sum, bill) => sum + toCents(bill.amount), 0) : 0);
+    const targetCents = toCents(effectiveTarget);
+    const minCents = toCents(effectiveMin);
+    let freed = freedAfterRepair;
+    let appliedToRemaining = 0;
+    if (applyExtras && !isReserved && !assignment.unusable) {
+      if (positionBeforeTopUp < minCents) {
+        const use = Math.min(freed, minCents - positionBeforeTopUp);
+        freed -= use;
+        appliedToRemaining += use;
       }
-      const applied = account.applyPayment(available, dateIso);
-      if (applied > 0) {
-        extraByPaycheck[i].push({
-          debtId: account.debtId,
-          billId: account.billId,
-          creditorName: account.creditorName,
-          amount: fromCents(applied),
-        });
-        if (account.paidOff) removeLaterOccurrences(account.billId, i);
+      const afterMin = positionBeforeTopUp + appliedToRemaining;
+      if (afterMin < targetCents) {
+        const use = Math.min(freed, targetCents - afterMin);
+        freed -= use;
+        appliedToRemaining += use;
       }
-      return applied;
-    };
+    }
+    freedCents[i] = freed;
 
-    const finishFloor = savingsFloorCents(
-      minSavingsPerPaycheck,
-      variant,
-      (() => {
+    const regularSurplusCents =
+      isReserved || assignment.unusable || hasUnpaid
+        ? 0
+        : Math.max(0, positionBeforeTopUp - targetCents);
+    const reservedSurplus = isReserved ? Math.max(0, totalIncome) : 0;
+
+    const goalDeposits: GoalDeposit[] = [];
+    const debtPayments: DebtPayment[] = [];
+    let savingsCents = 0;
+
+    if (!hasUnpaid && !assignment.unusable) {
+      const suffix = [];
+      for (let j = i; j < assignments.length; j++) {
+        const slot = assignments[j];
+        const slotIso = format(slot.date, 'yyyy-MM-dd');
+        let surplus: number;
+        if (j === i) {
+          surplus = isReserved ? reservedSurplus : fromCents(regularSurplusCents);
+        } else if (slot.unusable) {
+          surplus = 0;
+        } else if (isSavingsAndGoalsIncome(slot)) {
+          surplus = Math.max(0, slot.incomes.reduce((sum, income) => sum + income.amount, 0));
+        } else if (uniqueBills(slot).some((bill) => bill.isUnpayable && !bill.isSkipped)) {
+          surplus = 0;
+        } else {
+          const slotTarget = toCents(cashTargetForDate(cashOnHandByDate, slotIso, maxBudgetRemaining));
+          surplus = fromCents(Math.max(0, regularPositionCents(j, freedCents[j]) - slotTarget));
+        }
+        suffix.push({ date: slotIso, surplus });
+      }
+      const suffixGoals = goals.map((goal) => ({
+        id: goal.id,
+        name: goal.name,
+        targetAmount: goal.targetAmount,
+        alreadySaved: goal.alreadySaved + (allocatedByGoal.get(goal.id) ?? 0),
+        priority: goal.priority,
+        targetDate: goal.targetDate,
+      }));
+      const allocation = allocateFromSnapshot(
+        createCashFlowSnapshot(suffix, suffixGoals, { minSavingsPerPaycheck })
+      );
+      const thisAlloc = allocation.paychecks[0];
+      for (const deposit of thisAlloc.goalDeposits) {
+        addGoalDeposit(goalDeposits, deposit.goalId, deposit.goalName, deposit.amount);
+        allocatedByGoal.set(deposit.goalId, (allocatedByGoal.get(deposit.goalId) ?? 0) + deposit.amount);
+      }
+      savingsCents = toCents(thisAlloc.savingsDeposit);
+
+      if (applyExtras && !isReserved) {
         const account = nextDebt();
-        return account ? finishesWith(account, Math.max(0, savingsCents - toCents(50))) : false;
-      })()
-    );
-    const fromSavings = tryPayDebt(savingsCents, finishFloor);
-    savingsCents -= fromSavings;
+        let floor = variant === 'deep' ? fiftyCents : hundredCents;
+        if (variant === 'standard' && account && account.principalCents > 0) {
+          const drawToFifty = Math.max(0, savingsCents - fiftyCents);
+          if (drawToFifty >= account.principalCents) floor = fiftyCents;
+        }
+        const draw = account ? Math.min(Math.max(0, savingsCents - floor), account.principalCents) : 0;
+        if (account && draw > 0) {
+          const applied = account.applyPayment(draw, dateIso);
+          savingsCents -= applied;
+          recordPayment(debtPayments, account, applied);
+          if (account.paidOff) removeLaterOccurrences(account.billId, i);
+        }
 
-    if (freed > 0) {
-      const fromFreed = tryPayDebt(savingsCents + freed, savingsCents);
-      freed -= fromFreed;
-    }
-    if (freed > 0) {
-      for (const goal of [...goals].sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))) {
-        const remaining = Math.max(0, goal.targetAmount - goal.alreadySaved - (allocatedByGoal.get(goal.id) ?? 0));
-        const take = Math.min(Math.floor(fromCents(freed)), remaining);
-        if (take <= 0) continue;
-        allocatedByGoal.set(goal.id, (allocatedByGoal.get(goal.id) ?? 0) + take);
-        freed -= toCents(take);
+        const freedDebt = nextDebt();
+        if (freedDebt && freed > 0) {
+          const applied = freedDebt.applyPayment(Math.min(freed, freedDebt.principalCents), dateIso);
+          freed -= applied;
+          recordPayment(debtPayments, freedDebt, applied);
+          if (freedDebt.paidOff) removeLaterOccurrences(freedDebt.billId, i);
+        }
+        const byPriority = [...goals].sort(
+          (left, right) => left.priority - right.priority || left.id.localeCompare(right.id)
+        );
+        for (const goal of byPriority) {
+          const remaining = Math.max(
+            0,
+            Math.round(goal.targetAmount - goal.alreadySaved - (allocatedByGoal.get(goal.id) ?? 0))
+          );
+          const take = Math.min(Math.floor(freed / 100), remaining);
+          if (take <= 0) continue;
+          addGoalDeposit(goalDeposits, goal.id, goal.name, take);
+          allocatedByGoal.set(goal.id, (allocatedByGoal.get(goal.id) ?? 0) + take);
+          freed -= take * 100;
+        }
+        savingsCents += freed;
+        freedCents[i] = 0;
       }
     }
-  }
 
-  const paychecks = buildPaycheckEntries(
-    assignments,
-    startingBalance,
-    maxBudgetRemaining,
-    goals,
-    minCashOnHand,
-    minSavingsPerPaycheck,
-    cashOnHandByDate
-  );
-
-  if (applyExtras) {
-    for (let i = 0; i < paychecks.length; i++) {
-      const extras = extraByPaycheck[i];
-      if (!extras.length) continue;
-      const extraTotal = extras.reduce((sum, item) => sum + item.amount, 0);
-      const savings = Math.max(0, paychecks[i].savingsDeposit - extraTotal);
-      paychecks[i] = {
-        ...paychecks[i],
-        savingsDeposit: Math.round(savings * 100) / 100,
-        debtPayments: extras,
-        totalDebtPayments: Math.round(extraTotal * 100) / 100,
-      };
+    const totalGoalDeposits = goalDeposits.reduce((sum, deposit) => sum + deposit.amount, 0);
+    const savingsDeposit = fromCents(savingsCents);
+    const totalDebtPayments = fromCents(debtPayments.reduce((sum, payment) => sum + toCents(payment.amount), 0));
+    let budgetRemaining = fromCents(positionBeforeTopUp + appliedToRemaining);
+    if (isReserved) {
+      budgetRemaining = lastOperatingRemaining;
+    } else if (!hasUnpaid && (regularSurplusCents > 0 || appliedToRemaining > 0 || positionBeforeTopUp >= targetCents)) {
+      budgetRemaining = effectiveTarget;
     }
+    if (!isReserved && !assignment.unusable) {
+      totalSavingsDollars += savingsDeposit;
+    } else if (isReserved) {
+      totalSavingsDollars += savingsDeposit;
+    }
+
+    const allOperatingBillsUnpayable =
+      currentBills.length > 0 && currentBills.every((bill) => bill.isSkipped || bill.isUnpayable);
+    const isShortfall = isReserved
+      ? false
+      : assignment.unusable && allOperatingBillsUnpayable
+        ? true
+        : budgetRemaining < effectiveMin;
+
+    paychecks.push({
+      id: paycheckEntryId(purpose, dateIso),
+      purpose,
+      date: dateIso,
+      incomeSources: assignment.incomes.map((income) => ({
+        id: income.sourceId,
+        name: income.sourceName,
+        amount: income.amount,
+      })),
+      totalIncome,
+      bills: currentBills.map((bill) => ({
+        billId: bill.billId,
+        creditorName: bill.creditorName,
+        amount: bill.amount,
+        dueDay: bill.dueDay,
+        priority: bill.priority,
+        category: bill.category,
+        billDate: format(bill.date, 'yyyy-MM-dd'),
+        isIncomeAttached: bill.isIncomeAttached,
+        isUnpayable: bill.isUnpayable,
+        isSkipped: bill.isSkipped,
+        unfundableReason: bill.unfundableReason,
+        preferredIncomeSourceId: bill.preferredIncomeSourceId,
+      })),
+      totalBills: totalBillsAmount,
+      goalDeposits,
+      totalGoalDeposits,
+      budgetRemaining: fromCents(toCents(budgetRemaining)),
+      savingsDeposit,
+      totalSavings: fromCents(toCents(totalSavingsDollars)),
+      isShortfall,
+      targetCashOnHand: effectiveTarget,
+      minCashOnHand: effectiveMin,
+      savingsSqueezed: totalGoalDeposits > 0 && savingsDeposit < fromCents(toCents(SAVINGS_TARGET_FALLBACK)),
+      unpayableCount: unpayableBills.length,
+      hasUnpayableBills: hasUnpaid,
+      debtPayments,
+      totalDebtPayments,
+    });
+
+    if (!isReserved) lastOperatingRemaining = budgetRemaining;
   }
 
   return { paychecks, accounts, ignoredPins };
@@ -595,34 +676,46 @@ export function runDebtAcceleration(input: DebtAccelerationInput): DebtAccelerat
 
   const apply = input.accelerateDebtPayoff === true;
   const applied = apply ? chosen : accepted[0];
-  const planAccounts = chosen.variant === 'disabled' ? standard.accounts : chosen.accounts;
+  const chosenAccounts = chosen.variant === 'disabled' ? [] : chosen.accounts;
   const baselineRows = eligible.map((item) => {
     const baseline = baselineInterestFor(item, input.startIso, work);
-    const accelerated = planAccounts.find((account) => account.debtId === item.debt.id);
+    const accelerated = chosenAccounts.find((account) => account.debtId === item.debt.id);
     return {
       debtId: item.debt.id,
       billId: item.bill.id,
       creditorName: item.bill.creditorName,
       baselinePayoffDate: baseline.payoffDate,
-      acceleratedPayoffDate: accelerated?.payoffIso ?? baseline.payoffDate,
+      acceleratedPayoffDate:
+        chosen.variant === 'disabled' ? baseline.payoffDate : (accelerated?.payoffIso ?? null),
       baselineInterest: baseline.interest,
-      acceleratedInterest: accelerated ? fromCents(accelerated.totalInterestCents) : baseline.interest,
+      acceleratedInterest:
+        chosen.variant === 'disabled'
+          ? baseline.interest
+          : accelerated
+            ? fromCents(accelerated.totalInterestCents)
+            : baseline.interest,
     };
   });
 
-  const totalInterestSaved = Math.max(
-    0,
-    baselineRows.reduce((sum, row) => sum + row.baselineInterest - row.acceleratedInterest, 0)
-  );
+  const totalInterestSaved =
+    chosen.variant === 'disabled'
+      ? 0
+      : Math.max(
+          0,
+          baselineRows.reduce((sum, row) => sum + row.baselineInterest - row.acceleratedInterest, 0)
+        );
   const payoffDates = baselineRows
     .map((row) => row.acceleratedPayoffDate)
     .filter((value): value is string => Boolean(value))
     .sort();
-  const freedMonthlyCash = eligible.reduce((sum, item) => {
-    const accelerated = planAccounts.find((account) => account.debtId === item.debt.id);
-    if (accelerated?.paidOff) return sum + item.bill.budgetedAmount;
-    return sum;
-  }, 0);
+  const freedMonthlyCash =
+    chosen.variant === 'disabled'
+      ? 0
+      : eligible.reduce((sum, item) => {
+          const accelerated = chosenAccounts.find((account) => account.debtId === item.debt.id);
+          if (accelerated?.paidOff) return sum + item.bill.budgetedAmount;
+          return sum;
+        }, 0);
 
   const debtPlan: DebtPlan = {
     enabled: apply,
