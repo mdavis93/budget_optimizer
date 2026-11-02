@@ -68,6 +68,15 @@ export interface AssignmentModel {
   billDueIso: readonly string[];
   creditorNames: readonly string[];
   paycheckIso: readonly string[];
+  /**
+   * Set only by the Break-Glass relaxed re-solve. Production assignment omits it.
+   * Greedy then starts from this placement and breaks T7 ties by early-move count,
+   * then move count, then dollar-days.
+   */
+  advisorBaseline?: {
+    placement: Int32Array;
+    earlyDayCutoff: number;
+  };
 }
 
 export interface AssignmentModelInput {
