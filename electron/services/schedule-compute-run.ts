@@ -1,6 +1,7 @@
 import type { Bill, Income, Leave, SavingsGoal } from '@shared/types';
 import { SchedulerService } from './scheduler.service';
 import type {
+  ScheduleComputeMeta,
   ScheduleComputeProgressSink,
   ScheduleComputeRequest,
   ScheduleComputeSuccessMessage,
@@ -80,7 +81,16 @@ export function runScheduleCompute(
   });
 
   onProgress({ stage: 'assigning' });
-  const paychecks = assignPreparedHorizon(prepared, native.preferredAssignments);
+  let computeMeta: ScheduleComputeMeta = {
+    solver: 'greedy',
+    timings: { modelMs: 0, solveMs: 0, materializeMs: 0 },
+    ignoredPins: 0,
+  };
+  const paychecks = assignPreparedHorizon(prepared, native.preferredAssignments, {
+    onComputeMeta: (meta) => {
+      computeMeta = meta;
+    },
+  });
   const data = assembleAssignedSchedule(prepared, paychecks, {
     includePresentation: true,
     now,
@@ -149,5 +159,6 @@ export function runScheduleCompute(
       breakGlassAdvisor: data.breakGlassAdvisor,
       reconciliation: data.reconciliation,
     },
+    computeMeta,
   };
 }

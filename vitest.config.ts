@@ -30,6 +30,9 @@ export default defineConfig({
         'src/types/**',
         'src/constants/version.ts',
         'src/components/schedule/index.ts',
+        'electron/services/scheduler/solve.ts',
+        'electron/services/scheduler/clusters.ts',
+        'electron/services/scheduler/rebalance.ts',
       ],
       thresholds: {
         lines: 90,

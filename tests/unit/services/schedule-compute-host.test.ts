@@ -44,6 +44,11 @@ function scheduleResult(jobId: string, inputHash: string) {
     jobId,
     inputHash,
     op: 'schedule' as const,
+    computeMeta: {
+      solver: 'greedy' as const,
+      timings: { modelMs: 1, solveMs: 1, materializeMs: 1 },
+      ignoredPins: 0,
+    },
     schedule: {
       startDate: '2026-01-01',
       endDate: '2026-01-31',
@@ -90,6 +95,15 @@ describe('ScheduleComputeHost', () => {
     child.emit('message', scheduleResult('job-1', inputHash));
 
     await expect(pending).resolves.toMatchObject({ jobId: 'job-1', op: 'schedule' });
+    const { logger } = await import('../../../electron/services/logger.service');
+    expect(logger.info).toHaveBeenCalledWith(
+      'schedule-compute',
+      expect.objectContaining({
+        solver: 'greedy',
+        ignoredPins: 0,
+        timings: expect.objectContaining({ modelMs: 1, solveMs: 1, materializeMs: 1 }),
+      })
+    );
     host.dispose();
   });
 

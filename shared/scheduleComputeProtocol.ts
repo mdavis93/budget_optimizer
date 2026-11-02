@@ -78,6 +78,27 @@ export interface ScheduleComputeRequest {
   input: ScheduleComputeInputPayload;
 }
 
+export type ScheduleComputeSolver = 'greedy' | 'highs';
+
+export type ScheduleComputeFallbackReason =
+  | 'size_guard'
+  | 'load_rejected'
+  | 'non_optimal'
+  | 'limit_hit';
+
+export interface ScheduleComputeTimings {
+  modelMs: number;
+  solveMs: number;
+  materializeMs: number;
+}
+
+export interface ScheduleComputeMeta {
+  solver: ScheduleComputeSolver;
+  fallbackReason?: ScheduleComputeFallbackReason;
+  timings: ScheduleComputeTimings;
+  ignoredPins: number;
+}
+
 export interface ScheduleComputeScheduleSuccess {
   type: 'result';
   protocolVersion: typeof SCHEDULE_COMPUTE_PROTOCOL_VERSION;
@@ -85,6 +106,7 @@ export interface ScheduleComputeScheduleSuccess {
   inputHash: string;
   op: 'schedule';
   schedule: unknown;
+  computeMeta: ScheduleComputeMeta;
 }
 
 export interface ScheduleComputeGoalsSuccess {

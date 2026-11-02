@@ -139,8 +139,41 @@ export function assertScheduleComputeSuccessMessage(
 
   if (expected.op === 'schedule') {
     assertScheduleData(message.schedule);
+    assertComputeMeta(message.computeMeta);
   } else {
     assertGoalProjections(message.goalProjections);
+  }
+}
+
+const SOLVER_SET = new Set(['greedy', 'highs']);
+const FALLBACK_SET = new Set(['size_guard', 'load_rejected', 'non_optimal', 'limit_hit']);
+
+function assertComputeMeta(value: unknown): void {
+  if (!isRecord(value)) {
+    throw new Error('computeMeta must be an object');
+  }
+  if (typeof value.solver !== 'string' || !SOLVER_SET.has(value.solver)) {
+    throw new Error('computeMeta.solver must be greedy or highs');
+  }
+  if (value.fallbackReason !== undefined) {
+    if (typeof value.fallbackReason !== 'string' || !FALLBACK_SET.has(value.fallbackReason)) {
+      throw new Error('computeMeta.fallbackReason is not a known reason');
+    }
+  }
+  if (!isRecord(value.timings)) {
+    throw new Error('computeMeta.timings must be an object');
+  }
+  for (const key of ['modelMs', 'solveMs', 'materializeMs'] as const) {
+    if (!isFiniteNumber(value.timings[key]) || (value.timings[key] as number) < 0) {
+      throw new Error(`computeMeta.timings.${key} must be a non-negative finite number`);
+    }
+  }
+  if (
+    typeof value.ignoredPins !== 'number' ||
+    !Number.isInteger(value.ignoredPins) ||
+    value.ignoredPins < 0
+  ) {
+    throw new Error('computeMeta.ignoredPins must be a non-negative integer');
   }
 }
 
