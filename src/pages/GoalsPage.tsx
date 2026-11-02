@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SavingsGoal, SavingsGoalInput, GoalProjection } from '../types';
+import { SavingsGoal, SavingsGoalInput } from '../types';
 import { Target, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import Modal from '../components/Modal';
 import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
-import { useDraftData, useDraftStatus, useDraftActions } from '../context/DraftContext';
-import { reportError } from '../utils/reportError';
+import { useDraftData, useDraftActions, useSchedule } from '../context/DraftContext';
 import { MAX_SAVINGS_GOALS, nextAvailableGoalPriority } from '@shared/goalPriority';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
@@ -19,55 +18,52 @@ const INITIAL_FORM_VALUES: GoalFormValues = {
 };
 
 export default function GoalsPage() {
-  const { goals, budgetFields } = useDraftData();
-  const { dirtyDomains } = useDraftStatus();
+  const { goals, incomes, bills, budgetFields } = useDraftData();
+  const { createGoal, updateGoal, deleteGoal } = useDraftActions();
   const {
-    getGoalProjections,
-    createGoal,
-    updateGoal,
-    deleteGoal,
-  } = useDraftActions();
+    generateSchedule,
+    schedule,
+    scheduleStartDate,
+    scheduleMonths,
+    isViewportReady,
+    scheduleStartingBalance,
+    scheduleInputHash,
+    isLoading,
+  } = useSchedule();
   const navigate = useNavigate();
-  const [projections, setProjections] = useState<GoalProjection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<GoalFormValues>(INITIAL_FORM_VALUES);
   const [isSaving, setIsSaving] = useState(false);
 
-  const loadProjections = useCallback(async () => {
-    try {
-      const data = await getGoalProjections();
-      setProjections(data);
-    } catch (error) {
-      void reportError('renderer:GoalsPage.loadProjections', error);
-    }
-  }, [getGoalProjections]);
-
   useEffect(() => {
     let isMounted = true;
 
-    const doLoad = async () => {
-      setIsLoading(true);
-      try {
-        if (isMounted) {
-          await loadProjections();
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+    const loadSchedule = async () => {
+      if (isMounted) {
+        await generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance);
       }
     };
 
-    void doLoad();
-    return () => { isMounted = false; };
-  }, [goals, dirtyDomains.size, loadProjections]);
+    if (isViewportReady && (incomes.length > 0 || bills.length > 0 || goals.length > 0)) {
+      void loadSchedule();
+    }
 
-  const refreshData = useCallback(async () => {
-    await loadProjections();
-  }, [loadProjections]);
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    incomes,
+    bills,
+    generateSchedule,
+    scheduleStartDate,
+    scheduleMonths,
+    isViewportReady,
+    scheduleStartingBalance,
+    scheduleInputHash,
+    goals.length,
+  ]);
 
   const resetForm = () => setFormValues(INITIAL_FORM_VALUES);
 
@@ -93,7 +89,7 @@ export default function GoalsPage() {
     setEditingGoal(goal);
   };
 
-  const handleCreate = async (event: React.FormEvent) => {
+  const handleCreate = (event: React.FormEvent) => {
     event.preventDefault();
     const { name, targetAmount, targetDate, alreadySaved, priority } = formValues;
     if (!name.trim() || targetAmount <= 0 || !targetDate) return;
@@ -110,14 +106,13 @@ export default function GoalsPage() {
       if (createGoal(input)) {
         setShowCreateModal(false);
         resetForm();
-        await refreshData();
       }
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleUpdate = async (event: React.FormEvent) => {
+  const handleUpdate = (event: React.FormEvent) => {
     event.preventDefault();
     const { name, targetAmount, targetDate, alreadySaved, priority } = formValues;
     if (!editingGoal || !name.trim() || targetAmount <= 0 || !targetDate) return;
@@ -134,17 +129,15 @@ export default function GoalsPage() {
       if (updateGoal(editingGoal.id, updates)) {
         setEditingGoal(null);
         resetForm();
-        await refreshData();
       }
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (deleteGoal(id)) {
       setDeleteConfirm(null);
-      await refreshData();
     }
   };
 
@@ -160,7 +153,10 @@ export default function GoalsPage() {
     [navigate]
   );
 
-  if (isLoading) {
+  const showPageSpinner =
+    isViewportReady && isLoading && !schedule && goals.length > 0;
+
+  if (showPageSpinner) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
@@ -169,6 +165,7 @@ export default function GoalsPage() {
   }
 
   const minCashOnHand = budgetFields?.minCashOnHand ?? 100;
+  const projections = schedule?.goalProjections ?? [];
 
   return (
     <div className="space-y-6">

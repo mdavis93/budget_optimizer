@@ -1,9 +1,9 @@
 /**
- * Cross-process protocol for schedule / goal compute in a utilityProcess.
+ * Cross-process protocol for schedule compute in a utilityProcess.
  * Main owns DB I/O; the worker only receives plain payloads and returns ephemeral results.
  */
 
-export const SCHEDULE_COMPUTE_PROTOCOL_VERSION = 1 as const;
+export const SCHEDULE_COMPUTE_PROTOCOL_VERSION = 2 as const;
 
 export const SCHEDULE_COMPUTE_SERVICE_NAME = 'budget-optimizer-schedule';
 
@@ -29,7 +29,7 @@ export const SCHEDULE_COMPUTE_STAGES = [
 
 export type ScheduleComputeStage = (typeof SCHEDULE_COMPUTE_STAGES)[number];
 
-export type ScheduleComputeOp = 'schedule' | 'goals';
+export type ScheduleComputeOp = 'schedule';
 
 export type ScheduleComputeErrorCode =
   | 'timeout'
@@ -109,18 +109,7 @@ export interface ScheduleComputeScheduleSuccess {
   computeMeta: ScheduleComputeMeta;
 }
 
-export interface ScheduleComputeGoalsSuccess {
-  type: 'result';
-  protocolVersion: typeof SCHEDULE_COMPUTE_PROTOCOL_VERSION;
-  jobId: string;
-  inputHash: string;
-  op: 'goals';
-  goalProjections: unknown;
-}
-
-export type ScheduleComputeSuccessMessage =
-  | ScheduleComputeScheduleSuccess
-  | ScheduleComputeGoalsSuccess;
+export type ScheduleComputeSuccessMessage = ScheduleComputeScheduleSuccess;
 
 export interface ScheduleComputeWorkerErrorMessage {
   type: 'error';

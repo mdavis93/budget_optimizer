@@ -312,7 +312,7 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 **Where:** `src/pages/SummaryPage.tsx` `scheduleData` + its own `generateSchedule` effect.
 
-**Remediation:** Read `useSchedule().schedule` (and loading/error). Delete the shadow state. Same for Goals if it still calls `goals:get-projections` when `schedule.goalProjections` is already on the cached build **and** the identity hash matches.
+**Remediation:** Read `useSchedule().schedule` (and loading/error). Delete the shadow state. Goals now reads `schedule.goalProjections` from the cached build; the `goals:get-projections` channel is gone.
 
 **Why this is the right fix:** One schedule in context is the cache. A page-local copy is how Summary and Schedule disagree after a draft edit.
 

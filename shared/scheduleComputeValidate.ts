@@ -94,23 +94,6 @@ function assertScheduleData(schedule: unknown): void {
   assertScheduleSummary(schedule.summary);
 }
 
-function assertGoalProjections(value: unknown): void {
-  if (!Array.isArray(value)) {
-    throw new Error('goalProjections must be an array');
-  }
-  for (const item of value) {
-    if (!isRecord(item)) {
-      throw new Error('goalProjection entries must be objects');
-    }
-    if (typeof item.goalId !== 'string' || typeof item.goalName !== 'string') {
-      throw new Error('goalProjection requires goalId and goalName strings');
-    }
-    if (!isFiniteNumber(item.targetAmount) || !isFiniteNumber(item.alreadySaved)) {
-      throw new Error('goalProjection amounts must be finite numbers');
-    }
-  }
-}
-
 /**
  * Structural allowlist validation for worker results.
  * Does not reject unknown nested keys (scheduler may add fields).
@@ -137,12 +120,8 @@ export function assertScheduleComputeSuccessMessage(
     throw new Error('compute result op mismatch');
   }
 
-  if (expected.op === 'schedule') {
-    assertScheduleData(message.schedule);
-    assertComputeMeta(message.computeMeta);
-  } else {
-    assertGoalProjections(message.goalProjections);
-  }
+  assertScheduleData(message.schedule);
+  assertComputeMeta(message.computeMeta);
 }
 
 const SOLVER_SET = new Set(['greedy', 'highs']);

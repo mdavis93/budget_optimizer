@@ -13,7 +13,6 @@ import type {
   DebtInput,
   DebtWithAmortization,
   DraftOverlay,
-  GoalProjection,
   Income,
   IncomeInput,
   IncomeOverride,
@@ -119,7 +118,6 @@ export interface ElectronAPI {
     create: (input: SavingsGoalInput) => Promise<ApiResult<SavingsGoal>>;
     update: (id: string, input: Partial<SavingsGoalInput>) => Promise<ApiResult<SavingsGoal>>;
     delete: (id: string) => Promise<ApiResult>;
-    getProjections: (overlay?: DraftOverlay) => Promise<ApiResult<GoalProjection[]>>;
   };
 
   debts: {

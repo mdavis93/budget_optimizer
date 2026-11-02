@@ -22,7 +22,7 @@ import {
   type ScheduleComputeOp,
   type ScheduleComputeProgressMessage,
 } from '@shared/scheduleComputeProtocol';
-import type { GoalProjection, ScheduleData } from '@shared/types';
+import type { ScheduleData } from '@shared/types';
 import { resolveAppBrowserWindow } from '../utils/dialog';
 import { validateScheduleBuildArgs } from '../services/validation.service';
 import { applyLockSideEffects } from './appLock';
@@ -650,48 +650,6 @@ export function registerIpcHandlers(
       }
     });
     return result;
-  }));
-
-  ipcMain.handle('goals:get-projections', withBudgetGuard(services, async (_, overlay?: DraftOverlayInput) => {
-    const { budgetManager, database } = ready();
-    const resolved = resolveScheduleInputs(budgetManager, database, overlay);
-    if (resolved.goals.length === 0) {
-      return { success: true, data: [] as GoalProjection[] };
-    }
-
-    const { skippedSet, manualAssignments, preferredAssignments, incomeOverridesMap, debtPayoffs } = buildScheduleMaps(
-      resolved,
-      services.debt
-    );
-
-    return runOffloadedCompute(
-      services,
-      'goals',
-      {
-        incomes: resolved.incomes,
-        bills: resolved.bills,
-        startDate: resolved.scheduleStartDate,
-        months: 12,
-        startingBalance: resolved.startingBalance,
-        skippedBills: skippedSet,
-        manualAssignments,
-        preferredAssignments,
-        targetCashOnHand: resolved.targetCashOnHand,
-        goals: resolved.goals,
-        minCashOnHand: resolved.minCashOnHand,
-        minSavingsPerPaycheck: resolved.minSavingsPerPaycheck,
-        debtPayoffs,
-        incomeOverrides: incomeOverridesMap,
-        leaves: resolved.leaves,
-        nowIso: new Date().toISOString(),
-      },
-      (message) => {
-        if (message.op !== 'goals') {
-          throw new Error('Unexpected compute op for goals');
-        }
-        return message.goalProjections as GoalProjection[];
-      }
-    );
   }));
 
   ipcMain.handle('schedule:build', withBudgetGuard(services, async (event, startDate: string, months: number, startingBalance: number, overlay?: DraftOverlayInput) => {

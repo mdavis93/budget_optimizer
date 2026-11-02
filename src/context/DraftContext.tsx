@@ -15,7 +15,6 @@ import {
   Debt,
   DebtInput,
   DebtWithAmortization,
-  GoalProjection,
   Income,
   IncomeInput,
   IncomeOverride,
@@ -116,7 +115,6 @@ interface DraftActionsContextValue {
   applyBreakGlassPlan: (plan: BreakGlassPlan) => boolean;
   updateBudgetFields: (updates: Partial<DraftBudgetFields>) => boolean;
   getDebtsWithAmortization: () => Promise<DebtWithAmortization[]>;
-  getGoalProjections: () => Promise<GoalProjection[]>;
 }
 
 interface ScheduleContextValue {
@@ -984,18 +982,6 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return [];
   }, [buildDraftOverlay]);
 
-  const getGoalProjections = useCallback(async (): Promise<GoalProjection[]> => {
-    const overlay = buildDraftOverlay();
-    const result = await window.electronAPI.goals.getProjections(overlay);
-    if (result.errorCode === 'superseded' || result.errorCode === 'cancelled') {
-      return [];
-    }
-    if (result.success && result.data) {
-      return result.data as GoalProjection[];
-    }
-    return [];
-  }, [buildDraftOverlay]);
-
   const scheduleValue = useScheduleEngine({
     draft,
     currentBudget,
@@ -1076,7 +1062,6 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       applyBreakGlassPlan,
       updateBudgetFields,
       getDebtsWithAmortization,
-      getGoalProjections,
     }),
     [
       buildDraftOverlay,
@@ -1114,7 +1099,6 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       applyBreakGlassPlan,
       updateBudgetFields,
       getDebtsWithAmortization,
-      getGoalProjections,
     ]
   );
 

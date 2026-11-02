@@ -253,7 +253,6 @@ export const createMockElectronAPI = () => {
       create: vi.fn().mockResolvedValue({ success: true, data: createMockGoal() }),
       update: vi.fn().mockResolvedValue({ success: true, data: createMockGoal() }),
       delete: vi.fn().mockResolvedValue({ success: true }),
-      getProjections: vi.fn().mockResolvedValue({ success: true, data: [createMockGoalProjection()] }),
     },
 
     debts: {

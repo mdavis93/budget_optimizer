@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { addMonths, format, parseISO } from 'date-fns';
 import { applyScheduleViewport } from '../../../src/utils/scheduleViewport';
 import { Bill, PaycheckEntry, ScheduleData } from '../../../src/types';
-import { createMockBill, createMockPaycheck, createMockSchedule } from '../../mocks/electron-api.mock';
+import { createMockBill, createMockGoalProjection, createMockPaycheck, createMockSchedule } from '../../mocks/electron-api.mock';
 
 function buildMonthlyPaychecks(): PaycheckEntry[] {
   return Array.from({ length: 12 }, (_, idx) => {
@@ -88,6 +88,28 @@ describe('applyScheduleViewport', () => {
       expect(sixMonth.paychecks).toHaveLength(7);
       expect(sixMonth.paychecks.at(-1)?.date).toBe('2026-07-01');
       expect(sixMonth.endDate).toBe('2026-07-01');
+    });
+
+    it('keeps full-horizon goalProjections on a 3-month viewport', () => {
+      const fullSchedule = buildSchedule({
+        goalProjections: [
+          createMockGoalProjection({
+            goalId: 'goal-near',
+            targetDate: '2026-02-15',
+          }),
+          createMockGoalProjection({
+            goalId: 'goal-far',
+            targetDate: '2026-12-31',
+          }),
+        ],
+      });
+
+      const threeMonth = applyScheduleViewport(fullSchedule, 3, bills, 1000);
+
+      expect(threeMonth.goalProjections).toEqual(fullSchedule.goalProjections);
+      expect(threeMonth.goalProjections?.some((projection) => projection.targetDate === '2026-12-31')).toBe(
+        true
+      );
     });
 
     it('keeps full 12 month view unchanged', () => {

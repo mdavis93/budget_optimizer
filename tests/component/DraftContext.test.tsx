@@ -54,7 +54,6 @@ function DraftHarness() {
       <div data-testid="dirty-budget">{String(draft.isDomainDirty('budget'))}</div>
       <div data-testid="budget-starting-balance">{draft.budgetFields?.startingBalance ?? -1}</div>
       <div data-testid="amortization-result">0</div>
-      <div data-testid="goal-projection-result">0</div>
       <button
         onClick={() =>
           draft.createIncome({
@@ -447,16 +446,6 @@ function DraftHarness() {
       >
         get-amortization
       </button>
-      <button
-        onClick={() => {
-          void draft.getGoalProjections().then((data) => {
-            const el = document.querySelector('[data-testid="goal-projection-result"]');
-            if (el) el.textContent = String(data.length);
-          });
-        }}
-      >
-        get-goal-projections
-      </button>
     </div>
   );
 }
@@ -616,10 +605,6 @@ describe('DraftContext', () => {
     mockAPI.debts.getAllWithAmortization.mockResolvedValue({
       success: true,
       data: [{ debt: { id: 'debt-1' }, amortization: { monthsToPayoff: 10 }, bill: null }],
-    });
-    mockAPI.goals.getProjections.mockResolvedValue({
-      success: true,
-      data: [{ goalId: 'goal-1', status: 'achievable' }],
     });
   });
 
@@ -825,11 +810,7 @@ describe('DraftContext', () => {
       });
     });
 
-    it('loads amortization and goal projections when IPC succeeds', async () => {
-      mockAPI.goals.getProjections.mockResolvedValueOnce({
-        success: true,
-        data: [{ goalId: 'goal-1', status: 'achievable' }],
-      });
+    it('loads amortization when IPC succeeds', async () => {
       (mockAPI as unknown as { debts: { getAllWithAmortization: ReturnType<typeof vi.fn> } }).debts
         .getAllWithAmortization.mockResolvedValueOnce({
           success: true,
@@ -842,11 +823,9 @@ describe('DraftContext', () => {
       });
 
       fireEvent.click(screen.getByText('get-amortization'));
-      fireEvent.click(screen.getByText('get-goal-projections'));
 
       await waitFor(() => {
         expect(screen.getByTestId('amortization-result')).toHaveTextContent('1');
-        expect(screen.getByTestId('goal-projection-result')).toHaveTextContent('1');
       });
     });
 
@@ -902,7 +881,7 @@ describe('DraftContext', () => {
       });
     });
 
-    it('supports delete/discard/reload/save-all and projection lookups', async () => {
+    it('supports delete/discard/reload/save-all and amortization lookups', async () => {
       renderProvider();
       await waitFor(() => {
         expect(screen.getByTestId('income-count')).toHaveTextContent('1');
@@ -926,10 +905,8 @@ describe('DraftContext', () => {
       });
 
       fireEvent.click(screen.getByText('get-amortization'));
-      fireEvent.click(screen.getByText('get-goal-projections'));
       await waitFor(() => {
         expect(screen.getByTestId('amortization-result')).toHaveTextContent('1');
-        expect(screen.getByTestId('goal-projection-result')).toHaveTextContent('1');
       });
 
       fireEvent.click(screen.getByText('discard-all'));
@@ -1011,22 +988,18 @@ describe('DraftContext', () => {
       expect(screen.getByTestId('dirty-bills')).toHaveTextContent('true');
     });
 
-    it('returns empty projection results when IPC responses are unsuccessful', async () => {
+    it('returns empty amortization results when IPC responses are unsuccessful', async () => {
       mockAPI.debts.getAllWithAmortization.mockResolvedValueOnce({ success: false, error: 'no amortization' });
-      mockAPI.goals.getProjections.mockResolvedValueOnce({ success: false, error: 'no goals' });
       renderProvider();
 
       fireEvent.click(screen.getByText('get-amortization'));
-      fireEvent.click(screen.getByText('get-goal-projections'));
       await waitFor(() => {
         expect(screen.getByTestId('amortization-result')).toHaveTextContent('0');
-        expect(screen.getByTestId('goal-projection-result')).toHaveTextContent('0');
       });
     });
 
-    it('returns empty projection results when IPC succeeds without data', async () => {
+    it('returns empty amortization results when IPC succeeds without data', async () => {
       mockAPI.debts.getAllWithAmortization.mockResolvedValueOnce({ success: true, data: undefined });
-      mockAPI.goals.getProjections.mockResolvedValueOnce({ success: true, data: null });
       renderProvider();
 
       await waitFor(() => {
@@ -1034,10 +1007,8 @@ describe('DraftContext', () => {
       });
 
       fireEvent.click(screen.getByText('get-amortization'));
-      fireEvent.click(screen.getByText('get-goal-projections'));
       await waitFor(() => {
         expect(screen.getByTestId('amortization-result')).toHaveTextContent('0');
-        expect(screen.getByTestId('goal-projection-result')).toHaveTextContent('0');
       });
     });
 
