@@ -127,8 +127,9 @@ describe('SpreadsheetService', () => {
       expect(scheduleSheet).toBeDefined();
       expect(paycheckSheet).toBeDefined();
       expect(scheduleSheet!.rowCount).toBeGreaterThan(4);
-      expect(paycheckSheet!.getRow(2).getCell(9).value).toBe('');
-      expect(paycheckSheet!.getRow(3).getCell(9).value).toBe('Yes');
+      // Incidental: Debt Paydown was inserted before Shortfall, so Shortfall moved from column 9 to 10.
+      expect(paycheckSheet!.getRow(2).getCell(10).value).toBe('');
+      expect(paycheckSheet!.getRow(3).getCell(10).value).toBe('Yes');
     });
   });
 
@@ -146,6 +147,55 @@ describe('SpreadsheetService', () => {
   });
 
   describe('hostile', () => {
+    it('writes a creditor name that starts with = as text, not an Excel formula', async () => {
+      const service = new SpreadsheetService();
+      const outputPath = path.join(os.tmpdir(), `budget-optimizer-spreadsheet-formula-${Date.now()}.xlsx`);
+      createdFiles.push(outputPath);
+      const schedule = createMockSchedule({
+        paychecks: [{
+          date: '2026-01-15',
+          incomeSources: [{ id: 'income-1', name: 'Salary', amount: 2000 }],
+          totalIncome: 2000,
+          bills: [{
+            billId: 'bill-1',
+            creditorName: '=HYPERLINK("http://evil")',
+            amount: 100,
+            dueDay: 1,
+            priority: 'normal' as const,
+            category: 'debt',
+            billDate: '2026-01-15',
+            isIncomeAttached: false,
+            isUnpayable: false,
+          }],
+          totalBills: 100,
+          goalDeposits: [],
+          totalGoalDeposits: 0,
+          budgetRemaining: 250,
+          savingsDeposit: 0,
+          totalSavings: 0,
+          isShortfall: false,
+        }],
+      });
+
+      const result = await service.generateXlsx(schedule as never, outputPath);
+      expect(result.success).toBe(true);
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(outputPath);
+      const sheet = workbook.getWorksheet('Schedule')!;
+      let description: ExcelJS.CellValue | undefined;
+      sheet.eachRow((row) => {
+        const value = row.getCell(3).value;
+        const text = typeof value === 'string'
+          ? value
+          : value && typeof value === 'object' && 'richText' in value
+            ? value.richText.map((part) => part.text).join('')
+            : '';
+        if (text.startsWith('=')) description = value;
+      });
+      expect(description).toEqual({ richText: [{ text: '=HYPERLINK("http://evil")' }] });
+      expect(JSON.stringify(description)).not.toContain('"formula"');
+    });
+
     it('returns failure object for invalid output path', async () => {
       const service = new SpreadsheetService();
       const invalidPath = path.join('/definitely-not-real', 'subdir', 'report.xlsx');

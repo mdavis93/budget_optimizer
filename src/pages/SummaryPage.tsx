@@ -6,6 +6,7 @@ import { CHART_COLORS } from '../components/charts/chartTheme';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
 import { SCHEDULE_VIEWPORT_MONTHS, type ScheduleViewportMonths } from '@shared/scheduleViewportMonths';
+import type { DebtPlan } from '@shared/types';
 
 const CATEGORY_COLORS: Record<string, string> = {
   Housing: CHART_COLORS.primary,
@@ -48,6 +49,7 @@ export default function SummaryPage() {
       totalSavingsDeposits: number;
       finalSavingsBalance: number;
     };
+    debtPlan?: DebtPlan;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [savingsAPY, setSavingsAPY] = useState(0);
@@ -83,6 +85,7 @@ export default function SummaryPage() {
           setScheduleData({
             paychecks: result.paychecks,
             summary: result.summary,
+            debtPlan: result.debtPlan,
           });
         }
       } finally {
@@ -234,6 +237,22 @@ export default function SummaryPage() {
 
       {hasData && !isLoading && (
         <div className="space-y-6">
+          {scheduleData?.debtPlan?.enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="card p-4">
+                <p className="text-sm text-(--color-text-muted)">Debt-free date</p>
+                <p className="text-xl font-semibold">{scheduleData.debtPlan.debtFreeDate ?? '—'}</p>
+              </div>
+              <div className="card p-4">
+                <p className="text-sm text-(--color-text-muted)">Interest saved</p>
+                <p className="text-xl font-semibold">{formatCurrency(scheduleData.debtPlan.totalInterestSaved)}</p>
+              </div>
+              <div className="card p-4">
+                <p className="text-sm text-(--color-text-muted)">Freed monthly cash</p>
+                <p className="text-xl font-semibold">{formatCurrency(scheduleData.debtPlan.freedMonthlyCash)}</p>
+              </div>
+            </div>
+          )}
           {/* Top Row: Income vs Expenses + Category Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Income vs Expenses */}

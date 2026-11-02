@@ -5,9 +5,11 @@ interface BudgetAllocationSectionProps {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  accelerateDebtPayoff: boolean;
   onTargetCashOnHandChange: (value: number) => void;
   onMinCashOnHandChange: (value: number) => void;
   onMinSavingsPerPaycheckChange: (value: number) => void;
+  onAccelerateDebtPayoffChange: (enabled: boolean) => void;
 }
 
 export default function BudgetAllocationSection({
@@ -15,9 +17,11 @@ export default function BudgetAllocationSection({
   targetCashOnHand,
   minCashOnHand,
   minSavingsPerPaycheck,
+  accelerateDebtPayoff,
   onTargetCashOnHandChange,
   onMinCashOnHandChange,
   onMinSavingsPerPaycheckChange,
+  onAccelerateDebtPayoffChange,
 }: BudgetAllocationSectionProps) {
   return (
     <div className="card">
@@ -88,6 +92,21 @@ export default function BudgetAllocationSection({
           <p className="text-sm text-(--color-text-muted) mt-1">
             This amount goes to savings first, before allocating to goals. 
             Set to 0 to let goals take priority over savings.
+          </p>
+        </div>
+
+        <div className="pt-2 border-t border-(--color-border)">
+          <label htmlFor="settings-accelerate-debt" className="flex items-center gap-2">
+            <input
+              id="settings-accelerate-debt"
+              type="checkbox"
+              checked={accelerateDebtPayoff}
+              onChange={(event) => onAccelerateDebtPayoffChange(event.target.checked)}
+            />
+            <span className="label mb-0">Accelerate debt payoff</span>
+          </label>
+          <p className="text-sm text-(--color-text-muted) mt-1">
+            When on, extra paycheck cash pays down the highest-APR debt after goals and the savings floor.
           </p>
         </div>
       </div>

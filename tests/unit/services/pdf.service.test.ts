@@ -133,6 +133,39 @@ describe('PdfService.generateHtml', () => {
   });
 
   describe('hostile', () => {
+    it('escapes HTML in a debt-paydown creditor name', () => {
+      const service = new PdfService();
+      const html = service.generateHtml({
+        ...schedule,
+        paychecks: [
+          {
+            ...schedule.paychecks[0],
+            debtPayments: [{
+              debtId: 'd1',
+              billId: 'b1',
+              creditorName: '<img src=x onerror=alert(1)>',
+              amount: 25,
+            }],
+            totalDebtPayments: 25,
+          },
+        ],
+        debtPlan: {
+          enabled: true,
+          strategy: 'avalanche',
+          variant: 'standard',
+          debts: [],
+          excluded: [],
+          debtFreeDate: '<script>alert(1)</script>',
+          totalInterestSaved: 10,
+          freedMonthlyCash: 5,
+        },
+      });
+      expect(html).not.toContain('<img src=x onerror=alert(1)>');
+      expect(html).not.toContain('<script>alert(1)</script>');
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+      expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+
     it('escapes script tags in creditor names and other user-controlled fields', () => {
       const service = new PdfService();
       const html = service.generateHtml(schedule);

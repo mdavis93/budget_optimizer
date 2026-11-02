@@ -35,6 +35,7 @@ interface PaycheckViewProps {
   formatCurrency: (amount: number) => string;
   maxBudgetRemaining: number;
   minCashOnHand: number;
+  debtPlanEnabled?: boolean;
   onSkipBill: (billId: string, billDate: string) => void;
   onUnskipBill: (billId: string, billDate: string) => void;
   skippingBill: string | null;
@@ -124,6 +125,7 @@ function PaycheckView({
   formatCurrency,
   maxBudgetRemaining,
   minCashOnHand,
+  debtPlanEnabled = false,
   onSkipBill,
   onUnskipBill,
   skippingBill,
@@ -160,7 +162,10 @@ function PaycheckView({
         <div>
           <h3 className="font-semibold">Paychecks ({paychecks.length})</h3>
           <p className="text-xs text-(--color-text-muted)">
-            Target cash on hand: {formatCurrency(maxBudgetRemaining)} • Surplus above target funds goals and savings
+            Target cash on hand: {formatCurrency(maxBudgetRemaining)} •{' '}
+            {debtPlanEnabled
+              ? 'Surplus above target funds goals, debt paydown, and savings'
+              : 'Surplus above target funds goals and savings'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -267,6 +272,11 @@ function PaycheckView({
                       {isBelowMinimum && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 dark:bg-warning-500/20 text-warning-800 dark:text-warning-200">
                           Below minimum
+                        </span>
+                      )}
+                      {(paycheck.totalDebtPayments ?? 0) > 0 && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-danger-100 dark:bg-danger-500/20 text-danger-800 dark:text-danger-200">
+                          Debt paydown {formatCurrency(paycheck.totalDebtPayments ?? 0)}
                         </span>
                       )}
                     </p>

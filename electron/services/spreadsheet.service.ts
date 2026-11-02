@@ -5,6 +5,13 @@ import type { ScheduleData } from './scheduler.service';
 import { PRIORITY_LABELS } from '../utils/constants';
 import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
 
+function excelCellText(value: string): string | { richText: Array<{ text: string }> } {
+  if (value.startsWith('=')) {
+    return { richText: [{ text: value }] };
+  }
+  return value;
+}
+
 function excelCurrencyNumFmt(currency: string): string {
   const symbol =
     new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' })
@@ -117,29 +124,37 @@ export class SpreadsheetService {
   ): void {
     const sheet = workbook.addWorksheet('By Paycheck');
 
-    sheet.columns = [
-      { key: 'date', width: 16 },
-      { key: 'incomeSources', width: 28 },
-      { key: 'totalIncome', width: 14 },
-      { key: 'totalBills', width: 14 },
-      { key: 'goalDeposits', width: 14 },
-      { key: 'savingsDeposit', width: 14 },
-      { key: 'budgetRemaining', width: 16 },
-      { key: 'savingsBalance', width: 16 },
-      { key: 'shortfall', width: 10 },
-    ];
-
-    const header = sheet.addRow([
+    const headers = [
       'Paycheck Date',
       'Income Sources',
       'Total Income',
       'Total Bills',
       'Goal Deposits',
+      'Debt Paydown',
       'Savings Transfer',
       'Budget Remaining',
       'Savings Balance',
       'Shortfall',
+    ];
+    const currencyHeaders = new Set([
+      'Total Income',
+      'Total Bills',
+      'Goal Deposits',
+      'Debt Paydown',
+      'Savings Transfer',
+      'Budget Remaining',
+      'Savings Balance',
     ]);
+    const currencyColumns = headers.flatMap((header, index) =>
+      currencyHeaders.has(header) ? [index + 1] : []
+    );
+
+    sheet.columns = headers.map((header) => ({
+      key: header,
+      width: header === 'Income Sources' ? 28 : header === 'Paycheck Date' ? 16 : 14,
+    }));
+
+    const header = sheet.addRow(headers);
     header.font = { bold: true };
     header.eachCell(cell => {
       cell.fill = {
@@ -152,17 +167,18 @@ export class SpreadsheetService {
     schedule.paychecks.forEach(paycheck => {
       const row = sheet.addRow([
         format(parseISO(paycheck.date), 'yyyy-MM-dd'),
-        `${isSavingsAndGoalsIncome(paycheck) ? '[Savings deposit] ' : ''}${paycheck.incomeSources.map(s => s.name).join(' + ')}`,
+        excelCellText(`${isSavingsAndGoalsIncome(paycheck) ? '[Savings deposit] ' : ''}${paycheck.incomeSources.map(s => s.name).join(' + ')}`),
         paycheck.totalIncome,
         paycheck.totalBills,
         paycheck.totalGoalDeposits,
+        paycheck.totalDebtPayments ?? 0,
         paycheck.savingsDeposit,
         paycheckSpendRemaining(paycheck),
         paycheck.totalSavings,
         paycheck.isShortfall ? 'Yes' : '',
       ]);
 
-      [3, 4, 5, 6, 7, 8].forEach(col => {
+      currencyColumns.forEach(col => {
         row.getCell(col).numFmt = currencyFormat;
       });
 
@@ -245,7 +261,7 @@ export class SpreadsheetService {
         const row = sheet.addRow([
           paycheckDateStr,
           'Bill',
-          bill.creditorName,
+          excelCellText(bill.creditorName),
           PRIORITY_LABELS[bill.priority],
           bill.isIncomeAttached ? 'Per Paycheck' : format(parseISO(bill.billDate), 'yyyy-MM-dd'),
           -bill.amount,
