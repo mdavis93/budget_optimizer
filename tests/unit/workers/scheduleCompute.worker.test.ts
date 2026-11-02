@@ -51,6 +51,32 @@ describe('scheduleCompute.worker handleMessage', () => {
     expect(exit).toHaveBeenCalledWith(0);
   });
 
+  it('rejects protocol v1 compute without running the job', async () => {
+    const { runScheduleCompute } = await import(
+      '../../../electron/services/schedule-compute-run'
+    );
+    const { handleMessage } = await import('../../../electron/workers/scheduleCompute.worker');
+    handleMessage({
+      protocolVersion: 1,
+      jobId: 'job-v1',
+      inputHash: 'hash-v1',
+      op: 'schedule',
+      input: {},
+    });
+
+    expect(runScheduleCompute).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        jobId: 'job-v1',
+        inputHash: 'hash-v1',
+        error: 'unsupported compute protocol version',
+        protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      })
+    );
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
   it('reports compute failures with the request job id', async () => {
     const { runScheduleCompute } = await import(
       '../../../electron/services/schedule-compute-run'

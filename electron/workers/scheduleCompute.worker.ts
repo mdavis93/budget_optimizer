@@ -43,6 +43,18 @@ export function handleMessage(data: unknown): void {
   }
 
   const request = data as ScheduleComputeRequest;
+  if (request.protocolVersion !== SCHEDULE_COMPUTE_PROTOCOL_VERSION) {
+    reply({
+      type: 'error',
+      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
+      jobId: request.jobId ?? 'unknown',
+      inputHash: request.inputHash ?? '',
+      error: 'unsupported compute protocol version',
+    });
+    process.exit(1);
+    return;
+  }
+
   try {
     const result = runScheduleCompute(request, (report) => {
       reply({

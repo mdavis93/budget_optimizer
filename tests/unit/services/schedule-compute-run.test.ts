@@ -307,7 +307,7 @@ describe('runScheduleCompute', () => {
     }
   });
 
-  it('produces goal projections for the goals compute path', () => {
+  it('produces goal projections on the schedule assemble path', () => {
     const income: Income = {
       id: 'inc-1',
       sourceName: 'Job',
@@ -361,18 +361,17 @@ describe('runScheduleCompute', () => {
     const result = runScheduleCompute({
       protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
       jobId: 'goals-1',
-      inputHash: computeScheduleInputHash('goals', input),
-      op: 'goals',
+      inputHash: computeScheduleInputHash('schedule', input),
+      op: 'schedule',
       input,
     });
 
-    expect(result.op).toBe('goals');
-    if (result.op === 'goals') {
-      expect(result.goalProjections.length).toBeGreaterThan(0);
-      expect(result.goalProjections[0]).toMatchObject({
-        goalId: 'goal-1',
-      });
-    }
+    expect(result.op).toBe('schedule');
+    const schedule = result.schedule as { goalProjections: Array<{ goalId: string }> };
+    expect(schedule.goalProjections.length).toBeGreaterThan(0);
+    expect(schedule.goalProjections[0]).toMatchObject({
+      goalId: 'goal-1',
+    });
   });
 
   it('reports ordered stage tokens through the progress sink', () => {

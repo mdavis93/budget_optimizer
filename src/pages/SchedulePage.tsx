@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Calendar, List, RefreshCw } from 'lucide-react';
 import { useDraftData, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
@@ -149,7 +149,15 @@ export default function SchedulePage() {
     setRecommendationsExpanded(hasActionableRecommendations);
   }, [hasActionableRecommendations]);
 
+  // Accept already force-builds with preferredAssignments. Skip the hash-driven
+  // follow-up while that apply is in flight so we do not drop the soft seeds.
+  const applyingBreakGlassRef = useRef(isApplyingBreakGlass);
+  applyingBreakGlassRef.current = isApplyingBreakGlass;
+
   useEffect(() => {
+    if (applyingBreakGlassRef.current) {
+      return;
+    }
     if (isViewportReady && (incomes.length > 0 || bills.length > 0)) {
       generateSchedule(startDate, months, startingBalance);
     }

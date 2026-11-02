@@ -20,7 +20,7 @@ import { GreedySolver } from './scheduler/solvers/greedySolver';
 const noopProgress: ScheduleComputeProgressSink = () => undefined;
 
 /**
- * Pure schedule/goal compute used by the utilityProcess worker and unit tests.
+ * Pure schedule compute used by the utilityProcess worker and unit tests.
  * Must stay free of DB / filesystem / network side effects.
  * `onProgress` is an optional output port (stage tokens only — no I/O).
  */
@@ -36,34 +36,6 @@ export function runScheduleCompute(
   const bills = native.bills as Bill[];
   const goals = native.goals as SavingsGoal[];
   const leaves = native.leaves as Leave[];
-
-  if (request.op === 'goals') {
-    const goalProjections = scheduler.generateGoalProjections(
-      incomes,
-      bills,
-      native.startDate,
-      native.startingBalance,
-      native.skippedBills,
-      native.manualAssignments,
-      native.targetCashOnHand,
-      goals,
-      native.minCashOnHand,
-      native.minSavingsPerPaycheck,
-      native.debtPayoffs,
-      native.incomeOverrides,
-      leaves,
-      now
-    );
-
-    return {
-      type: 'result',
-      protocolVersion: SCHEDULE_COMPUTE_PROTOCOL_VERSION,
-      jobId: request.jobId,
-      inputHash: request.inputHash,
-      op: 'goals',
-      goalProjections,
-    };
-  }
 
   const prepared = prepareScheduleHorizon({
     incomes,

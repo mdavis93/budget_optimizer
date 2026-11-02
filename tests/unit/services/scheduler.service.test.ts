@@ -2830,6 +2830,61 @@ describe('SchedulerService', () => {
       expect(schedule6.summary.shortfallCount).toBeGreaterThanOrEqual(schedule3.summary.shortfallCount);
       expect(schedule12.fullPaychecks.length).toBe(schedule3.fullPaychecks.length);
     });
+
+    it('keeps full-horizon goalProjections on a 3-month viewport', () => {
+      const income: Income = {
+        id: 'income-goal',
+        sourceName: 'Salary',
+        amount: 2000,
+        cadence: 'biweekly',
+        startDate: '2026-06-01',
+        isActive: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+      const bill: Bill = {
+        id: 'bill-light',
+        creditorName: 'Phone',
+        budgetedAmount: 80,
+        dueDay: 10,
+        isRecurring: true,
+        priority: 'normal',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      };
+      const goal: SavingsGoal = {
+        id: 'goal-far',
+        budgetId: 'budget-1',
+        name: 'Far Goal',
+        targetAmount: 1000,
+        targetDate: '2027-06-01',
+        alreadySaved: 0,
+        priority: 1,
+        createdAt: '2026-06-01T00:00:00.000Z',
+      };
+
+      const schedule3 = scheduler.generateSchedule(
+        [income],
+        [bill],
+        '2026-06-01',
+        3,
+        1000,
+        new Set(),
+        new Map(),
+        250,
+        [goal]
+      );
+
+      expect(schedule3.goalProjections).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            goalId: 'goal-far',
+            targetDate: '2027-06-01',
+          }),
+        ])
+      );
+      expect(schedule3.paychecks.at(-1)?.date < '2027-06-01').toBe(true);
+    });
   });
 
   describe('goal allocation with unpaid bills', () => {

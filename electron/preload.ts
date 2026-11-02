@@ -96,7 +96,6 @@ const api = {
     create: (input) => ipcRenderer.invoke('goals:create', input),
     update: (id, input) => ipcRenderer.invoke('goals:update', id, input),
     delete: (id) => ipcRenderer.invoke('goals:delete', id),
-    getProjections: (overlay) => ipcRenderer.invoke('goals:get-projections', overlay),
   },
 
   debts: {

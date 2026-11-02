@@ -247,19 +247,9 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       isDisposed: false,
       cancelInFlight: vi.fn(),
       runJob: vi.fn(async (request: { op: string; inputHash: string; input: { startingBalance: number; startDate: string; months: number } }) => {
-        if (request.op === 'goals') {
-          return {
-            type: 'result',
-            protocolVersion: 1,
-            jobId: 'test-job',
-            inputHash: request.inputHash,
-            op: 'goals',
-            goalProjections: [],
-          };
-        }
         return {
           type: 'result',
-          protocolVersion: 1,
+          protocolVersion: 2,
           jobId: 'test-job',
           inputHash: request.inputHash,
           op: 'schedule',
@@ -534,7 +524,7 @@ describe('ipc handlers', () => {
           runJob: vi.fn(async (_request, options?: { onProgress?: (progress: unknown) => void }) => {
             options?.onProgress?.({
               type: 'progress',
-              protocolVersion: 1,
+              protocolVersion: 2,
               jobId: 'job-1',
               inputHash: 'hash-1',
               op: 'schedule',
@@ -542,7 +532,7 @@ describe('ipc handlers', () => {
             });
             return {
               type: 'result',
-              protocolVersion: 1,
+              protocolVersion: 2,
               jobId: 'test-job',
               inputHash: 'hash-1',
               op: 'schedule',
@@ -580,7 +570,7 @@ describe('ipc handlers', () => {
     it('does not send schedule progress after lock or renderer teardown', async () => {
       const progressPayload = {
         type: 'progress',
-        protocolVersion: 1,
+        protocolVersion: 2,
         jobId: 'job-1',
         inputHash: 'hash-1',
         op: 'schedule',
@@ -588,7 +578,7 @@ describe('ipc handlers', () => {
       };
       const resultPayload = {
         type: 'result',
-        protocolVersion: 1,
+        protocolVersion: 2,
         jobId: 'test-job',
         inputHash: 'hash-1',
         op: 'schedule',
@@ -815,19 +805,9 @@ describe('ipc handlers', () => {
         scheduleCompute: {
           ...createServices().scheduleCompute,
           runJob: vi.fn(async (request: { op: string; inputHash: string; input: { startDate: string; months: number } }) => {
-            if (request.op === 'goals') {
-              return {
-                type: 'result',
-                protocolVersion: 1,
-                jobId: 'test-job',
-                inputHash: request.inputHash,
-                op: 'goals',
-                goalProjections: [{ id: 'gp-1' }],
-              };
-            }
             return {
               type: 'result',
-              protocolVersion: 1,
+              protocolVersion: 2,
               jobId: 'test-job',
               inputHash: request.inputHash,
               op: 'schedule',
@@ -957,10 +937,6 @@ describe('ipc handlers', () => {
       });
 
       await expect(ipcMain.invoke('goals:get-all')).resolves.toEqual({ success: true, data: [{ id: 'goal-1' }] });
-      await expect(ipcMain.invoke('goals:get-projections')).resolves.toEqual({
-        success: true,
-        data: [{ id: 'gp-1' }],
-      });
       await expect(ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000)).resolves.toEqual({
         success: true,
         data: expect.objectContaining({ startDate: '2026-01-01' }),
@@ -1123,27 +1099,13 @@ describe('ipc handlers', () => {
       });
       registerHandlers(ipcMain, services);
 
-      await ipcMain.invoke('goals:get-projections');
+      await ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000);
       expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
       expect(services.scheduleCompute.runJob).toHaveBeenCalledWith(
-        expect.objectContaining({ op: 'goals' })
+        expect.objectContaining({ op: 'schedule' }),
+        expect.objectContaining({ onProgress: expect.any(Function) })
       );
       expect(services.scheduler.generateGoalProjections).not.toHaveBeenCalled();
-    });
-
-    it('returns empty goal projections when no goals are configured', async () => {
-      const services = createServices({
-        budgetManager: {
-          ...createServices().budgetManager,
-          getAllGoals: vi.fn(() => []),
-        },
-      });
-      registerHandlers(ipcMain, services);
-
-      await expect(ipcMain.invoke('goals:get-projections')).resolves.toEqual({
-        success: true,
-        data: [],
-      });
     });
 
     it('allows debts:get-all-with-amortization with overlay debts even without budget id', async () => {
