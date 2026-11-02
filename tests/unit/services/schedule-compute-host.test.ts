@@ -677,26 +677,38 @@ describe('runScheduleWorkerSmoke', () => {
     expect(forkFn).not.toHaveBeenCalled();
   });
 
-  it('pings the worker and resolves after pong', async () => {
+  it('runs a synthetic schedule job and writes the greedy smoke token', async () => {
     process.env.SCHEDULE_WORKER_SMOKE = '1';
     vi.useRealTimers();
     const child = createMockUtilityProcess();
     const forkFn = vi.fn(() => child);
+    const writes: string[] = [];
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
 
     const pending = runScheduleWorkerSmoke({
       workerPath: '/fake/schedule-worker.js',
       forkFn,
     });
 
-    child.__emitSpawn();
-    child.emit('message', { type: 'pong', jobId: 'smoke' });
+    try {
+      child.__emitSpawn();
+      child.emit('message', scheduleResult('smoke', 'smoke'));
 
-    await expect(pending).resolves.toBeUndefined();
-    expect(forkFn).toHaveBeenCalledWith(
-      '/fake/schedule-worker.js',
-      [],
-      expect.objectContaining({ serviceName: 'budget-optimizer-schedule' })
-    );
+      await expect(pending).resolves.toBeUndefined();
+      expect(forkFn).toHaveBeenCalledWith(
+        '/fake/schedule-worker.js',
+        [],
+        expect.objectContaining({ serviceName: 'budget-optimizer-schedule' })
+      );
+      expect(writes.some((chunk) => chunk.includes('SCHEDULE_WORKER_SMOKE_OK solver=greedy'))).toBe(
+        true
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
   });
 
   it('forwards validated progress and ignores malformed packets', async () => {
