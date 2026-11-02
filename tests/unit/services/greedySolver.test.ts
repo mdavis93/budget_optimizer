@@ -45,7 +45,7 @@ describe('GreedySolver', () => {
     });
     const result = new GreedySolver().solve(model);
     expect(result.solver).toBe('greedy');
-    expect(result.optimal).toBe(true);
+    expect(result.withinWorkCap).toBe(true);
     expect(result.placement[0]).toBe(1);
     expect(result.workCount).toBeLessThan(GREEDY_MAX_WORK);
   });
@@ -94,7 +94,7 @@ describe('GreedySolver', () => {
       startingBalance: 0,
     });
     const result = new GreedySolver(1).solve(model);
-    expect(result.optimal).toBe(false);
+    expect(result.withinWorkCap).toBe(false);
     expect(result.fallbackReason).toBe('limit_hit');
   });
 });

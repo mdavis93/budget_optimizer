@@ -130,7 +130,7 @@ describe('SummaryPage', () => {
       });
       renderWithRouter(<SummaryPage />, { mockAPI });
       expect(await screen.findByText('Debt-free date')).toBeInTheDocument();
-      expect(screen.getByText('2028-04-15')).toBeInTheDocument();
+      expect(screen.getByText('Apr 15, 2028')).toBeInTheDocument();
       expect(screen.getByText('Interest saved')).toBeInTheDocument();
       expect(screen.getByText('$640.00')).toBeInTheDocument();
       expect(screen.getByText('Freed monthly cash')).toBeInTheDocument();

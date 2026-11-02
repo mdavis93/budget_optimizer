@@ -360,7 +360,7 @@ export function validateDebt(debt: {
 
   const aprLimit = aprMode === 'legacy' ? 100 : 1;
   if (typeof debt.apr !== 'number' || !Number.isFinite(debt.apr) || debt.apr < 0 || debt.apr > aprLimit) {
-    errors.push(aprMode === 'legacy' ? 'APR must be between 0 and 100' : 'APR must be between 0% and 100%');
+    errors.push(aprMode === 'legacy' ? 'APR must be between 0 and 100' : 'APR must be a decimal between 0 and 1 (0% to 100%)');
   }
 
   if (

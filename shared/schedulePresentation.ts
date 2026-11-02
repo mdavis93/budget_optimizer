@@ -62,7 +62,7 @@ function roundMoney(amount: number): number {
  * One row per paycheck event. Each operating paycycle starts fresh (the first
  * one includes the starting balance). Petty cash spends whatever cash is left.
  */
-export function convertToLegacyEntries(
+export function buildLedgerEntries(
   paychecks: PaycheckEntry[],
   startingBalance: number
 ): ScheduleEntry[] {
@@ -225,10 +225,10 @@ export function generateRecommendations(
       `This couldn't be resolved by prepaying bills. Consider reducing expenses or increasing income.`
     );
   } else {
-    const rebalancedPaychecks = paychecks.filter(
+    const prepaidPaychecks = paychecks.filter(
       (p) => isOperatingPaycheck(p) && p.totalBills > p.totalIncome && !p.isShortfall && p.budgetRemaining >= 0
     );
-    if (rebalancedPaychecks.length > 0) {
+    if (prepaidPaychecks.length > 0) {
       recommendations.push(
         'Budget optimized! Some bills were scheduled to be paid early to avoid deficits in later paychecks.'
       );

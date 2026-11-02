@@ -137,7 +137,7 @@ export class GreedySolver implements AssignmentSolver {
           placement,
           workCount,
           solver: 'greedy',
-          optimal: true,
+          withinWorkCap: true,
         };
       }
 
@@ -189,7 +189,7 @@ export class GreedySolver implements AssignmentSolver {
         placement,
         workCount,
         solver: 'greedy',
-        optimal: true,
+        withinWorkCap: true,
       };
     } catch (error) {
       if (error instanceof GreedyWorkLimitError) {
@@ -197,7 +197,7 @@ export class GreedySolver implements AssignmentSolver {
           placement,
           workCount,
           solver: 'greedy',
-          optimal: false,
+          withinWorkCap: false,
           fallbackReason: 'limit_hit',
         };
       }

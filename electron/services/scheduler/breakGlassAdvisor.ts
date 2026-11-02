@@ -520,7 +520,7 @@ export function proposeBreakGlassPlans(
   const solved = solver.solve(built.model);
   const baseline = built.model.advisorBaseline?.placement;
   const solvable =
-    solved.optimal &&
+    solved.withinWorkCap &&
     baseline !== undefined &&
     respectsHardConstraints(
       built.model,

@@ -4,7 +4,7 @@ import {
   assignPreparedHorizon,
   prepareScheduleHorizon,
 } from '../../../electron/services/scheduler/scheduleBuild';
-import { calculateSummary, convertToLegacyEntries } from '@shared/schedulePresentation';
+import { calculateSummary, buildLedgerEntries } from '@shared/schedulePresentation';
 import { paycheckSpendRemaining } from '@shared/incomePurpose';
 
 const timestamps = {
@@ -154,7 +154,7 @@ describe('savings-and-goals reserved income', () => {
         startingBalance: 0,
       });
       const paychecks = assignPreparedHorizon(prepared);
-      const entries = convertToLegacyEntries(paychecks, 0);
+      const entries = buildLedgerEntries(paychecks, 0);
       expect(entries.every((entry) => entry.type === 'savings')).toBe(true);
       expect(entries.some((entry) => entry.description.includes('<script>'))).toBe(true);
       expect(entries.every((entry) => entry.runningBalance === 0)).toBe(true);

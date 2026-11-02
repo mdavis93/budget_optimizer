@@ -81,25 +81,29 @@ These behaviors are intentional — not bugs. They are covered by unit tests whe
 
 ### Income-attached bills (A-03)
 
-Bills marked income-attached (`isIncomeAttached` with `preferredIncomeSourceId`) are placed on **every paycheck** that includes that income source before the exact solver runs. Due-day alignment and the `MAX_PREPAY_DAYS` prepay cap do **not** apply on this path. See `applyIncomeAttachedBills` in `electron/services/scheduler/exactAssignment.ts`.
+Bills marked income-attached (`isIncomeAttached` with `preferredIncomeSourceId`) are pinned on **every paycheck** that includes that income source. Due-day alignment and the `MAX_PREPAY_DAYS` prepay cap do **not** apply on this path. See `pushAttachedBills` in `electron/services/scheduler/model/assignmentModel.ts`.
 
 ### Manual assignment (A-02)
 
-Drag-and-drop on the Schedule page may place a bill late or more than `MAX_PREPAY_DAYS` days early. The UI shows a **confirmation dialog** before accepting the placement; the user can proceed after confirming. Hard rejection is not enforced — manual placements lock from auto-rebalance.
+Drag-and-drop on the Schedule page may place a bill late or more than `MAX_PREPAY_DAYS` days early. The UI shows a **confirmation dialog** before accepting the placement; the user can proceed after confirming. Hard rejection is not enforced — manual placements stay fixed for the greedy run.
 
-Accepted radii: auto-legal prepay is **20 days** (`MAX_PREPAY_DAYS`); the Break-Glass advisor may search up to **28 days** (`MAX_ADVISOR_EARLY_DAYS`). Confirmation is required only for landings past 20 days. Advisor plans are never auto-applied.
+Accepted radii: auto-legal prepay is **20 days** (`MAX_PREPAY_DAYS`); the Break-Glass advisor may land bills up to **28 days** early (`MAX_ADVISOR_EARLY_DAYS`). Confirmation is required only for landings past 20 days. Break-Glass is a relaxed re-solve; plans are never auto-applied.
 
-### Assignment and rebalance (A-08)
+### Assignment (A-08)
 
-Schedule generation builds an integer-cents assignment model (`exactAssignment`) and places bills with the greedy solver (`greedySolver`): latest affordable paycheck in the eligibility window, then one improvement pass and one later-shift pass. Preferred, locked, and income-attached placements stay fixed for the run. Shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
+Schedule generation builds eligibility in `shared/billEligibility.ts` (20-day window, 31-day fallback), an integer-cents model, and a greedy placement (`greedySolver`: latest affordable paycheck, then an improvement pass and a later-shift pass). Preferred, locked, and income-attached placements stay fixed for the run. After assignment, `cashFlowAllocator.ts` funds goals and savings; `debtAcceleration.ts` applies extra avalanche payments only when `accelerateDebtPayoff` is on. Break-Glass plans come from `breakGlassAdvisor.ts` and must survive `breakGlassDryRun.ts`. Shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
 
 ## Post-Audit Backlog
 
-**Status:** Empty — audit is **Done, retained for archival purposes only** ([AUDIT_REPORT.md](AUDIT_REPORT.md)).
+The 2026-08-24 findings live in [AUDIT_REPORT.md](AUDIT_REPORT.md). That report is a dated record; this docs pass does not re-verify or close security findings.
+
+This pass closes **S-22** (README password is 12 characters) and **D-01** (this section no longer claims the backlog is empty). Scheduler v2 (`#153`–`#172`) is separate from that audit: greedy assignment, early goal funding, and opt-in avalanche debt.
+
+Open IDs from the audit body that this pass does **not** mark closed: S-16–S-21, S-23, A-09–A-12, E-06.
 
 ### Won't-do
 
-- **5.4** — LP/constraint solver for hard rebalance cases (A-08 enhancement). Declined July 2026; revisit only if product need resurfaces. Exact assignment + post-assignment rebalance shipped in `#71`.
+- **5.4** — LP/constraint solver for assignment. Declined July 2026. HiGHS was spiked in `#159` and rejected (compute-only p95 missed 2 s). `#165` removed post-assignment rebalance. Greedy is the only solver.
 
 ### Closed since audit
 
@@ -112,6 +116,8 @@ Schedule generation builds an integer-cents assignment model (`exactAssignment`)
 - **6.5** — Electron `^33.4.11` → 42 (`#90`; always-probe ABI helper `#89`)
 - Dependabot ignore for Electron / TypeScript majors (`#93`) — see [Dependabot PRs](#dependabot-prs)
 - Docs currency pass (`#95`); Electron Vite `@shared` aliases (`#96`)
+- **S-22** — README master-password minimum is 12 characters (this docs pass)
+- **D-01** — this backlog no longer claims Status: Empty (this docs pass)
 
 ## Pull request descriptions
 
@@ -146,7 +152,7 @@ Examples:
 
 - `feat(goals): add achievability panel`
 - `fix(export): handle empty budget selection`
-- `chore: update vitest to 4.1.8`
+- `chore: update vitest`
 
 If a PR contains multiple commits, **all** of them are validated in CI. Fix bad messages with `git rebase -i` or `git commit --amend` before merging.
 

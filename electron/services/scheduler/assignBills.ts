@@ -26,7 +26,7 @@ export interface AssignmentComputeMeta {
   ignoredPins: number;
 }
 
-export interface ExactAssignmentOptions {
+export interface AssignBillsOptions {
   startingBalanceCents?: number;
   skippedBills?: Set<string>;
   /** Hard locks (user drag). Fixed for the run and pinned in T0. */
@@ -50,12 +50,12 @@ export interface ExactAssignmentOptions {
  * Assign bills to paychecks. Builds the integer model, runs the chosen solver
  * (library default: greedy), then materializes paycheck assignments.
  */
-export function assignBillsExact(
+export function assignBills(
   paycheckDates: Date[],
   allIncomes: ProjectedIncome[],
   allBills: ProjectedBill[],
   startingBalance: number,
-  options: ExactAssignmentOptions = {}
+  options: AssignBillsOptions = {}
 ): PaycheckAssignment[] {
   const skippedBills = options.skippedBills ?? new Set();
   const manualAssignments = options.manualAssignments ?? new Map();

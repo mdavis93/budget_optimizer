@@ -611,7 +611,7 @@ describe('SchedulerService', () => {
       expect(june12!.totalBills).toBe(181);
     });
 
-    it('does not rebalance manually assigned bills to an earlier paycheck', () => {
+    it('does not move manually assigned bills to an earlier paycheck', () => {
       const angelaIncome: Income = {
         id: 'income-angela',
         sourceName: 'Angela',
@@ -760,7 +760,7 @@ describe('SchedulerService', () => {
         expect(billOnJan1).toBeUndefined();
       });
 
-      it('rebalance does not move bills more than MAX_PREPAY_DAYS early', () => {
+      it('assignment does not move bills more than MAX_PREPAY_DAYS early', () => {
         const biweeklyIncome: Income = {
           id: 'income-biweekly',
           sourceName: 'Salary',
@@ -826,7 +826,7 @@ describe('SchedulerService', () => {
         }
       });
 
-      it('rebalance reserves min cash, savings, and goal headroom per paycheck silo', () => {
+      it('assignment reserves min cash, savings, and goal headroom per paycheck silo', () => {
         const biweeklyIncome: Income = {
           id: 'income-biweekly',
           sourceName: 'Salary',
@@ -916,7 +916,7 @@ describe('SchedulerService', () => {
     });
   });
 
-  describe('critical bill funding and rebalance', () => {
+  describe('critical bill funding and assignment', () => {
     const weeklyIncome: Income = {
       id: 'income-weekly',
       sourceName: 'Salary',
@@ -974,7 +974,7 @@ describe('SchedulerService', () => {
       expect(jun26!.totalIncome - jun26!.totalBills).toBeGreaterThanOrEqual(0);
     });
 
-    it('does not move Per Paycheck bills during rebalance', () => {
+    it('does not move Per Paycheck bills during assignment', () => {
       const angelaIncome: Income = {
         ...weeklyIncome,
         id: 'income-angela',
@@ -2489,7 +2489,7 @@ describe('SchedulerService', () => {
     });
   });
 
-  describe('rebalance and reconciliation', () => {
+  describe('assignment and reconciliation', () => {
     const biweeklyIncome: Income = {
       id: 'income-biweekly',
       sourceName: 'Salary',
@@ -2501,7 +2501,7 @@ describe('SchedulerService', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
 
-    it('rebalance avoids shortfall when movable bill and earlier surplus exist', () => {
+    it('assignment avoids shortfall when a movable bill and earlier surplus exist', () => {
       const heavyBill: Bill = {
         id: 'bill-heavy',
         creditorName: 'Heavy Bill',
@@ -2748,7 +2748,7 @@ describe('SchedulerService', () => {
       ).toBe(true);
     });
 
-    it('reports reconciliation metrics when shortfalls remain after rebalance', () => {
+    it('reports reconciliation metrics when shortfalls remain after assignment', () => {
       const lowIncome: Income = {
         ...biweeklyIncome,
         amount: 800,
@@ -3495,7 +3495,7 @@ describe('SchedulerService', () => {
   });
 
   describe('generateRecommendations shortfall', () => {
-    it('includes unresolved shortfall guidance when deficits remain after rebalance', () => {
+    it('includes unresolved shortfall guidance when deficits remain after assignment', () => {
       const lowIncome: Income = {
         id: 'income-low',
         sourceName: 'Part Time',

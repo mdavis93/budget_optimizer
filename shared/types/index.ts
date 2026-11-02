@@ -374,7 +374,7 @@ export interface GoalProjection {
   achievabilityPercent: number;
   status: 'achievable' | 'partial' | 'impossible';
   suggestions: GoalSuggestion[];
-  isProjected: boolean; // True if goal is beyond 12-month schedule window
+  isProjected: boolean; // True if goal is beyond the calculation horizon
   projectionNote?: string; // Explanation when isProjected is true
   avgAllocationPerPaycheck: number;
   marginPerPaycheck: number;
@@ -419,7 +419,7 @@ export interface ReconciliationReport {
   minCashOnHand?: number;
 }
 
-/** One bill move in a Break-Glass advisor cascade (may exceed auto MAX_PREPAY_DAYS). */
+/** One bill move in a Break-Glass plan (may exceed auto MAX_PREPAY_DAYS). */
 export interface BreakGlassPlanStep {
   billId: string;
   billName: string;
@@ -465,7 +465,7 @@ export interface ScheduleData {
   fullPaychecks: PaycheckEntry[]; // Always contains the full calculation horizon
   /**
    * Full calculation horizon in months (>= 12, capped at 60). Spans the latest
-   * goal deadline so funding is paced correctly. Defaults to 12 when absent.
+   * goal deadline. Defaults to 12 when absent.
    */
   calculationMonths?: number;
   /**
@@ -482,7 +482,7 @@ export interface ScheduleData {
   maxBudgetRemaining: number;
   minCashOnHand: number;
   reconciliation?: ReconciliationReport;
-  /** Residual Break-Glass suggestions after auto rebalance; never auto-applied. */
+  /** Residual Break-Glass suggestions after assignment; never auto-applied. */
   breakGlassAdvisor?: BreakGlassAdvisorReport;
   goalProjections?: GoalProjection[];
   /** Avalanche preview/result. Present even when accelerateDebtPayoff is off. */

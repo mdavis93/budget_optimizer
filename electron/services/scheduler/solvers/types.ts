@@ -1,21 +1,17 @@
 import type { AssignmentModel } from '../model/assignmentModel';
 
-export type SolverName = 'greedy' | 'highs';
+export type SolverName = 'greedy';
 
-export type FallbackReason =
-  | 'size_guard'
-  | 'load_rejected'
-  | 'non_optimal'
-  | 'limit_hit';
+export type FallbackReason = 'limit_hit';
 
 export interface AssignmentSolveResult {
   /** Paycheck index per bill, or `UNPAID_PLACEMENT`. */
   placement: Int32Array;
   workCount: number;
   solver: SolverName;
-  optimal: boolean;
+  /** True when the greedy run finished under the work cap. */
+  withinWorkCap: boolean;
   fallbackReason?: FallbackReason;
-  highsStatus?: string;
 }
 
 export interface AssignmentSolver {

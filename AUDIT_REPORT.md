@@ -2,9 +2,16 @@
 
 **App version:** 3.0.0  
 **Audit date:** 2026-08-24  
+**Verified:** 2026-11-01 against the working tree (Scheduler v2 through `#172` plus the docs pass). This is the same audit plus status, not a new full security review.  
 **Scope:** Full working tree — `src/`, `electron/`, `shared/`, `scripts/`, CI, lockfile, production + full-tree dependency advisories, including uncommitted SQLCipher work  
 **Method:** Static review of Electron hardening, IPC/auth/crypto/DB, renderer data flow, schedule pipeline, duplication, hot paths, and package hygiene  
 **Threat model:** Local-first desktop finance app. Primary adversaries are (1) malicious or compromised renderer content (XSS, dependency, navigation), (2) other OS users / malware reading disk and leftover files, (3) offline brute-force of stolen `userData`. There is no network backend.
+
+**Verification (2026-11-01):** Open IDs were re-checked at the cited files and still apply, except:
+
+- **S-22** and **D-01** are **closed** (README documents a 12-character master password; CONTRIBUTING no longer claims the backlog is empty).
+- Schedule compute is **greedy-only**. HiGHS `#159` was a no-go; post-assignment rebalance was removed (`#165`); Break-Glass is a relaxed re-solve (`#168`).
+- Goals read `schedule.goalProjections`; the `goals:get-projections` channel is gone (`#169`).
 
 **Supersedes:** The 2026-08-18 audit (verified 2026-08-23). Closed items from that cycle are **not re-litigated** below except where the current tree reopened them or left a residual.
 
@@ -16,7 +23,7 @@
 
 Budget Optimizer is a capable local-first Electron 42 finance app with a **sound core**: context isolation, sandbox, parameterized SQL, AES-256-GCM payload encryption, unlock-gated IPC for budget data, schedule compute isolated in a `utilityProcess`, and a coherent draft/commit model.
 
-**This audit’s verdict:** the product is **one system**, not a pile of feature silos. The remaining work is **hygiene on the new SQLCipher layer**, **IPC sender/quit invariants**, and **docs drift** — not a second architecture.
+**This audit’s verdict:** the product is **one system**, not a pile of feature silos. The remaining work is **hygiene on the new SQLCipher layer**, **IPC sender/quit invariants**, and **schedule presentation leftovers** — not docs drift (S-22 and D-01 are closed) and not a second scheduler.
 
 **Overall posture:** **B+** for a private desktop finance app (was A- on 2026-08-23). The grade drops because file-level encryption can still leave plaintext siblings on disk, the SQLCipher key is handled as a JS string, and `app:quit` can skip the unsaved-changes guard.
 
@@ -26,19 +33,19 @@ Budget Optimizer is a capable local-first Electron 42 finance app with a **sound
 | Electron / IPC security     | **B+**  | Isolation + sender checks on data IPC; `app:quit` and a few probes skip `assertAppSender`         |
 | Crypto / at-rest data       | **B+**  | SQLCipher + column GCM is the right stack; key/backup hygiene is unfinished                       |
 | Auth / lock                 | **A-**  | Unlock gates, keychain in main, min 12; recovery hash still has legacy salt fallback              |
-| Architecture / harmony      | **B+**  | One apply path and one worker engine; main still constructs an unused `SchedulerService`, viewport is applied twice |
+| Architecture / harmony      | **B+**  | Greedy worker solver (no LP); main still constructs an unused `SchedulerService`; viewport is applied twice |
 | Efficiency / leaks          | **A-**  | Worker + debounce single-flight + junction maps + lazy routes/charts; toast/settings timers are uncleared |
 | Bloat / duplication         | **A-**  | Shared constants/formatters; BIP39 list and dual Vite plugins remain by choice                    |
-| Dependencies / supply chain | **B+**  | One lockfile; exceljs is a prod dep and asar-excluded because Vite bundles it; two ignored GHSAs  |
+| Dependencies / supply chain | **B+**  | One lockfile; exceljs is a prod dep and asar-excluded because Vite bundles it; three ignored GHSAs  |
 
 
 | Severity                        | Count | IDs                                      |
 | ------------------------------- | ----- | ---------------------------------------- |
 | High (open)                     | 0     | —                                        |
 | Medium (open)                   | 3     | S-16, S-17, S-18                         |
-| Low (open)                      | 9     | S-19, S-20, S-21, S-22, S-23, A-09, A-10, A-11, E-06 |
+| Low (open)                      | 9     | S-19, S-20, S-21, S-23, A-09, A-10, A-11, A-12, E-06 |
 | Low (accepted / deferred)       | 7     | S-06 residual, S-10, S-15, S-24, A-06, B-03, E-05 |
-| Docs drift                      | 1     | D-01                                     |
+| Closed this verification        | 2     | S-22, D-01                               |
 
 
 No critical remote RCE or SQL injection was found. No production debug telemetry remains.
@@ -57,14 +64,14 @@ Keep these. Remediations below layer on them; they do not replace them.
 - Unlock clears the key (`CryptoService.clearKey` zero-fills the Buffer) and `applyLockSideEffects` closes DB + clears export-path allowlist + ends Quick Budget.
 - Keychain unlock (`auth:unlock-with-saved-credentials`) never returns the password to the renderer.
 - Export writes require a prior native save-dialog path, TTL, home-directory prefix (`electron/utils/exportPaths.ts`). Residual: no `realpath` (S-21).
-- HTML export escapes user strings. PDF window has `javascript: false`, sandbox, and navigation lock; scratch HTML lives under `userData` at `0o700`/`0o600`.
-- Schedule work is off-main in `utilityProcess` with newest-wins, timeout, and no DB/keytar in the worker.
+- HTML export escapes user strings. PDF window has `javascript: false`, sandbox, and navigation lock; scratch HTML lives under `userData` at `0o700`/`0o600`. User-chosen HTML export still writes without `mode: 0o600` (S-23).
+- Schedule work is off-main in `utilityProcess` with newest-wins, timeout, and no DB/keytar in the worker. The solver is **greedy**; protocol v2, `op: 'schedule'` only.
 - Draft overlay is validated (`validateDraftOverlay`) before compute.
 - Quick Budget is ephemeral sqlite through `BudgetManager`, not a second CRUD clone.
 - Apply (reconciliation / break-glass) is draft-only.
 - Constants and `formatCurrency` live in `shared/`; Settings currency is wired (`AuthContext` + Settings page).
 - Diagnostics scrub secrets/paths/money; read/export is unlock-gated.
-- Password min length is 12 in `AuthService` (async PBKDF2-SHA-512, 310k). Generator uses rejection sampling.
+- Password min length is 12 in `AuthService` (async PBKDF2-SHA-512, 310k), README, and Setup/Login/Change-password UI (S-22 closed). Generator uses rejection sampling.
 - Junction lookups use in-memory maps after first decrypt (`skipCache` / `assignmentCache` / override map).
 - Layout activity ping, theme media query, schedule progress, close-requested, and locked listeners unsubscribe.
 - Routes and charts are `React.lazy`. ESLint covers `src`, `electron`, `shared`.
@@ -85,7 +92,7 @@ Renderer (draft overlay)
     → serialize → utilityProcess worker → schedule (ephemeral; persist only on Save)
 ```
 
-**This is the architecture. Do not add another store, another apply channel, or another scheduler.**
+Assignment is greedy; the cash-flow allocator then funds goals and savings; optional avalanche debt runs when `accelerateDebtPayoff` is on; Break-Glass is a relaxed re-solve. **Decision:** HiGHS will not ship (won't-do 5.4 stands; `#159` confirmed). Do not add another store, another apply channel, or another scheduler.
 
 What looks like “two systems” and is **not**:
 
@@ -99,10 +106,10 @@ What looks like “two systems” and is **not**:
 
 What **is** leftover bulk / cross-wiring (not a second product):
 
-- `src/context/DraftContext.tsx` (~1143 lines) still owns all draft CRUD after `useScheduleEngine` was extracted (A-09).
-- Viewport is sliced in the worker **and** again in the renderer (A-10).
+- `src/context/DraftContext.tsx` (1165 lines) still owns all draft CRUD after `useScheduleEngine` was extracted (A-09).
+- Viewport is sliced in the worker **and** again in the renderer (A-10). Worker still calls `applyViewportFilter` in `schedule-compute-run.ts`.
 - `electron/main.ts` still constructs `SchedulerService` for the Services bag; IPC never calls `services.scheduler` (A-11). Real compute is `new SchedulerService()` inside the worker.
-- `SummaryPage` keeps a local `scheduleData` copy instead of `useSchedule()` (A-12; fold into A-10 if touching schedule UI).
+- `SummaryPage` keeps a local `scheduleData` copy instead of `useSchedule()` (A-12; fold into A-10 if touching schedule UI). Goals already reads `useSchedule()` / `schedule.goalProjections` (`#169`).
 
 ---
 
@@ -113,6 +120,8 @@ Each item: **why it matters in this app**, then **the remediation that is correc
 ### 4.1 Security
 
 #### S-16 — Medium — SQLCipher key is a JS string in a PRAGMA; derived Buffer is never zeroed
+
+**Status (2026-11-01):** Open. `sqlCipherKeyPragma()` still returns a hex string; `applySqlCipherKey` still interpolates it into `pragma key`.
 
 **Where:**
 
@@ -136,6 +145,8 @@ String interpolation is not injection today (hex-only), but it is the wrong API:
 ---
 
 #### S-17 — Medium — `app:quit` skips sender check and the unsaved-changes guard
+
+**Status (2026-11-01):** Open. `ipcMain.handle('app:quit', () => { shutdownApp(); })` still has no sender check and no `allowWindowClose` gate.
 
 **Where:** `electron/main.ts` `ipcMain.handle('app:quit', () => { shutdownApp(); })`. `shutdownApp()` sets `allowWindowClose = true` and quits.
 
@@ -164,6 +175,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### S-18 — Medium — “Successful” SQLCipher migrate can leave plaintext siblings on disk
 
+**Status (2026-11-01):** Open. Migrate still returns `{ migrated: true }` after best-effort unlink of `.replaced-plaintext` / `.pre-sqlcipher` (warn on failure).
+
 **Where:** `electron/utils/sqlcipher.ts` `migratePlaintextToSqlCipher`. After verify + rename, `unlinkSync` of `${dbPath}.replaced-plaintext` and `${dbPath}.pre-sqlcipher` is best-effort `warn` only; the function still returns `{ migrated: true }`. `DatabaseService.initialize` then opens the encrypted file and proceeds.
 
 **Why it matters here:** Column GCM never hid schema/IDs; SQLCipher was added specifically so a copied `budget-data.db` is unreadable. A leftover `.pre-sqlcipher` / `.replaced-plaintext` (plus `-wal`/`-shm` if unlink of sidecars failed earlier) is the **old plaintext vault sitting next to the new one**, mode `0o600` in `userData`. Other OS users and local malware are the threat SQLCipher was meant to address. Logging a warning does not restore the product claim.
@@ -183,6 +196,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### S-19 — Low — Ungated IPC: save-dialog, activity ping, unlock probes
 
+**Status (2026-11-01):** Open. `app:quit` / `app:show-save-dialog` in main and `auth:activity-ping` in handlers still skip `assertAppSender`.
+
 **Where:** `electron/main.ts` `app:show-save-dialog`, `app:get-platform`, `app:check-biometric-available`; `electron/ipc/handlers.ts` `auth:activity-ping`, `auth:is-unlocked`, `auth:is-first-time-setup`, `credentials:has`, `diagnostics:report`.
 
 **Why it matters here:** Save-dialog **allowlists export paths**. Activity ping **resets auto-lock**. Unlock probes and `credentials:has` are login-page necessities. `diagnostics:report` must work on the login screen (already scrubbed).
@@ -194,6 +209,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 ---
 
 #### S-20 — Low — IPC returns raw `Error.message` to the renderer
+
+**Status (2026-11-01):** Open. `ipcData` / `ipcVoid` still use `getErrorMessage`; `getSafeErrorMessage` still falls through to the raw message.
 
 **Where:** `electron/ipc/guards.ts` `ipcData` / `ipcVoid` use `getErrorMessage`, not `getSafeErrorMessage`. `getSafeErrorMessage` only special-cases `ValidationError`, then falls through to the same raw message — so sqlite/fs errors (`SQLITE_…`, absolute paths under `userData`) can reach React.
 
@@ -207,6 +224,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### S-21 — Low — Export allowlist uses `path.resolve`, not `fs.realpathSync`
 
+**Status (2026-11-01):** Open. `validateExportPath` still uses `path.resolve`, not `realpath`.
+
 **Where:** `electron/utils/exportPaths.ts` `validateExportPath` / `approveExportPath`.
 
 **Why it matters here:** Native save-dialog is the intended disclosure. `path.resolve` does not follow a symlink. If the chosen path under `$HOME` is a symlink to `/tmp` (or another user’s tree), `writeFile` follows it after a successful allowlist check. This needs a planted symlink **and** the user picking that path — not remote RCE, but it is the remaining hole in a control this app already treats as security-critical.
@@ -219,15 +238,21 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### S-22 — Low — README documents an 8-character password; AuthService enforces 12
 
+**Status (2026-11-01):** Closed. README documents a 12-character master password, matching `AuthService`.
+
 **Where:** `README.md` “minimum 8 characters”. `AuthService` `MIN_PASSWORD_LENGTH = 12`. Setup/Login/Change-password UI already say 12.
 
 **Remediation:** README + any remaining “8 characters” copy → 12. One number, the one `AuthService` uses.
 
 **Why this is the right fix:** Docs that understate policy train users to pick passwords the app will reject — or, worse, future UI refactors that copy README.
 
+**Closed 2026-11-01** by the docs pass. README documents a 12-character master password, matching `AuthService`.
+
 ---
 
 #### S-23 — Low — HTML export writes without `mode: 0o600`
+
+**Status (2026-11-01):** Open. `generateHtmlFile` still `writeFileSync(htmlPath, html)` with no mode; the final PDF buffer write also has no mode. Scratch HTML already uses `0o600`.
 
 **Where:** `electron/services/pdf.service.ts` `generateHtmlFile` — `fs.writeFileSync(htmlPath, html)` with no mode. PDF scratch already uses `0o600`.
 
@@ -239,6 +264,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### S-24 — Low (accepted) — Lock parks a dirty draft in renderer RAM
 
+**Status (2026-11-01):** Accepted. Product still requires unsaved simulation to survive Lock App.
+
 **Where:** `src/context/DraftContext.tsx` `parkedDraftRef` — documented: lock is not a memory wipe.
 
 **Keep.** Product requirement: unsaved simulation survives Lock App. Screen hides data; process memory still holds the overlay until unlock or quit. Encrypting parked state in main would be a new protocol — out of scope unless product changes lock semantics. XSS on an unlocked session already has live draft; parked state matters after lock + XSS on the login page (CSP + nav lock make that hard).
@@ -246,6 +273,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 ---
 
 #### S-06 residual — Low (accepted) — Recovery hash may still use the login salt
+
+**Status (2026-11-01):** Accepted. Legacy salt fallback must remain until a migrate re-hashes recovery.
 
 **Where:** `AuthService.recoveryKeyHashMatches` tries `recoverySalt` then `config.salt`.
 
@@ -255,6 +284,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### S-10 residual — Low (accepted) — `allow-unsigned-executable-memory` remains
 
+**Status (2026-11-01):** Accepted. Chromium/Electron JIT entitlement; do not re-open without a notarized run.
+
 **Where:** `build/entitlements.mac.plist`. `disable-library-validation` was already dropped after a packaged smoke.
 
 **Keep:** Chromium/Electron JIT cost. Do not re-open without another notarized run.
@@ -262,6 +293,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 ---
 
 #### S-15 residual — Low (accepted) — DevTools when unpackaged
+
+**Status (2026-11-01):** Accepted. Still gated on `VITE_DEV_SERVER_URL && !app.isPackaged`.
 
 **Where:** `electron/main.ts` `openDevTools()` under `VITE_DEV_SERVER_URL && !app.isPackaged`.
 
@@ -273,7 +306,9 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### A-09 — Low — `DraftContext.tsx` is still a CRUD god file
 
-**Where:** `src/context/DraftContext.tsx` (~1143 lines) after `useScheduleEngine` extract.
+**Status (2026-11-01):** Open. File is 1165 lines after `useScheduleEngine` extract; still owns draft CRUD.
+
+**Where:** `src/context/DraftContext.tsx` (1165 lines) after `useScheduleEngine` extract.
 
 **Why it matters here:** Schedule bugs no longer land here; income/bill/debt/goal/leave/skip/assignment CRUD still does. PR conflict zone remains.
 
@@ -284,6 +319,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 ---
 
 #### A-10 — Low — Viewport is applied in the worker and again in the renderer
+
+**Status (2026-11-01):** Open. Worker still calls `applyViewportFilter` in `schedule-compute-run.ts`; renderer still slices in `useScheduleEngine`.
 
 **Where:**
 
@@ -300,6 +337,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### A-11 — Low — Main process holds a dead `SchedulerService`
 
+**Status (2026-11-01):** Open. `main.ts` still constructs `scheduler: new SchedulerService()`; IPC still has zero `services.scheduler` call sites.
+
 **Where:** `electron/main.ts` `scheduler: new SchedulerService()`; `handlers.ts` Services type includes `scheduler`; **zero** `services.scheduler` call sites. Worker does `new SchedulerService()` in `schedule-compute-run.ts`. Tests already assert IPC does not call the main instance.
 
 **Remediation:** Remove `scheduler` from the main Services bag and `main.ts` construction. Keep the class for the worker and unit tests. Do not “use the main instance” — that would pull compute back onto the UI process.
@@ -310,15 +349,19 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### A-12 — Low — `SummaryPage` copies schedule into local state
 
+**Status (2026-11-01):** Open for Summary. Goals already reads `useSchedule()` / `schedule.goalProjections` (`#169`).
+
 **Where:** `src/pages/SummaryPage.tsx` `scheduleData` + its own `generateSchedule` effect.
 
-**Remediation:** Read `useSchedule().schedule` (and loading/error). Delete the shadow state. Goals now reads `schedule.goalProjections` from the cached build; the `goals:get-projections` channel is gone.
+**Remediation:** Read `useSchedule().schedule` (and loading/error). Delete the shadow state. Goals already consume the cached build.
 
 **Why this is the right fix:** One schedule in context is the cache. A page-local copy is how Summary and Schedule disagree after a draft edit.
 
 ---
 
 #### A-06 — Low (accepted) — Two Electron Vite plugins
+
+**Status (2026-11-01):** Accepted. Dual plugins still required so the worker does not `require("./main.js")`.
 
 **Where:** `vite.config.ts` `vite-plugin-electron/simple` (main+preload) **and** `vite-plugin-electron` (worker) so the worker does not `require("./main.js")`.
 
@@ -330,6 +373,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 
 #### E-05 — Note (accepted) — Schedule cache retention
 
+**Status (2026-11-01):** Accepted. Cache until budget switch / lock is still intended.
+
 `useScheduleEngine` debounce resolves the prior Promise on retrigger. Progress/lock/close listeners unsubscribe. PDF window is destroyed. Worker host disposes. **Do not “fix” listeners.**
 
 `scheduleCacheRef` + `fullScheduleRef` hold a horizon until budget switch / lock. That is intended. Clear on lock already.
@@ -337,6 +382,8 @@ Wire `assertAppSender` / `setMainWindowGetter` for this handler (today it lives 
 Dual encrypt (SQLCipher + GCM) is extra CPU by design. Keep both. Do not add a third cache.
 
 #### E-06 — Low — Uncleared `setTimeout` in Toast / Settings / RecoveryKeyDisplay
+
+**Status (2026-11-01):** Open. Toast, Settings, and RecoveryKeyDisplay still `setTimeout` without unmount `clearTimeout`.
 
 **Where:**
 
@@ -354,10 +401,11 @@ Dual encrypt (SQLCipher + GCM) is extra CPU by design. Keep both. Do not add a t
 
 #### B-03 — Low (accepted) — Ignored advisories
 
-`scripts/audit-dev.cjs`:
+**Status (2026-11-01):** Accepted. Do not upgrade react-router or electron-builder in a docs or security PR. `scripts/audit-dev.cjs` now ignores three GHSAs:
 
 - `GHSA-mh99-v99m-4gvg` (brace-expansion / minimatch via electron-builder) — no patched 1.x/2.x.
 - `GHSA-qwww-vcr4-c8h2` (react-router RSC CSRF) — HashRouter + Electron, not RSC.
+- `GHSA-ch52-4w7c-c8xp` (http-cache-semantics via `@electron/get` / got@11) — build-time Electron download client only.
 
 Revisit on electron-builder / react-router-dom major. Do not “upgrade RR to 8” inside a security PR.
 
@@ -367,11 +415,15 @@ Inline BIP-39 wordlist in `crypto.service.ts`: keep. Do not add a wallet library
 
 #### D-01 — Low — CONTRIBUTING claims the audit backlog is empty
 
+**Status (2026-11-01):** Closed. CONTRIBUTING no longer claims the backlog is empty; it lists open IDs and points at this file.
+
 **Where:** `CONTRIBUTING.md` “Post-Audit Backlog — Status: Empty”.
 
 **Remediation:** Point at this file. List open IDs: S-16–S-23, A-09–A-12, E-06, D-01.
 
 **Why this is the right fix:** Contributors will otherwise treat leftovers as “done, archival.”
+
+**Closed 2026-11-01** by the docs pass. CONTRIBUTING no longer claims the backlog is empty.
 
 ---
 
@@ -387,7 +439,7 @@ Inline BIP-39 wordlist in `crypto.service.ts`: keep. Do not add a wallet library
 | One package manager, one lockfile                     | Honored                                                                |
 | Fail closed on crypto/migrate                         | **Not yet** for leftover plaintext (S-18)                              |
 
-No new framework, state library, or scheduler. No LP solver (won't-do).
+No new framework, state library, or scheduler. **Decision:** LP/HiGHS will not ship; greedy is the production solver (`#159` no-go, `#161`+).
 
 ---
 
@@ -397,11 +449,11 @@ Attach this file. Implement **only** the open IDs. Do not re-plan Phases 0–4 f
 
 ### Goal
 
-Finish SQLCipher so stolen `userData` has **no plaintext sibling**, treat the file key like the GCM key (Buffer, wipe, no SQL string), make quit/export-dialog obey the same sender + close protocol as the rest of IPC, realpath export targets, stop leaking engine errors to the renderer, collapse double viewport / dead main scheduler, and fix docs.
+Finish SQLCipher so stolen `userData` has **no plaintext sibling**, treat the file key like the GCM key (Buffer, wipe, no SQL string), make quit/export-dialog obey the same sender + close protocol as the rest of IPC, realpath export targets, stop leaking engine errors to the renderer, and collapse double viewport / dead main scheduler. Docs (S-22, D-01) are already closed.
 
 ### Constraints
 
-- Do not introduce Redux, a new scheduler, or an LP solver.
+- Do not introduce Redux, a new scheduler, HiGHS, or a second solver.
 - Do not remove column GCM. Do not remove SQLCipher.
 - Do not expand Quick Budget.
 - Do not re-open closed 2026-08-18 items except S-17 (quit) which this audit reopened.
@@ -425,7 +477,6 @@ Finish SQLCipher so stolen `userData` has **no plaintext sibling**, treat the fi
 - `rg 'sqlCipherKeyPragma|pragma\\(\`key' electron` shows only the validated Buffer path.
 - `rg "app:quit" electron/main.ts` is behind `assertAppSender` and `allowWindowClose`.
 - Tests cover: migrate unlink failure does not report success; initialize throws if plaintext sibling remains; fake sender rejected on quit and save-dialog.
-- `rg "minimum 8" README.md` is empty **if S-22 is in this PR**; else a one-line docs PR.
 
 ### Phase 5b — One schedule presentation path (A-10, A-11, A-12, E-06)
 
@@ -433,19 +484,15 @@ Finish SQLCipher so stolen `userData` has **no plaintext sibling**, treat the fi
 
 1. **A-10** — Worker returns full horizon; renderer `applyScheduleViewport` is the only slice. Grep: one `applyViewportFilter` production call site (tests/wrapper only).
 2. **A-11** — Remove `scheduler` from main Services / `main.ts`. Worker still `new SchedulerService()`.
-3. **A-12** — `SummaryPage` consumes `useSchedule()`. Optional: Goals reuse `schedule.goalProjections` when identity matches.
+3. **A-12** — `SummaryPage` consumes `useSchedule()`. Goals already read `schedule.goalProjections`.
 4. **E-06** — Clear toast/settings/recovery-key timers on unmount.
+5. **A-09** (optional) — Mechanical DraftContext extract only if the PR stays behavior-free. Drop it if types get noisy.
 
 **Done when:** `rg "services.scheduler" electron` is empty; Summary has no `useState` schedule copy; changing viewport months does not rebuild the worker job.
 
-### Phase 5c — Docs + DraftContext extract (S-22, D-01, A-09) — split if 5/5b are already large
+### Phase 5c — Docs (S-22, D-01) — done
 
-**PR title:** `docs: password min 12; refactor draft CRUD modules`
-
-1. README min 12. CONTRIBUTING backlog lists open IDs from this file.
-2. A-09 extract only if the PR stays mechanical (no schedule/debounce changes). Drop A-09 from the PR if types get noisy.
-
-**Done when:** README matches `MIN_PASSWORD_LENGTH`; CONTRIBUTING does not say “backlog empty.”
+README documents a 12-character password. CONTRIBUTING lists open IDs and does not say the backlog is empty. Do not re-open a docs PR for these.
 
 ### Test plan
 
@@ -456,8 +503,8 @@ Finish SQLCipher so stolen `userData` has **no plaintext sibling**, treat the fi
 
 ### Out of scope (explicit)
 
-- LP/constraint solver.
-- Rewriting the heuristic scheduler.
+- LP/constraint solver or HiGHS (`#159` no-go; greedy stays).
+- Rewriting the greedy scheduler.
 - React Router 8 (B-03).
 - Collapsing dual Vite Electron plugins (A-06).
 - Argon2/scrypt migration (PBKDF2-SHA-512 310k stays).
@@ -469,15 +516,15 @@ Finish SQLCipher so stolen `userData` has **no plaintext sibling**, treat the fi
 ## 7. Suggested Plan Agent prompt (verbatim)
 
 ```
-You are planning implementation for Budget Optimizer v3.0.0 from AUDIT_REPORT.md (audit 2026-08-24).
+You are planning implementation for Budget Optimizer v3.0.0 from AUDIT_REPORT.md (audit 2026-08-24, verified 2026-11-01).
 
-Prior §5 Phases 0–4 (2026-08-18) are already implemented. Do not re-plan them.
+Prior §5 Phases 0–4 (2026-08-18) are already implemented. Do not re-plan them. Phase 5c docs (S-22, D-01) are done.
 
-Open findings to implement: S-16, S-17, S-18, S-19, S-20, S-21, S-23. Architecture: A-10, A-11, A-12, E-06. Docs: S-22, D-01. Optional same-cycle extract: A-09.
+Open findings to implement: S-16, S-17, S-18, S-19, S-20, S-21, S-23. Architecture: A-10, A-11, A-12, E-06. Optional same-cycle extract: A-09.
 
-Accepted/deferred: S-06 residual, S-10, S-15, S-24, A-06, B-03, E-05.
+Accepted/deferred: S-06 residual, S-10, S-15, S-24, A-06, B-03 (three GHSAs in audit-dev.cjs), E-05.
 
-Product invariants: local-first Electron finance app; main owns secrets and SQLite; renderer owns draft UX; schedule compute stays in utilityProcess; no new frameworks; SQLCipher file encryption plus column GCM; fail closed if plaintext sqlite siblings remain after migrate.
+Product invariants: local-first Electron finance app; main owns secrets and SQLite; renderer owns draft UX; schedule compute stays in utilityProcess with the greedy solver (do not add HiGHS); no new frameworks; SQLCipher file encryption plus column GCM; fail closed if plaintext sqlite siblings remain after migrate.
 
 Deliver a plan only for the open items: exact files to touch, tests to add, and grep-based done-when checks. Call out anything in the report that is still stale vs the current working tree.
 ```

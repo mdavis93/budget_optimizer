@@ -8,6 +8,14 @@ import { formatCurrency } from '../utils/formatCurrency';
 import { SCHEDULE_VIEWPORT_MONTHS, type ScheduleViewportMonths } from '@shared/scheduleViewportMonths';
 import type { DebtPlan } from '@shared/types';
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function displayIsoDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  if (!ISO_DAY.test(value)) return value;
+  return format(parseISO(value), 'MMM d, yyyy');
+}
+
 const CATEGORY_COLORS: Record<string, string> = {
   Housing: CHART_COLORS.primary,
   Utilities: CHART_COLORS.warning,
@@ -241,7 +249,7 @@ export default function SummaryPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="card p-4">
                 <p className="text-sm text-(--color-text-muted)">Debt-free date</p>
-                <p className="text-xl font-semibold">{scheduleData.debtPlan.debtFreeDate ?? '—'}</p>
+                <p className="text-xl font-semibold">{displayIsoDate(scheduleData.debtPlan.debtFreeDate)}</p>
               </div>
               <div className="card p-4">
                 <p className="text-sm text-(--color-text-muted)">Interest saved</p>

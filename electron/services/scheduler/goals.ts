@@ -265,7 +265,7 @@ export function calculateGoalProjections(
     const goalDate = parseISO(goal.targetDate);
     const isWithinSchedule = isBefore(goalDate, scheduleEnd) || isEqual(goalDate, scheduleEnd);
 
-    // Get ACTUAL allocation from 12-month schedule
+    // Get ACTUAL allocation from the calculation horizon
     const actualAllocation = actualAllocations.get(goal.id) || 0;
 
     // Count paychecks before goal deadline (within schedule window)
@@ -319,14 +319,14 @@ export function calculateGoalProjections(
       isProjected = false;
       projectionNote = undefined;
     } else if (isWithinSchedule) {
-      // Goal is within 12-month schedule but not fully funded
+      // Goal is within the calculation horizon but not fully funded
       // Use actual allocation to show partial achievability
       achievableAmount = goal.alreadySaved + actualAllocation;
       achievabilityPercent = Math.min(100, Math.round((achievableAmount / goal.targetAmount) * 100));
       isProjected = false;
       projectionNote = undefined;
     } else {
-      // Goal is beyond 12-month schedule AND not fully funded
+      // Goal is beyond the calculation horizon AND not fully funded
       // Project based on monthly goal allocation rate
       const monthsToGoal = Math.ceil(differenceInDays(goalDate, now) / 30);
       const projectedGoalPool = monthlyGoalRate * monthsToGoal;

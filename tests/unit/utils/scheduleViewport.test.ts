@@ -380,7 +380,7 @@ describe('applyScheduleViewport', () => {
       expect(full.endDate).toBe('2027-07-01');
     });
 
-    it('adds rebalanced and heavy-paycheck recommendations', () => {
+    it('adds prepaid and heavy-paycheck recommendations', () => {
       const fullSchedule = buildSchedule({
         paychecks: [
           createMockPaycheck({

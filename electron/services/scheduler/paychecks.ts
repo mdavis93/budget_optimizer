@@ -19,7 +19,7 @@ import { allocateGoalsAndSavings } from './cashFlowAllocator';
 import { isSavingsAndGoalsIncome, paycheckEntryId } from '@shared/incomePurpose';
 export {
   calculateSummary,
-  convertToLegacyEntries,
+  buildLedgerEntries,
   generateRecommendations,
 } from '@shared/schedulePresentation';
 

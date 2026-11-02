@@ -53,8 +53,8 @@ export const SAVINGS_TARGET_FALLBACK = 100;
  * Resolve how many months the schedule should span: enough to cover the
  * latest goal deadline, clamped to [SCHEDULE_CALCULATION_MONTHS,
  * SCHEDULE_MAX_CALCULATION_MONTHS]. With no goals (or only short goals) this
- * stays at the 12-month default; a longer goal extends the horizon so funding
- * is paced over its true timeline, and anything past the cap is left to the
+ * stays at the 12-month default; a longer goal extends the horizon to the
+ * deadline, and anything past the cap is left to the
  * projection/extrapolation path.
  */
 export function resolveCalculationMonths(

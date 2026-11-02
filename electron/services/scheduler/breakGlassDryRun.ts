@@ -127,7 +127,7 @@ export function preferredMapFromPlanSteps(
 }
 
 /**
- * Keep only plans that survive a real assign+rebalance dry-run with unlocked
+ * Keep only plans that survive a real assignment dry-run with unlocked
  * preferred seeds. Multi-plan stacking accumulates prior survivors as preferred.
  */
 export function filterBreakGlassPlansByDryRun(

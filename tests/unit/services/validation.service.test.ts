@@ -583,7 +583,7 @@ describe('validation.service', () => {
         monthlyPayment: 150,
       };
       expect(validateDebt(debt).valid).toBe(false);
-      expect(validateDebt(debt, 'strict').errors.join(' ')).toContain('between 0% and 100%');
+      expect(validateDebt(debt, 'strict').errors.join(' ')).toContain('decimal between 0 and 1 (0% to 100%)');
       expect(validateDebt({ ...debt, apr: 0.125 }).valid).toBe(true);
       expect(validateDraftOverlay({ debts: [debt] }).valid).toBe(true);
       expect(validateDraftOverlay({ debts: [{ ...debt, apr: 101 }] }).valid).toBe(false);

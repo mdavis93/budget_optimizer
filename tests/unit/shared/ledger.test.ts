@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertToLegacyEntries } from '@shared/schedulePresentation';
+import { buildLedgerEntries } from '@shared/schedulePresentation';
 import type { PaycheckEntry } from '@shared/types';
 
 function paycheck(overrides: Partial<PaycheckEntry> & Pick<PaycheckEntry, 'date'>): PaycheckEntry {
@@ -20,9 +20,9 @@ function paycheck(overrides: Partial<PaycheckEntry> & Pick<PaycheckEntry, 'date'
   };
 }
 
-describe('convertToLegacyEntries', () => {
+describe('buildLedgerEntries', () => {
   it('resets the running balance at each operating paycycle and spends petty cash', () => {
-    const entries = convertToLegacyEntries(
+    const entries = buildLedgerEntries(
       [
         paycheck({ date: '2026-01-02', budgetRemaining: 200 }),
         paycheck({ date: '2026-01-16', budgetRemaining: 150 }),
@@ -42,7 +42,7 @@ describe('convertToLegacyEntries', () => {
   });
 
   it('does not deduct skipped bills and flags unpayable bills', () => {
-    const entries = convertToLegacyEntries(
+    const entries = buildLedgerEntries(
       [
         paycheck({
           date: '2026-01-02',
