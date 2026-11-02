@@ -5,8 +5,8 @@ import {
   type AssignmentModel,
 } from '../model/assignmentModel';
 import {
+  TIER_COUNT,
   UNPAID_PLACEMENT,
-  compareTierVectors,
   scoreObjective,
   type TierVector,
 } from '../model/objective';
@@ -60,6 +60,50 @@ function canPay(remaining: ArrayLike<number>, paycheckIndex: number, amount: num
   return remaining[paycheckIndex] >= amount;
 }
 
+function advisorTieBreak(
+  model: AssignmentModel,
+  placement: ArrayLike<number>
+): { earlyMoves: number; moveCount: number } {
+  const baseline = model.advisorBaseline;
+  if (!baseline) return { earlyMoves: 0, moveCount: 0 };
+  let earlyMoves = 0;
+  let moveCount = 0;
+  for (let billIndex = 0; billIndex < model.billCount; billIndex++) {
+    const paycheckIndex = placement[billIndex];
+    if (paycheckIndex !== baseline.placement[billIndex]) moveCount += 1;
+    if (paycheckIndex === UNPAID_PLACEMENT) continue;
+    const daysEarly = model.dueDay[billIndex] - model.paycheckDay[paycheckIndex];
+    if (daysEarly > baseline.earlyDayCutoff) earlyMoves += 1;
+  }
+  return { earlyMoves, moveCount };
+}
+
+/**
+ * Negative when `trial` is the better placement.
+ * With `advisorBaseline`, T0–T6 stay the schedule objective, then moves more than
+ * `earlyDayCutoff` days early, then move count, then dollar-days.
+ */
+function comparePlacements(
+  model: AssignmentModel,
+  trial: ArrayLike<number>,
+  incumbent: ArrayLike<number>,
+  throughTier: number
+): number {
+  const trialScore = scorePlacement(model, trial);
+  const incumbentScore = scorePlacement(model, incumbent);
+  const head = comparePrefix(trialScore, incumbentScore, throughTier);
+  if (head !== 0 || !model.advisorBaseline) return head;
+  const trialTie = advisorTieBreak(model, trial);
+  const incumbentTie = advisorTieBreak(model, incumbent);
+  if (trialTie.earlyMoves !== incumbentTie.earlyMoves) {
+    return trialTie.earlyMoves < incumbentTie.earlyMoves ? -1 : 1;
+  }
+  if (trialTie.moveCount !== incumbentTie.moveCount) {
+    return trialTie.moveCount < incumbentTie.moveCount ? -1 : 1;
+  }
+  return comparePrefix(trialScore, incumbentScore, TIER_COUNT);
+}
+
 export class GreedySolver implements AssignmentSolver {
   readonly name = 'greedy' as const;
 
@@ -82,6 +126,21 @@ export class GreedySolver implements AssignmentSolver {
     };
 
     try {
+      if (
+        model.advisorBaseline &&
+        model.advisorBaseline.placement.length === model.billCount
+      ) {
+        placement.set(model.advisorBaseline.placement);
+        this.improveOnce(model, placement, inspect);
+        this.shiftLater(model, placement, inspect);
+        return {
+          placement,
+          workCount,
+          solver: 'greedy',
+          optimal: true,
+        };
+      }
+
       const fixedOrder = Array.from({ length: model.billCount }, (_, index) => index).filter(
         (billIndex) => isFixed(model, billIndex)
       );
@@ -151,9 +210,9 @@ export class GreedySolver implements AssignmentSolver {
     placement: Int32Array,
     inspect: () => void
   ): void {
-    let best = scorePlacement(model, placement);
-    let bestBill = -1;
-    let bestPaycheck = UNPAID_PLACEMENT;
+    let bestPlacement = Int32Array.from(placement);
+    let improved = false;
+    const tierDepth = model.advisorBaseline ? 7 : TIER_COUNT;
 
     for (let billIndex = 0; billIndex < model.billCount; billIndex++) {
       if (isFixed(model, billIndex)) continue;
@@ -168,28 +227,24 @@ export class GreedySolver implements AssignmentSolver {
         if (paycheckIndex !== UNPAID_PLACEMENT && remaining[paycheckIndex] < 0) {
           continue;
         }
-        const vector = scorePlacement(model, trial);
-        if (compareTierVectors(vector, best) < 0) {
-          best = vector;
-          bestBill = billIndex;
-          bestPaycheck = paycheckIndex;
+        if (comparePlacements(model, trial, bestPlacement, tierDepth) < 0) {
+          bestPlacement = trial;
+          improved = true;
         }
       }
       inspect();
       if (current !== UNPAID_PLACEMENT) {
         const trial = Int32Array.from(placement);
         trial[billIndex] = UNPAID_PLACEMENT;
-        const vector = scorePlacement(model, trial);
-        if (compareTierVectors(vector, best) < 0) {
-          best = vector;
-          bestBill = billIndex;
-          bestPaycheck = UNPAID_PLACEMENT;
+        if (comparePlacements(model, trial, bestPlacement, tierDepth) < 0) {
+          bestPlacement = trial;
+          improved = true;
         }
       }
     }
 
-    if (bestBill >= 0) {
-      placement[bestBill] = bestPaycheck;
+    if (improved) {
+      placement.set(bestPlacement);
     }
   }
 
@@ -210,7 +265,6 @@ export class GreedySolver implements AssignmentSolver {
       const current = placement[billIndex];
       if (current === UNPAID_PLACEMENT) continue;
       const amount = model.amountCents[billIndex];
-      const baseline = scorePlacement(model, placement);
       const candidates = candidatesForBill(model, billIndex);
       let chosen = current;
       for (let cursor = candidates.length - 1; cursor >= 0; cursor--) {
@@ -221,8 +275,7 @@ export class GreedySolver implements AssignmentSolver {
         trial[billIndex] = paycheckIndex;
         const remaining = remainingCentsForPlacement(model, trial);
         if (remaining[paycheckIndex] < 0) continue;
-        const vector = scorePlacement(model, trial);
-        if (comparePrefix(vector, baseline, 7) <= 0) {
+        if (comparePlacements(model, trial, placement, 7) <= 0) {
           chosen = paycheckIndex;
           break;
         }
