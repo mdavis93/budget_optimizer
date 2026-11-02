@@ -4,7 +4,8 @@ import {
   partitionPresumedPaidBills,
   resolveSolveEndDate,
 } from './lookahead';
-import type { Bill, Income, Leave, SavingsGoal } from '../database.service';
+import type { Bill, Debt, Income, Leave, SavingsGoal } from '../database.service';
+import type { DebtPlan, DebtPlanVariant } from '@shared/types';
 import { projectIncome, projectBills } from './projection';
 import { applyProjectedIncomeAdjustments } from './incomeAdjustments';
 import {
@@ -60,6 +61,11 @@ export interface PreparedScheduleHorizon {
   incomeAttachedBillsRaw: Bill[];
   cashOnHandByDate: CashOnHandByDate;
   effectiveManualAssignments: Map<string, string>;
+  debts: Debt[];
+  accelerateDebtPayoff: boolean;
+  forcedVariant?: DebtPlanVariant;
+  lastDebtPlan?: DebtPlan;
+  lastDebtIgnoredPins: number;
 }
 
 export interface PrepareScheduleHorizonInput {
@@ -76,6 +82,9 @@ export interface PrepareScheduleHorizonInput {
   debtPayoffs?: Map<string, DebtPayoffInfo>;
   incomeOverrides?: Map<string, number>;
   leaves?: Leave[];
+  debts?: Debt[];
+  accelerateDebtPayoff?: boolean;
+  forcedVariant?: DebtPlanVariant;
 }
 
 const EMPTY_SUMMARY: ScheduleData['summary'] = {
@@ -215,13 +224,21 @@ export function prepareScheduleHorizon(
     incomeAttachedBillsRaw,
     cashOnHandByDate,
     effectiveManualAssignments,
+    debts: input.debts ?? [],
+    accelerateDebtPayoff: input.accelerateDebtPayoff === true,
+    forcedVariant: input.forcedVariant,
+    lastDebtIgnoredPins: 0,
   };
 }
 
 export function assignPreparedHorizon(
   prepared: PreparedScheduleHorizon,
   preferredAssignments: Map<string, string> = new Map(),
-  assignmentOptions: { solver?: ExactAssignmentOptions['solver']; onComputeMeta?: ExactAssignmentOptions['onComputeMeta'] } = {}
+  assignmentOptions: {
+    solver?: ExactAssignmentOptions['solver'];
+    onComputeMeta?: ExactAssignmentOptions['onComputeMeta'];
+    forcedVariant?: DebtPlanVariant;
+  } = {}
 ): PaycheckEntry[] {
   const effectivePreferredAssignments = pruneManualAssignmentsToPaychecks(
     preferredAssignments,
@@ -245,7 +262,17 @@ export function assignPreparedHorizon(
     prepared.reservedIncomes,
     prepared.fundingEndDate,
     prepared.startDate,
-    assignmentOptions
+    {
+      ...assignmentOptions,
+      debts: prepared.debts,
+      bills: prepared.bills,
+      accelerateDebtPayoff: prepared.accelerateDebtPayoff,
+      forcedVariant: assignmentOptions.forcedVariant ?? prepared.forcedVariant,
+      onDebtPlan: (plan, ignoredPins) => {
+        prepared.lastDebtPlan = plan;
+        prepared.lastDebtIgnoredPins = ignoredPins;
+      },
+    }
   );
 }
 
@@ -274,6 +301,7 @@ export function assembleAssignedSchedule(
       recommendations: [],
       maxBudgetRemaining: prepared.maxBudgetRemaining,
       minCashOnHand: prepared.minCashOnHand,
+      debtPlan: prepared.lastDebtPlan,
     };
   }
 
@@ -309,5 +337,6 @@ export function assembleAssignedSchedule(
     maxBudgetRemaining: prepared.maxBudgetRemaining,
     minCashOnHand: prepared.minCashOnHand,
     goalProjections,
+    debtPlan: prepared.lastDebtPlan,
   };
 }

@@ -163,6 +163,7 @@ function createServices(overrides: Partial<Record<string, unknown>> = {}) {
       getTargetCashOnHand: vi.fn(() => 250),
       getMinCashOnHand: vi.fn(() => 100),
       getMinSavingsPerPaycheck: vi.fn(() => 50),
+      getAccelerateDebtPayoff: vi.fn(() => false),
       getScheduleStartDate: vi.fn(() => '2026-01-01'),
       getAllBudgets: vi.fn(() => []),
       getAllBudgetsWithStats: vi.fn(() => []),
@@ -420,7 +421,7 @@ describe('ipc handlers', () => {
       const services = createServices({
         budgetManager: {
           ...createServices().budgetManager,
-          getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 150 }]),
+          getAllBills: vi.fn(() => [{ id: 'bill-1', budgetedAmount: 150, dueDay: 15 }]),
           getDebtById: vi.fn(() => ({
             id: 'debt-1',
             billId: 'bill-1',
@@ -440,7 +441,15 @@ describe('ipc handlers', () => {
       registerHandlers(ipcMain, services);
 
       await ipcMain.invoke('debts:get-amortization', 'debt-1');
-      expect(services.debt.calculateAmortization).toHaveBeenCalledWith(1000, 12, 100, 50, 'monthly');
+      expect(services.debt.calculateAmortization).toHaveBeenCalledWith(
+        1000,
+        12,
+        100,
+        50,
+        'monthly',
+        expect.any(Date),
+        15
+      );
     });
 
     it('invokes schedule:build via scheduleCompute host and returns schedule payload', async () => {
@@ -1100,7 +1109,7 @@ describe('ipc handlers', () => {
       registerHandlers(ipcMain, services);
 
       await ipcMain.invoke('schedule:build', '2026-01-01', 3, 1000);
-      expect(services.debt.calculateAmortization).toHaveBeenCalledWith(500, 8, 100, 0, 'none');
+      expect(services.debt.calculateAmortization).not.toHaveBeenCalled();
       expect(services.scheduleCompute.runJob).toHaveBeenCalledWith(
         expect.objectContaining({ op: 'schedule' }),
         expect.objectContaining({ onProgress: expect.any(Function) })

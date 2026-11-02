@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
-import type { DebtPayoffInfo } from './scheduler/types';
 import type {
   ScheduleComputeInputPayload,
   ScheduleComputeOp,
-  SerializedDebtPayoff,
 } from '@shared/scheduleComputeProtocol';
 import { assertPayloadSize } from '@shared/scheduleComputeValidate';
 import { scheduleComputeHashBody } from '@shared/scheduleIdentity';
@@ -21,37 +19,11 @@ export interface ScheduleComputeNativeInputs {
   goals: unknown[];
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
-  debtPayoffs: Map<string, DebtPayoffInfo>;
+  debts: unknown[];
+  accelerateDebtPayoff: boolean;
   incomeOverrides: Map<string, number>;
   leaves: unknown[];
   nowIso: string;
-}
-
-export function serializeDebtPayoffs(
-  debtPayoffs: Map<string, DebtPayoffInfo>
-): SerializedDebtPayoff[] {
-  return Array.from(debtPayoffs.values()).map((info) => ({
-    billId: info.billId,
-    payoffDate:
-      info.payoffDate instanceof Date
-        ? info.payoffDate.toISOString()
-        : String(info.payoffDate),
-    finalPaymentAmount: info.finalPaymentAmount,
-  }));
-}
-
-export function deserializeDebtPayoffs(
-  items: SerializedDebtPayoff[]
-): Map<string, DebtPayoffInfo> {
-  const map = new Map<string, DebtPayoffInfo>();
-  for (const item of items) {
-    map.set(item.billId, {
-      billId: item.billId,
-      payoffDate: new Date(item.payoffDate),
-      finalPaymentAmount: item.finalPaymentAmount,
-    });
-  }
-  return map;
 }
 
 export function serializeScheduleComputeInput(
@@ -70,7 +42,8 @@ export function serializeScheduleComputeInput(
     goals: native.goals,
     minCashOnHand: native.minCashOnHand,
     minSavingsPerPaycheck: native.minSavingsPerPaycheck,
-    debtPayoffs: serializeDebtPayoffs(native.debtPayoffs),
+    debts: native.debts,
+    accelerateDebtPayoff: native.accelerateDebtPayoff === true,
     incomeOverrides: Array.from(native.incomeOverrides.entries()),
     leaves: native.leaves,
     nowIso: native.nowIso,
@@ -95,7 +68,8 @@ export function deserializeScheduleComputeInput(
     goals: payload.goals,
     minCashOnHand: payload.minCashOnHand,
     minSavingsPerPaycheck: payload.minSavingsPerPaycheck,
-    debtPayoffs: deserializeDebtPayoffs(payload.debtPayoffs),
+    debts: payload.debts ?? [],
+    accelerateDebtPayoff: payload.accelerateDebtPayoff === true,
     incomeOverrides: new Map(payload.incomeOverrides),
     leaves: payload.leaves,
     nowIso: payload.nowIso,

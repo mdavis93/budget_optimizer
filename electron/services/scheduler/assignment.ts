@@ -12,9 +12,10 @@ import {
 } from './types';
 import type { CashOnHandByDate } from './cashOnHandOverrides';
 import { assignBillsExact, type ExactAssignmentOptions } from './exactAssignment';
-import { buildPaycheckEntries } from './paychecks';
 import { isOperatingIncome } from '@shared/incomePurpose';
 import { dropLookaheadAssignments } from './lookahead';
+import { runDebtAcceleration } from './debt/debtAcceleration';
+import type { Debt, DebtPlan, DebtPlanVariant } from '@shared/types';
 
 export function getUniquePaycheckDates(incomes: ProjectedIncome[]): Date[] {
   const dateSet = new Set<number>();
@@ -158,7 +159,13 @@ export function assignBillsToPaychecks(
   reservedIncomes: ProjectedIncome[] = [],
   fundingEndDate?: Date,
   startDate?: Date,
-  assignmentOptions: Pick<ExactAssignmentOptions, 'solver' | 'onComputeMeta'> = {}
+  assignmentOptions: Pick<ExactAssignmentOptions, 'solver' | 'onComputeMeta'> & {
+    debts?: Debt[];
+    bills?: Bill[];
+    accelerateDebtPayoff?: boolean;
+    forcedVariant?: DebtPlanVariant;
+    onDebtPlan?: (plan: DebtPlan, ignoredPins: number) => void;
+  } = {}
 ): PaycheckEntry[] {
   const assignments = assignBillsExact(
     paycheckDates,
@@ -193,13 +200,31 @@ export function assignBillsToPaychecks(
     ? dropLookaheadAssignments(merged, fundingEndDate)
     : merged;
 
-  return buildPaycheckEntries(
-    horizonAssignments,
+  const acceleration = runDebtAcceleration({
+    assignments: horizonAssignments,
+    debts: assignmentOptions.debts ?? [],
+    bills: assignmentOptions.bills ?? incomeAttachedBillsRaw,
+    startIso: startDate ? formatIso(startDate) : '1970-01-01',
     startingBalance,
     maxBudgetRemaining,
     goals,
     minCashOnHand,
     minSavingsPerPaycheck,
-    cashOnHandByDate
-  );
+    cashOnHandByDate,
+    manualAssignments,
+    accelerateDebtPayoff: assignmentOptions.accelerateDebtPayoff === true,
+    forcedVariant: assignmentOptions.forcedVariant,
+  });
+  assignmentOptions.onDebtPlan?.(acceleration.debtPlan, acceleration.ignoredPins);
+  if (acceleration.ignoredPins > 0 && assignmentOptions.onComputeMeta) {
+    // Caller merges ignoredPins from solver meta; extra removals are reported separately.
+  }
+  return acceleration.paychecks;
+}
+
+function formatIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

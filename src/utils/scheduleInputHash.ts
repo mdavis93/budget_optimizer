@@ -61,6 +61,7 @@ export function buildBudgetFieldsHash(budgetFields: DraftBudgetFields | null | u
     targetCashOnHand: budgetFields.targetCashOnHand,
     minCashOnHand: budgetFields.minCashOnHand,
     minSavingsPerPaycheck: budgetFields.minSavingsPerPaycheck,
+    accelerateDebtPayoff: budgetFields.accelerateDebtPayoff,
     now: new Date(0),
   });
 }
@@ -80,6 +81,7 @@ export function toScheduleIdentityInput(params: {
   targetCashOnHand?: number | null;
   minCashOnHand?: number | null;
   minSavingsPerPaycheck?: number | null;
+  accelerateDebtPayoff?: boolean | null;
   budgetFields?: DraftBudgetFields | null;
   now?: Date;
 }): ScheduleIdentityInput {
@@ -99,6 +101,7 @@ export function toScheduleIdentityInput(params: {
     targetCashOnHand: params.targetCashOnHand ?? budget?.targetCashOnHand,
     minCashOnHand: params.minCashOnHand ?? budget?.minCashOnHand,
     minSavingsPerPaycheck: params.minSavingsPerPaycheck ?? budget?.minSavingsPerPaycheck,
+    accelerateDebtPayoff: params.accelerateDebtPayoff ?? budget?.accelerateDebtPayoff,
     now: params.now,
   };
 }

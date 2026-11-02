@@ -15,6 +15,7 @@ const baseManager = {
   getTargetCashOnHand: vi.fn(() => 250),
   getMinCashOnHand: vi.fn(() => 100),
   getMinSavingsPerPaycheck: vi.fn(() => 50),
+  getAccelerateDebtPayoff: vi.fn(() => false),
   getScheduleStartDate: vi.fn(() => '2026-01-01'),
 };
 

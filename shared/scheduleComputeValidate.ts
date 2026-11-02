@@ -92,6 +92,90 @@ function assertScheduleData(schedule: unknown): void {
     }
   }
   assertScheduleSummary(schedule.summary);
+  assertDebtPlan(schedule);
+}
+
+const MAX_MONEY = 10_000_000;
+const MAX_DEBTS = 200;
+const MAX_CREDITOR_NAME = 100;
+const DEBT_PLAN_VARIANTS = new Set(['disabled', 'standard', 'deep']);
+
+function assertMoney(value: unknown, label: string): void {
+  if (!isFiniteNumber(value) || Math.abs(value) > MAX_MONEY) {
+    throw new Error(`${label} must be a finite amount within ${MAX_MONEY}`);
+  }
+}
+
+function assertDebtPayments(
+  paychecks: unknown,
+  accelerateOff: boolean
+): void {
+  if (!Array.isArray(paychecks)) return;
+  for (const paycheck of paychecks) {
+    if (!isRecord(paycheck)) continue;
+    const payments = paycheck.debtPayments;
+    if (payments === undefined) continue;
+    if (!Array.isArray(payments)) {
+      throw new Error('paycheck.debtPayments must be an array');
+    }
+    if (accelerateOff && payments.length > 0) {
+      throw new Error('debtPayments must be empty when accelerateDebtPayoff is off');
+    }
+    if (payments.length > MAX_DEBTS) {
+      throw new Error(`paycheck.debtPayments cannot exceed ${MAX_DEBTS}`);
+    }
+    for (const payment of payments) {
+      if (!isRecord(payment)) {
+        throw new Error('debt payment must be an object');
+      }
+      if (typeof payment.creditorName === 'string' && payment.creditorName.length > MAX_CREDITOR_NAME) {
+        throw new Error('debt payment creditorName exceeds 100 characters');
+      }
+      assertMoney(payment.amount, 'debt payment amount');
+    }
+    if (paycheck.totalDebtPayments !== undefined) {
+      assertMoney(paycheck.totalDebtPayments, 'totalDebtPayments');
+    }
+  }
+}
+
+function assertDebtPlan(schedule: Record<string, unknown>): void {
+  const paychecks = schedule.paychecks;
+  const plan = schedule.debtPlan;
+  const enabled = isRecord(plan) && plan.enabled === true;
+  assertDebtPayments(paychecks, !enabled);
+  assertDebtPayments(schedule.fullPaychecks, !enabled);
+  if (plan === undefined) return;
+  if (!isRecord(plan)) {
+    throw new Error('schedule.debtPlan must be an object');
+  }
+  if (typeof plan.enabled !== 'boolean') {
+    throw new Error('debtPlan.enabled must be a boolean');
+  }
+  if (plan.strategy !== 'avalanche') {
+    throw new Error('debtPlan.strategy must be avalanche');
+  }
+  if (typeof plan.variant !== 'string' || !DEBT_PLAN_VARIANTS.has(plan.variant)) {
+    throw new Error('debtPlan.variant must be disabled, standard, or deep');
+  }
+  if (!Array.isArray(plan.debts) || plan.debts.length > MAX_DEBTS) {
+    throw new Error(`debtPlan.debts cannot exceed ${MAX_DEBTS}`);
+  }
+  if (!Array.isArray(plan.excluded) || plan.excluded.length > MAX_DEBTS) {
+    throw new Error(`debtPlan.excluded cannot exceed ${MAX_DEBTS}`);
+  }
+  assertMoney(plan.totalInterestSaved, 'debtPlan.totalInterestSaved');
+  assertMoney(plan.freedMonthlyCash, 'debtPlan.freedMonthlyCash');
+  for (const row of plan.debts) {
+    if (!isRecord(row)) {
+      throw new Error('debtPlan debt row must be an object');
+    }
+    if (typeof row.creditorName === 'string' && row.creditorName.length > MAX_CREDITOR_NAME) {
+      throw new Error('debtPlan creditorName exceeds 100 characters');
+    }
+    assertMoney(row.baselineInterest, 'debtPlan baselineInterest');
+    assertMoney(row.acceleratedInterest, 'debtPlan acceleratedInterest');
+  }
 }
 
 /**

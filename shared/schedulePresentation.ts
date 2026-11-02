@@ -91,6 +91,16 @@ export function convertToLegacyEntries(
           isShortfall: false,
         });
       }
+      for (const payment of paycheck.debtPayments ?? []) {
+        entries.push({
+          date: paycheck.date,
+          type: 'debt',
+          description: `Debt: ${payment.creditorName}`,
+          amount: payment.amount,
+          runningBalance: 0,
+          isShortfall: false,
+        });
+      }
       if (paycheck.savingsDeposit > 0) {
         entries.push({
           date: paycheck.date,
@@ -151,6 +161,18 @@ export function convertToLegacyEntries(
         type: 'savings',
         description: `Goal: ${goalDeposit.goalName}`,
         amount: goalDeposit.amount,
+        runningBalance: roundMoney(runningBalance),
+        isShortfall: false,
+      });
+    }
+
+    for (const payment of paycheck.debtPayments ?? []) {
+      runningBalance -= payment.amount;
+      entries.push({
+        date: paycheck.date,
+        type: 'debt',
+        description: `Debt: ${payment.creditorName}`,
+        amount: payment.amount,
         runningBalance: roundMoney(runningBalance),
         isShortfall: false,
       });

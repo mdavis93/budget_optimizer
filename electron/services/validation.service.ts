@@ -460,6 +460,7 @@ export function validateBudget(budget: {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  accelerateDebtPayoff?: boolean;
   scheduleStartDate?: string;
 }): ValidationResult {
   const errors: string[] = [];
@@ -487,6 +488,10 @@ export function validateBudget(budget: {
     if (value !== undefined && (typeof value !== 'number' || isNaN(value) || value < 0)) {
       errors.push(`${field} must be a non-negative number`);
     }
+  }
+
+  if (budget.accelerateDebtPayoff !== undefined && typeof budget.accelerateDebtPayoff !== 'boolean') {
+    errors.push('accelerateDebtPayoff must be a boolean');
   }
 
   return { valid: errors.length === 0, errors };
@@ -605,6 +610,7 @@ export function validateDraftOverlay(overlay: {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  accelerateDebtPayoff?: boolean;
   scheduleStartDate?: string;
 }): ValidationResult {
   const errors: string[] = [];
@@ -719,6 +725,13 @@ export function validateDraftOverlay(overlay: {
     if (value !== undefined && !isMoney(value, false)) {
       errors.push(`${field} must be a non-negative number`);
     }
+  }
+
+  if (
+    overlay.accelerateDebtPayoff !== undefined &&
+    typeof overlay.accelerateDebtPayoff !== 'boolean'
+  ) {
+    errors.push('accelerateDebtPayoff must be a boolean');
   }
 
   return { valid: errors.length === 0, errors };

@@ -54,6 +54,7 @@ describe('scheduleInputHash', () => {
         targetCashOnHand: 250,
         minCashOnHand: 100,
         minSavingsPerPaycheck: 50,
+        accelerateDebtPayoff: false,
         scheduleStartDate: '2026-01-01',
       },
     });
@@ -68,6 +69,7 @@ describe('scheduleInputHash', () => {
         targetCashOnHand: 250,
         minCashOnHand: 100,
         minSavingsPerPaycheck: 50,
+        accelerateDebtPayoff: false,
         scheduleStartDate: '2026-01-01',
       })
     ).not.toBe('');
@@ -81,6 +83,7 @@ describe('scheduleInputHash', () => {
       targetCashOnHand: 250,
       minCashOnHand: 100,
       minSavingsPerPaycheck: 50,
+      accelerateDebtPayoff: false,
       scheduleStartDate: '2026-03-01',
     };
     const identity = toScheduleIdentityInput({
@@ -144,6 +147,36 @@ describe('scheduleInputHash', () => {
     });
 
     expect(withoutLeaves).not.toBe(withLeaves);
+  });
+
+  it('changes schedule input hash when accelerateDebtPayoff is true', () => {
+    const incomes = [createMockIncome()];
+    const bills = [createMockBill()];
+    const omitted = buildScheduleInputHash({
+      incomes,
+      bills,
+      skippedBills: [],
+      billAssignments: [],
+      incomeOverrides: [],
+    });
+    const explicitFalse = buildScheduleInputHash({
+      incomes,
+      bills,
+      skippedBills: [],
+      billAssignments: [],
+      incomeOverrides: [],
+      accelerateDebtPayoff: false,
+    });
+    const enabled = buildScheduleInputHash({
+      incomes,
+      bills,
+      skippedBills: [],
+      billAssignments: [],
+      incomeOverrides: [],
+      accelerateDebtPayoff: true,
+    });
+    expect(omitted).toBe(explicitFalse);
+    expect(enabled).not.toBe(explicitFalse);
   });
 
   it('includes leave cash overrides in schedule entity hash', () => {

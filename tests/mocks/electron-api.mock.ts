@@ -8,6 +8,7 @@ export const createMockBudget = (overrides = {}) => ({
   targetCashOnHand: 500,
   minCashOnHand: 100,
   minSavingsPerPaycheck: 50,
+  accelerateDebtPayoff: false,
   scheduleStartDate: '2026-01-01',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',

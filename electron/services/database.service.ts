@@ -918,6 +918,7 @@ export class DatabaseService {
       id: row.id,
       ...decrypted,
       scheduleStartDate: decrypted.scheduleStartDate ?? defaultScheduleStartDate(row.created_at),
+      accelerateDebtPayoff: decrypted.accelerateDebtPayoff === true,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1156,6 +1157,7 @@ export class DatabaseService {
       targetCashOnHand: input.targetCashOnHand ?? 250,
       minCashOnHand: input.minCashOnHand ?? 100,
       minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? 0,
+      accelerateDebtPayoff: input.accelerateDebtPayoff === true,
       scheduleStartDate: input.scheduleStartDate ?? defaultScheduleStartDate(now),
     };
     const encryptedData = this.crypto.encryptObject(payload);
@@ -1189,6 +1191,7 @@ export class DatabaseService {
         targetCashOnHand: input.targetCashOnHand ?? existing.targetCashOnHand,
         minCashOnHand: input.minCashOnHand ?? existing.minCashOnHand,
         minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? existing.minSavingsPerPaycheck,
+        accelerateDebtPayoff: input.accelerateDebtPayoff ?? existing.accelerateDebtPayoff,
         scheduleStartDate: input.scheduleStartDate ?? existing.scheduleStartDate,
       }),
       'Invalid budget data'
@@ -1210,6 +1213,7 @@ export class DatabaseService {
       targetCashOnHand: input.targetCashOnHand ?? existing.targetCashOnHand,
       minCashOnHand: input.minCashOnHand ?? existing.minCashOnHand,
       minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? existing.minSavingsPerPaycheck,
+      accelerateDebtPayoff: input.accelerateDebtPayoff ?? existing.accelerateDebtPayoff === true,
       scheduleStartDate: input.scheduleStartDate ?? existing.scheduleStartDate,
     };
     const encryptedData = this.crypto.encryptObject(payload);

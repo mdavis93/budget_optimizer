@@ -18,6 +18,8 @@ export interface Budget {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  /** Opt-in avalanche extra payments. Missing/undefined is false. */
+  accelerateDebtPayoff: boolean;
   scheduleStartDate: string;
   createdAt: string;
   updatedAt: string;
@@ -29,6 +31,7 @@ export interface BudgetInput {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  accelerateDebtPayoff?: boolean;
   scheduleStartDate?: string;
 }
 
@@ -237,7 +240,7 @@ export type UnfundableReason =
 
 export interface ScheduleEntry {
   date: string;
-  type: 'income' | 'expense' | 'savings' | 'pettyCash';
+  type: 'income' | 'expense' | 'savings' | 'pettyCash' | 'debt';
   description: string;
   amount: number;
   runningBalance: number;
@@ -264,6 +267,46 @@ export interface GoalDeposit {
   goalId: string;
   goalName: string;
   amount: number;
+}
+
+export interface DebtPayment {
+  debtId: string;
+  billId: string;
+  creditorName: string;
+  amount: number;
+}
+
+export type DebtPlanVariant = 'disabled' | 'standard' | 'deep';
+
+export type DebtPlanExcludedReason =
+  | 'apr_above_one'
+  | 'missing_bill'
+  | 'duplicate_bill';
+
+export interface DebtPlanExcluded {
+  debtId: string;
+  reason: DebtPlanExcludedReason;
+}
+
+export interface DebtPlanDebt {
+  debtId: string;
+  billId: string;
+  creditorName: string;
+  baselinePayoffDate: string | null;
+  acceleratedPayoffDate: string | null;
+  baselineInterest: number;
+  acceleratedInterest: number;
+}
+
+export interface DebtPlan {
+  enabled: boolean;
+  strategy: 'avalanche';
+  variant: DebtPlanVariant;
+  debts: DebtPlanDebt[];
+  excluded: DebtPlanExcluded[];
+  debtFreeDate: string | null;
+  totalInterestSaved: number;
+  freedMonthlyCash: number;
 }
 
 export interface PaycheckEntry {
@@ -296,6 +339,9 @@ export interface PaycheckEntry {
   unpayableCount?: number;
   /** True when one or more bills in this paycheck could not be funded. */
   hasUnpayableBills?: boolean;
+  /** Extra avalanche payments on this paycheck. Absent/empty when acceleration is off. */
+  debtPayments?: DebtPayment[];
+  totalDebtPayments?: number;
 }
 
 export interface GoalSuggestion {
@@ -439,6 +485,8 @@ export interface ScheduleData {
   /** Residual Break-Glass suggestions after auto rebalance; never auto-applied. */
   breakGlassAdvisor?: BreakGlassAdvisorReport;
   goalProjections?: GoalProjection[];
+  /** Avalanche preview/result. Present even when accelerateDebtPayoff is off. */
+  debtPlan?: DebtPlan;
 }
 
 // ---------------------------------------------------------------------------
@@ -475,6 +523,7 @@ export interface DraftBudgetFields {
   targetCashOnHand: number;
   minCashOnHand: number;
   minSavingsPerPaycheck: number;
+  accelerateDebtPayoff: boolean;
   scheduleStartDate: string;
 }
 
@@ -505,5 +554,6 @@ export interface DraftOverlay {
   targetCashOnHand?: number;
   minCashOnHand?: number;
   minSavingsPerPaycheck?: number;
+  accelerateDebtPayoff?: boolean;
   scheduleStartDate?: string;
 }

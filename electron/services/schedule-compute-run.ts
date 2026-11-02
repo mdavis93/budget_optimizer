@@ -1,4 +1,5 @@
-import type { Bill, Income, Leave, SavingsGoal } from '@shared/types';
+import type { Bill, Debt, Income, Leave, SavingsGoal } from '@shared/types';
+import { buildDebtPayoffsFromStart } from './scheduler/debt/debtPayoffs';
 import { SchedulerService } from './scheduler.service';
 import type {
   ScheduleComputeMeta,
@@ -36,6 +37,8 @@ export function runScheduleCompute(
   const bills = native.bills as Bill[];
   const goals = native.goals as SavingsGoal[];
   const leaves = native.leaves as Leave[];
+  const debts = native.debts as Debt[];
+  const debtPayoffs = buildDebtPayoffsFromStart(debts, bills, native.startDate);
 
   const prepared = prepareScheduleHorizon({
     incomes,
@@ -48,9 +51,11 @@ export function runScheduleCompute(
     goals,
     minCashOnHand: native.minCashOnHand,
     minSavingsPerPaycheck: native.minSavingsPerPaycheck,
-    debtPayoffs: native.debtPayoffs,
+    debtPayoffs,
     incomeOverrides: native.incomeOverrides,
     leaves,
+    debts,
+    accelerateDebtPayoff: native.accelerateDebtPayoff,
   });
 
   onProgress({ stage: 'assigning' });
@@ -66,6 +71,11 @@ export function runScheduleCompute(
       computeMeta = meta;
     },
   });
+  computeMeta = {
+    ...computeMeta,
+    ignoredPins: computeMeta.ignoredPins + (prepared.lastDebtIgnoredPins ?? 0),
+  };
+  const chosenVariant = prepared.lastDebtPlan?.variant;
   const data = assembleAssignedSchedule(prepared, paychecks, {
     includePresentation: true,
     now,
@@ -110,6 +120,7 @@ export function runScheduleCompute(
         });
         const trialPaychecks = assignPreparedHorizon(prepared, preferredAssignments, {
           solver,
+          forcedVariant: native.accelerateDebtPayoff ? chosenVariant : 'disabled',
         });
         return assembleAssignedSchedule(prepared, trialPaychecks, {
           includePresentation: false,
