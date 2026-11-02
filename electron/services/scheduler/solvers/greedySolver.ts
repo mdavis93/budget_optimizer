@@ -63,7 +63,10 @@ function canPay(remaining: ArrayLike<number>, paycheckIndex: number, amount: num
 export class GreedySolver implements AssignmentSolver {
   readonly name = 'greedy' as const;
 
-  constructor(private readonly maxWork: number = GREEDY_MAX_WORK) {}
+  constructor(
+    private readonly maxWork: number = GREEDY_MAX_WORK,
+    private readonly improvementPasses: number = 1
+  ) {}
 
   solve(model: AssignmentModel): AssignmentSolveResult {
     const placement = new Int32Array(model.billCount);
@@ -117,6 +120,11 @@ export class GreedySolver implements AssignmentSolver {
 
       this.improveOnce(model, placement, inspect);
       this.shiftLater(model, placement, inspect);
+      for (let pass = 1; pass < this.improvementPasses; pass++) {
+        const before = placement.join(',');
+        this.improveOnce(model, placement, inspect);
+        if (placement.join(',') === before) break;
+      }
 
       return {
         placement,

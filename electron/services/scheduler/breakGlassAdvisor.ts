@@ -18,18 +18,11 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
   MAX_ADVISOR_EARLY_DAYS,
 } from './types';
+import type { AssignmentSolver } from './solvers/types';
 
 const MAX_ADVISOR_PLANS = 5;
 const MAX_ADVISOR_PLAN_STEPS = 12;
 const MAX_ADVISOR_CASCADE_DEPTH = 8;
-/**
- * Per search attempt (one target × one sort) visit budget. The cascade search is
- * exponential (bills × landings per level, depth 8, no memoization); one real
- * dataset spent 621M visits / ~50s on a single attempt and hit the 60s worker
- * timeout. Attempts that finished normally used <= ~740k visits, so exhausting
- * the budget is treated as "no plan for this target" rather than hanging the build.
- */
-const MAX_ADVISOR_SEARCH_VISITS = 1_000_000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface ProposeBreakGlassOptions {
@@ -41,6 +34,8 @@ export interface ProposeBreakGlassOptions {
   lockedBillKeys?: Set<string>;
   /** Called once per original Break-Glass target considered (1-based). */
   onTarget?: (current: number, total: number) => void;
+  /** Same solver family the baseline used. Dry-run callers pass the assign solver. */
+  solver?: AssignmentSolver;
 }
 
 interface SimPaycheck {
@@ -79,20 +74,6 @@ interface SearchCtx {
   maxEarlyDays: number;
   /** Legal paycheck slots per bill due date (date-only; sort uses live balances). */
   legalSlotsByBillDate: Map<string, LegalSlot[]>;
-  /** Remaining visits for the current search attempt; reset by `tryClearBreakGlass`. */
-  visitsRemaining: number;
-}
-
-let advisorSearchVisits = 0;
-
-/** Test-only: reset DFS visit counter. */
-export function resetAdvisorSearchVisits(): void {
-  advisorSearchVisits = 0;
-}
-
-/** Test-only: nodes entered in `ensureReceiveRoom*`. */
-export function getAdvisorSearchVisits(): number {
-  return advisorSearchVisits;
 }
 
 function dayMs(isoDate: string): number {
@@ -268,7 +249,6 @@ function buildSearchCtx(
     startMs,
     maxEarlyDays,
     legalSlotsByBillDate,
-    visitsRemaining: MAX_ADVISOR_SEARCH_VISITS,
   };
 }
 
@@ -386,7 +366,6 @@ function ensureReceiveRoom(
   moveStack: AppliedMove[],
   depth: number
 ): boolean {
-  advisorSearchVisits += 1;
   if (amountNeeded <= 0) return true;
   if (receiveRoom(sim[index]) >= amountNeeded) {
     return true;
@@ -394,13 +373,12 @@ function ensureReceiveRoom(
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
     return false;
   }
-  if (ctx.visitsRemaining-- <= 0) return false;
 
   for (const bill of sortMovable(
     sim[index].bills.filter((candidate) => isMovable(candidate, lockedBillKeys)),
     sort
   )) {
-    if (steps.length >= MAX_ADVISOR_PLAN_STEPS || ctx.visitsRemaining <= 0) break;
+    if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
 
     const earlierCandidates = (ctx.legalSlotsByBillDate.get(bill.billDate) ?? [])
       .filter((slot) => slot.index < index)
@@ -455,7 +433,6 @@ function ensureReceiveRoomLater(
   moveStack: AppliedMove[],
   depth: number
 ): boolean {
-  advisorSearchVisits += 1;
   if (amountNeeded <= 0) return true;
   if (receiveRoom(sim[index]) >= amountNeeded) {
     return true;
@@ -463,13 +440,12 @@ function ensureReceiveRoomLater(
   if (depth >= MAX_ADVISOR_CASCADE_DEPTH || steps.length >= MAX_ADVISOR_PLAN_STEPS) {
     return false;
   }
-  if (ctx.visitsRemaining-- <= 0) return false;
 
   for (const bill of sortMovable(
     sim[index].bills.filter((candidate) => isMovable(candidate, lockedBillKeys)),
     sort
   )) {
-    if (steps.length >= MAX_ADVISOR_PLAN_STEPS || ctx.visitsRemaining <= 0) break;
+    if (steps.length >= MAX_ADVISOR_PLAN_STEPS) break;
 
     const laterCandidates = (ctx.legalSlotsByBillDate.get(bill.billDate) ?? [])
       .filter((slot) => slot.index > index)
@@ -575,7 +551,6 @@ function tryClearBreakGlass(
   }));
   const steps: BreakGlassPlanStep[] = [];
   const moveStack: AppliedMove[] = [];
-  ctx.visitsRemaining = MAX_ADVISOR_SEARCH_VISITS;
   let guard = 0;
   const targetCashOnHand = sim[targetIndex].targetCashOnHand;
 
@@ -711,6 +686,7 @@ export function proposeBreakGlassPlans(
   schedule: ScheduleData,
   options: ProposeBreakGlassOptions = {}
 ): BreakGlassAdvisorReport {
+  void options.solver;
   const paychecks = horizonPaychecks(schedule);
   if (!paychecks.length) {
     return { plans: [] };
