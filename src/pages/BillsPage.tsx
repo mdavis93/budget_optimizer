@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState';
 import clsx from 'clsx';
 import { getMonthlyBillEquivalent } from '../utils/cadence';
 import { isOperatingIncome } from '@shared/incomePurpose';
+import { ordinalSuffix } from '@shared/ordinal';
 import { formatCurrency } from '../utils/formatCurrency';
 
 interface BillFormProps {
@@ -142,7 +143,7 @@ function BillForm({ bill, incomes, onSubmit, onCancel }: BillFormProps) {
             >
               {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                 <option key={day} value={day}>
-                  {day}{day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'}
+                  {day}{ordinalSuffix(day)}
                 </option>
               ))}
             </select>
@@ -469,7 +470,7 @@ export default function BillsPage() {
                       </span>
                     ) : (
                       <>
-                        Due: {bill.dueDay}{bill.dueDay === 1 ? 'st' : bill.dueDay === 2 ? 'nd' : bill.dueDay === 3 ? 'rd' : 'th'} of each month
+                        Due: {bill.dueDay}{ordinalSuffix(bill.dueDay)} of each month
                         {bill.preferredIncomeSourceId && (
                           <span className="text-primary-500">
                             {' • '}Paid with: {incomes.find(i => i.id === bill.preferredIncomeSourceId)?.sourceName || 'Unknown'}

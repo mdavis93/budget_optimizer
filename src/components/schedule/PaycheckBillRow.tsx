@@ -1,6 +1,7 @@
 import { format, getMonth, getYear, parseISO } from 'date-fns';
 import { GripVertical, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
 import clsx from 'clsx';
+import { ordinalSuffix } from '@shared/ordinal';
 import { BillAssignment, PaycheckBill, PRIORITY_LABELS } from '../../types';
 import { isBillMovedToPaycheck } from '../../utils/scheduleBills';
 import type { DraggedBill } from './PaycheckView';
@@ -131,7 +132,7 @@ export default function PaycheckBillRow({
         <span className="text-xs text-(--color-text-muted)">
           {bill.isIncomeAttached
             ? 'Per Paycheck'
-            : `Due: ${monthName}${bill.dueDay}${bill.dueDay === 1 ? 'st' : bill.dueDay === 2 ? 'nd' : bill.dueDay === 3 ? 'rd' : 'th'}`}
+            : `Due: ${monthName}${bill.dueDay}${ordinalSuffix(bill.dueDay)}`}
         </span>
       </div>
       <div className="relative flex items-center gap-3">
