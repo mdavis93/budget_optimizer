@@ -109,7 +109,12 @@ export class GreedySolver implements AssignmentSolver {
 
   constructor(
     private readonly maxWork: number = GREEDY_MAX_WORK,
-    private readonly improvementPasses: number = 1
+    /**
+     * Cap on repair attempts. The search repeats single-bill repairs, and a
+     * freeing move paired with paying an unpaid bill, until the score stops
+     * improving. Dollar-days (T7) are left to the later-shift pass.
+     */
+    private readonly improvementPasses: number = 10_000
   ) {}
 
   solve(model: AssignmentModel): AssignmentSolveResult {
@@ -131,8 +136,7 @@ export class GreedySolver implements AssignmentSolver {
         model.advisorBaseline.placement.length === model.billCount
       ) {
         placement.set(model.advisorBaseline.placement);
-        this.improveOnce(model, placement, inspect);
-        this.shiftLater(model, placement, inspect);
+        this.repairPlacement(model, placement, inspect);
         return {
           placement,
           workCount,
@@ -177,13 +181,7 @@ export class GreedySolver implements AssignmentSolver {
         }
       }
 
-      this.improveOnce(model, placement, inspect);
-      this.shiftLater(model, placement, inspect);
-      for (let pass = 1; pass < this.improvementPasses; pass++) {
-        const before = placement.join(',');
-        this.improveOnce(model, placement, inspect);
-        if (placement.join(',') === before) break;
-      }
+      this.repairPlacement(model, placement, inspect);
 
       return {
         placement,
@@ -205,14 +203,89 @@ export class GreedySolver implements AssignmentSolver {
     }
   }
 
-  private improveOnce(
+  /**
+   * Repair floors and unpaid bills, then pack later without giving those up.
+   * A second sweep picks up bills that become payable after the shift.
+   */
+  private repairPlacement(
     model: AssignmentModel,
     placement: Int32Array,
     inspect: () => void
   ): void {
+    const sweep = (): void => {
+      for (let pass = 0; pass < this.improvementPasses; pass++) {
+        if (this.improveOnce(model, placement, inspect)) continue;
+        if (this.payUnpaidByFreeing(model, placement, inspect)) continue;
+        break;
+      }
+    };
+    sweep();
+    this.shiftLater(model, placement, inspect);
+    sweep();
+  }
+
+  /**
+   * Place one unpaid bill by moving one paid bill off its paycheck.
+   * The freeing move alone can miss the cash floors, so it is kept only when
+   * the pair pays a bill and the combined score is better.
+   */
+  private payUnpaidByFreeing(
+    model: AssignmentModel,
+    placement: Int32Array,
+    inspect: () => void
+  ): boolean {
+    const remaining = remainingCentsForPlacement(model, placement);
+    const onPaycheck: number[][] = Array.from({ length: model.paycheckCount }, () => []);
+    const unpaid: number[] = [];
+    for (let billIndex = 0; billIndex < model.billCount; billIndex++) {
+      const paycheckIndex = placement[billIndex];
+      if (paycheckIndex === UNPAID_PLACEMENT) unpaid.push(billIndex);
+      else onPaycheck[paycheckIndex]?.push(billIndex);
+    }
+    if (unpaid.length === 0) return false;
+
+    let best: Int32Array | null = null;
+    for (const unpaidIndex of unpaid) {
+      const amount = model.amountCents[unpaidIndex] ?? 0;
+      for (const paycheckIndex of candidatesForBill(model, unpaidIndex)) {
+        inspect();
+        const gap = amount - (remaining[paycheckIndex] ?? 0);
+        if (gap <= 0) continue;
+        for (const otherIndex of onPaycheck[paycheckIndex] ?? []) {
+          if (isFixed(model, otherIndex)) continue;
+          if ((model.amountCents[otherIndex] ?? 0) < gap) continue;
+          for (const destination of candidatesForBill(model, otherIndex)) {
+            if (destination === paycheckIndex) continue;
+            inspect();
+            const trial = Int32Array.from(placement);
+            trial[otherIndex] = destination;
+            trial[unpaidIndex] = paycheckIndex;
+            const nextRemaining = remainingCentsForPlacement(model, trial);
+            if ((nextRemaining[destination] ?? 0) < 0 || (nextRemaining[paycheckIndex] ?? 0) < 0) {
+              continue;
+            }
+            if (comparePlacements(model, trial, best ?? placement, TIER_COUNT) < 0) {
+              best = trial;
+            }
+          }
+        }
+      }
+    }
+    if (!best) return false;
+    placement.set(best);
+    return true;
+  }
+
+  private improveOnce(
+    model: AssignmentModel,
+    placement: Int32Array,
+    inspect: () => void
+  ): boolean {
     let bestPlacement = Int32Array.from(placement);
     let improved = false;
-    const tierDepth = model.advisorBaseline ? 7 : TIER_COUNT;
+    // T0–T6 only. A pure earliness improvement is shiftLater's job; including
+    // T7 here makes the pass count track dollar-days instead of repairs.
+    const tierDepth = 7;
 
     for (let billIndex = 0; billIndex < model.billCount; billIndex++) {
       if (isFixed(model, billIndex)) continue;
@@ -246,6 +319,7 @@ export class GreedySolver implements AssignmentSolver {
     if (improved) {
       placement.set(bestPlacement);
     }
+    return improved;
   }
 
   private shiftLater(
