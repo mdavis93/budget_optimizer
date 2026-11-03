@@ -287,6 +287,51 @@ describe('PdfService.generateHtml', () => {
                 priority: 'normal',
                 isIncomeAttached: false,
               },
+              {
+                billId: 'b11',
+                billDate: '2026-01-11',
+                creditorName: 'Eleventh',
+                amount: 11,
+                dueDay: 11,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b21',
+                billDate: '2026-01-21',
+                creditorName: 'TwentyFirst',
+                amount: 21,
+                dueDay: 21,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b22',
+                billDate: '2026-01-22',
+                creditorName: 'TwentySecond',
+                amount: 22,
+                dueDay: 22,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b23',
+                billDate: '2026-01-23',
+                creditorName: 'TwentyThird',
+                amount: 23,
+                dueDay: 23,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
+              {
+                billId: 'b31',
+                billDate: '2026-01-31',
+                creditorName: 'ThirtyFirst',
+                amount: 31,
+                dueDay: 31,
+                priority: 'normal',
+                isIncomeAttached: false,
+              },
             ],
           },
         ],
@@ -296,6 +341,11 @@ describe('PdfService.generateHtml', () => {
       expect(html).toContain('Due: 2nd');
       expect(html).toContain('Due: 3rd');
       expect(html).toContain('Due: 4th');
+      expect(html).toContain('Due: 11th');
+      expect(html).toContain('Due: 21st');
+      expect(html).toContain('Due: 22nd');
+      expect(html).toContain('Due: 23rd');
+      expect(html).toContain('Due: 31st');
     });
 
     it('writes html export to .html path derived from pdf filename', async () => {

@@ -7,6 +7,7 @@ import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
 import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
 import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
+import { ordinalSuffix } from '@shared/ordinal';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -129,8 +130,6 @@ export class PdfService {
       const reserved = isSavingsAndGoalsIncome(paycheck);
       const budgetClass = spendRemaining >= 0 ? 'positive' : 'negative';
 
-      const dueDaySuffix = (d: number) => d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
-
       return `
     <div class="paycheck ${paycheck.isShortfall ? 'paycheck-shortfall' : ''}">
       <div class="paycheck-overview">
@@ -180,7 +179,7 @@ export class PdfService {
             const monthPrefix = isNextMonth ? format(billDate, 'MMM') + ' ' : '';
             const dueLabel = bill.isIncomeAttached
               ? 'Per Paycheck'
-              : `Due: ${monthPrefix}${bill.dueDay}${dueDaySuffix(bill.dueDay)}`;
+              : `Due: ${monthPrefix}${bill.dueDay}${ordinalSuffix(bill.dueDay)}`;
             return `
               <div class="row row-bill">
                 <div class="row-label">
