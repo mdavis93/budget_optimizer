@@ -91,7 +91,7 @@ Accepted radii: auto-legal prepay is **20 days** (`MAX_PREPAY_DAYS`); the Break-
 
 ### Assignment (A-08)
 
-Schedule generation builds eligibility in `shared/billEligibility.ts` (20-day window, 31-day fallback), an integer-cents model, and a greedy placement (`greedySolver`: latest affordable paycheck, then an improvement pass and a later-shift pass). Preferred, locked, and income-attached placements stay fixed for the run. After assignment, `cashFlowAllocator.ts` funds goals and savings; `debtAcceleration.ts` applies extra avalanche payments only when `accelerateDebtPayoff` is on. Break-Glass plans come from `breakGlassAdvisor.ts` and must survive `breakGlassDryRun.ts`. Shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
+Schedule generation builds eligibility in `shared/billEligibility.ts` (20-day window, 31-day fallback), an integer-cents model, and a greedy placement (`greedySolver`: latest affordable paycheck, then repeated repairs until the score stops improving — a single bill move, or one move that frees a paycheck paired with paying an unpaid bill — then a later-shift pass). Preferred, locked, and income-attached placements stay fixed for the run. After assignment, `cashFlowAllocator.ts` funds goals and savings; `debtAcceleration.ts` applies extra avalanche payments only when `accelerateDebtPayoff` is on. Break-Glass plans come from `breakGlassAdvisor.ts` and must survive `breakGlassDryRun.ts`. Shortfalls may remain under sparse paycheck cadences or heavy manual overrides. The README states this limitation.
 
 ## Post-Audit Backlog
 
