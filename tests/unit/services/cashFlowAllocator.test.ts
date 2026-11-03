@@ -177,7 +177,7 @@ describe('cashFlowAllocator oracle', () => {
     expect(result.goals.find((g) => g.goalId === 'low')?.funded).toBe(true);
   });
 
-  it('allows a smaller lower-priority goal to complete on an earlier paycheck', () => {
+  it('does not let a lower-priority earlier deadline take surplus while a higher-priority goal still needs it', () => {
     const result = allocateGoalsAndSavings(
       [
         paycheck('2026-01-15', 200),
@@ -190,18 +190,132 @@ describe('cashFlowAllocator oracle', () => {
         goal({ id: 'early', name: 'Early', priority: 2, targetAmount: 50, targetDate: '2026-02-15' }),
       ]
     );
-    expect(result.goals.every((g) => g.funded)).toBe(true);
-    const completion = (goalId: string): number => {
-      let cumulative = 0;
-      const need = goalId === 'late' ? 400 : 50;
-      for (let i = 0; i < result.paychecks.length; i++) {
-        cumulative += result.paychecks[i].goalDeposits.find((d) => d.goalId === goalId)?.amount ?? 0;
-        if (cumulative >= need) return i;
+    expect(result.goals.find((g) => g.goalId === 'late')?.funded).toBe(true);
+    let lateRemaining = 400;
+    for (const paycheckAlloc of result.paychecks) {
+      const late = paycheckAlloc.goalDeposits.find((d) => d.goalId === 'late')?.amount ?? 0;
+      const early = paycheckAlloc.goalDeposits.find((d) => d.goalId === 'early')?.amount ?? 0;
+      if (early > 0) {
+        expect(lateRemaining - late).toBe(0);
       }
-      return -1;
-    };
-    expect(completion('early')).toBeGreaterThanOrEqual(0);
-    expect(completion('late')).toBeGreaterThanOrEqual(0);
+      lateRemaining -= late;
+    }
+  });
+
+  it('does not starve an unadmitted higher-priority goal to complete a lower-priority protected goal', () => {
+    const dates = [
+      '2026-10-02',
+      '2026-10-16',
+      '2026-10-30',
+      '2026-11-13',
+      '2026-11-27',
+      '2026-12-11',
+      '2027-01-08',
+      '2027-01-22',
+      '2027-02-05',
+      '2027-02-19',
+      '2027-03-05',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date) => paycheck(date, 400)),
+      [
+        goal({
+          id: 'christmas',
+          name: 'Christmas',
+          priority: 1,
+          targetAmount: 4000,
+          targetDate: '2026-11-27',
+        }),
+        goal({
+          id: 'con',
+          name: 'Con',
+          priority: 2,
+          targetAmount: 1500,
+          targetDate: '2027-03-01',
+        }),
+        goal({
+          id: 'cruise',
+          name: 'Cruise',
+          priority: 3,
+          targetAmount: 10000,
+          targetDate: '2027-06-11',
+        }),
+      ],
+      { savingsTargetPrimary: 0, savingsTargetFallback: 0 }
+    );
+    const christmas = result.goals.find((g) => g.goalId === 'christmas')!;
+    const con = result.goals.find((g) => g.goalId === 'con')!;
+    expect(christmas.totalAllocated).toBe(2000);
+    expect(christmas.funded).toBe(false);
+    expect(con.funded).toBe(true);
+
+    result.paychecks.forEach((paycheckAlloc, index) => {
+      const toChristmas = paycheckAlloc.goalDeposits.find((d) => d.goalId === 'christmas')?.amount ?? 0;
+      const toOthers = paycheckAlloc.goalDeposits
+        .filter((d) => d.goalId !== 'christmas')
+        .reduce((sum, deposit) => sum + deposit.amount, 0);
+      if (dates[index] <= '2026-11-27') {
+        expect(toOthers).toBe(0);
+        expect(toChristmas).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  it('still funds a lower-priority protected goal from later paychecks after a higher-priority window is exhausted', () => {
+    const dates = [
+      '2026-10-02',
+      '2026-10-16',
+      '2026-10-30',
+      '2026-11-13',
+      '2026-11-27',
+      '2026-12-11',
+      '2027-01-08',
+      '2027-01-22',
+      '2027-02-05',
+      '2027-02-19',
+      '2027-03-05',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date) => paycheck(date, 400)),
+      [
+        goal({
+          id: 'christmas',
+          name: 'Christmas',
+          priority: 1,
+          targetAmount: 4000,
+          targetDate: '2026-11-27',
+        }),
+        goal({
+          id: 'con',
+          name: 'Con',
+          priority: 2,
+          targetAmount: 6000,
+          targetDate: '2027-03-01',
+        }),
+        goal({
+          id: 'cruise',
+          name: 'Cruise',
+          priority: 3,
+          targetAmount: 10000,
+          targetDate: '2027-06-11',
+        }),
+      ]
+    );
+    const christmas = result.goals.find((g) => g.goalId === 'christmas')!;
+    const con = result.goals.find((g) => g.goalId === 'con')!;
+    const cruise = result.goals.find((g) => g.goalId === 'cruise')!;
+    expect(christmas.totalAllocated).toBeGreaterThan(0);
+    expect(con.totalAllocated).toBeGreaterThan(0);
+    expect(cruise.totalAllocated).toBeGreaterThan(0);
+    result.paychecks.forEach((paycheckAlloc, index) => {
+      const toChristmas = paycheckAlloc.goalDeposits.find((d) => d.goalId === 'christmas')?.amount ?? 0;
+      const toOthers = paycheckAlloc.goalDeposits
+        .filter((d) => d.goalId !== 'christmas')
+        .reduce((sum, deposit) => sum + deposit.amount, 0);
+      if (dates[index] <= '2026-11-27' && toChristmas > 0) {
+        expect(toOthers).toBe(0);
+      }
+    });
   });
 
   it('is deterministic across two runs sharing one snapshot', () => {
