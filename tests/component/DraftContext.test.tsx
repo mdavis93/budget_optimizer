@@ -31,6 +31,7 @@ function DraftHarness() {
   return (
     <div>
       <div data-testid="income-count">{draft.incomes.length}</div>
+      <div data-testid="income-end">{draft.incomes[0]?.endDate ?? 'none'}</div>
       <div data-testid="bill-name">{draft.bills[0]?.creditorName ?? ''}</div>
       <div data-testid="dirty-income">{String(draft.isDomainDirty('income'))}</div>
       <div data-testid="dirty-bills">{String(draft.isDomainDirty('bills'))}</div>
@@ -138,6 +139,33 @@ function DraftHarness() {
         }
       >
         update-income
+      </button>
+      <button
+        onClick={() =>
+          draft.updateIncome('income-1', {
+            sourceName: 'Salary',
+            amount: 2000,
+            cadence: 'biweekly',
+            startDate: '2026-01-01',
+            endDate: '2026-09-04',
+            isActive: true,
+          })
+        }
+      >
+        set-income-end
+      </button>
+      <button
+        onClick={() =>
+          draft.updateIncome('income-1', {
+            sourceName: 'Salary',
+            amount: 2000,
+            cadence: 'biweekly',
+            startDate: '2026-01-01',
+            isActive: true,
+          })
+        }
+      >
+        clear-income-end
       </button>
       <button onClick={() => draft.skipBill('bill-1', '2026-01-15')}>skip-bill</button>
       <button onClick={() => draft.unskipBill('bill-1', '2026-01-15')}>unskip-bill</button>
@@ -797,6 +825,24 @@ describe('DraftContext', () => {
       await waitFor(() => {
         expect(screen.getByTestId('income-count')).toHaveTextContent('0');
         expect(screen.getByTestId('leave-count')).toHaveTextContent('0');
+      });
+    });
+
+    it('clears an omitted income end date', async () => {
+      renderProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('income-count')).toHaveTextContent('1');
+      });
+
+      fireEvent.click(screen.getByText('set-income-end'));
+      await waitFor(() => {
+        expect(screen.getByTestId('income-end')).toHaveTextContent('2026-09-04');
+      });
+
+      fireEvent.click(screen.getByText('clear-income-end'));
+      await waitFor(() => {
+        expect(screen.getByTestId('income-end')).toHaveTextContent('none');
       });
     });
 

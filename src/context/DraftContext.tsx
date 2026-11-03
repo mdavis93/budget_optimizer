@@ -523,9 +523,15 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const updateIncome = useCallback(async (id: string, input: IncomeInput): Promise<boolean> => {
     if (isDraftMode) {
       updateDraft((prev) => {
-        const nextIncomes = prev.incomes.map((income) =>
-          income.id === id ? { ...income, ...input, updatedAt: nowIso() } : income
-        );
+        const nextIncomes = prev.incomes.map((income) => {
+          if (income.id !== id) return income;
+          const next: Income = { ...income, ...input, updatedAt: nowIso() };
+          // An omitted endDate means open-ended income. Spread keeps the previous date.
+          if (!input.endDate) {
+            delete next.endDate;
+          }
+          return next;
+        });
         const nextBills =
           input.purpose === 'savingsAndGoals'
             ? prev.bills.map((bill) => stripBillLinkToIncome(bill, id))

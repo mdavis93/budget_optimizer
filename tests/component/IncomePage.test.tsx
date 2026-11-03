@@ -136,6 +136,38 @@ describe('IncomePage', () => {
   });
 
   describe('hostile', () => {
+    it('omits end date when the last-payment toggle is turned off', async () => {
+      const user = userEvent.setup();
+      mockUseData.mockReturnValue({
+        incomes: [
+          createMockIncome({
+            sourceName: 'Side Gig',
+            startDate: '2026-01-01',
+            endDate: '2026-08-31',
+          }),
+        ],
+        leaves: [],
+        createIncome,
+        updateIncome,
+        deleteIncome,
+        createLeave,
+        updateLeave,
+        deleteLeave,
+      });
+
+      render(<IncomePage />);
+      await user.click(screen.getByRole('button', { name: /Edit Side Gig/i }));
+      await user.click(screen.getByText('Set an end date (last payment)').closest('div')!.querySelector('button')!);
+      await user.click(screen.getByRole('button', { name: 'Update Income' }));
+
+      await waitFor(() => {
+        expect(updateIncome).toHaveBeenCalledWith(
+          'income-1',
+          expect.not.objectContaining({ endDate: expect.anything() })
+        );
+      });
+    });
+
     it('submits end date when enabled on add income form', async () => {
       const user = userEvent.setup();
       render(<IncomePage />);
