@@ -1,22 +1,19 @@
 import { useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
+  TrendingDown,
   AlertTriangle,
-  ArrowRight,
   Wallet,
   Receipt,
-  Calendar
 } from 'lucide-react';
 import { useDraftData, useSchedule } from '../context/DraftContext';
-import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
-import { BalanceProjectionChart, ChartSuspense } from '../components/charts/lazyCharts';
 import { ScheduleBuildProgress } from '../components/schedule';
+import PayCycleBoard from '../components/dashboard/PayCycleBoard';
 import { useCopyDiagnosticReport } from '../hooks/useCopyDiagnosticReport';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
 import { getMonthlyBillEquivalent, getMonthlyOperatingIncomeTotal } from '../utils/cadence';
+import { buildPayCycleBoard } from '../utils/payCycleBoard';
 
 interface StatCardProps {
   label: string;
@@ -55,6 +52,14 @@ function StatCard({ label, value, trend, icon: Icon, color }: StatCardProps) {
   );
 }
 
+function todayIsoLocal(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function DashboardPage() {
   const { incomes, bills } = useDraftData();
   const copyReport = useCopyDiagnosticReport();
@@ -77,17 +82,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
-    
+
     const loadSchedule = async () => {
       if (isMounted) {
         await generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance);
       }
     };
-    
+
     if (isViewportReady && (incomes.length > 0 || bills.length > 0)) {
       loadSchedule();
     }
-    
+
     return () => { isMounted = false; };
   }, [incomes, bills, generateSchedule, scheduleStartDate, scheduleMonths, isViewportReady, scheduleStartingBalance, scheduleInputHash]);
 
@@ -99,36 +104,12 @@ export default function DashboardPage() {
     return bills.reduce((sum, bill) => sum + getMonthlyBillEquivalent(bill, incomes), 0);
   }, [bills, incomes]);
 
-  const upcomingPayments = useMemo(() => {
-    if (!schedule?.entries) return [];
-    
-    const now = new Date();
-    const nextWeek = addDays(now, 7);
-    
-    return schedule.entries
-      .filter((entry) => entry.type !== 'pettyCash')
-      .filter((entry) => !entry.description.endsWith(' (skipped)'))
-      .filter(entry => {
-        const entryDate = parseISO(entry.date);
-        return isWithinInterval(entryDate, { start: now, end: nextWeek });
-      })
-      .slice(0, 5);
-  }, [schedule]);
+  const todayIso = todayIsoLocal();
 
-  const chartData = useMemo(() => {
-    if (!schedule?.entries) return [];
-    
-    const dataPoints: { date: string; balance: number }[] = [];
-    
-    for (const entry of schedule.entries.slice(0, 30)) {
-      dataPoints.push({
-        date: format(parseISO(entry.date), 'MMM d'),
-        balance: entry.runningBalance,
-      });
-    }
-    
-    return dataPoints;
-  }, [schedule]);
+  const payCycleBoard = useMemo(() => {
+    if (!schedule?.paychecks?.length) return null;
+    return buildPayCycleBoard(schedule.paychecks, todayIso);
+  }, [schedule, todayIso]);
 
   const formatWholeCurrency = (amount: number) => formatCurrency(amount, { fractionDigits: 0 });
 
@@ -180,130 +161,69 @@ export default function DashboardPage() {
           label="Projected Shortfalls"
           value={String(schedule?.summary?.shortfallCount ?? 0)}
           icon={AlertTriangle}
-          color={hasShortfalls 
+          color={hasShortfalls
             ? "bg-warning-100 dark:bg-warning-900 text-warning-800 dark:text-warning-200"
             : "bg-(--color-bg-tertiary) text-(--color-text-secondary)"
           }
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Balance Projection</h3>
-            <Link to="/schedule" className="text-sm text-primary-500 hover:text-primary-600 flex items-center gap-1">
-              View full schedule <ArrowRight className="w-4 h-4" />
-            </Link>
+      <div className="card">
+        {isLoading ? (
+          <div
+            className="h-64 flex flex-col items-center justify-center px-4 text-(--color-text-secondary)"
+            role="status"
+            aria-live="polite"
+          >
+            <ScheduleBuildProgress
+              heading="Building schedule for Upcoming pay cycle…"
+              progress={progress}
+              startedAt={buildStartedAt}
+            />
           </div>
-          
-          {isLoading ? (
-            <div
-              className="h-64 flex flex-col items-center justify-center px-4 text-(--color-text-secondary)"
-              role="status"
-              aria-live="polite"
-            >
-              <ScheduleBuildProgress
-                heading="Building schedule for Balance Projection…"
-                progress={progress}
-                startedAt={buildStartedAt}
-              />
-            </div>
-          ) : error ? (
-            <div
-              className="h-64 flex flex-col items-center justify-center gap-3 text-center px-4"
-              role="alert"
-            >
-              <p className="font-medium">Could not build the balance projection.</p>
-              <p className="text-sm text-(--color-text-secondary)">{error}</p>
-              <div className="flex items-center gap-2">
+        ) : error ? (
+          <div
+            className="h-64 flex flex-col items-center justify-center gap-3 text-center px-4"
+            role="alert"
+          >
+            <p className="font-medium">Could not build the upcoming pay cycle.</p>
+            <p className="text-sm text-(--color-text-secondary)">{error}</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  clearError();
+                  void generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance, { force: true });
+                }}
+              >
+                Try again
+              </button>
+              {diagnosticId ? (
                 <button
                   type="button"
                   className="btn-secondary"
                   onClick={() => {
-                    clearError();
-                    void generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance, { force: true });
+                    void copyReport(diagnosticId);
                   }}
                 >
-                  Try again
+                  Copy report
                 </button>
-                {diagnosticId ? (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      void copyReport(diagnosticId);
-                    }}
-                  >
-                    Copy report
-                  </button>
-                ) : null}
-              </div>
+              ) : null}
             </div>
-          ) : chartData.length > 0 ? (
-            <div className="h-64">
-              <ChartSuspense>
-                <BalanceProjectionChart data={chartData} formatCurrency={formatWholeCurrency} />
-              </ChartSuspense>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-(--color-text-muted)">
-              Add income and bills to see your balance projection
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Next 7 Days</h3>
-            <Calendar className="w-5 h-5 text-(--color-text-muted)" />
           </div>
-          
-          {upcomingPayments.length > 0 ? (
-            <div className="space-y-3">
-              {upcomingPayments.map((entry, index) => (
-                <div 
-                  key={index}
-                  className={clsx(
-                    'flex items-center justify-between p-3 rounded-lg',
-                    entry.isShortfall ? 'bg-danger-50 dark:bg-danger-500/10' : 'bg-(--color-bg-tertiary)'
-                  )}
-                >
-                  <div>
-                    <p className="font-medium text-sm">{entry.description}</p>
-                    <p className="text-xs text-(--color-text-muted)">
-                      {format(parseISO(entry.date), 'EEE, MMM d')}
-                    </p>
-                  </div>
-                  <span className={clsx(
-                    'font-mono font-medium',
-                    entry.type === 'income' ? 'text-success-500' : 'text-danger-500'
-                  )}>
-                    {entry.type === 'income' ? '+' : '-'}{formatWholeCurrency(entry.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-(--color-text-muted)">
-              No upcoming payments this week
-            </div>
-          )}
-        </div>
+        ) : payCycleBoard ? (
+          <PayCycleBoard
+            board={payCycleBoard}
+            todayIso={todayIso}
+            formatCurrency={formatWholeCurrency}
+          />
+        ) : (
+          <div className="h-64 flex items-center justify-center text-(--color-text-muted)">
+            Add income and bills to see your upcoming pay cycle
+          </div>
+        )}
       </div>
-
-      {schedule?.recommendations && schedule.recommendations.length > 0 && (
-        <div className="card border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-500/10">
-          <h3 className="font-semibold mb-3 text-primary-700 dark:text-primary-400">Recommendations</h3>
-          <ul className="space-y-2">
-            {schedule.recommendations.map((rec, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm text-primary-700 dark:text-primary-300">
-                <span className="text-primary-500 mt-0.5">→</span>
-                {rec}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

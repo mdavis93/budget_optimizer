@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TestMemoryRouter } from '../helpers/router';
@@ -23,30 +23,43 @@ vi.mock('../../src/context/DraftContext', () => ({
   useSchedule: () => mockUseData(),
 }));
 
-vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Line: () => <div>Line</div>,
-  XAxis: ({ tickFormatter }: { tickFormatter?: (value: string) => string }) => {
-    tickFormatter?.('2026-01-15');
-    return <div>XAxis</div>;
-  },
-  YAxis: ({ tickFormatter }: { tickFormatter?: (value: number) => string }) => {
-    tickFormatter?.(1500);
-    return <div>YAxis</div>;
-  },
-  Tooltip: ({ formatter }: { formatter?: (value: number) => string }) => {
-    formatter?.(2000);
-    return <div>Tooltip</div>;
-  },
-  ReferenceLine: () => <div>ReferenceLine</div>,
-}));
+function operatingPaycheck(overrides: Record<string, unknown> = {}) {
+  return {
+    date: '2026-11-06',
+    purpose: 'operating',
+    incomeSources: [{ id: 'inc-1', name: 'Salary', amount: 2000 }],
+    totalIncome: 2000,
+    bills: [
+      {
+        billId: 'rent',
+        creditorName: 'Rent Payment',
+        amount: 1000,
+        dueDay: 8,
+        priority: 'critical',
+        billDate: '2026-11-08',
+        isIncomeAttached: false,
+        isUnpayable: false,
+        isSkipped: false,
+      },
+    ],
+    totalBills: 1000,
+    goalDeposits: [],
+    totalGoalDeposits: 0,
+    budgetRemaining: 250,
+    savingsDeposit: 0,
+    totalSavings: 0,
+    isShortfall: false,
+    ...overrides,
+  };
+}
 
 describe('DashboardPage', () => {
   const generateSchedule = vi.fn(async () => null);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 10, 3, 12, 0, 0));
     const setScheduleStartingBalance = vi.fn();
 
     mockUseData.mockReturnValue({
@@ -54,7 +67,16 @@ describe('DashboardPage', () => {
       bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
       generateSchedule,
       schedule: {
-        entries: [{ date: '2026-01-12', description: 'Salary', type: 'income', amount: 2000, runningBalance: 2200, isShortfall: false }],
+        paychecks: [
+          operatingPaycheck(),
+          operatingPaycheck({
+            date: '2026-11-20',
+            bills: [],
+            totalBills: 0,
+            budgetRemaining: 250,
+          }),
+        ],
+        entries: [],
         summary: { shortfallCount: 0 },
         recommendations: ['Keep emergency buffer'],
       },
@@ -67,8 +89,12 @@ describe('DashboardPage', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('happy', () => {
-    it('renders dashboard stats and recommendations', () => {
+    it('renders dashboard stats and the pay-cycle board link', () => {
       render(
         <TestMemoryRouter>
           <DashboardPage />
@@ -80,24 +106,23 @@ describe('DashboardPage', () => {
       expect(screen.getByText('Monthly Income')).toBeInTheDocument();
       expect(screen.getByText('Monthly Bills')).toBeInTheDocument();
       expect(screen.getByText('Projected Shortfalls')).toBeInTheDocument();
-      expect(screen.getByText('Recommendations')).toBeInTheDocument();
-      expect(screen.getByText('Keep emergency buffer')).toBeInTheDocument();
-      const scheduleLink = screen.getByRole('link', { name: /View full schedule/i });
+      expect(screen.queryByText('Recommendations')).not.toBeInTheDocument();
+      const scheduleLink = screen.getByRole('link', { name: /View month/i });
       expect(scheduleLink).toBeInTheDocument();
       expect(scheduleLink).toHaveAttribute('href', '/schedule');
     });
   });
 
   describe('sad', () => {
-    it('shows empty upcoming-payments state when none in range', () => {
+    it('shows empty pay-cycle state when schedule has no operating paychecks', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
         generateSchedule,
-        schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
+        schedule: { paychecks: [], entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -107,10 +132,10 @@ describe('DashboardPage', () => {
         </TestMemoryRouter>
       );
 
-      expect(screen.getByText('No upcoming payments this week')).toBeInTheDocument();
+      expect(screen.getByText('Add income and bills to see your upcoming pay cycle')).toBeInTheDocument();
     });
 
-    it('shows a progress bar while the balance projection is building', () => {
+    it('shows a progress bar while the pay cycle board is building', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
@@ -118,10 +143,10 @@ describe('DashboardPage', () => {
         isLoading: true,
         progress: { stage: 'assigning' },
         buildStartedAt: Date.now(),
-        schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
+        schedule: { paychecks: [], entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -135,7 +160,7 @@ describe('DashboardPage', () => {
       expect(screen.getByText('Assigning bills to paychecks…')).toBeInTheDocument();
     });
 
-    it('shows a failed projection state instead of the empty chart copy', () => {
+    it('shows a failed pay-cycle state instead of the empty board copy', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
@@ -147,7 +172,7 @@ describe('DashboardPage', () => {
         schedule: null,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -157,12 +182,12 @@ describe('DashboardPage', () => {
         </TestMemoryRouter>
       );
 
-      expect(screen.getByRole('alert')).toHaveTextContent('Could not build the balance projection.');
-      expect(screen.queryByText('Add income and bills to see your balance projection')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not build the upcoming pay cycle.');
+      expect(screen.queryByText('Add income and bills to see your upcoming pay cycle')).not.toBeInTheDocument();
     });
 
     it('retries a failed projection and copies the diagnostic report', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const clearError = vi.fn();
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
@@ -175,7 +200,7 @@ describe('DashboardPage', () => {
         schedule: null,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -201,13 +226,17 @@ describe('DashboardPage', () => {
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
         generateSchedule,
         schedule: {
-          entries: [{ date: '2026-01-12', description: 'Salary', type: 'income', amount: 2000, runningBalance: 2200, isShortfall: false }],
+          paychecks: [
+            operatingPaycheck(),
+            operatingPaycheck({ date: '2026-11-20', bills: [], totalBills: 0 }),
+          ],
+          entries: [],
           summary: { shortfallCount: 0 },
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
         scheduleInputHash: 'hash-v1',
         setScheduleStartingBalance: vi.fn(),
@@ -238,7 +267,7 @@ describe('DashboardPage', () => {
     });
 
     it('generates schedule on mount and reflects starting-balance edits', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const setScheduleStartingBalance = vi.fn();
       mockUseData.mockReturnValue({
         ...mockUseData(),
@@ -261,47 +290,50 @@ describe('DashboardPage', () => {
       expect(setScheduleStartingBalance).toHaveBeenCalled();
     });
 
-    it('renders upcoming shortfall entries when schedule has near-term events', () => {
-      const now = new Date();
-      const inRange = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-      const inRangeIso = inRange.toISOString().slice(0, 10);
+    it('renders pay-cycle bill chips on due dates and marks shortfall remainder', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
         generateSchedule,
         schedule: {
-          entries: [
-            {
-              date: inRangeIso,
-              description: 'Rent Payment',
-              type: 'bill',
-              amount: 1000,
-              runningBalance: -100,
+          paychecks: [
+            operatingPaycheck({
               isShortfall: true,
-            },
-            {
-              date: inRangeIso,
-              description: 'Petty cash',
-              type: 'pettyCash',
-              amount: 40,
-              runningBalance: 0,
-              isShortfall: false,
-            },
-            {
-              date: inRangeIso,
-              description: 'Utilities (skipped)',
-              type: 'expense',
-              amount: 80,
-              runningBalance: 0,
-              isShortfall: false,
-            },
+              budgetRemaining: 40,
+              bills: [
+                {
+                  billId: 'rent',
+                  creditorName: 'Rent Payment',
+                  amount: 1000,
+                  dueDay: 8,
+                  priority: 'critical',
+                  billDate: '2026-11-08',
+                  isIncomeAttached: false,
+                  isUnpayable: false,
+                  isSkipped: false,
+                },
+                {
+                  billId: 'skip',
+                  creditorName: 'Utilities',
+                  amount: 80,
+                  dueDay: 8,
+                  priority: 'normal',
+                  billDate: '2026-11-08',
+                  isIncomeAttached: false,
+                  isUnpayable: false,
+                  isSkipped: true,
+                },
+              ],
+            }),
+            operatingPaycheck({ date: '2026-11-20', bills: [], totalBills: 0 }),
           ],
+          entries: [],
           summary: { shortfallCount: 1 },
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
       });
 
@@ -312,8 +344,8 @@ describe('DashboardPage', () => {
       );
 
       expect(screen.getByText('Rent Payment')).toBeInTheDocument();
-      expect(screen.queryByText('Petty cash')).not.toBeInTheDocument();
-      expect(screen.queryByText('Utilities (skipped)')).not.toBeInTheDocument();
+      expect(screen.queryByText('Utilities')).not.toBeInTheDocument();
+      expect(screen.getByTestId('pay-cycle-remainder')).toHaveAttribute('data-shortfall', 'true');
       expect(screen.getByText(/Projected Shortfalls/i)).toBeInTheDocument();
     });
 
@@ -322,10 +354,10 @@ describe('DashboardPage', () => {
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 1000, cadence: 'monthly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 2000, dueDay: 1, priority: 'critical', isRecurring: true }],
         generateSchedule,
-        schedule: { entries: [], summary: { shortfallCount: 2 }, recommendations: [] },
+        schedule: { paychecks: [], entries: [], summary: { shortfallCount: 2 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -345,10 +377,10 @@ describe('DashboardPage', () => {
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 1500, cadence: 'monthly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1500, dueDay: 1, priority: 'critical', isRecurring: true }],
         generateSchedule,
-        schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
+        schedule: { paychecks: [], entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -362,7 +394,7 @@ describe('DashboardPage', () => {
       expect(screen.getByText('Neutral balance trend')).toBeInTheDocument();
     });
 
-    it('shows empty balance projection when schedule has no entries', () => {
+    it('shows empty pay cycle when schedule is null and there is no income or bills', () => {
       mockUseData.mockReturnValue({
         incomes: [],
         bills: [],
@@ -370,7 +402,7 @@ describe('DashboardPage', () => {
         schedule: null,
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -381,35 +413,27 @@ describe('DashboardPage', () => {
         </TestMemoryRouter>
       );
 
-      expect(screen.getByText('Add income and bills to see your balance projection')).toBeInTheDocument();
+      expect(screen.getByText('Add income and bills to see your upcoming pay cycle')).toBeInTheDocument();
       expect(generateSchedule).not.toHaveBeenCalled();
     });
 
-    it('renders income entries with positive amounts in upcoming payments', () => {
-      const now = new Date();
-      const inRange = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-      const inRangeIso = inRange.toISOString().slice(0, 10);
+    it('renders the payday deposit from the pay-cycle board', () => {
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
         bills: [],
         generateSchedule,
         schedule: {
-          entries: [
-            {
-              date: inRangeIso,
-              description: 'Paycheck',
-              type: 'income',
-              amount: 2000,
-              runningBalance: 2000,
-              isShortfall: false,
-            },
+          paychecks: [
+            operatingPaycheck({ bills: [], totalBills: 0 }),
+            operatingPaycheck({ date: '2026-11-20', bills: [], totalBills: 0 }),
           ],
+          entries: [],
           summary: { shortfallCount: 0 },
           recommendations: [],
         },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
@@ -420,47 +444,21 @@ describe('DashboardPage', () => {
         </TestMemoryRouter>
       );
 
-      expect(screen.getByText('Paycheck')).toBeInTheDocument();
       expect(screen.getByText('+$2,000')).toBeInTheDocument();
-    });
-
-    it('omits recommendations section when schedule has none', () => {
-      mockUseData.mockReturnValue({
-        incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
-        bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
-        generateSchedule,
-        schedule: {
-          entries: [{ date: '2026-01-12', description: 'Salary', type: 'income', amount: 2000, runningBalance: 2200, isShortfall: false }],
-          summary: { shortfallCount: 0 },
-          recommendations: [],
-        },
-        scheduleStartDate: '2026-01-01',
-        scheduleMonths: 3,
-      isViewportReady: true,
-        scheduleStartingBalance: 700,
-        setScheduleStartingBalance: vi.fn(),
-      });
-
-      render(
-        <TestMemoryRouter>
-          <DashboardPage />
-        </TestMemoryRouter>
-      );
-
-      expect(screen.queryByText('Recommendations')).not.toBeInTheDocument();
+      expect(screen.getByTestId('pay-cycle-day-2026-11-06')).toBeInTheDocument();
     });
 
     it('falls back to zero when starting balance input is cleared', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const setScheduleStartingBalance = vi.fn();
       mockUseData.mockReturnValue({
         incomes: [{ id: 'i1', sourceName: 'Salary', amount: 2000, cadence: 'biweekly', startDate: '2026-01-01', isActive: true }],
         bills: [{ id: 'b1', creditorName: 'Rent', budgetedAmount: 1000, dueDay: 1, priority: 'critical', isRecurring: true }],
         generateSchedule,
-        schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
+        schedule: { paychecks: [], entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 700,
         setScheduleStartingBalance,
       });
@@ -484,10 +482,10 @@ describe('DashboardPage', () => {
         ],
         bills: [],
         generateSchedule,
-        schedule: { entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
+        schedule: { paychecks: [], entries: [], summary: { shortfallCount: 0 }, recommendations: [] },
         scheduleStartDate: '2026-01-01',
         scheduleMonths: 3,
-      isViewportReady: true,
+        isViewportReady: true,
         scheduleStartingBalance: 0,
         setScheduleStartingBalance: vi.fn(),
       });
