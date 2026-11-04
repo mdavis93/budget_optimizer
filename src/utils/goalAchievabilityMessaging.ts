@@ -6,6 +6,7 @@ import {
   GoalCopyVars,
 } from './goalAchievabilityCopy';
 import { formatCurrency } from './formatCurrency';
+import { DEFAULT_MIN_CASH_ON_HAND } from '@shared/constants';
 
 export type { GoalComfortTier };
 
@@ -225,7 +226,7 @@ function shouldShowSuggestions(
 export function buildGoalAchievabilityMessaging(
   goal: SavingsGoal,
   projection: GoalProjection,
-  minCashOnHand = 100
+  minCashOnHand = DEFAULT_MIN_CASH_ON_HAND
 ): GoalAchievabilityMessaging {
   const comfortTier = deriveComfortTier(goal, projection);
   const copyTier =

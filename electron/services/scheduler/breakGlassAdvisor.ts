@@ -22,18 +22,14 @@ import type { AssignmentModel } from './model/assignmentModel';
 import { remainingCentsForPlacement } from './model/assignmentModel';
 import { UNPAID_PLACEMENT } from './model/objective';
 import { toCents } from './money';
+import { isBreakGlassBand } from '@shared/breakGlassBand';
+import { priorityTier as tierForPriority } from '@shared/billPriority';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import { GreedySolver } from './solvers/greedySolver';
 import type { AssignmentSolver } from './solvers/types';
 
 const MAX_ADVISOR_PLANS = 5;
 const MAX_ADVISOR_PLAN_STEPS = 12;
-
-const PRIORITY_TIER: Record<PaycheckBill['priority'], 1 | 2 | 3 | 4> = {
-  critical: 1,
-  high: 2,
-  normal: 3,
-  low: 4,
-};
 
 export interface ProposeBreakGlassOptions {
   scheduleStartDate?: string;
@@ -75,7 +71,7 @@ interface RelaxedMove {
 }
 
 function occurrenceKey(billId: string, billDate: string): string {
-  return `${billId}-${billDate}`;
+  return billOccurrenceKeyFromIso(billId, billDate);
 }
 
 function isBreakGlassRemaining(
@@ -83,7 +79,7 @@ function isBreakGlassRemaining(
   targetCashOnHand: number,
   minCashOnHand: number
 ): boolean {
-  return budgetRemaining < targetCashOnHand && budgetRemaining >= minCashOnHand;
+  return isBreakGlassBand(budgetRemaining, targetCashOnHand, minCashOnHand);
 }
 
 function horizonPaychecks(schedule: ScheduleData): PaycheckEntry[] {
@@ -322,7 +318,7 @@ function buildRelaxedModel(
     const bill = relaxed[billIndex];
     amountCents[billIndex] = bill.amountCents;
     dueDay[billIndex] = bill.dueDay;
-    priorityTier[billIndex] = PRIORITY_TIER[bill.bill.priority];
+    priorityTier[billIndex] = tierForPriority(bill.bill.priority);
     isPinned[billIndex] = bill.isPinned ? 1 : 0;
     fixedPaycheck[billIndex] = bill.fixedPaycheck;
     baseline[billIndex] = bill.fromIndex;

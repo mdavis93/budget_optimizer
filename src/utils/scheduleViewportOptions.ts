@@ -1,4 +1,5 @@
-import { addMonths, differenceInCalendarMonths, format, isBefore, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { monthsCoveringDate } from '@shared/monthsCoveringDate';
 import { SCHEDULE_VIEWPORT_MONTHS } from '@shared/scheduleViewportMonths';
 
 export interface ViewportOption {
@@ -15,12 +16,7 @@ const FIXED_VIEWPORTS = SCHEDULE_VIEWPORT_MONTHS;
 
 /** Whole months from start to target, rounded up so the window covers the deadline. */
 function monthsUntil(startDate: string, targetDate: string): number {
-  const start = parseISO(startDate);
-  const target = parseISO(targetDate);
-  if (!isBefore(start, target)) return 0;
-  let months = Math.max(0, differenceInCalendarMonths(target, start));
-  while (isBefore(addMonths(start, months), target)) months++;
-  return months;
+  return monthsCoveringDate(parseISO(startDate), parseISO(targetDate));
 }
 
 /**

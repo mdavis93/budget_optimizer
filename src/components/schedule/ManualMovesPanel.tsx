@@ -3,6 +3,7 @@ import { List, RotateCcw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import type { Bill, BillAssignment } from '../../types';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import ConfirmDialog from '../ConfirmDialog';
 import Modal from '../Modal';
 
@@ -157,7 +158,7 @@ export default function ManualMovesPanel({
             data-testid="manual-moves-list"
           >
             {sortedAssignments.map((assignment) => {
-              const key = `${assignment.billId}-${assignment.billDueDate}`;
+              const key = billOccurrenceKeyFromIso(assignment.billId, assignment.billDueDate);
               const isRestoring = restoringBill === key;
               const isStale = !paycheckDateSet.has(assignment.paycheckDate);
               const name = billLabel(billNameById, assignment.billId);

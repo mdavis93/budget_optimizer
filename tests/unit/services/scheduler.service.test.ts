@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MAX_PREPAY_DAYS } from '@shared/constants';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import { SchedulerService, type PaycheckEntry } from '../../../electron/services/scheduler.service';
 import { buildGoalProjectionMetrics } from '../../../electron/services/scheduler/goals';
 import { Income, Bill, SavingsGoal } from '../../../electron/services/database.service';
@@ -822,7 +823,7 @@ describe('SchedulerService', () => {
         );
 
         for (const paycheck of schedule.paychecks) {
-          const keys = paycheck.bills.map((b) => `${b.billId}-${b.billDate}`);
+          const keys = paycheck.bills.map((b) => billOccurrenceKeyFromIso(b.billId, b.billDate));
           expect(keys.length).toBe(new Set(keys).size);
         }
       });
@@ -2018,7 +2019,7 @@ describe('SchedulerService', () => {
         const occurrenceKeys: string[] = [];
         for (const paycheck of schedule.paychecks) {
           for (const bill of paycheck.bills) {
-            occurrenceKeys.push(`${bill.billId}-${bill.billDate}`);
+            occurrenceKeys.push(billOccurrenceKeyFromIso(bill.billId, bill.billDate));
             const daysEarly = differenceInDays(parseISO(bill.billDate), parseISO(paycheck.date));
             expect(daysEarly).toBeLessThanOrEqual(MAX_PREPAY_DAYS);
           }

@@ -1,4 +1,5 @@
 import { dayNumberOfIsoDate } from '@shared/billEligibility';
+import { MAX_MONEY } from '@shared/limits';
 import { CENTS_PER_DOLLAR, fromCents, toCents } from '../money';
 
 /** Cap on simulated months. A payment that never covers interest hits this and is flagged. */
@@ -288,17 +289,21 @@ export class DebtAccount {
 }
 
 export function dollarsToPrincipalCents(principal: number): number | null {
-  if (!Number.isFinite(principal) || principal < 0 || principal > 10_000_000) {
+  if (!Number.isFinite(principal) || principal < 0 || principal > MAX_MONEY) {
     return null;
   }
   return toCents(principal);
+}
+
+export function extraMonthlyDollars(billAmount: number, monthlyPayment: number): number {
+  return Math.max(0, billAmount - monthlyPayment);
 }
 
 export function extraPaymentCents(
   billAmount: number,
   monthlyPayment: number
 ): { extraCents: number; extraType: 'none' | 'monthly' } {
-  const extra = Math.max(0, billAmount - monthlyPayment);
+  const extra = extraMonthlyDollars(billAmount, monthlyPayment);
   return extra > 0
     ? { extraCents: toCents(extra), extraType: 'monthly' }
     : { extraCents: 0, extraType: 'none' };

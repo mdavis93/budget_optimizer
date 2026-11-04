@@ -6,8 +6,10 @@ import type { ScheduleData, PaycheckEntry } from './scheduler.service';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { escapeHtml } from '../utils/escapeHtml';
 import { formatCurrencyDisplay, PRIORITY_LABELS } from '../utils/constants';
+import { BILL_PRIORITY_STYLES } from '@shared/billPriorityStyle';
 import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
 import { ordinalSuffix } from '@shared/ordinal';
+import { DEFAULT_CURRENCY } from '@shared/settingsDefaults';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -24,7 +26,7 @@ export class PdfService {
     return this.scratchRoot ?? path.join(app.getPath('userData'), 'export-scratch');
   }
 
-  async generateHtmlFile(schedule: ScheduleData, outputPath: string, currency = 'USD'): Promise<{ success: boolean; error?: string }> {
+  async generateHtmlFile(schedule: ScheduleData, outputPath: string, currency = DEFAULT_CURRENCY): Promise<{ success: boolean; error?: string }> {
     try {
       const html = this.generateHtml(schedule, currency);
       const htmlPath = outputPath.endsWith('.html') ? outputPath : outputPath.replace(/\.pdf$/, '.html');
@@ -38,7 +40,7 @@ export class PdfService {
     }
   }
 
-  async generatePdf(schedule: ScheduleData, outputPath: string, currency = 'USD'): Promise<{ success: boolean; error?: string }> {
+  async generatePdf(schedule: ScheduleData, outputPath: string, currency = DEFAULT_CURRENCY): Promise<{ success: boolean; error?: string }> {
     const scratchDir = this.resolveScratchDir();
     fs.mkdirSync(scratchDir, { recursive: true, mode: 0o700 });
     const tempHtmlPath = path.join(
@@ -99,7 +101,7 @@ export class PdfService {
     }
   }
 
-  generateHtml(schedule: ScheduleData, currency = 'USD'): string {
+  generateHtml(schedule: ScheduleData, currency = DEFAULT_CURRENCY): string {
     const { paychecks, summary, recommendations, startDate, endDate } = schedule;
 
     const totalGoalDeposits = paychecks.reduce((sum, p) => sum + p.totalGoalDeposits, 0);
@@ -522,10 +524,10 @@ export class PdfService {
       font-weight: 500;
     }
 
-    .badge-critical { background: #fecaca; color: #991b1b; }
-    .badge-high { background: #fde68a; color: #92400e; }
-    .badge-normal { background: #bfdbfe; color: #1e40af; }
-    .badge-low { background: #e5e7eb; color: #374151; }
+    .badge-critical { background: ${BILL_PRIORITY_STYLES.critical.pdfBackground}; color: ${BILL_PRIORITY_STYLES.critical.pdfColor}; }
+    .badge-high { background: ${BILL_PRIORITY_STYLES.high.pdfBackground}; color: ${BILL_PRIORITY_STYLES.high.pdfColor}; }
+    .badge-normal { background: ${BILL_PRIORITY_STYLES.normal.pdfBackground}; color: ${BILL_PRIORITY_STYLES.normal.pdfColor}; }
+    .badge-low { background: ${BILL_PRIORITY_STYLES.low.pdfBackground}; color: ${BILL_PRIORITY_STYLES.low.pdfColor}; }
 
     .row-amount {
       font-family: 'SF Mono', Monaco, monospace;

@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Receipt, AlertTriangle } from 'lucide-react';
 import { useDraftActions, useDraftData } from '../context/DraftContext';
 import { Bill, BillInput, Income, PRIORITY_LABELS, CATEGORY_OPTIONS } from '../types';
+import { PRIORITY_ORDER } from '@shared/billPriority';
+import { BILL_PRIORITY_STYLES } from '@shared/billPriorityStyle';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -299,7 +301,6 @@ export default function BillsPage() {
   );
 
   const sortedBills = useMemo(() => {
-    const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
     const nameCmp = (a: Bill, b: Bill) => a.creditorName.localeCompare(b.creditorName, undefined, { sensitivity: 'base' });
 
     return [...filteredBills].sort((a, b) => {
@@ -316,8 +317,8 @@ export default function BillsPage() {
         return nameCmp(a, b);
       }
       // default — priority, then due day, then name
-      const pa = priorityOrder[a.priority];
-      const pb = priorityOrder[b.priority];
+      const pa = PRIORITY_ORDER[a.priority];
+      const pb = PRIORITY_ORDER[b.priority];
       if (pa !== pb) return pa - pb;
       if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay;
       return nameCmp(a, b);
@@ -437,17 +438,11 @@ export default function BillsPage() {
               <div className="flex items-center gap-4">
                 <div className={clsx(
                   'p-3 rounded-lg',
-                  bill.priority === 'critical' && 'bg-danger-100 dark:bg-danger-500/20',
-                  bill.priority === 'high' && 'bg-warning-100 dark:bg-warning-500/20',
-                  bill.priority === 'normal' && 'bg-primary-100 dark:bg-primary-500/20',
-                  bill.priority === 'low' && 'bg-(--color-bg-tertiary)'
+                  BILL_PRIORITY_STYLES[bill.priority].billsIconWrap
                 )}>
                   <Receipt className={clsx(
                     'w-6 h-6',
-                    bill.priority === 'critical' && 'text-danger-600 dark:text-danger-500',
-                    bill.priority === 'high' && 'text-warning-600 dark:text-warning-500',
-                    bill.priority === 'normal' && 'text-primary-600 dark:text-primary-500',
-                    bill.priority === 'low' && 'text-(--color-text-muted)'
+                    BILL_PRIORITY_STYLES[bill.priority].billsIcon
                   )} />
                 </div>
                 <div>
@@ -455,10 +450,7 @@ export default function BillsPage() {
                     <h3 className="font-medium">{bill.creditorName}</h3>
                     <span className={clsx(
                       'text-xs font-medium px-2 py-0.5 rounded-full',
-                      bill.priority === 'critical' && 'bg-danger-100 text-danger-700 dark:bg-danger-900 dark:text-danger-200',
-                      bill.priority === 'high' && 'bg-warning-100 text-warning-800 dark:bg-warning-900 dark:text-warning-200',
-                      bill.priority === 'normal' && 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-200',
-                      bill.priority === 'low' && 'bg-(--color-bg-tertiary) text-(--color-text-secondary)'
+                      BILL_PRIORITY_STYLES[bill.priority].billsBadge
                     )}>
                       {PRIORITY_LABELS[bill.priority]}
                     </span>

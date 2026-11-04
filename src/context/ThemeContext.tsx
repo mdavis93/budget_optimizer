@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { DEFAULT_THEME } from '@shared/settingsDefaults';
+import type { ThemeSetting } from '@shared/themes';
 
-type Theme = 'light' | 'dark' | 'system';
+type Theme = ThemeSetting;
 
 interface ThemeContextType {
   theme: Theme;
@@ -20,7 +22,7 @@ function getSystemTheme(): 'light' | 'dark' {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem('theme') as Theme | null;
-    return stored || 'system';
+    return stored || DEFAULT_THEME;
   });
   
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => {

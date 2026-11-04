@@ -3,6 +3,7 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
 } from '@shared/constants';
 import type { Bill, Income, Leave, SavingsGoal, ScheduleData } from '@shared/types';
+import { roundCurrency } from '@shared/money';
 import { SchedulerService } from '../../electron/services/scheduler.service';
 
 const STAMP = '2026-01-01T00:00:00.000Z';
@@ -107,7 +108,7 @@ export function monthlyAmountsForLoad(
     throw new Error('load weights must be positive');
   }
   const monthlyPool = (annualIncome * load) / 12;
-  return weights.map((weight) => Math.round(((monthlyPool * weight) / weightSum) * 100) / 100);
+  return weights.map((weight) => roundCurrency((monthlyPool * weight) / weightSum));
 }
 
 export function approximateAnnualLoad(scenario: ScheduleScenario): number {

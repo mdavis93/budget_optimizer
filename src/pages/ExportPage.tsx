@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO } from 'date-fns';
+import { SCHEDULE_VIEWPORT_MONTHS } from '@shared/scheduleViewportMonths';
 import { formatCurrency } from '../utils/formatCurrency';
 import clsx from 'clsx';
 
@@ -170,9 +171,11 @@ export default function ExportPage() {
               onChange={(e) => setMonths(parseInt(e.target.value))}
               className="input"
             >
-              <option value={3}>3 Months</option>
-              <option value={6}>6 Months</option>
-              <option value={12}>12 Months</option>
+              {SCHEDULE_VIEWPORT_MONTHS.map((viewportMonths) => (
+                <option key={viewportMonths} value={viewportMonths}>
+                  {`${viewportMonths} Month${viewportMonths > 1 ? 's' : ''}`}
+                </option>
+              ))}
             </select>
           </div>
           

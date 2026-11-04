@@ -3,6 +3,7 @@ import { GripVertical, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
 import clsx from 'clsx';
 import { ordinalSuffix } from '@shared/ordinal';
 import { BillAssignment, PaycheckBill, PRIORITY_LABELS } from '../../types';
+import { BILL_PRIORITY_STYLES } from '@shared/billPriorityStyle';
 import { isBillMovedToPaycheck } from '../../utils/scheduleBills';
 import type { DraggedBill } from './PaycheckView';
 
@@ -122,10 +123,7 @@ export default function PaycheckBillRow({
         )}
         <span className={clsx(
           'text-xs px-2 py-0.5 rounded-full',
-          bill.priority === 'critical' && 'bg-danger-200 text-danger-800 dark:bg-danger-800 dark:text-danger-200',
-          bill.priority === 'high' && 'bg-warning-200 text-warning-800 dark:bg-warning-800 dark:text-warning-200',
-          bill.priority === 'normal' && 'bg-primary-200 text-primary-800 dark:bg-primary-800 dark:text-primary-200',
-          bill.priority === 'low' && 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+          BILL_PRIORITY_STYLES[bill.priority].paycheckBadge
         )}>
           {PRIORITY_LABELS[bill.priority]}
         </span>

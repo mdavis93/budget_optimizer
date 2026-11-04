@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dayNumberOfIsoDate } from '@shared/billEligibility';
-import { MAX_ADVISOR_EARLY_DAYS, MAX_PREPAY_DAYS } from '@shared/constants';
+import { DEFAULT_MIN_CASH_ON_HAND, DEFAULT_TARGET_CASH_ON_HAND, MAX_ADVISOR_EARLY_DAYS, MAX_PREPAY_DAYS } from '@shared/constants';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import {
   proposeBreakGlassPlans,
   type ProposeBreakGlassOptions,
@@ -77,8 +78,8 @@ function replayPlan(schedule: ScheduleData, steps: BreakGlassAdvisorReport['plan
 }
 
 function isBreakGlass(remaining: number, schedule: ScheduleData, paycheck: PaycheckEntry): boolean {
-  const target = paycheck.targetCashOnHand ?? schedule.maxBudgetRemaining ?? 250;
-  const min = paycheck.minCashOnHand ?? schedule.minCashOnHand ?? 100;
+  const target = paycheck.targetCashOnHand ?? schedule.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
+  const min = paycheck.minCashOnHand ?? schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   return remaining < target && remaining >= min;
 }
 
@@ -92,7 +93,7 @@ function expectAdvisorInvariants(
   expect(new Set(targets).size).toBe(targets.length);
   const bills = new Map(
     schedule.paychecks.flatMap((paycheck) =>
-      paycheck.bills.map((bill) => [`${bill.billId}-${bill.billDate}`, bill] as const)
+      paycheck.bills.map((bill) => [billOccurrenceKeyFromIso(bill.billId, bill.billDate), bill] as const)
     )
   );
 
@@ -103,7 +104,7 @@ function expectAdvisorInvariants(
     expect(plan.steps.length).toBeLessThanOrEqual(12);
     const seen = new Set<string>();
     for (const step of plan.steps) {
-      const key = `${step.billId}-${step.billDueDate}`;
+      const key = billOccurrenceKeyFromIso(step.billId, step.billDueDate);
       expect(seen.has(key)).toBe(false);
       seen.add(key);
       expect(step.toPaycheckDate <= step.billDueDate).toBe(true);
@@ -124,7 +125,7 @@ function expectAdvisorInvariants(
     const after = replayPlan(schedule, plan.steps);
     for (const paycheck of schedule.paychecks) {
       const next = after.get(paycheck.date) ?? paycheck.budgetRemaining;
-      const min = paycheck.minCashOnHand ?? schedule.minCashOnHand ?? 100;
+      const min = paycheck.minCashOnHand ?? schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
       if (paycheck.budgetRemaining >= min) {
         expect(next).toBeGreaterThanOrEqual(min);
       } else {

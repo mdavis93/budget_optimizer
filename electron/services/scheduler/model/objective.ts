@@ -4,6 +4,10 @@ import {
 } from '@shared/constants';
 import type { PaycheckEntry } from '@shared/types';
 import { toCents } from '../money';
+import { priorityTier, type BillPriority } from '@shared/billPriority';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
+
+export type { BillPriority };
 
 /**
  * Lexicographic schedule objective. The smaller vector wins.
@@ -21,8 +25,6 @@ export const UNPAID_PLACEMENT = -1;
 
 const MS_PER_DAY = 86_400_000;
 
-export type BillPriority = 'critical' | 'high' | 'normal' | 'low';
-
 export type TierVector = readonly [
   number,
   number,
@@ -33,13 +35,6 @@ export type TierVector = readonly [
   number,
   number,
 ];
-
-const PRIORITY_TIER: Record<BillPriority, 1 | 2 | 3 | 4> = {
-  critical: 1,
-  high: 2,
-  normal: 3,
-  low: 4,
-};
 
 export interface ObjectiveBill {
   amountCents: number;
@@ -108,7 +103,7 @@ export function scoreObjective(input: ObjectiveInput): TierVector {
     const bill = input.bills[index];
     const paycheckIndex = input.placement[index];
     if (paycheckIndex === UNPAID_PLACEMENT) {
-      const tier = bill.isPinned ? 0 : PRIORITY_TIER[bill.priority];
+      const tier = bill.isPinned ? 0 : priorityTier(bill.priority);
       tiers[tier] += bill.amountCents;
       continue;
     }
@@ -141,7 +136,7 @@ export function compareTierVectors(left: TierVector, right: TierVector): number 
 }
 
 function occurrenceKey(billId: string, dueDate: string): string {
-  return `${billId}-${dueDate}`;
+  return billOccurrenceKeyFromIso(billId, dueDate);
 }
 
 /**

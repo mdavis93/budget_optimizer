@@ -31,6 +31,11 @@ import {
 } from '@shared/scheduleComputeValidate';
 import { resolveScheduleWorkerPath } from '../utils/scheduleWorkerPath';
 import { logger } from './logger.service';
+import {
+  DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
+  DEFAULT_TARGET_CASH_ON_HAND,
+} from '@shared/constants';
 
 export type { ScheduleComputeRequest, ScheduleComputeSuccessMessage };
 
@@ -536,10 +541,10 @@ export const SCHEDULE_WORKER_SMOKE_INPUT: ScheduleComputeInputPayload = {
   startingBalance: 1000,
   skippedBills: [],
   manualAssignments: [],
-  targetCashOnHand: 250,
+  targetCashOnHand: DEFAULT_TARGET_CASH_ON_HAND,
   goals: [],
-  minCashOnHand: 100,
-  minSavingsPerPaycheck: 0,
+  minCashOnHand: DEFAULT_MIN_CASH_ON_HAND,
+  minSavingsPerPaycheck: DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   debts: [],
   accelerateDebtPayoff: false,
   incomeOverrides: [],

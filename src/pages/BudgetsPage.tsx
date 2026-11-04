@@ -8,12 +8,13 @@ import { useToast } from '../components/Toast';
 import clsx from 'clsx';
 import BudgetCard from '../components/budgets/BudgetCard';
 import CreateBudgetForm, { BudgetFormValues } from '../components/budgets/CreateBudgetForm';
+import { DEFAULT_MIN_CASH_ON_HAND, DEFAULT_TARGET_CASH_ON_HAND } from '@shared/constants';
 
 const INITIAL_BUDGET_VALUES: BudgetFormValues = {
   name: '',
   startingBalance: 0,
-  targetCashOnHand: 250,
-  minCashOnHand: 100,
+  targetCashOnHand: DEFAULT_TARGET_CASH_ON_HAND,
+  minCashOnHand: DEFAULT_MIN_CASH_ON_HAND,
 };
 
 export default function BudgetsPage() {

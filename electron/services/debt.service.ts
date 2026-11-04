@@ -1,28 +1,11 @@
 import { addMonths, format } from 'date-fns';
+import type { AmortizationSchedule } from '@shared/types';
 import { fromCents, toCents } from './scheduler/money';
 import {
   amortizationResultToDollars,
   monthlyInterestCents,
   simulateMonthlyAmortization,
 } from './scheduler/debt/debtSimulator';
-
-export interface AmortizationPayment {
-  paymentNumber: number;
-  date: string;
-  payment: number;
-  principal: number;
-  interest: number;
-  remainingBalance: number;
-}
-
-export interface AmortizationSchedule {
-  payments: AmortizationPayment[];
-  totalPayments: number;
-  totalInterest: number;
-  totalPrincipal: number;
-  payoffDate: string;
-  monthsToPayoff: number;
-}
 
 const MAX_CACHE_SIZE = 50;
 

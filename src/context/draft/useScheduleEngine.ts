@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { format, startOfMonth } from 'date-fns';
 import type { Budget, DraftBudgetFields, DraftOverlay, DraftState, ScheduleData } from '../../types';
+import { firstOfLocalMonth } from '@shared/firstOfLocalMonth';
 import { reportError } from '../../utils/reportError';
 import { applyScheduleViewport } from '../../utils/scheduleViewport';
 import {
@@ -16,7 +16,7 @@ import {
   isScheduleViewportMonths,
 } from '@shared/scheduleViewportMonths';
 
-const defaultScheduleStartDate = () => format(startOfMonth(new Date()), 'yyyy-MM-dd');
+const defaultScheduleStartDate = () => firstOfLocalMonth(new Date());
 
 export interface ScheduleEngineValue {
   schedule: ScheduleData | null;

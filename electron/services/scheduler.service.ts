@@ -29,6 +29,7 @@ import { proposeBreakGlassPlans } from './scheduler/breakGlassAdvisor';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   SCHEDULE_CALCULATION_MONTHS,
 } from './scheduler/types';
 import type { DebtPayoffInfo, ScheduleData } from './scheduler/types';
@@ -80,7 +81,7 @@ export class SchedulerService {
     maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
     goals: SavingsGoal[] = [],
     minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-    minSavingsPerPaycheck: number = 0,
+    minSavingsPerPaycheck: number = DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
     debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
     incomeOverrides: Map<string, number> = new Map(),
     leaves: Leave[] = [],

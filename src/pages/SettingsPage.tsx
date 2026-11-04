@@ -25,6 +25,17 @@ import {
   DEFAULT_SCHEDULE_VIEWPORT_MONTHS,
   type ScheduleViewportMonths,
 } from '@shared/scheduleViewportMonths';
+import {
+  DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
+  DEFAULT_TARGET_CASH_ON_HAND,
+} from '@shared/constants';
+import {
+  clampSavingsApy,
+  DEFAULT_AUTO_LOCK_MINUTES,
+  DEFAULT_CURRENCY,
+  DEFAULT_SAVINGS_APY,
+} from '@shared/settingsDefaults';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -32,12 +43,12 @@ export default function SettingsPage() {
   const { currentBudget, updateBudget } = useBudget();
   const draft = useDraft();
   const { setScheduleMonths, persistedViewportMonths } = useSchedule();
-  const [currency, setCurrency] = useState('USD');
-  const [autoLockMinutes, setAutoLockMinutes] = useState(5);
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
+  const [autoLockMinutes, setAutoLockMinutes] = useState(DEFAULT_AUTO_LOCK_MINUTES);
   const [defaultScheduleMonths, setDefaultScheduleMonths] = useState<ScheduleViewportMonths>(
     DEFAULT_SCHEDULE_VIEWPORT_MONTHS
   );
-  const [savingsAPY, setSavingsAPY] = useState(0);
+  const [savingsAPY, setSavingsAPY] = useState(DEFAULT_SAVINGS_APY);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({
@@ -46,9 +57,9 @@ export default function SettingsPage() {
   });
   
   // Budget-specific settings
-  const [targetCashOnHand, setTargetCashOnHand] = useState(250);
-  const [minCashOnHand, setMinCashOnHand] = useState(100);
-  const [minSavingsPerPaycheck, setMinSavingsPerPaycheck] = useState(0);
+  const [targetCashOnHand, setTargetCashOnHand] = useState(DEFAULT_TARGET_CASH_ON_HAND);
+  const [minCashOnHand, setMinCashOnHand] = useState(DEFAULT_MIN_CASH_ON_HAND);
+  const [minSavingsPerPaycheck, setMinSavingsPerPaycheck] = useState(DEFAULT_MIN_SAVINGS_PER_PAYCHECK);
   const [accelerateDebtPayoff, setAccelerateDebtPayoff] = useState(false);
 
   // Load settings on mount
@@ -59,11 +70,11 @@ export default function SettingsPage() {
       try {
         const result = await window.electronAPI.settings.get();
         if (isMounted && result.success && result.data) {
-          const nextCurrency = result.data.currency || 'USD';
+          const nextCurrency = result.data.currency || DEFAULT_CURRENCY;
           setCurrency(nextCurrency);
           setDefaultCurrency(nextCurrency);
-          setAutoLockMinutes(result.data.autoLockMinutes ?? 5);
-          setSavingsAPY(result.data.savingsAPY ?? 0);
+          setAutoLockMinutes(result.data.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES);
+          setSavingsAPY(result.data.savingsAPY ?? DEFAULT_SAVINGS_APY);
         }
       } catch {
         // Settings load failed, using defaults
@@ -122,7 +133,7 @@ export default function SettingsPage() {
   };
 
   const handleSavingsAPYChange = (value: number) => {
-    const clampedValue = Math.min(100, Math.max(0, value));
+    const clampedValue = clampSavingsApy(value);
     setSavingsAPY(clampedValue);
     saveSettings({ savingsAPY: clampedValue });
   };

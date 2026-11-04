@@ -7,6 +7,7 @@ import {
 import { movableBillCapacity } from '@shared/reconciliationSurplus';
 import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
 import { PRIORITY_ORDER } from '../../utils/constants';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
@@ -72,7 +73,7 @@ export function analyzeAndProposeFixes(schedule: ScheduleData): ReconciliationRe
       .sort((a, b) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]);
 
     for (const bill of movableBills) {
-      const billKey = `${bill.billId}-${bill.billDate}`;
+      const billKey = billOccurrenceKeyFromIso(bill.billId, bill.billDate);
       if (proposedBillMoves.has(billKey)) continue;
 
       const earlierPaychecks = schedule.paychecks

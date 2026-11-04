@@ -9,6 +9,7 @@ import type {
   SkippedBill,
 } from './types';
 import type { ScheduleComputeInputPayload } from './scheduleComputeProtocol';
+import { normalizeIncomePurpose } from './incomePurpose';
 
 /**
  * Assignment-changing fields hashed by the renderer cache and scheduleInputHash.
@@ -85,7 +86,7 @@ function incomeIdentity(incomes: Income[]) {
     startDate: income.startDate,
     endDate: income.endDate ?? '',
     isActive: income.isActive,
-    purpose: income.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating',
+    purpose: normalizeIncomePurpose(income.purpose),
   }));
 }
 

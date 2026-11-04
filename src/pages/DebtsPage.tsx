@@ -4,7 +4,7 @@ import { useDraftActions, useDraftData, useDraftStatus, useSchedule } from '../c
 import { useBudget } from '../context/BudgetContext';
 import { reportError } from '../utils/reportError';
 import { formatCurrency } from '../utils/formatCurrency';
-import { Bill, DebtInput, DebtWithAmortization } from '../types';
+import { Bill, DEBT_CATEGORY, DebtInput, DebtWithAmortization } from '../types';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -78,7 +78,7 @@ export default function DebtsPage() {
     [debtsWithAmortization]
   );
 
-  const debtBills = useMemo(() => bills.filter((b) => b.category === 'Debt'), [bills]);
+  const debtBills = useMemo(() => bills.filter((b) => b.category === DEBT_CATEGORY), [bills]);
 
   const untrackedDebtBills = useMemo(
     () => debtBills.filter((b) => !existingDebtBillIds.has(b.id)),

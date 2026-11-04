@@ -1,153 +1,154 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ElectronAPI } from '@shared/electronApi';
 import type { ScheduleComputeProgressMessage } from '@shared/scheduleComputeProtocol';
+import { IPC } from '@shared/ipcChannels';
 
 const api = {
-  platform: () => ipcRenderer.invoke('app:get-platform'),
-  checkBiometricAvailable: () => ipcRenderer.invoke('app:check-biometric-available'),
-  showSaveDialog: (options) => ipcRenderer.invoke('app:show-save-dialog', options),
-  quitApp: () => ipcRenderer.invoke('app:quit'),
+  platform: () => ipcRenderer.invoke(IPC.appGetPlatform),
+  checkBiometricAvailable: () => ipcRenderer.invoke(IPC.appCheckBiometricAvailable),
+  showSaveDialog: (options) => ipcRenderer.invoke(IPC.appShowSaveDialog, options),
+  quitApp: () => ipcRenderer.invoke(IPC.appQuit),
   onCloseRequested: (callback) => {
     const handler = () => callback();
-    ipcRenderer.on('app:close-requested', handler);
-    return () => ipcRenderer.removeListener('app:close-requested', handler);
+    ipcRenderer.on(IPC.appCloseRequested, handler);
+    return () => ipcRenderer.removeListener(IPC.appCloseRequested, handler);
   },
 
   budget: {
-    getAll: () => ipcRenderer.invoke('budget:get-all'),
-    getAllWithStats: () => ipcRenderer.invoke('budget:get-all-with-stats'),
-    getCurrent: () => ipcRenderer.invoke('budget:get-current'),
-    getSnapshot: () => ipcRenderer.invoke('budget:get-snapshot'),
-    getStats: (budgetId) => ipcRenderer.invoke('budget:get-stats', budgetId),
-    create: (input) => ipcRenderer.invoke('budget:create', input),
-    update: (id, input) => ipcRenderer.invoke('budget:update', id, input),
-    delete: (id) => ipcRenderer.invoke('budget:delete', id),
-    switch: (id) => ipcRenderer.invoke('budget:switch', id),
-    startQuick: () => ipcRenderer.invoke('budget:start-quick'),
-    endQuick: () => ipcRenderer.invoke('budget:end-quick'),
+    getAll: () => ipcRenderer.invoke(IPC.budgetGetAll),
+    getAllWithStats: () => ipcRenderer.invoke(IPC.budgetGetAllWithStats),
+    getCurrent: () => ipcRenderer.invoke(IPC.budgetGetCurrent),
+    getSnapshot: () => ipcRenderer.invoke(IPC.budgetGetSnapshot),
+    getStats: (budgetId) => ipcRenderer.invoke(IPC.budgetGetStats, budgetId),
+    create: (input) => ipcRenderer.invoke(IPC.budgetCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC.budgetUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC.budgetDelete, id),
+    switch: (id) => ipcRenderer.invoke(IPC.budgetSwitch, id),
+    startQuick: () => ipcRenderer.invoke(IPC.budgetStartQuick),
+    endQuick: () => ipcRenderer.invoke(IPC.budgetEndQuick),
   },
 
   auth: {
-    isFirstTimeSetup: () => ipcRenderer.invoke('auth:is-first-time-setup'),
+    isFirstTimeSetup: () => ipcRenderer.invoke(IPC.authIsFirstTimeSetup),
     createMasterPassword: (password) =>
-      ipcRenderer.invoke('auth:create-master-password', password),
-    unlock: (password) => ipcRenderer.invoke('auth:unlock', password),
-    unlockWithSavedCredentials: () => ipcRenderer.invoke('auth:unlock-with-saved-credentials'),
-    unlockWithBiometric: () => ipcRenderer.invoke('auth:unlock-with-biometric'),
-    lock: () => ipcRenderer.invoke('auth:lock'),
-    isUnlocked: () => ipcRenderer.invoke('auth:is-unlocked'),
-    enableBiometric: () => ipcRenderer.invoke('auth:enable-biometric'),
-    isBiometricEnabled: () => ipcRenderer.invoke('auth:is-biometric-enabled'),
+      ipcRenderer.invoke(IPC.authCreateMasterPassword, password),
+    unlock: (password) => ipcRenderer.invoke(IPC.authUnlock, password),
+    unlockWithSavedCredentials: () => ipcRenderer.invoke(IPC.authUnlockWithSavedCredentials),
+    unlockWithBiometric: () => ipcRenderer.invoke(IPC.authUnlockWithBiometric),
+    lock: () => ipcRenderer.invoke(IPC.authLock),
+    isUnlocked: () => ipcRenderer.invoke(IPC.authIsUnlocked),
+    enableBiometric: () => ipcRenderer.invoke(IPC.authEnableBiometric),
+    isBiometricEnabled: () => ipcRenderer.invoke(IPC.authIsBiometricEnabled),
     changePassword: (oldPassword, newPassword) =>
-      ipcRenderer.invoke('auth:change-password', oldPassword, newPassword),
-    getPendingRecoveryKey: () => ipcRenderer.invoke('auth:get-pending-recovery-key'),
-    clearPendingRecoveryKey: () => ipcRenderer.invoke('auth:clear-pending-recovery-key'),
+      ipcRenderer.invoke(IPC.authChangePassword, oldPassword, newPassword),
+    getPendingRecoveryKey: () => ipcRenderer.invoke(IPC.authGetPendingRecoveryKey),
+    clearPendingRecoveryKey: () => ipcRenderer.invoke(IPC.authClearPendingRecoveryKey),
     verifyRecoveryKey: (recoveryKey) =>
-      ipcRenderer.invoke('auth:verify-recovery-key', recoveryKey),
+      ipcRenderer.invoke(IPC.authVerifyRecoveryKey, recoveryKey),
     resetPasswordWithRecovery: (recoveryKey, newPassword) =>
-      ipcRenderer.invoke('auth:reset-password-with-recovery', recoveryKey, newPassword),
-    activityPing: () => ipcRenderer.invoke('auth:activity-ping'),
+      ipcRenderer.invoke(IPC.authResetPasswordWithRecovery, recoveryKey, newPassword),
+    activityPing: () => ipcRenderer.invoke(IPC.authActivityPing),
     onLocked: (callback) => {
       const handler = () => callback();
-      ipcRenderer.on('auth:locked', handler);
-      return () => ipcRenderer.removeListener('auth:locked', handler);
+      ipcRenderer.on(IPC.authLocked, handler);
+      return () => ipcRenderer.removeListener(IPC.authLocked, handler);
     },
   },
 
   income: {
-    getAll: () => ipcRenderer.invoke('income:get-all'),
-    create: (income) => ipcRenderer.invoke('income:create', income),
-    update: (id, income) => ipcRenderer.invoke('income:update', id, income),
-    delete: (id) => ipcRenderer.invoke('income:delete', id),
+    getAll: () => ipcRenderer.invoke(IPC.incomeGetAll),
+    create: (income) => ipcRenderer.invoke(IPC.incomeCreate, income),
+    update: (id, income) => ipcRenderer.invoke(IPC.incomeUpdate, id, income),
+    delete: (id) => ipcRenderer.invoke(IPC.incomeDelete, id),
   },
 
   bills: {
-    getAll: () => ipcRenderer.invoke('bills:get-all'),
-    create: (bill) => ipcRenderer.invoke('bills:create', bill),
-    update: (id, bill) => ipcRenderer.invoke('bills:update', id, bill),
-    delete: (id) => ipcRenderer.invoke('bills:delete', id),
+    getAll: () => ipcRenderer.invoke(IPC.billsGetAll),
+    create: (bill) => ipcRenderer.invoke(IPC.billsCreate, bill),
+    update: (id, bill) => ipcRenderer.invoke(IPC.billsUpdate, id, bill),
+    delete: (id) => ipcRenderer.invoke(IPC.billsDelete, id),
   },
 
   skippedBills: {
-    getAll: () => ipcRenderer.invoke('skipped-bills:get-all'),
-    skip: (billId, skipDate) => ipcRenderer.invoke('skipped-bills:skip', billId, skipDate),
-    unskip: (billId, skipDate) => ipcRenderer.invoke('skipped-bills:unskip', billId, skipDate),
-    isSkipped: (billId, skipDate) => ipcRenderer.invoke('skipped-bills:is-skipped', billId, skipDate),
+    getAll: () => ipcRenderer.invoke(IPC.skippedBillsGetAll),
+    skip: (billId, skipDate) => ipcRenderer.invoke(IPC.skippedBillsSkip, billId, skipDate),
+    unskip: (billId, skipDate) => ipcRenderer.invoke(IPC.skippedBillsUnskip, billId, skipDate),
+    isSkipped: (billId, skipDate) => ipcRenderer.invoke(IPC.skippedBillsIsSkipped, billId, skipDate),
   },
 
   billAssignments: {
-    getAll: () => ipcRenderer.invoke('bill-assignments:get-all'),
+    getAll: () => ipcRenderer.invoke(IPC.billAssignmentsGetAll),
     assign: (billId, billDueDate, paycheckDate) =>
-      ipcRenderer.invoke('bill-assignments:assign', billId, billDueDate, paycheckDate),
+      ipcRenderer.invoke(IPC.billAssignmentsAssign, billId, billDueDate, paycheckDate),
     remove: (billId, billDueDate) =>
-      ipcRenderer.invoke('bill-assignments:remove', billId, billDueDate),
+      ipcRenderer.invoke(IPC.billAssignmentsRemove, billId, billDueDate),
   },
 
   incomeOverrides: {
-    getAll: () => ipcRenderer.invoke('income-overrides:get-all'),
+    getAll: () => ipcRenderer.invoke(IPC.incomeOverridesGetAll),
     set: (incomeId, paycheckDate, amount) =>
-      ipcRenderer.invoke('income-overrides:set', incomeId, paycheckDate, amount),
+      ipcRenderer.invoke(IPC.incomeOverridesSet, incomeId, paycheckDate, amount),
     remove: (incomeId, paycheckDate) =>
-      ipcRenderer.invoke('income-overrides:remove', incomeId, paycheckDate),
+      ipcRenderer.invoke(IPC.incomeOverridesRemove, incomeId, paycheckDate),
   },
 
   goals: {
-    getAll: () => ipcRenderer.invoke('goals:get-all'),
-    create: (input) => ipcRenderer.invoke('goals:create', input),
-    update: (id, input) => ipcRenderer.invoke('goals:update', id, input),
-    delete: (id) => ipcRenderer.invoke('goals:delete', id),
+    getAll: () => ipcRenderer.invoke(IPC.goalsGetAll),
+    create: (input) => ipcRenderer.invoke(IPC.goalsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC.goalsUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC.goalsDelete, id),
   },
 
   debts: {
-    getAll: () => ipcRenderer.invoke('debts:get-all'),
-    getByBill: (billId) => ipcRenderer.invoke('debts:get-by-bill', billId),
-    create: (input) => ipcRenderer.invoke('debts:create', input),
-    update: (id, input) => ipcRenderer.invoke('debts:update', id, input),
-    delete: (id) => ipcRenderer.invoke('debts:delete', id),
-    getAmortization: (debtId) => ipcRenderer.invoke('debts:get-amortization', debtId),
+    getAll: () => ipcRenderer.invoke(IPC.debtsGetAll),
+    getByBill: (billId) => ipcRenderer.invoke(IPC.debtsGetByBill, billId),
+    create: (input) => ipcRenderer.invoke(IPC.debtsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC.debtsUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC.debtsDelete, id),
+    getAmortization: (debtId) => ipcRenderer.invoke(IPC.debtsGetAmortization, debtId),
     getAllWithAmortization: (overlay) =>
-      ipcRenderer.invoke('debts:get-all-with-amortization', overlay),
+      ipcRenderer.invoke(IPC.debtsGetAllWithAmortization, overlay),
   },
 
   leaves: {
-    getAll: () => ipcRenderer.invoke('leaves:get-all'),
-    create: (input) => ipcRenderer.invoke('leaves:create', input),
-    update: (id, input) => ipcRenderer.invoke('leaves:update', id, input),
-    delete: (id) => ipcRenderer.invoke('leaves:delete', id),
+    getAll: () => ipcRenderer.invoke(IPC.leavesGetAll),
+    create: (input) => ipcRenderer.invoke(IPC.leavesCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC.leavesUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC.leavesDelete, id),
   },
 
   schedule: {
     build: (startDate, months, startingBalance, overlay) =>
-      ipcRenderer.invoke('schedule:build', startDate, months, startingBalance, overlay),
+      ipcRenderer.invoke(IPC.scheduleBuild, startDate, months, startingBalance, overlay),
     onProgress: (callback) => {
       const handler = (_event: unknown, progress: ScheduleComputeProgressMessage) => callback(progress);
-      ipcRenderer.on('schedule:progress', handler);
-      return () => ipcRenderer.removeListener('schedule:progress', handler);
+      ipcRenderer.on(IPC.scheduleProgress, handler);
+      return () => ipcRenderer.removeListener(IPC.scheduleProgress, handler);
     },
   },
 
   export: {
-    toPdf: (schedule, filePath) => ipcRenderer.invoke('export:to-pdf', schedule, filePath),
-    toHtml: (schedule, filePath) => ipcRenderer.invoke('export:to-html', schedule, filePath),
+    toPdf: (schedule, filePath) => ipcRenderer.invoke(IPC.exportToPdf, schedule, filePath),
+    toHtml: (schedule, filePath) => ipcRenderer.invoke(IPC.exportToHtml, schedule, filePath),
     toSpreadsheet: (schedule, filePath) =>
-      ipcRenderer.invoke('export:to-spreadsheet', schedule, filePath),
+      ipcRenderer.invoke(IPC.exportToSpreadsheet, schedule, filePath),
   },
 
   settings: {
-    get: () => ipcRenderer.invoke('settings:get'),
-    update: (settings) => ipcRenderer.invoke('settings:update', settings),
+    get: () => ipcRenderer.invoke(IPC.settingsGet),
+    update: (settings) => ipcRenderer.invoke(IPC.settingsUpdate, settings),
   },
 
   credentials: {
-    delete: () => ipcRenderer.invoke('credentials:delete'),
-    has: () => ipcRenderer.invoke('credentials:has'),
+    delete: () => ipcRenderer.invoke(IPC.credentialsDelete),
+    has: () => ipcRenderer.invoke(IPC.credentialsHas),
   },
 
   diagnostics: {
-    report: (input) => ipcRenderer.invoke('diagnostics:report', input),
-    getEvent: (eventId) => ipcRenderer.invoke('diagnostics:get-event', eventId),
-    getBundle: (limit) => ipcRenderer.invoke('diagnostics:get-bundle', limit),
-    export: (filePath, limit) => ipcRenderer.invoke('diagnostics:export', filePath, limit),
+    report: (input) => ipcRenderer.invoke(IPC.diagnosticsReport, input),
+    getEvent: (eventId) => ipcRenderer.invoke(IPC.diagnosticsGetEvent, eventId),
+    getBundle: (limit) => ipcRenderer.invoke(IPC.diagnosticsGetBundle, limit),
+    export: (filePath, limit) => ipcRenderer.invoke(IPC.diagnosticsExport, filePath, limit),
   },
 } satisfies ElectronAPI;
 

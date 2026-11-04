@@ -4,7 +4,7 @@ import {
   eligiblePaycheckIndices,
   isFundingPaycheckUsable,
 } from '@shared/billEligibility';
-import { PaycheckAssignment, ProjectedBill, billOccurrenceKey } from './types';
+import { PaycheckAssignment, ProjectedBill, billOccurrenceKey, billOccurrenceKeyFromIso } from './types';
 
 export interface EligibleBill {
   bill: ProjectedBill;
@@ -28,7 +28,7 @@ function isPaycheckUsable(
   paycheckDateStr: string,
   skippedBills: Set<string>
 ): boolean {
-  if (skippedBills.has(`${bill.billId}-${paycheckDateStr}`)) return false;
+  if (skippedBills.has(billOccurrenceKeyFromIso(bill.billId, paycheckDateStr))) return false;
   return isFundingPaycheckUsable(
     {
       purpose: paycheck.purpose,

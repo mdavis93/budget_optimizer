@@ -5,6 +5,7 @@ import {
   type AssignmentModel,
 } from './model/assignmentModel';
 import { UNPAID_PLACEMENT } from './model/objective';
+import { priorityFromTier } from '@shared/billPriority';
 import {
   type PaycheckAssignment,
   type ProjectedBill,
@@ -68,14 +69,7 @@ function lookupProjectedBill(
     creditorName: model.creditorNames[billIndex],
     amount: model.amountCents[billIndex] / 100,
     dueDay: model.dueDay[billIndex],
-    priority:
-      model.priorityTier[billIndex] === 1
-        ? 'critical'
-        : model.priorityTier[billIndex] === 2
-          ? 'high'
-          : model.priorityTier[billIndex] === 3
-            ? 'normal'
-            : 'low',
+    priority: priorityFromTier(model.priorityTier[billIndex]),
   };
 }
 

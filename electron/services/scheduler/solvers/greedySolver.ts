@@ -11,6 +11,7 @@ import {
   type TierVector,
 } from '../model/objective';
 import type { AssignmentSolveResult, AssignmentSolver } from './types';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 
 /** Named inspection cap. Entity-cap corpora stay under this. */
 export const GREEDY_MAX_WORK = 2_000_000;
@@ -26,7 +27,7 @@ export class GreedyWorkLimitError extends Error {
 }
 
 function occurrenceKey(model: AssignmentModel, billIndex: number): string {
-  return `${model.billIds[billIndex]}-${model.billDueIso[billIndex]}`;
+  return billOccurrenceKeyFromIso(model.billIds[billIndex], model.billDueIso[billIndex]);
 }
 
 function compareMovable(model: AssignmentModel, left: number, right: number): number {

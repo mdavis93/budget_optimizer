@@ -4,6 +4,7 @@ import { CreditCard, Pencil, Trash2, TrendingDown, Calendar, DollarSign, Percent
 import { DebtAmortizationChart, ChartSuspense } from '../charts/lazyCharts';
 import { CHART_COLORS } from '../charts/chartTheme';
 import { DebtPlanDebt, DebtWithAmortization } from '../../types';
+import { extraMonthlyDollars } from '@electron/services/scheduler/debt/debtSimulator';
 import { formatCurrency } from '../../utils/formatCurrency';
 import type { TimePeriod } from './debtSorting';
 
@@ -31,7 +32,7 @@ const DebtCard = memo(function DebtCard({
   }
 
   // Calculate extra payment from bill budget vs minimum payment
-  const extraPayment = Math.max(0, bill.budgetedAmount - debt.monthlyPayment);
+  const extraPayment = extraMonthlyDollars(bill.budgetedAmount, debt.monthlyPayment);
 
   const monthsToShow = timePeriod === 'max' ? amortization.monthsToPayoff : Math.min(timePeriod, amortization.monthsToPayoff);
   const paymentsToShow = amortization.payments.slice(0, monthsToShow);

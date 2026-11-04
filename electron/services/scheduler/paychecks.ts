@@ -10,13 +10,16 @@ import {
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   PaycheckEntry,
   PaycheckAssignment,
   GoalDeposit,
   billOccurrenceKey,
 } from './types';
 import { allocateGoalsAndSavings } from './cashFlowAllocator';
+import { roundCurrency } from './money';
 import { isSavingsAndGoalsIncome, paycheckEntryId } from '@shared/incomePurpose';
+import { allBillsSkippedOrUnpayable, isPaycheckShortfall } from '@shared/paycheckFlags';
 export {
   calculateSummary,
   buildLedgerEntries,
@@ -29,7 +32,7 @@ export function buildPaycheckEntries(
   maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0,
+  minSavingsPerPaycheck: number = DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   cashOnHandByDate?: CashOnHandByDate
 ): PaycheckEntry[] {
   const paychecks: PaycheckEntry[] = [];
@@ -143,14 +146,14 @@ export function buildPaycheckEntries(
       totalSavings += savingsDeposit;
     }
 
-    const allOperatingBillsUnpayable =
-      uniqueBills.length > 0 &&
-      uniqueBills.every((bill) => bill.isSkipped || bill.isUnpayable);
-    const isShortfall = isReserved
-      ? false
-      : assignment.unusable && allOperatingBillsUnpayable
-        ? true
-        : budgetRemaining < effectiveMin;
+    const allOperatingBillsUnpayable = allBillsSkippedOrUnpayable(uniqueBills);
+    const isShortfall = isPaycheckShortfall({
+      isReserved,
+      unusable: assignment.unusable === true,
+      allOperatingBillsUnpayable,
+      budgetRemaining,
+      effectiveMin,
+    });
 
     const unpayableCount = uniqueBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
     const hasUnpayableBills = unpayableCount > 0;
@@ -180,12 +183,12 @@ export function buildPaycheckEntries(
         unfundableReason: bill.unfundableReason,
         preferredIncomeSourceId: bill.preferredIncomeSourceId,
       })),
-      totalBills: Math.round(totalBillsAmount * 100) / 100,
+      totalBills: roundCurrency(totalBillsAmount),
       goalDeposits,
-      totalGoalDeposits: Math.round(totalGoalDeposits * 100) / 100,
-      budgetRemaining: Math.round(budgetRemaining * 100) / 100,
-      savingsDeposit: Math.round(savingsDeposit * 100) / 100,
-      totalSavings: Math.round(totalSavings * 100) / 100,
+      totalGoalDeposits: roundCurrency(totalGoalDeposits),
+      budgetRemaining: roundCurrency(budgetRemaining),
+      savingsDeposit: roundCurrency(savingsDeposit),
+      totalSavings: roundCurrency(totalSavings),
       isShortfall,
       targetCashOnHand: effectiveTarget,
       minCashOnHand: effectiveMin,

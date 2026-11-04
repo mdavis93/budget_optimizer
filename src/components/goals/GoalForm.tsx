@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { GOAL_PRIORITY_LABELS, MAX_GOAL_PRIORITY, MIN_GOAL_PRIORITY } from '@shared/goalPriority';
 
 export interface GoalFormValues {
   name: string;
@@ -105,11 +106,12 @@ export default function GoalForm({
           onChange={(event) => onChange({ ...values, priority: parseInt(event.target.value) })}
           className="input w-full"
         >
-          <option value={1}>1 - Highest</option>
-          <option value={2}>2 - High</option>
-          <option value={3}>3 - Medium</option>
-          <option value={4}>4 - Low</option>
-          <option value={5}>5 - Lowest</option>
+          {Array.from(
+            { length: MAX_GOAL_PRIORITY - MIN_GOAL_PRIORITY + 1 },
+            (_, index) => MIN_GOAL_PRIORITY + index
+          ).map((priority) => (
+            <option key={priority} value={priority}>{GOAL_PRIORITY_LABELS[priority]}</option>
+          ))}
         </select>
         {isCreate && (
           <p className="text-xs text-(--color-text-muted) mt-1">

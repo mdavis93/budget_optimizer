@@ -8,6 +8,7 @@ import {
   remapDebtBillIds,
   persistEntityDiff,
 } from '../../../src/utils/draftDiff';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 
 interface TestEntity {
   id: string;
@@ -68,7 +69,7 @@ describe('draftDiff', () => {
       const diff = computeKeyedDiff(
         committed,
         draft,
-        (item) => `${item.billId}-${item.skipDate}`,
+        (item) => billOccurrenceKeyFromIso(item.billId, item.skipDate),
         (a, b) =>
           a.billId === b.billId &&
           a.skipDate === b.skipDate &&
@@ -90,7 +91,7 @@ describe('draftDiff', () => {
       const diff = computeKeyedDiff(
         committed,
         draft,
-        (item) => `${item.billId}-${item.skipDate}`,
+        (item) => billOccurrenceKeyFromIso(item.billId, item.skipDate),
         (a, b) =>
           a.billId === b.billId &&
           a.skipDate === b.skipDate &&
