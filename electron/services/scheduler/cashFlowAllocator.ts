@@ -166,6 +166,35 @@ function admitProtectedSet(
   return protectedIndices;
 }
 
+/**
+ * What each goal still needs after a priority-order draw on above-primary
+ * dollars only. Protected dips are not in this pool, so a goal that cannot
+ * be fully funded must not be credited with them.
+ */
+function remainingAfterAbovePrimaryDraw(
+  goals: readonly SnapshotGoal[],
+  paycheckDays: Int32Array,
+  abovePrimary: Int32Array
+): Int32Array {
+  const remaining = new Int32Array(goals.length);
+  for (let g = 0; g < goals.length; g++) remaining[g] = goals[g].remainingDollars;
+  const pool = new Int32Array(abovePrimary);
+  const order = goals.map((_, index) => index).sort((a, b) => compareGoals(goals[a], goals[b]));
+  for (let i = 0; i < paycheckDays.length; i++) {
+    if (pool[i] <= 0) continue;
+    for (const goalIndex of order) {
+      if (remaining[goalIndex] <= 0) continue;
+      if (paycheckDays[i] > goals[goalIndex].deadlineDay) continue;
+      const take = Math.min(remaining[goalIndex], pool[i]);
+      if (take <= 0) continue;
+      remaining[goalIndex] -= take;
+      pool[i] -= take;
+      if (pool[i] <= 0) break;
+    }
+  }
+  return remaining;
+}
+
 function planAlapDips(
   protectedIndices: readonly number[],
   goals: readonly SnapshotGoal[],
@@ -181,18 +210,15 @@ function planAlapDips(
   const deadlines = [...new Set(protectedIndices.map((index) => goals[index].deadlineDay))].sort(
     (a, b) => a - b
   );
+  const uncovered = remainingAfterAbovePrimaryDraw(goals, paycheckDays, abovePrimary);
   const remainingDeficit = new Int32Array(deadlines.length);
   for (let d = 0; d < deadlines.length; d++) {
     const deadline = deadlines[d];
     let need = 0;
     for (const index of protectedIndices) {
-      if (goals[index].deadlineDay <= deadline) need += goals[index].remainingDollars;
+      if (goals[index].deadlineDay <= deadline) need += uncovered[index];
     }
-    let capacity = 0;
-    for (let i = 0; i < n; i++) {
-      if (paycheckDays[i] <= deadline) capacity += abovePrimary[i];
-    }
-    remainingDeficit[d] = Math.max(0, need - capacity);
+    remainingDeficit[d] = need;
   }
 
   const applyBand = (band: Int32Array) => {
@@ -274,9 +300,10 @@ function maxFeasibleTake(
   goals: readonly SnapshotGoal[],
   remainingNeed: Int32Array,
   remainingAllocable: Int32Array,
-  paycheckDays: Int32Array
+  paycheckDays: Int32Array,
+  spendCap: number
 ): number {
-  const hardMax = Math.min(remainingNeed[goalIndex], remainingAllocable[paycheckIndex]);
+  const hardMax = Math.min(remainingNeed[goalIndex], remainingAllocable[paycheckIndex], spendCap);
   if (hardMax <= 0) return 0;
   let lo = 0;
   let hi = hardMax;
@@ -391,15 +418,37 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
     snapshot.bandToFallback,
     snapshot.bandToFloor
   );
+  const uncoveredAfterAbove = remainingAfterAbovePrimaryDraw(
+    snapshot.goals,
+    snapshot.paycheckDays,
+    snapshot.abovePrimary
+  );
   const remainingAllocable = new Int32Array(n);
+  const aboveLeft = new Int32Array(n);
+  const dipLeft = new Int32Array(n);
   for (let i = 0; i < n; i++) {
+    aboveLeft[i] = snapshot.abovePrimary[i];
+    dipLeft[i] = dips[i];
     remainingAllocable[i] = snapshot.abovePrimary[i] + dips[i];
   }
 
   const allocByGoal = snapshot.goals.map(() => new Int32Array(n));
+  const protectedSet = new Set(snapshot.protectedIndices);
+  // Each protected goal may spend only the dip it still needs after above-primary.
+  // A shared dip purse lets an earlier goal replace its own above-primary with a
+  // later goal's dip, and the freed above-primary then leaks to an unadmitted goal.
+  const dipAllowance = new Int32Array(snapshot.goals.length);
+  for (const index of snapshot.protectedIndices) {
+    dipAllowance[index] = uncoveredAfterAbove[index];
+  }
 
   const deposit = (goalIndex: number, paycheckIndex: number, amount: number) => {
     if (amount <= 0) return;
+    const fromAbove = Math.min(aboveLeft[paycheckIndex], amount);
+    const fromDip = amount - fromAbove;
+    aboveLeft[paycheckIndex] -= fromAbove;
+    dipLeft[paycheckIndex] -= fromDip;
+    dipAllowance[goalIndex] -= fromDip;
     remainingNeed[goalIndex] -= amount;
     remainingAllocable[paycheckIndex] -= amount;
     allocByGoal[goalIndex][paycheckIndex] += amount;
@@ -422,7 +471,10 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
         snapshot.goals,
         remainingNeed,
         remainingAllocable,
-        snapshot.paycheckDays
+        snapshot.paycheckDays,
+        protectedSet.has(goalIndex)
+          ? aboveLeft[i] + Math.min(dipAllowance[goalIndex], dipLeft[i])
+          : aboveLeft[i]
       );
       deposit(goalIndex, i, take);
     }

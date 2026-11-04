@@ -385,6 +385,60 @@ describe('cashFlowAllocator oracle', () => {
     expect(farDeposits.some((amount) => amount > 0)).toBe(true);
   });
 
+  it('does not let an earlier protected goal spend a later protected goal’s savings dip', () => {
+    const result = allocateGoalsAndSavings(
+      [
+        paycheck('2026-01-01', 250),
+        paycheck('2026-01-15', 155),
+        paycheck('2026-02-01', 30),
+        paycheck('2026-02-15', 30),
+      ],
+      [
+        goal({ id: 'high', name: 'High', priority: 1, targetAmount: 120, targetDate: '2026-01-15' }),
+        goal({ id: 'mid', name: 'Mid', priority: 2, targetAmount: 500, targetDate: '2026-02-01' }),
+        goal({ id: 'low', name: 'Low', priority: 3, targetAmount: 250, targetDate: '2026-02-15' }),
+      ]
+    );
+    const high = result.goals.find((entry) => entry.goalId === 'high')!;
+    const mid = result.goals.find((entry) => entry.goalId === 'mid')!;
+    const low = result.goals.find((entry) => entry.goalId === 'low')!;
+    expect(high.funded).toBe(true);
+    expect(high.totalAllocated).toBe(120);
+    expect(mid.totalAllocated).toBe(0);
+    expect(low.funded).toBe(true);
+    expect(low.totalAllocated).toBe(250);
+    expect(result.paychecks.every((entry) => entry.savingsDeposit >= 0)).toBe(true);
+  });
+
+  it('finishes a protected goal by dipping after a higher-priority unadmitted goal takes above-primary cash', () => {
+    const dates = [
+      '2026-01-15',
+      '2026-02-15',
+      '2026-03-15',
+      '2026-04-15',
+      '2026-05-15',
+      '2026-06-15',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date) => paycheck(date, 200)),
+      [
+        goal({ id: 'high', name: 'High', priority: 1, targetAmount: 80, targetDate: '2026-01-15' }),
+        goal({ id: 'mid', name: 'Mid', priority: 2, targetAmount: 1000, targetDate: '2026-05-15' }),
+        goal({ id: 'low', name: 'Low', priority: 3, targetAmount: 500, targetDate: '2026-06-15' }),
+      ]
+    );
+    const high = result.goals.find((entry) => entry.goalId === 'high')!;
+    const mid = result.goals.find((entry) => entry.goalId === 'mid')!;
+    const low = result.goals.find((entry) => entry.goalId === 'low')!;
+    expect(high.funded).toBe(true);
+    expect(high.totalAllocated).toBe(80);
+    expect(mid.funded).toBe(false);
+    expect(mid.totalAllocated).toBe(200);
+    expect(low.funded).toBe(true);
+    expect(low.totalAllocated).toBe(500);
+    expect(result.paychecks.every((entry) => entry.savingsDeposit >= 0)).toBe(true);
+  });
+
   it('keeps savings at or above $150 when an unadmitted in-horizon goal cannot meet its deadline', () => {
     const result = allocateGoalsAndSavings(
       [
