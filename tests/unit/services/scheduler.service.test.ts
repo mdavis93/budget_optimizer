@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MAX_PREPAY_DAYS } from '@shared/constants';
-import { SchedulerService } from '../../../electron/services/scheduler.service';
+import { SchedulerService, type PaycheckEntry } from '../../../electron/services/scheduler.service';
+import { buildGoalProjectionMetrics } from '../../../electron/services/scheduler/goals';
 import { Income, Bill, SavingsGoal } from '../../../electron/services/database.service';
 import { parseISO, format, differenceInDays } from 'date-fns';
 
@@ -3433,6 +3434,94 @@ describe('SchedulerService', () => {
       expect(timeline.estimatedFundedDate).toBe('2026-06-15');
       expect(timeline.missesDeadlineByPaychecks).toBeGreaterThan(0);
       expect(timeline.beatsDeadlineByPaychecks).toBeNull();
+    });
+
+    it('compares average allocation to the deadline pace, including paychecks with no deposit', () => {
+      const paycheck = (date: string, amount: number, isShortfall = false): PaycheckEntry => ({
+        date,
+        isShortfall,
+        goalDeposits: amount > 0
+          ? [{ goalId: 'goal-1', goalName: 'AdeptiCon', amount }]
+          : [],
+        incomeSources: [],
+        totalIncome: 0,
+        bills: [],
+        totalBills: 0,
+        totalGoalDeposits: amount,
+        budgetRemaining: 0,
+        savingsDeposit: 0,
+        totalSavings: 0,
+      });
+      const paychecks = [
+        paycheck('2026-01-01', 300),
+        paycheck('2026-01-15', 0),
+        paycheck('2026-01-20', 500, true),
+        paycheck('2026-02-01', 300),
+        paycheck('2026-02-15', 0),
+        paycheck('2026-06-01', 999),
+      ];
+
+      const metrics = buildGoalProjectionMetrics(
+        'goal-1',
+        800,
+        200,
+        paychecks,
+        parseISO('2026-03-01'),
+        { tightPaycheckCount: 0, shortfallCount: 1, savingsTotal: 0 }
+      );
+
+      expect(metrics.avgAllocationPerPaycheck).toBe(150);
+      expect(metrics.marginPerPaycheck).toBe(-50);
+    });
+
+    it('treats whole-dollar funding as on pace when a few cents remain', () => {
+      const paycheck = (date: string, amount: number): PaycheckEntry => ({
+        date,
+        isShortfall: false,
+        goalDeposits: amount > 0
+          ? [{ goalId: 'christmas', goalName: 'Christmas in Chicago', amount }]
+          : [],
+        incomeSources: [],
+        totalIncome: 0,
+        bills: [],
+        totalBills: 0,
+        totalGoalDeposits: amount,
+        budgetRemaining: 0,
+        savingsDeposit: 0,
+        totalSavings: 0,
+      });
+      const goal: SavingsGoal = {
+        id: 'christmas',
+        budgetId: 'budget-1',
+        name: 'Christmas in Chicago',
+        targetAmount: 4000,
+        targetDate: '2026-12-18',
+        alreadySaved: 1841.86,
+        priority: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+
+      const [projection] = scheduler.calculateGoalProjections(
+        [goal],
+        [
+          paycheck('2026-11-13', 750),
+          paycheck('2026-11-20', 0),
+          paycheck('2026-11-27', 708),
+          paycheck('2026-12-04', 0),
+          paycheck('2026-12-11', 700),
+          paycheck('2026-12-18', 0),
+        ],
+        '2027-11-01',
+        parseISO('2026-11-03')
+      );
+
+      expect(projection.status).toBe('achievable');
+      expect(projection.achievabilityPercent).toBe(100);
+      expect(projection.requiredPerPaycheck).toBe(359.67);
+      expect(projection.avgAllocationPerPaycheck).toBe(359.67);
+      expect(projection.marginPerPaycheck).toBe(0);
+      expect(projection.estimatedFundedDate).toBe('2026-12-11');
+      expect(projection.paychecksToFullyFund).toBe(3);
     });
   });
 

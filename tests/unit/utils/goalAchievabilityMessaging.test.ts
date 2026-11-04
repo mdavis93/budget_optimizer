@@ -65,9 +65,17 @@ describe('deriveComfortTier', () => {
     expect(tier).toBe('achievable_tight');
   });
 
-  it('returns aggressive when margin is zero or negative', () => {
+  it('returns aggressive when margin is negative', () => {
     const tier = deriveComfortTier(baseGoal, makeProjection({ marginPerPaycheck: -5, requiredPerPaycheck: 200 }));
     expect(tier).toBe('aggressive');
+  });
+
+  it('returns achievable when a fully funded goal is exactly on pace', () => {
+    const tier = deriveComfortTier(
+      baseGoal,
+      makeProjection({ marginPerPaycheck: 0, requiredPerPaycheck: 359.67, achievabilityPercent: 100, status: 'achievable' })
+    );
+    expect(tier).toBe('achievable');
   });
 
   it('returns partial for partial status', () => {
@@ -117,6 +125,25 @@ describe('deriveComfortTier', () => {
 });
 
 describe('buildGoalAchievabilityMessaging', () => {
+  it('describes an exactly funded goal as on track without a zero margin', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      baseGoal,
+      makeProjection({
+        marginPerPaycheck: 0,
+        requiredPerPaycheck: 359.67,
+        avgAllocationPerPaycheck: 359.67,
+        achievabilityPercent: 100,
+        status: 'achievable',
+        estimatedFundedDate: '2026-12-11',
+        paychecksToFullyFund: 3,
+      })
+    );
+    expect(messaging.comfortTier).toBe('achievable');
+    expect(messaging.headline).toBe('On Track To Hit Your Target');
+    expect(messaging.margin).toBeNull();
+    expect(messaging.body).toContain('Dec 11, 2026');
+  });
+
   it('produces tight messaging for low-margin fully funded goal', () => {
     const messaging = buildGoalAchievabilityMessaging(baseGoal, makeProjection());
     expect(messaging.comfortTier).toBe('achievable_tight');
