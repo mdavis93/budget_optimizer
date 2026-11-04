@@ -121,7 +121,6 @@ export function computeGoalFundingTimeline(
 export function buildGoalProjectionMetrics(
   goalId: string,
   remainingAmount: number,
-  actualAllocation: number,
   requiredPerPaycheck: number,
   paychecks: PaycheckEntry[],
   goalDate: Date,
@@ -137,8 +136,21 @@ export function buildGoalProjectionMetrics(
   | 'scheduleHealth'
 > {
   const timeline = computeGoalFundingTimeline(goalId, remainingAmount, paychecks, goalDate);
-  const avgAllocationPerPaycheck = timeline.depositPaycheckCount > 0
-    ? actualAllocation / timeline.depositPaycheckCount
+  // Same paycheck set as requiredPerPaycheck: every non-shortfall paycheck on or
+  // before the deadline, including ones with no deposit. Averaging only the
+  // depositing paychecks makes a lumpy partial goal look ahead of pace.
+  let allocationByDeadline = 0;
+  let deadlinePaycheckCount = 0;
+  for (const paycheck of paychecks) {
+    if (paycheck.isShortfall) continue;
+    const paycheckDate = parseISO(paycheck.date);
+    if (!isBefore(paycheckDate, goalDate) && !isEqual(paycheckDate, goalDate)) continue;
+    deadlinePaycheckCount++;
+    const deposit = paycheck.goalDeposits.find((entry) => entry.goalId === goalId);
+    if (deposit && deposit.amount > 0) allocationByDeadline += deposit.amount;
+  }
+  const avgAllocationPerPaycheck = deadlinePaycheckCount > 0
+    ? allocationByDeadline / deadlinePaycheckCount
     : 0;
   const marginPerPaycheck = avgAllocationPerPaycheck - requiredPerPaycheck;
 
@@ -262,6 +274,10 @@ export function calculateGoalProjections(
   // Build projections based on schedule data
   for (const goal of sortedGoals) {
     const remainingAmount = goal.targetAmount - goal.alreadySaved;
+    // The allocator funds whole dollars (Math.round of the cent remainder).
+    // Pace and "fully funded" follow that amount so a leftover few cents
+    // cannot show up as a negative margin on a goal the schedule already funded.
+    const fundableRemaining = Math.max(0, Math.round(remainingAmount));
     const goalDate = parseISO(goal.targetDate);
     const isWithinSchedule = isBefore(goalDate, scheduleEnd) || isEqual(goalDate, scheduleEnd);
 
@@ -313,7 +329,7 @@ export function calculateGoalProjections(
 
     // First check: is the goal already fully funded by actual allocations?
     // If so, it's 100% achievable - no projection needed
-    if (actualAllocation >= remainingAmount) {
+    if (actualAllocation >= fundableRemaining) {
       achievableAmount = goal.targetAmount;
       achievabilityPercent = 100;
       isProjected = false;
@@ -361,7 +377,7 @@ export function calculateGoalProjections(
     }
 
     // Needed per paycheck to stay on deadline, not a description of actual deposits.
-    const requiredPerPaycheck = paycheckCount > 0 ? remainingAmount / paycheckCount : 0;
+    const requiredPerPaycheck = paycheckCount > 0 ? fundableRemaining / paycheckCount : 0;
     // Calculate available per paycheck based on total goal deposits
     const totalPaychecksInSchedule = paychecks.filter(p => !p.isShortfall).length;
     const availablePerPaycheck = totalPaychecksInSchedule > 0
@@ -370,8 +386,7 @@ export function calculateGoalProjections(
 
     const metrics = buildGoalProjectionMetrics(
       goal.id,
-      remainingAmount,
-      actualAllocation,
+      fundableRemaining,
       requiredPerPaycheck,
       paychecks,
       goalDate,

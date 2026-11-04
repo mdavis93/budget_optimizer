@@ -376,7 +376,9 @@ export interface GoalProjection {
   suggestions: GoalSuggestion[];
   isProjected: boolean; // True if goal is beyond the calculation horizon
   projectionNote?: string; // Explanation when isProjected is true
+  /** Mean deposit over the same deadline paychecks as requiredPerPaycheck, including paychecks with no deposit. */
   avgAllocationPerPaycheck: number;
+  /** avgAllocationPerPaycheck minus requiredPerPaycheck. Negative means behind the deadline pace. */
   marginPerPaycheck: number;
   paychecksToFullyFund: number | null;
   estimatedFundedDate: string | null;

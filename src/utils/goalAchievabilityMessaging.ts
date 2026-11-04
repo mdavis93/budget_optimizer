@@ -120,6 +120,8 @@ export function deriveComfortTier(
     if (marginRatio >= 0.35) return 'easily_achievable';
     if (marginRatio >= 0.15) return 'achievable';
     if (marginRatio > 0) return 'achievable_tight';
+    // Exactly the deadline pace, including a whole-dollar goal with no cent gap.
+    if (projection.marginPerPaycheck >= 0) return 'achievable';
     return 'aggressive';
   }
 
@@ -245,7 +247,8 @@ export function buildGoalAchievabilityMessaging(
   const margin =
     projection.remainingAmount > 0 &&
     comfortTier !== 'not_achievable' &&
-    comfortTier !== 'complete'
+    comfortTier !== 'complete' &&
+    projection.marginPerPaycheck !== 0
       ? {
           perPaycheckDelta: projection.marginPerPaycheck,
           requiredPerPaycheck: projection.requiredPerPaycheck,
