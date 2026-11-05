@@ -439,6 +439,80 @@ describe('cashFlowAllocator oracle', () => {
     expect(result.paychecks.every((entry) => entry.savingsDeposit >= 0)).toBe(true);
   });
 
+  it('funds an open-ended goal on the same paychecks as a dated goal that still hits its deadline', () => {
+    const dates = [
+      '2026-01-02',
+      '2026-01-16',
+      '2026-01-30',
+      '2026-02-13',
+      '2026-02-27',
+      '2026-03-13',
+      '2026-03-27',
+      '2026-04-10',
+      '2026-04-24',
+      '2026-05-08',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date) => paycheck(date, 300)),
+      [
+        goal({ id: 'dated', name: 'Vacation', priority: 1, targetAmount: 1000, targetDate: '2026-05-08' }),
+        goal({
+          id: 'open',
+          name: 'New Car',
+          priority: 2,
+          targetAmount: 5000,
+          targetDate: '',
+          openEnded: true,
+        }),
+      ],
+      { savingsTargetPrimary: 0, savingsTargetFallback: 0 }
+    );
+
+    const dated = result.goals.find((entry) => entry.goalId === 'dated')!;
+    const open = result.goals.find((entry) => entry.goalId === 'open')!;
+    expect(dated.funded).toBe(true);
+    expect(dated.totalAllocated).toBe(1000);
+    expect(open.totalAllocated).toBe(2000);
+
+    const sharedPaychecks = result.paychecks.filter((paycheckAlloc) => {
+      const datedAmount = paycheckAlloc.goalDeposits.find((deposit) => deposit.goalId === 'dated')?.amount ?? 0;
+      const openAmount = paycheckAlloc.goalDeposits.find((deposit) => deposit.goalId === 'open')?.amount ?? 0;
+      return datedAmount > 0 && openAmount > 0;
+    });
+    expect(sharedPaychecks).toHaveLength(dates.length);
+    expect(result.paychecks[0].goalDeposits.find((deposit) => deposit.goalId === 'dated')?.amount).toBe(100);
+    expect(result.paychecks[0].goalDeposits.find((deposit) => deposit.goalId === 'open')?.amount).toBe(200);
+  });
+
+  it('withholds an open-ended goal when a dated goal needs the whole surplus to hit its deadline', () => {
+    const result = allocateGoalsAndSavings(
+      ['2026-01-02', '2026-01-16', '2026-01-30', '2026-02-13'].map((date) => paycheck(date, 100)),
+      [
+        goal({ id: 'dated', name: 'Vacation', targetAmount: 400, targetDate: '2026-02-13' }),
+        goal({ id: 'open', name: 'New Car', priority: 2, targetAmount: 5000, targetDate: '', openEnded: true }),
+      ],
+      { savingsTargetPrimary: 0, savingsTargetFallback: 0 }
+    );
+
+    expect(result.goals.find((entry) => entry.goalId === 'dated')).toMatchObject({
+      funded: true,
+      totalAllocated: 400,
+    });
+    expect(result.goals.find((entry) => entry.goalId === 'open')?.totalAllocated).toBe(0);
+  });
+
+  it('funds an open-ended goal from surplus above the savings target and does not dip to chase it', () => {
+    const result = allocateGoalsAndSavings(
+      [paycheck('2026-01-01', 300), paycheck('2026-02-01', 300), paycheck('2026-03-01', 300)],
+      [goal({ id: 'open', name: 'New Car', targetAmount: 400, targetDate: '', openEnded: true })]
+    );
+
+    expect(result.goals[0].totalAllocated).toBe(400);
+    expect(result.goals[0].funded).toBe(true);
+    expect(result.paychecks.every((entry) => entry.savingsDeposit >= 150)).toBe(true);
+    expect(result.paychecks.every((entry) => !entry.savingsSqueezed)).toBe(true);
+  });
+
   it('keeps savings at or above $150 when an unadmitted in-horizon goal cannot meet its deadline', () => {
     const result = allocateGoalsAndSavings(
       [

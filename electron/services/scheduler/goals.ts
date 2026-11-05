@@ -4,9 +4,11 @@ import {
   isEqual,
   format,
   parseISO,
+  addDays,
   differenceInDays,
   differenceInCalendarMonths,
 } from 'date-fns';
+import { compareGoalsByPriority, isOpenEndedGoal } from '@shared/goalPriority';
 import { Income, Bill, SavingsGoal } from '../database.service';
 import type { Leave } from '../database.service';
 import { formatCurrency, roundCurrency } from '../../utils/constants';
@@ -176,7 +178,7 @@ export function generateGoalSuggestions(
   const suggestions: GoalSuggestion[] = [];
   const remainingAmount = goal.targetAmount - goal.alreadySaved;
 
-  if (remainingAmount <= 0 || availablePerPaycheck <= 0) return suggestions;
+  if (isOpenEndedGoal(goal) || remainingAmount <= 0 || availablePerPaycheck <= 0) return suggestions;
 
   // Suggestion 1: Extend deadline
   const paycheckDates = paychecks
@@ -236,6 +238,116 @@ export function generateGoalSuggestions(
   return suggestions;
 }
 
+const OPEN_ENDED_PAYCHECK_GAP_DAYS = 14;
+
+function estimateOpenEndedCompletion(
+  goalId: string,
+  fundableRemaining: number,
+  paychecks: PaycheckEntry[]
+): {
+  actualAllocation: number;
+  paychecksToFullyFund: number | null;
+  estimatedFundedDate: string | null;
+  isProjected: boolean;
+} {
+  const ordered = paychecks
+    .filter((paycheck) => !paycheck.isShortfall)
+    .sort((left, right) => parseISO(left.date).getTime() - parseISO(right.date).getTime());
+
+  let actualAllocation = 0;
+  let running = 0;
+  let completionIndex: number | null = null;
+  for (let index = 0; index < ordered.length; index++) {
+    const deposit = ordered[index].goalDeposits.find((entry) => entry.goalId === goalId);
+    const amount = deposit && deposit.amount > 0 ? deposit.amount : 0;
+    if (amount <= 0) continue;
+    actualAllocation += amount;
+    running += amount;
+    if (completionIndex === null && running >= fundableRemaining) {
+      completionIndex = index;
+    }
+  }
+
+  if (completionIndex !== null) {
+    return {
+      actualAllocation,
+      paychecksToFullyFund: completionIndex + 1,
+      estimatedFundedDate: ordered[completionIndex].date,
+      isProjected: false,
+    };
+  }
+
+  if (ordered.length === 0 || actualAllocation <= 0) {
+    return {
+      actualAllocation,
+      paychecksToFullyFund: null,
+      estimatedFundedDate: null,
+      isProjected: false,
+    };
+  }
+
+  const averagePerPaycheck = actualAllocation / ordered.length;
+  const extraPaychecks = Math.max(1, Math.ceil((fundableRemaining - actualAllocation) / averagePerPaycheck));
+  const lastDate = parseISO(ordered[ordered.length - 1].date);
+  const previousDate = ordered.length > 1 ? parseISO(ordered[ordered.length - 2].date) : null;
+  const gapDays = previousDate
+    ? Math.max(1, differenceInDays(lastDate, previousDate))
+    : OPEN_ENDED_PAYCHECK_GAP_DAYS;
+
+  return {
+    actualAllocation,
+    paychecksToFullyFund: ordered.length + extraPaychecks,
+    estimatedFundedDate: format(addDays(lastDate, gapDays * extraPaychecks), 'yyyy-MM-dd'),
+    isProjected: true,
+  };
+}
+
+function buildOpenEndedProjection(
+  goal: SavingsGoal,
+  paychecks: PaycheckEntry[],
+  scheduleHealth: GoalScheduleHealth,
+  totalPaychecksInSchedule: number,
+  totalGoalDeposits: number
+): GoalProjection {
+  const remainingAmount = goal.targetAmount - goal.alreadySaved;
+  const fundableRemaining = Math.max(0, Math.round(remainingAmount));
+  const estimate = estimateOpenEndedCompletion(goal.id, fundableRemaining, paychecks);
+  const canFinish = estimate.estimatedFundedDate !== null;
+  const achievableAmount = canFinish ? goal.targetAmount : goal.alreadySaved + estimate.actualAllocation;
+  const availablePerPaycheck = totalPaychecksInSchedule > 0
+    ? totalGoalDeposits / totalPaychecksInSchedule
+    : 0;
+
+  return {
+    goalId: goal.id,
+    goalName: goal.name,
+    targetAmount: goal.targetAmount,
+    alreadySaved: goal.alreadySaved,
+    remainingAmount,
+    targetDate: '',
+    paycheckCount: totalPaychecksInSchedule,
+    requiredPerPaycheck: 0,
+    adjustedRequiredPerPaycheck: 0,
+    availablePerPaycheck: roundCurrency(availablePerPaycheck),
+    actualAllocation: roundCurrency(estimate.actualAllocation),
+    achievableAmount: roundCurrency(achievableAmount),
+    achievabilityPercent: canFinish ? 100 : 0,
+    status: canFinish ? 'achievable' : 'impossible',
+    suggestions: [],
+    isProjected: estimate.isProjected,
+    projectionNote: estimate.isProjected
+      ? 'Estimated from your current surplus after dated goals stay on schedule'
+      : undefined,
+    avgAllocationPerPaycheck: 0,
+    marginPerPaycheck: 0,
+    paychecksToFullyFund: estimate.paychecksToFullyFund,
+    estimatedFundedDate: estimate.estimatedFundedDate,
+    beatsDeadlineByPaychecks: null,
+    missesDeadlineByPaychecks: null,
+    scheduleHealth,
+  };
+}
+
 export function calculateGoalProjections(
   goals: SavingsGoal[],
   paychecks: PaycheckEntry[],
@@ -250,8 +362,8 @@ export function calculateGoalProjections(
   const firstPaycheckDate = paychecks.length > 0 ? parseISO(paychecks[0].date) : scheduleEnd;
   const horizonMonths = Math.max(1, differenceInCalendarMonths(scheduleEnd, firstPaycheckDate));
 
-  // Sort goals by priority (ascending - 1 is highest priority)
-  const sortedGoals = [...goals].sort((a, b) => a.priority - b.priority);
+  // Dated goals keep priority order. Open-ended goals sort last.
+  const sortedGoals = [...goals].sort(compareGoalsByPriority);
 
   // Sum ACTUAL allocations from paychecks
   const actualAllocations = new Map<string, number>();
@@ -280,20 +392,7 @@ export function calculateGoalProjections(
     // Pace and "fully funded" follow that amount so a leftover few cents
     // cannot show up as a negative margin on a goal the schedule already funded.
     const fundableRemaining = Math.max(0, Math.round(remainingAmount));
-    const goalDate = parseISO(goal.targetDate);
-    const isWithinSchedule = isBefore(goalDate, scheduleEnd) || isEqual(goalDate, scheduleEnd);
 
-    // Get ACTUAL allocation from the calculation horizon
-    const actualAllocation = actualAllocations.get(goal.id) || 0;
-
-    // Count paychecks before goal deadline (within schedule window)
-    const relevantPaychecks = paychecks.filter(p => {
-      const pDate = parseISO(p.date);
-      return (isBefore(pDate, goalDate) || isEqual(pDate, goalDate)) && !p.isShortfall;
-    });
-    const paycheckCount = relevantPaychecks.length;
-
-    // Handle already achieved goals
     if (remainingAmount <= 0) {
       projections.push({
         goalId: goal.id,
@@ -301,7 +400,7 @@ export function calculateGoalProjections(
         targetAmount: goal.targetAmount,
         alreadySaved: goal.alreadySaved,
         remainingAmount: 0,
-        targetDate: goal.targetDate,
+        targetDate: isOpenEndedGoal(goal) ? '' : goal.targetDate,
         paycheckCount: 0,
         requiredPerPaycheck: 0,
         adjustedRequiredPerPaycheck: 0,
@@ -323,6 +422,30 @@ export function calculateGoalProjections(
       });
       continue;
     }
+
+    if (isOpenEndedGoal(goal)) {
+      projections.push(buildOpenEndedProjection(
+        goal,
+        paychecks,
+        scheduleHealth,
+        paychecks.filter((paycheck) => !paycheck.isShortfall).length,
+        totalGoalDeposits
+      ));
+      continue;
+    }
+
+    const goalDate = parseISO(goal.targetDate);
+    const isWithinSchedule = isBefore(goalDate, scheduleEnd) || isEqual(goalDate, scheduleEnd);
+
+    // Get ACTUAL allocation from the calculation horizon
+    const actualAllocation = actualAllocations.get(goal.id) || 0;
+
+    // Count paychecks before goal deadline (within schedule window)
+    const relevantPaychecks = paychecks.filter(p => {
+      const pDate = parseISO(p.date);
+      return (isBefore(pDate, goalDate) || isEqual(pDate, goalDate)) && !p.isShortfall;
+    });
+    const paycheckCount = relevantPaychecks.length;
 
     let achievableAmount: number;
     let achievabilityPercent: number;
@@ -354,6 +477,7 @@ export function calculateGoalProjections(
       let poolConsumedByHigherPriority = 0;
       for (let i = 0; i < goalIndex; i++) {
         const higherGoal = sortedGoals[i];
+        if (isOpenEndedGoal(higherGoal)) continue;
         const higherRemaining = higherGoal.targetAmount - higherGoal.alreadySaved;
         poolConsumedByHigherPriority += Math.max(0, higherRemaining);
       }

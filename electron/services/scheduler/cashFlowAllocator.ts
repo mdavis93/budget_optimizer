@@ -7,9 +7,12 @@ import { SAVINGS_TARGET_FALLBACK, SAVINGS_TARGET_PRIMARY } from './types';
 /**
  * Forward cash-flow allocator: protected goals, ALAP savings dips, greedy
  * deposits in priority order. A slack guard only reserves capacity for
- * higher-priority protected goals. Dollars enter at the boundary; the engine
- * works in integer cents. Goal deposits are whole dollars; savings takes
- * leftover cents. No module-level buffers — each run owns its typed arrays.
+ * higher-priority protected goals. Open-ended goals have no deadline: they
+ * take surplus only when every protected goal can still finish on time, and
+ * they share that surplus instead of waiting until dated goals are paid off
+ * early. Dollars enter at the boundary; the engine works in integer cents.
+ * Goal deposits are whole dollars; savings takes leftover cents. No
+ * module-level buffers — each run owns its typed arrays.
  */
 
 export interface AllocatorPaycheck {
@@ -24,10 +27,12 @@ export interface AllocatorGoal {
   name: string;
   targetAmount: number;
   alreadySaved: number;
-  /** Lower number = higher priority. */
+  /** Lower number = higher priority. Ignored for ordering when `openEnded` is set. */
   priority: number;
-  /** Goal deadline as an ISO date string (yyyy-MM-dd). */
+  /** Goal deadline as an ISO date string (yyyy-MM-dd). Unused when `openEnded` is set. */
   targetDate: string;
+  /** No due date. Funded from surplus that dated goals do not need for their deadlines. */
+  openEnded?: boolean;
 }
 
 export interface AllocatorOptions {
@@ -79,6 +84,7 @@ interface SnapshotGoal {
   name: string;
   inputIndex: number;
   priority: number;
+  openEnded: boolean;
   deadlineDay: number;
   remainingDollars: number;
   lastPaycheckIndex: number;
@@ -104,6 +110,7 @@ function wholeDollarsAbove(surplusCents: number, reserveCents: number): number {
 }
 
 function compareGoals(a: SnapshotGoal, b: SnapshotGoal): number {
+  if (a.openEnded !== b.openEnded) return a.openEnded ? 1 : -1;
   return a.priority - b.priority || a.deadlineDay - b.deadlineDay || a.id.localeCompare(b.id);
 }
 
@@ -151,7 +158,7 @@ function admitProtectedSet(
   const order = goals.map((_, index) => index).sort((a, b) => compareGoals(goals[a], goals[b]));
   for (const index of order) {
     const goal = goals[index];
-    if (goal.remainingDollars <= 0) continue;
+    if (goal.openEnded || goal.remainingDollars <= 0) continue;
     if (goal.lastPaycheckIndex < 0 || goal.deadlineDay > lastPaycheckDay) continue;
     inHorizon.push(index);
   }
@@ -276,7 +283,8 @@ function protectedFeasibleAfterTake(
   goals: readonly SnapshotGoal[],
   remainingNeed: Int32Array,
   remainingAllocable: Int32Array,
-  paycheckDays: Int32Array
+  paycheckDays: Int32Array,
+  holdShortGoals: boolean
 ): boolean {
   for (const protectedIndex of protectedIndices) {
     if (protectedIndex === goalIndex) continue;
@@ -284,8 +292,12 @@ function protectedFeasibleAfterTake(
     if (residualNeed <= 0) continue;
     const deadline = goals[protectedIndex].deadlineDay;
     const currentCap = windowCapacity(remainingAllocable, paycheckDays, deadline);
-    // Already short of a full fill — do not block leftover deposits.
-    if (currentCap < residualNeed) continue;
+    // Already short of a full fill — do not block leftover deposits, unless this
+    // take belongs to an open-ended goal that must not widen the shortfall.
+    if (currentCap < residualNeed) {
+      if (holdShortGoals && take > 0 && paycheckDays[paycheckIndex] <= deadline) return false;
+      continue;
+    }
     let residualCap = currentCap;
     if (paycheckDays[paycheckIndex] <= deadline) residualCap -= take;
     if (residualCap < residualNeed) return false;
@@ -301,7 +313,8 @@ function maxFeasibleTake(
   remainingNeed: Int32Array,
   remainingAllocable: Int32Array,
   paycheckDays: Int32Array,
-  spendCap: number
+  spendCap: number,
+  holdShortGoals = false
 ): number {
   const hardMax = Math.min(remainingNeed[goalIndex], remainingAllocable[paycheckIndex], spendCap);
   if (hardMax <= 0) return 0;
@@ -319,7 +332,8 @@ function maxFeasibleTake(
         goals,
         remainingNeed,
         remainingAllocable,
-        paycheckDays
+        paycheckDays,
+        holdShortGoals
       )
     ) {
       best = mid;
@@ -329,6 +343,72 @@ function maxFeasibleTake(
     }
   }
   return best;
+}
+
+function futureCapacity(
+  fromExclusive: number,
+  earliestDayExclusive: number,
+  latestDayInclusive: number,
+  remainingAllocable: Int32Array,
+  paycheckDays: Int32Array
+): number {
+  let capacity = 0;
+  for (let index = fromExclusive + 1; index < paycheckDays.length; index++) {
+    if (paycheckDays[index] > earliestDayExclusive && paycheckDays[index] <= latestDayInclusive) {
+      capacity += remainingAllocable[index];
+    }
+  }
+  return capacity;
+}
+
+/**
+ * While an open-ended goal still needs money, a protected goal takes its
+ * deadline pace (or more, when later paychecks cannot cover the rest) instead
+ * of its entire balance.
+ */
+function tandemSpendCap(
+  goalIndex: number,
+  paycheckIndex: number,
+  goals: readonly SnapshotGoal[],
+  remainingNeed: Int32Array,
+  remainingAllocable: Int32Array,
+  paycheckDays: Int32Array,
+  protectedSet: ReadonlySet<number>,
+  baseSpend: number
+): { cap: number; mustTake: number } {
+  const goal = goals[goalIndex];
+  const need = remainingNeed[goalIndex];
+  const paychecksLeft = paycheckIndex <= goal.lastPaycheckIndex
+    ? goal.lastPaycheckIndex - paycheckIndex + 1
+    : 0;
+  if (need <= 0 || paychecksLeft <= 0 || baseSpend <= 0) return { cap: 0, mustTake: 0 };
+
+  const pace = Math.ceil(need / paychecksLeft);
+  let reserved = 0;
+  for (let other = 0; other < goals.length; other++) {
+    if (other === goalIndex || !protectedSet.has(other) || goals[other].openEnded) continue;
+    if (compareGoals(goals[other], goal) >= 0) continue;
+    const otherNeed = remainingNeed[other];
+    if (otherNeed <= 0) continue;
+    const afterWindow = futureCapacity(
+      paycheckIndex,
+      goal.deadlineDay,
+      goals[other].deadlineDay,
+      remainingAllocable,
+      paycheckDays
+    );
+    reserved += Math.max(0, otherNeed - afterWindow);
+  }
+  const ownFuture = futureCapacity(
+    paycheckIndex,
+    Number.NEGATIVE_INFINITY,
+    goal.deadlineDay,
+    remainingAllocable,
+    paycheckDays
+  );
+  const mustTake = Math.min(baseSpend, Math.max(0, need - Math.max(0, ownFuture - reserved)));
+  const cap = Math.min(need, baseSpend, Math.max(mustTake, pace));
+  return { cap, mustTake };
 }
 
 export function createCashFlowSnapshot(
@@ -364,15 +444,17 @@ export function createCashFlowSnapshot(
   const lastPaycheckDay = n > 0 ? paycheckDays[n - 1] : 0;
   const snapshotGoals: SnapshotGoal[] = goals.map((goal, inputIndex) => {
     const remainingDollars = Math.max(0, Math.round(goal.targetAmount - goal.alreadySaved));
-    const deadlineDay = dayNumberOfIsoDate(goal.targetDate);
+    const openEnded = goal.openEnded === true;
+    const deadlineDay = openEnded ? Number.POSITIVE_INFINITY : dayNumberOfIsoDate(goal.targetDate);
     return {
       id: goal.id,
       name: goal.name,
       inputIndex,
       priority: goal.priority,
+      openEnded,
       deadlineDay,
       remainingDollars,
-      lastPaycheckIndex: lastPaycheckOnOrBefore(paycheckDays, deadlineDay),
+      lastPaycheckIndex: openEnded ? n - 1 : lastPaycheckOnOrBefore(paycheckDays, deadlineDay),
     };
   });
 
@@ -457,13 +539,87 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
   const depositOrder = snapshot.goals
     .map((_, index) => index)
     .sort((a, b) => compareGoals(snapshot.goals[a], snapshot.goals[b]));
+  const datedOrder = depositOrder.filter((index) => !snapshot.goals[index].openEnded);
+  const openEndedOrder = depositOrder.filter((index) => snapshot.goals[index].openEnded);
   const constrainingByGoal = snapshot.goals.map((_, goalIndex) =>
     constrainingProtectedIndices(goalIndex, snapshot.protectedIndices, snapshot.goals)
   );
+  const spendRoom = (goalIndex: number, paycheckIndex: number) =>
+    protectedSet.has(goalIndex)
+      ? aboveLeft[paycheckIndex] + Math.min(dipAllowance[goalIndex], dipLeft[paycheckIndex])
+      : aboveLeft[paycheckIndex];
+
+  const depositDated = (goalIndex: number, paycheckIndex: number, spendCap: number) => {
+    if (snapshot.paycheckDays[paycheckIndex] > snapshot.goals[goalIndex].deadlineDay) return;
+    const take = maxFeasibleTake(
+      goalIndex,
+      paycheckIndex,
+      constrainingByGoal[goalIndex],
+      snapshot.goals,
+      remainingNeed,
+      remainingAllocable,
+      snapshot.paycheckDays,
+      spendCap
+    );
+    deposit(goalIndex, paycheckIndex, take);
+  };
 
   for (let i = 0; i < n; i++) {
-    for (const goalIndex of depositOrder) {
+    const tandem = openEndedOrder.some((index) => remainingNeed[index] > 0);
+    if (!tandem) {
+      for (const goalIndex of depositOrder) {
+        depositDated(goalIndex, i, spendRoom(goalIndex, i));
+      }
+      continue;
+    }
+
+    for (const goalIndex of datedOrder) {
       if (snapshot.paycheckDays[i] > snapshot.goals[goalIndex].deadlineDay) continue;
+      const room = spendRoom(goalIndex, i);
+      if (!protectedSet.has(goalIndex)) {
+        depositDated(goalIndex, i, room);
+        continue;
+      }
+      const { cap, mustTake } = tandemSpendCap(
+        goalIndex,
+        i,
+        snapshot.goals,
+        remainingNeed,
+        remainingAllocable,
+        snapshot.paycheckDays,
+        protectedSet,
+        room
+      );
+      const peerIndices = snapshot.protectedIndices.filter((index) => index !== goalIndex);
+      let take = maxFeasibleTake(
+        goalIndex,
+        i,
+        peerIndices,
+        snapshot.goals,
+        remainingNeed,
+        remainingAllocable,
+        snapshot.paycheckDays,
+        cap
+      );
+      if (take < mustTake) {
+        take = Math.max(
+          take,
+          maxFeasibleTake(
+            goalIndex,
+            i,
+            constrainingByGoal[goalIndex],
+            snapshot.goals,
+            remainingNeed,
+            remainingAllocable,
+            snapshot.paycheckDays,
+            Math.min(room, mustTake)
+          )
+        );
+      }
+      deposit(goalIndex, i, take);
+    }
+
+    for (const goalIndex of openEndedOrder) {
       const take = maxFeasibleTake(
         goalIndex,
         i,
@@ -472,11 +628,16 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
         remainingNeed,
         remainingAllocable,
         snapshot.paycheckDays,
-        protectedSet.has(goalIndex)
-          ? aboveLeft[i] + Math.min(dipAllowance[goalIndex], dipLeft[i])
-          : aboveLeft[i]
+        aboveLeft[i],
+        true
       );
       deposit(goalIndex, i, take);
+    }
+
+    if (!openEndedOrder.some((index) => remainingNeed[index] > 0)) {
+      for (const goalIndex of datedOrder) {
+        depositDated(goalIndex, i, spendRoom(goalIndex, i));
+      }
     }
   }
 
