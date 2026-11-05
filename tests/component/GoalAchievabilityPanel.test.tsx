@@ -47,6 +47,43 @@ const projection: GoalProjection = {
 };
 
 describe('GoalAchievabilityPanel', () => {
+  it('renders an open-ended goal with its funding date and paycheck count', () => {
+    const openGoal: SavingsGoal = {
+      ...goal,
+      name: 'New Car',
+      targetDate: '',
+      openEnded: true,
+      priority: 0,
+    };
+    const openProjection: GoalProjection = {
+      ...projection,
+      goalName: 'New Car',
+      targetDate: '',
+      paychecksToFullyFund: 48,
+      estimatedFundedDate: '2028-03-04',
+      marginPerPaycheck: 0,
+      isProjected: false,
+      status: 'achievable',
+      achievabilityPercent: 100,
+    };
+    const messaging = buildGoalAchievabilityMessaging(openGoal, openProjection);
+    render(
+      <GoalAchievabilityPanel
+        goal={openGoal}
+        projection={openProjection}
+        messaging={messaging}
+      />
+    );
+
+    expect(screen.getByText('Open-Ended Goal')).toBeInTheDocument();
+    expect(screen.getByText(
+      "You'll fund the full $11,000.00 for New Car by Mar 4, 2028, about 48 paychecks from now."
+    )).toBeInTheDocument();
+    expect(screen.getByText(/Funded in ~48 paychecks/)).toBeInTheDocument();
+    expect(screen.getByText(/est\. Mar 4, 2028/)).toBeInTheDocument();
+    expect(screen.queryByText(/your deadline/i)).not.toBeInTheDocument();
+  });
+
   it('renders headline and timeline with aria-live region', () => {
     const messaging = buildGoalAchievabilityMessaging(goal, projection);
     render(
@@ -61,6 +98,7 @@ describe('GoalAchievabilityPanel', () => {
     expect(screen.getByRole('region')).toHaveAttribute('aria-live', 'polite');
     expect(screen.getByText("Funded, But It's Tight")).toBeInTheDocument();
     expect(screen.getByText(/Funded in ~50 paychecks/)).toBeInTheDocument();
+    expect(screen.getByText(/est\. Apr 15, 2027/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /View funding on Schedule/i })).toBeInTheDocument();
   });
 

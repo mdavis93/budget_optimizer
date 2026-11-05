@@ -239,6 +239,49 @@ describe('GoalsPage', () => {
       await user.click(screen.getByRole('button', { name: 'panel-edit' }));
     });
 
+    it('creates an open-ended goal without a date or priority', async () => {
+      const user = userEvent.setup();
+      render(<GoalsPage />);
+      await user.click(screen.getByRole('button', { name: /Add Goal/i }));
+      await user.click(screen.getByLabelText('Open-ended'));
+
+      expect(screen.queryByLabelText('Target Date')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Priority')).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Goal Name'), { target: { value: 'New Car' } });
+      fireEvent.change(screen.getByLabelText('Target Amount'), { target: { value: '20000' } });
+      await user.click(screen.getByRole('button', { name: /Create Goal/i }));
+
+      await waitFor(() => {
+        expect(baseDraftActions.createGoal).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'New Car',
+            targetAmount: 20000,
+            targetDate: '',
+            openEnded: true,
+            priority: 0,
+          })
+        );
+      });
+    });
+
+    it('shows an open-ended goal without a priority rank or deadline', () => {
+      mockDraftContext({
+        goals: [createMockGoal({
+          id: 'goal-1',
+          name: 'New Car',
+          targetAmount: 20000,
+          targetDate: '',
+          priority: 0,
+          openEnded: true,
+        })],
+      });
+      render(<GoalsPage />);
+      expect(screen.getByText('Open-ended')).toBeInTheDocument();
+      expect(screen.getByText('No deadline')).toBeInTheDocument();
+      expect(screen.queryByText('Priority: 0')).not.toBeInTheDocument();
+    });
+
     it('updates priority and already saved fields when editing', async () => {
       const user = userEvent.setup();
       render(<GoalsPage />);

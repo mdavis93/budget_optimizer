@@ -21,7 +21,7 @@ import {
 import { formatCurrency } from '../../utils/formatCurrency';
 
 export interface GoalAchievabilityPanelProps {
-  goal: Pick<SavingsGoal, 'id' | 'name' | 'targetAmount' | 'targetDate' | 'alreadySaved' | 'priority'>;
+  goal: Pick<SavingsGoal, 'id' | 'name' | 'targetAmount' | 'targetDate' | 'alreadySaved' | 'priority' | 'openEnded'>;
   projection: GoalProjection | null;
   messaging: GoalAchievabilityMessaging | null;
   minCashOnHand?: number;
@@ -81,6 +81,12 @@ const TIER_STYLES: Record<
     border: 'border-sky-300/50 dark:border-sky-700/50',
     bg: 'bg-sky-50 dark:bg-sky-900/20',
     text: 'text-sky-800 dark:text-sky-300',
+    icon: TrendingUp,
+  },
+  open_ended: {
+    border: 'border-success-300/40 dark:border-success-700/40',
+    bg: 'bg-success-50/70 dark:bg-success-900/15',
+    text: 'text-success-700 dark:text-success-400',
     icon: TrendingUp,
   },
   not_achievable: {
@@ -210,7 +216,12 @@ const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
       <h4 id={headlineId} className={clsx('text-sm font-semibold line-clamp-1', tierStyle.text)}>
         {messaging.headline}
       </h4>
-      <p className={clsx('text-sm mt-1 line-clamp-2', tierStyle.text, 'opacity-90')}>
+      <p className={clsx(
+        'text-sm mt-1',
+        messaging.comfortTier === 'open_ended' ? 'line-clamp-3' : 'line-clamp-2',
+        tierStyle.text,
+        'opacity-90'
+      )}>
         {messaging.body}
       </p>
 
@@ -267,7 +278,7 @@ const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
             onClick={() => onEditGoal(goal.id)}
             className={clsx('text-sm font-medium underline hover:no-underline', tierStyle.text)}
           >
-            Adjust priority or deadline →
+            {goal.openEnded ? 'Adjust this goal →' : 'Adjust priority or deadline →'}
           </button>
         )}
       </div>

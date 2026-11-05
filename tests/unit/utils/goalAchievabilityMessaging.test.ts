@@ -275,6 +275,33 @@ describe('buildGoalAchievabilityMessaging', () => {
     expect(messaging.marginFact).toContain('3 paychecks already run short');
   });
 
+  it('describes an open-ended goal by the date it will be fully funded', () => {
+    const messaging = buildGoalAchievabilityMessaging(
+      { ...baseGoal, name: 'New Car', targetDate: '', openEnded: true },
+      makeProjection({
+        goalName: 'New Car',
+        targetDate: '',
+        estimatedFundedDate: '2028-03-04',
+        paychecksToFullyFund: 48,
+        status: 'achievable',
+        achievabilityPercent: 100,
+        isProjected: true,
+        marginPerPaycheck: 0,
+      })
+    );
+
+    expect(messaging.comfortTier).toBe('open_ended');
+    expect(messaging.headline).toBe('Open-Ended Goal');
+    expect(messaging.body).toBe(
+      "You'll fund the full $11,000.00 for New Car by Mar 4, 2028, about 48 paychecks from now."
+    );
+    expect(messaging.timeline?.paychecksToFund).toBe(48);
+    expect(messaging.timeline?.estimatedFundedDate).toBe('2028-03-04');
+    expect(messaging.timeline?.relativeToDeadline).toBe('unknown');
+    expect(messaging.margin).toBeNull();
+    expect(messaging.modifiers).toEqual(['projected']);
+  });
+
   it('marks timeline as meets when funded on deadline', () => {
     const messaging = buildGoalAchievabilityMessaging(
       baseGoal,

@@ -7,6 +7,7 @@ export interface GoalFormValues {
   targetDate: string;
   alreadySaved: number;
   priority: number;
+  openEnded: boolean;
 }
 
 interface GoalFormProps {
@@ -33,7 +34,9 @@ export default function GoalForm({
   const dateInputId = useId();
   const savedInputId = useId();
   const priorityInputId = useId();
+  const openEndedInputId = useId();
   const isCreate = mode === 'create';
+  const openEnded = values.openEnded === true;
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -65,17 +68,38 @@ export default function GoalForm({
         />
       </div>
 
-      <div>
-        <label htmlFor={`${idPrefix}-${dateInputId}`} className="block text-sm font-medium mb-1">Target Date</label>
-        <input
-          id={`${idPrefix}-${dateInputId}`}
-          type="date"
-          value={values.targetDate}
-          onChange={(event) => onChange({ ...values, targetDate: event.target.value })}
-          className="input w-full"
-          required
-        />
+      <div className="p-3 rounded-lg bg-(--color-bg-tertiary)">
+        <div className="flex items-center gap-3">
+          <input
+            id={`${idPrefix}-${openEndedInputId}`}
+            type="checkbox"
+            checked={openEnded}
+            onChange={(event) => onChange({ ...values, openEnded: event.target.checked })}
+            className="w-4 h-4 rounded-sm border-(--color-border)"
+            aria-describedby={`${idPrefix}-${openEndedInputId}-help`}
+          />
+          <label htmlFor={`${idPrefix}-${openEndedInputId}`} className="text-sm">
+            Open-ended
+          </label>
+        </div>
+        <p id={`${idPrefix}-${openEndedInputId}-help`} className="text-xs text-(--color-text-muted) mt-1">
+          No due date. Funded alongside your other goals, using only money they can spare and still hit their deadlines.
+        </p>
       </div>
+
+      {!openEnded && (
+        <div>
+          <label htmlFor={`${idPrefix}-${dateInputId}`} className="block text-sm font-medium mb-1">Target Date</label>
+          <input
+            id={`${idPrefix}-${dateInputId}`}
+            type="date"
+            value={values.targetDate}
+            onChange={(event) => onChange({ ...values, targetDate: event.target.value })}
+            className="input w-full"
+            required
+          />
+        </div>
+      )}
 
       <div>
         <label htmlFor={`${idPrefix}-${savedInputId}`} className="block text-sm font-medium mb-1">
@@ -98,27 +122,29 @@ export default function GoalForm({
         )}
       </div>
 
-      <div>
-        <label htmlFor={`${idPrefix}-${priorityInputId}`} className="block text-sm font-medium mb-1">Priority</label>
-        <select
-          id={`${idPrefix}-${priorityInputId}`}
-          value={values.priority}
-          onChange={(event) => onChange({ ...values, priority: parseInt(event.target.value) })}
-          className="input w-full"
-        >
-          {Array.from(
-            { length: MAX_GOAL_PRIORITY - MIN_GOAL_PRIORITY + 1 },
-            (_, index) => MIN_GOAL_PRIORITY + index
-          ).map((priority) => (
-            <option key={priority} value={priority}>{GOAL_PRIORITY_LABELS[priority]}</option>
-          ))}
-        </select>
-        {isCreate && (
-          <p className="text-xs text-(--color-text-muted) mt-1">
-            Higher priority goals are funded first. Choosing a priority already in use swaps with that goal.
-          </p>
-        )}
-      </div>
+      {!openEnded && (
+        <div>
+          <label htmlFor={`${idPrefix}-${priorityInputId}`} className="block text-sm font-medium mb-1">Priority</label>
+          <select
+            id={`${idPrefix}-${priorityInputId}`}
+            value={values.priority}
+            onChange={(event) => onChange({ ...values, priority: parseInt(event.target.value) })}
+            className="input w-full"
+          >
+            {Array.from(
+              { length: MAX_GOAL_PRIORITY - MIN_GOAL_PRIORITY + 1 },
+              (_, index) => MIN_GOAL_PRIORITY + index
+            ).map((priority) => (
+              <option key={priority} value={priority}>{GOAL_PRIORITY_LABELS[priority]}</option>
+            ))}
+          </select>
+          {isCreate && (
+            <p className="text-xs text-(--color-text-muted) mt-1">
+              Higher priority goals are funded first. Choosing a priority already in use swaps with that goal.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-3 pt-4">
         <button type="button" onClick={onCancel} className="btn btn-secondary flex-1">
@@ -126,7 +152,7 @@ export default function GoalForm({
         </button>
         <button
           type="submit"
-          disabled={isSaving || !values.name.trim() || values.targetAmount <= 0 || !values.targetDate}
+          disabled={isSaving || !values.name.trim() || values.targetAmount <= 0 || (!openEnded && !values.targetDate)}
           className="btn btn-primary flex-1"
         >
           {isSaving ? (isCreate ? 'Creating...' : 'Saving...') : (isCreate ? 'Create Goal' : 'Save Changes')}
