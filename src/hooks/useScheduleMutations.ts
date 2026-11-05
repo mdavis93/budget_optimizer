@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDraftActions, useDraftData, useSchedule } from '../context/DraftContext';
 import { reportError } from '../utils/reportError';
 import type { BreakGlassPlan, ProposedFix } from '../types';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 
 export function useScheduleMutations() {
   const { billAssignments } = useDraftData();
@@ -57,7 +58,7 @@ export function useScheduleMutations() {
         .filter((fix) => fix.type === 'move_bill' && fix.toPaycheckDate)
         .map(
           (fix) =>
-            [`${fix.billId}-${fix.billDueDate}`, fix.toPaycheckDate!] as [string, string]
+            [billOccurrenceKeyFromIso(fix.billId, fix.billDueDate), fix.toPaycheckDate!] as [string, string]
         );
 
       applyReconciliationFixes(fixes);
@@ -104,7 +105,7 @@ export function useScheduleMutations() {
     try {
       const preferred = plan.steps.map(
         (step) =>
-          [`${step.billId}-${step.billDueDate}`, step.toPaycheckDate] as [string, string]
+          [billOccurrenceKeyFromIso(step.billId, step.billDueDate), step.toPaycheckDate] as [string, string]
       );
 
       applyBreakGlassPlan(plan);
@@ -131,7 +132,7 @@ export function useScheduleMutations() {
   }, []);
 
   const handleSkipBill = useCallback(async (billId: string, billDate: string) => {
-    setSkippingBill(`${billId}-${billDate}`);
+    setSkippingBill(billOccurrenceKeyFromIso(billId, billDate));
     try {
       if (skipBill(billId, billDate)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
@@ -144,7 +145,7 @@ export function useScheduleMutations() {
   }, [generateSchedule, months, skipBill, startDate, startingBalance]);
 
   const handleUnskipBill = useCallback(async (billId: string, billDate: string) => {
-    setUnskippingBill(`${billId}-${billDate}`);
+    setUnskippingBill(billOccurrenceKeyFromIso(billId, billDate));
     try {
       if (unskipBill(billId, billDate)) {
         await generateSchedule(startDate, months, startingBalance, { force: true });
@@ -155,7 +156,7 @@ export function useScheduleMutations() {
   }, [generateSchedule, months, startDate, startingBalance, unskipBill]);
 
   const handleRestoreBill = useCallback(async (billId: string, billDueDate: string) => {
-    setRestoringBill(`${billId}-${billDueDate}`);
+    setRestoringBill(billOccurrenceKeyFromIso(billId, billDueDate));
     try {
       removeBillAssignment(billId, billDueDate);
     } catch (error) {

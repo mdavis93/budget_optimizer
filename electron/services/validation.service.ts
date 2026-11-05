@@ -1,5 +1,23 @@
 import { SCHEDULE_MAX_CALCULATION_MONTHS } from '@shared/constants';
+import { BILL_PRIORITIES } from '@shared/billPriority';
+import { isIncomePurpose } from '@shared/incomePurpose';
+import { INCOME_CADENCE_VALUES } from '@shared/incomeCadence';
+import { MAX_GOAL_PRIORITY, MIN_GOAL_PRIORITY } from '@shared/goalPriority';
+import { MAX_AUTO_LOCK_MINUTES, MAX_SAVINGS_APY, MIN_AUTO_LOCK_MINUTES, MIN_SAVINGS_APY } from '@shared/settingsDefaults';
+import { THEME_OPTIONS } from '@shared/themes';
+import {
+  MAX_BILL_BUDGETED_AMOUNT,
+  MAX_DEBT_ROWS,
+  MAX_MONEY,
+  MAX_NAME_LENGTH,
+} from '@shared/limits';
+import {
+  ISO_DATE_LENGTH,
+  OCCURRENCE_KEY_SEPARATOR_OFFSET,
+} from '@shared/billOccurrence';
 import { isScheduleViewportMonths } from '@shared/scheduleViewportMonths';
+
+export { MAX_MONEY };
 
 export class ValidationError extends Error {
   constructor(message: string, public field?: string) {
@@ -32,7 +50,7 @@ export function validateBill(
     errors.push('Creditor name is required');
   }
 
-  if (bill.creditorName && bill.creditorName.length > 100) {
+  if (bill.creditorName && bill.creditorName.length > MAX_NAME_LENGTH) {
     errors.push('Creditor name must be 100 characters or less');
   }
 
@@ -40,7 +58,7 @@ export function validateBill(
     errors.push('Budgeted amount must be a number');
   } else if (bill.budgetedAmount <= 0) {
     errors.push('Budgeted amount must be greater than 0');
-  } else if (bill.budgetedAmount > 1000000) {
+  } else if (bill.budgetedAmount > MAX_BILL_BUDGETED_AMOUNT) {
     errors.push('Budgeted amount cannot exceed 1,000,000');
   }
 
@@ -54,8 +72,7 @@ export function validateBill(
     errors.push('Category must be 50 characters or less');
   }
 
-  const validPriorities = ['critical', 'high', 'normal', 'low'];
-  if (!validPriorities.includes(bill.priority)) {
+  if (!BILL_PRIORITIES.some((priority) => priority === bill.priority)) {
     errors.push('Priority must be one of: critical, high, normal, low');
   }
 
@@ -86,7 +103,7 @@ export function validateIncome(income: {
     errors.push('Source name is required');
   }
 
-  if (income.sourceName && income.sourceName.length > 100) {
+  if (income.sourceName && income.sourceName.length > MAX_NAME_LENGTH) {
     errors.push('Source name must be 100 characters or less');
   }
 
@@ -94,16 +111,15 @@ export function validateIncome(income: {
     errors.push('Amount must be a number');
   } else if (income.amount <= 0) {
     errors.push('Amount must be greater than 0');
-  } else if (income.amount > 10000000) {
+  } else if (income.amount > MAX_MONEY) {
     errors.push('Amount cannot exceed 10,000,000');
   }
 
-  const validCadences = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
-  if (!validCadences.includes(income.cadence)) {
+  if (!INCOME_CADENCE_VALUES.some((cadence) => cadence === income.cadence)) {
     errors.push('Cadence must be one of: weekly, biweekly, semimonthly, monthly');
   }
 
-  if (income.purpose !== undefined && income.purpose !== 'operating' && income.purpose !== 'savingsAndGoals') {
+  if (income.purpose !== undefined && !isIncomePurpose(income.purpose)) {
     errors.push('Purpose must be one of: operating, savingsAndGoals');
   }
 
@@ -133,14 +149,11 @@ export function assertValid(result: ValidationResult, context: string): void {
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ID_REGEX = /^[a-zA-Z0-9-]{8,64}$/;
 
-/** Absolute ceiling for a single money field. Starting balance may be negative. */
-export const MAX_MONEY = 10_000_000;
-
 export const COLLECTION_LIMITS = {
   incomes: 100,
   bills: 1000,
   goals: 200,
-  debts: 200,
+  debts: MAX_DEBT_ROWS,
   leaves: 500,
   skippedBills: 20_000,
   billAssignments: 20_000,
@@ -176,9 +189,15 @@ function isRealCalendarDate(value: unknown): value is string {
 }
 
 function isPreferredAssignmentKey(key: string): boolean {
-  if (key.length < 19 || key.length > 80 || key[key.length - 11] !== '-') return false;
-  const billId = key.slice(0, -11);
-  return ID_REGEX.test(billId) && isRealCalendarDate(key.slice(-10));
+  if (
+    key.length < 19 ||
+    key.length > 80 ||
+    key[key.length - OCCURRENCE_KEY_SEPARATOR_OFFSET] !== '-'
+  ) {
+    return false;
+  }
+  const billId = key.slice(0, -OCCURRENCE_KEY_SEPARATOR_OFFSET);
+  return ID_REGEX.test(billId) && isRealCalendarDate(key.slice(-ISO_DATE_LENGTH));
 }
 
 export interface ReconciliationFixInput {
@@ -304,7 +323,7 @@ export function validateGoal(goal: {
 
   if (!goal.name || goal.name.trim().length === 0) {
     errors.push('Goal name is required');
-  } else if (goal.name.length > 100) {
+  } else if (goal.name.length > MAX_NAME_LENGTH) {
     errors.push('Goal name must be 100 characters or less');
   }
 
@@ -328,7 +347,7 @@ export function validateGoal(goal: {
     errors.push('Already saved must be a non-negative number');
   }
 
-  if (goal.priority !== undefined && (!Number.isInteger(goal.priority) || goal.priority < 1 || goal.priority > 5)) {
+  if (goal.priority !== undefined && (!Number.isInteger(goal.priority) || goal.priority < MIN_GOAL_PRIORITY || goal.priority > MAX_GOAL_PRIORITY)) {
     errors.push('Priority must be an integer between 1 and 5');
   }
 
@@ -392,7 +411,7 @@ export function validateLeave(leave: {
 
   if (!leave.name || leave.name.trim().length === 0) {
     errors.push('Leave name is required');
-  } else if (leave.name.length > 100) {
+  } else if (leave.name.length > MAX_NAME_LENGTH) {
     errors.push('Leave name must be 100 characters or less');
   }
 
@@ -467,7 +486,7 @@ export function validateBudget(budget: {
 
   if (!budget.name || budget.name.trim().length === 0) {
     errors.push('Budget name is required');
-  } else if (budget.name.length > 100) {
+  } else if (budget.name.length > MAX_NAME_LENGTH) {
     errors.push('Budget name must be 100 characters or less');
   }
 
@@ -524,13 +543,13 @@ export function validateSettings(settings: Record<string, unknown>): ValidationR
     }
   }
 
-  if (settings.theme !== undefined && !['light', 'dark', 'system'].includes(String(settings.theme))) {
+  if (settings.theme !== undefined && !THEME_OPTIONS.some((option) => option.value === settings.theme)) {
     errors.push('Theme must be light, dark, or system');
   }
 
   if (settings.autoLockMinutes !== undefined) {
     const minutes = Number(settings.autoLockMinutes);
-    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+    if (!Number.isInteger(minutes) || minutes < MIN_AUTO_LOCK_MINUTES || minutes > MAX_AUTO_LOCK_MINUTES) {
       errors.push('Auto-lock minutes must be an integer between 0 and 1440');
     }
   }
@@ -543,7 +562,7 @@ export function validateSettings(settings: Record<string, unknown>): ValidationR
 
   if (settings.savingsAPY !== undefined) {
     const apy = Number(settings.savingsAPY);
-    if (typeof apy !== 'number' || isNaN(apy) || apy < 0 || apy > 100) {
+    if (typeof apy !== 'number' || isNaN(apy) || apy < MIN_SAVINGS_APY || apy > MAX_SAVINGS_APY) {
       errors.push('Savings APY must be between 0 and 100');
     }
   }

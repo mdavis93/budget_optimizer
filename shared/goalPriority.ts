@@ -1,6 +1,14 @@
 export const MIN_GOAL_PRIORITY = 1;
 export const MAX_GOAL_PRIORITY = 5;
-export const MAX_SAVINGS_GOALS = 5;
+export const MAX_SAVINGS_GOALS = MAX_GOAL_PRIORITY - MIN_GOAL_PRIORITY + 1;
+
+export const GOAL_PRIORITY_LABELS: Record<number, string> = {
+  1: '1 - Highest',
+  2: '2 - High',
+  3: '3 - Medium',
+  4: '4 - Low',
+  5: '5 - Lowest',
+};
 
 type GoalPriorityFields = {
   id: string;

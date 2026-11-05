@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useDraftData, useSchedule } from '../context/DraftContext';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { CategoryPieChart, ChartSuspense, IncomeExpensesChart, SavingsAreaChart } from '../components/charts/lazyCharts';
-import { CHART_COLORS } from '../components/charts/chartTheme';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
 import { SCHEDULE_VIEWPORT_MONTHS, type ScheduleViewportMonths } from '@shared/scheduleViewportMonths';
 import type { DebtPlan } from '@shared/types';
+import { clampSavingsApy, DEFAULT_SAVINGS_APY } from '@shared/settingsDefaults';
+import { billCategoryChartColor } from '../types';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -15,20 +16,6 @@ function displayIsoDate(value: string | null | undefined): string {
   if (!ISO_DAY.test(value)) return value;
   return format(parseISO(value), 'MMM d, yyyy');
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Housing: CHART_COLORS.primary,
-  Utilities: CHART_COLORS.warning,
-  Transportation: CHART_COLORS.purple,
-  Insurance: CHART_COLORS.cyan,
-  Debt: CHART_COLORS.danger,
-  Subscriptions: CHART_COLORS.pink,
-  Food: CHART_COLORS.success,
-  Healthcare: CHART_COLORS.teal,
-  Entertainment: CHART_COLORS.orange,
-  Savings: CHART_COLORS.lime,
-  Other: CHART_COLORS.indigo,
-};
 
 export default function SummaryPage() {
   const { incomes, bills } = useDraftData();
@@ -60,7 +47,7 @@ export default function SummaryPage() {
     debtPlan?: DebtPlan;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [savingsAPY, setSavingsAPY] = useState(0);
+  const [savingsAPY, setSavingsAPY] = useState(DEFAULT_SAVINGS_APY);
 
   useEffect(() => {
     let isMounted = true;
@@ -69,7 +56,7 @@ export default function SummaryPage() {
       try {
         const result = await window.electronAPI.settings.get();
         if (isMounted && result.success && result.data) {
-          setSavingsAPY(result.data.savingsAPY || 0);
+          setSavingsAPY(result.data.savingsAPY ?? DEFAULT_SAVINGS_APY);
         }
       } catch {
         // Use default
@@ -109,9 +96,10 @@ export default function SummaryPage() {
   }, [incomes, bills, scheduleMonths, isViewportReady, generateSchedule, scheduleStartDate, scheduleStartingBalance, scheduleInputHash]);
 
   const handleAPYChange = async (newAPY: number) => {
-    setSavingsAPY(newAPY);
+    const clampedAPY = clampSavingsApy(newAPY);
+    setSavingsAPY(clampedAPY);
     try {
-      await window.electronAPI.settings.update({ savingsAPY: newAPY });
+      await window.electronAPI.settings.update({ savingsAPY: clampedAPY });
     } catch {
       // Silently fail
     }
@@ -196,7 +184,7 @@ export default function SummaryPage() {
       .map(([name, value]) => ({
         name,
         value: Math.round(value),
-        color: CATEGORY_COLORS[name] || CHART_COLORS.indigo,
+        color: billCategoryChartColor(name),
       }))
       .sort((a, b) => b.value - a.value);
   }, [scheduleData]);

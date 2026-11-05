@@ -1,3 +1,4 @@
+import { MAX_DEBT_ROWS, MAX_MONEY, MAX_NAME_LENGTH } from './limits';
 import {
   SCHEDULE_COMPUTE_MAX_PAYLOAD_BYTES,
   SCHEDULE_COMPUTE_PROGRESS_MAX_BYTES,
@@ -95,9 +96,6 @@ function assertScheduleData(schedule: unknown): void {
   assertDebtPlan(schedule);
 }
 
-const MAX_MONEY = 10_000_000;
-const MAX_DEBTS = 200;
-const MAX_CREDITOR_NAME = 100;
 const DEBT_PLAN_VARIANTS = new Set(['disabled', 'standard', 'deep']);
 
 function assertMoney(value: unknown, label: string): void {
@@ -121,14 +119,14 @@ function assertDebtPayments(
     if (accelerateOff && payments.length > 0) {
       throw new Error('debtPayments must be empty when accelerateDebtPayoff is off');
     }
-    if (payments.length > MAX_DEBTS) {
-      throw new Error(`paycheck.debtPayments cannot exceed ${MAX_DEBTS}`);
+    if (payments.length > MAX_DEBT_ROWS) {
+      throw new Error(`paycheck.debtPayments cannot exceed ${MAX_DEBT_ROWS}`);
     }
     for (const payment of payments) {
       if (!isRecord(payment)) {
         throw new Error('debt payment must be an object');
       }
-      if (typeof payment.creditorName === 'string' && payment.creditorName.length > MAX_CREDITOR_NAME) {
+      if (typeof payment.creditorName === 'string' && payment.creditorName.length > MAX_NAME_LENGTH) {
         throw new Error('debt payment creditorName exceeds 100 characters');
       }
       assertMoney(payment.amount, 'debt payment amount');
@@ -158,11 +156,11 @@ function assertDebtPlan(schedule: Record<string, unknown>): void {
   if (typeof plan.variant !== 'string' || !DEBT_PLAN_VARIANTS.has(plan.variant)) {
     throw new Error('debtPlan.variant must be disabled, standard, or deep');
   }
-  if (!Array.isArray(plan.debts) || plan.debts.length > MAX_DEBTS) {
-    throw new Error(`debtPlan.debts cannot exceed ${MAX_DEBTS}`);
+  if (!Array.isArray(plan.debts) || plan.debts.length > MAX_DEBT_ROWS) {
+    throw new Error(`debtPlan.debts cannot exceed ${MAX_DEBT_ROWS}`);
   }
-  if (!Array.isArray(plan.excluded) || plan.excluded.length > MAX_DEBTS) {
-    throw new Error(`debtPlan.excluded cannot exceed ${MAX_DEBTS}`);
+  if (!Array.isArray(plan.excluded) || plan.excluded.length > MAX_DEBT_ROWS) {
+    throw new Error(`debtPlan.excluded cannot exceed ${MAX_DEBT_ROWS}`);
   }
   assertMoney(plan.totalInterestSaved, 'debtPlan.totalInterestSaved');
   assertMoney(plan.freedMonthlyCash, 'debtPlan.freedMonthlyCash');
@@ -170,7 +168,7 @@ function assertDebtPlan(schedule: Record<string, unknown>): void {
     if (!isRecord(row)) {
       throw new Error('debtPlan debt row must be an object');
     }
-    if (typeof row.creditorName === 'string' && row.creditorName.length > MAX_CREDITOR_NAME) {
+    if (typeof row.creditorName === 'string' && row.creditorName.length > MAX_NAME_LENGTH) {
       throw new Error('debtPlan creditorName exceeds 100 characters');
     }
     assertMoney(row.baselineInterest, 'debtPlan baselineInterest');

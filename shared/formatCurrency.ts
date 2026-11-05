@@ -1,12 +1,14 @@
+import { DEFAULT_CURRENCY } from './settingsDefaults';
+
 export type FormatCurrencyOptions = {
   /** Whole dollars when 0; default is 2 decimal places. */
   fractionDigits?: 0 | 2;
 };
 
-let defaultCurrency = 'USD';
+let defaultCurrency = DEFAULT_CURRENCY;
 
 export function setDefaultCurrency(currency: string): void {
-  defaultCurrency = currency || 'USD';
+  defaultCurrency = currency || DEFAULT_CURRENCY;
 }
 
 export function getDefaultCurrency(): string {
@@ -21,7 +23,7 @@ export function formatCurrency(
   const fractionDigits = options?.fractionDigits ?? 2;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currency || 'USD',
+    currency: currency || DEFAULT_CURRENCY,
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount);

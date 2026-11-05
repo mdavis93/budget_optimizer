@@ -14,11 +14,13 @@ import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
   billOccurrenceKey,
+  billOccurrenceKeyFromIso,
   type PaycheckAssignment,
   type ProjectedBill,
   type ProjectedIncome,
 } from '../types';
 import type { PreparedScheduleHorizon } from '../scheduleBuild';
+import { priorityFromTier, priorityTier as tierForPriority } from '@shared/billPriority';
 import {
   UNPAID_PLACEMENT,
   type BillPriority,
@@ -38,13 +40,6 @@ export class AssignmentModelError extends Error {
     this.code = code;
   }
 }
-
-const PRIORITY_TIER: Record<BillPriority, 1 | 2 | 3 | 4> = {
-  critical: 1,
-  high: 2,
-  normal: 3,
-  low: 4,
-};
 
 const MAX_MONEY_CENTS = MAX_MONEY * 100;
 
@@ -165,7 +160,7 @@ function pushAttachedBills(
       );
       if (!hasMatchingIncome) continue;
       const paycheckIso = isoOf(paycheck.date);
-      if (skippedBills.has(`${bill.id}-${paycheckIso}`)) continue;
+      if (skippedBills.has(billOccurrenceKeyFromIso(bill.id, paycheckIso))) continue;
       bills.push({
         billId: bill.id,
         dueIso: paycheckIso,
@@ -261,7 +256,7 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
   pushAttachedBills(assignments, incomeAttachedBillsRaw, skippedBills, modelBills);
 
   const placedKeys = new Set(
-    modelBills.map((bill) => `${bill.billId}-${bill.dueIso}`)
+    modelBills.map((bill) => billOccurrenceKeyFromIso(bill.billId, bill.dueIso))
   );
   const eligibility = createEligibilityLookup(assignments, skippedBills);
 
@@ -271,10 +266,10 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
     assertCents(amountCents, `bill ${bill.billId}`);
     const dueIso = isoOf(bill.date);
     const occurrence = billOccurrenceKey(bill.billId, bill.date);
-    if (placedKeys.has(occurrence) || skippedBills.has(`${bill.billId}-${dueIso}`)) {
+    if (placedKeys.has(occurrence) || skippedBills.has(billOccurrenceKeyFromIso(bill.billId, dueIso))) {
       continue;
     }
-    const assignmentKey = `${bill.billId}-${dueIso}`;
+    const assignmentKey = billOccurrenceKeyFromIso(bill.billId, dueIso);
     const fixed = resolveFixedPaycheck(
       assignmentKey,
       paycheckIso,
@@ -317,8 +312,8 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
   }
 
   modelBills.sort((left, right) => {
-    const keyLeft = `${left.billId}-${left.dueIso}`;
-    const keyRight = `${right.billId}-${right.dueIso}`;
+    const keyLeft = billOccurrenceKeyFromIso(left.billId, left.dueIso);
+    const keyRight = billOccurrenceKeyFromIso(right.billId, right.dueIso);
     return keyLeft < keyRight ? -1 : keyLeft > keyRight ? 1 : 0;
   });
 
@@ -338,7 +333,7 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
     const bill = modelBills[billIndex];
     amountCents[billIndex] = bill.amountCents;
     dueDay[billIndex] = bill.dueDay;
-    priorityTier[billIndex] = PRIORITY_TIER[bill.priority];
+    priorityTier[billIndex] = tierForPriority(bill.priority);
     isPinned[billIndex] = bill.isPinned ? 1 : 0;
     fixedPaycheck[billIndex] = bill.fixedPaycheck;
     eligibilityOffsets[billIndex] = eligibilityBag.length;
@@ -425,8 +420,7 @@ export function modelToObjectiveInput(
   const paychecks: ObjectivePaycheck[] = [];
   for (let billIndex = 0; billIndex < model.billCount; billIndex++) {
     const tier = model.priorityTier[billIndex];
-    const priority: BillPriority =
-      tier === 1 ? 'critical' : tier === 2 ? 'high' : tier === 3 ? 'normal' : 'low';
+    const priority: BillPriority = priorityFromTier(tier);
     bills.push({
       amountCents: model.amountCents[billIndex],
       priority,

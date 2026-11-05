@@ -7,6 +7,10 @@
  * (constants, helpers) stay in their layer-specific modules.
  */
 
+import type { BillPriority } from '../billPriority';
+import type { IncomeCadence } from '../incomeCadence';
+import type { ThemeSetting } from '../themes';
+
 // ---------------------------------------------------------------------------
 // Entities
 // ---------------------------------------------------------------------------
@@ -47,7 +51,7 @@ export interface Income {
   id: string;
   sourceName: string;
   amount: number;
-  cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  cadence: IncomeCadence;
   startDate: string;
   /** Last payment date (inclusive). Omit for open-ended income. */
   endDate?: string;
@@ -61,7 +65,7 @@ export interface Income {
 export interface IncomeInput {
   sourceName: string;
   amount: number;
-  cadence: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  cadence: IncomeCadence;
   startDate: string;
   endDate?: string;
   isActive: boolean;
@@ -75,7 +79,7 @@ export interface Bill {
   dueDay: number;
   category?: string;
   isRecurring: boolean;
-  priority: 'critical' | 'high' | 'normal' | 'low';
+  priority: BillPriority;
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
   createdAt: string;
@@ -88,7 +92,7 @@ export interface BillInput {
   dueDay: number;
   category?: string;
   isRecurring: boolean;
-  priority: 'critical' | 'high' | 'normal' | 'low';
+  priority: BillPriority;
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
 }
@@ -181,7 +185,7 @@ export interface LeaveInput {
 }
 
 export interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
+  theme: ThemeSetting;
   autoLockMinutes: number;
   currency: string;
   defaultScheduleMonths: number;
@@ -253,7 +257,7 @@ export interface PaycheckBill {
   creditorName: string;
   amount: number;
   dueDay: number;
-  priority: 'critical' | 'high' | 'normal' | 'low';
+  priority: BillPriority;
   category?: string;
   billDate: string; // The projected due date for this bill occurrence
   isIncomeAttached?: boolean;

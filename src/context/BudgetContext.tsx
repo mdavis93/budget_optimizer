@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Budget, BudgetWithStats } from '../types';
+import { Budget, BudgetInput, BudgetWithStats } from '../types';
 
 interface BudgetContextValue {
   budgets: BudgetWithStats[];
@@ -10,7 +10,7 @@ interface BudgetContextValue {
   
   loadBudgets: () => Promise<void>;
   createBudget: (name: string, startingBalance?: number, targetCashOnHand?: number, minCashOnHand?: number) => Promise<Budget>;
-  updateBudget: (id: string, updates: { name?: string; startingBalance?: number; targetCashOnHand?: number; minCashOnHand?: number; minSavingsPerPaycheck?: number; accelerateDebtPayoff?: boolean; scheduleStartDate?: string }) => Promise<void>;
+  updateBudget: (id: string, updates: Partial<BudgetInput>) => Promise<void>;
   deleteBudget: (id: string) => Promise<boolean>;
   switchBudget: (id: string) => Promise<void>;
   startQuickBudget: () => Promise<void>;
@@ -55,7 +55,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     return result.data;
   }, [loadBudgets]);
 
-  const updateBudget = useCallback(async (id: string, updates: { name?: string; startingBalance?: number; targetCashOnHand?: number; minCashOnHand?: number; minSavingsPerPaycheck?: number; accelerateDebtPayoff?: boolean; scheduleStartDate?: string }) => {
+  const updateBudget = useCallback(async (id: string, updates: Partial<BudgetInput>) => {
     const result = await window.electronAPI.budget.update(id, updates);
     if (!result.success) {
       throw new Error(result.error || 'Failed to update budget');

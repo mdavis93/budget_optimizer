@@ -24,6 +24,7 @@ import { useBillDragAssignment } from '../hooks/useBillDragAssignment';
 import { useScheduleMutations } from '../hooks/useScheduleMutations';
 import { useToast } from '../components/Toast';
 import { useCopyDiagnosticReport } from '../hooks/useCopyDiagnosticReport';
+import { DEFAULT_MIN_CASH_ON_HAND, DEFAULT_TARGET_CASH_ON_HAND } from '@shared/constants';
 
 type ViewMode = 'paycheck' | 'calendar';
 
@@ -428,8 +429,8 @@ export default function SchedulePage() {
           expandAll={expandAll}
           collapseAll={collapseAll}
           formatCurrency={formatCurrency}
-          maxBudgetRemaining={schedule?.maxBudgetRemaining ?? currentBudget?.targetCashOnHand ?? 250}
-          minCashOnHand={schedule?.minCashOnHand ?? currentBudget?.minCashOnHand ?? 100}
+          maxBudgetRemaining={schedule?.maxBudgetRemaining ?? currentBudget?.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND}
+          minCashOnHand={schedule?.minCashOnHand ?? currentBudget?.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND}
           debtPlanEnabled={schedule?.debtPlan?.enabled === true}
           onSkipBill={handleSkipBill}
           onUnskipBill={handleUnskipBill}

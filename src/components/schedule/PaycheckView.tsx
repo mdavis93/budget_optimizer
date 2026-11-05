@@ -12,6 +12,7 @@ import {
 import { PaycheckEntry, PaycheckBill, BillAssignment, IncomeOverride } from '../../types';
 import { filterPaycheckBills } from '../../utils/scheduleBills';
 import { isSavingsAndGoalsIncome, paycheckKey } from '@shared/incomePurpose';
+import { isLabeledBreakGlassPaycheck } from '@shared/breakGlassBand';
 import clsx from 'clsx';
 import IconTooltip from '../IconTooltip';
 import PaycheckDetails from './PaycheckDetails';
@@ -55,20 +56,6 @@ interface PaycheckViewProps {
   onSaveIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => Promise<void>;
   onClearIncomeOverride: (incomeId: string, paycheckDate: string) => Promise<void>;
   savingIncomeKey: string | null;
-}
-
-function isBreakGlassPaycheck(
-  paycheck: PaycheckEntry,
-  maxBudgetRemaining: number,
-  minCashOnHand: number
-): boolean {
-  const target = paycheck.targetCashOnHand ?? maxBudgetRemaining;
-  const min = paycheck.minCashOnHand ?? minCashOnHand;
-  return (
-    !paycheck.isShortfall &&
-    paycheck.budgetRemaining < target &&
-    paycheck.budgetRemaining >= min
-  );
 }
 
 /** Hard failure: unfunded bills or negative remaining after obligations. */
@@ -192,7 +179,7 @@ function PaycheckView({
           const hasUnpayableBills = unpayableCount > 0;
           const isHardShortfall = !isReserved && isHardShortfallPaycheck(paycheck, hasUnpayableBills);
           const isBelowMinimum = !isReserved && isBelowMinimumPaycheck(paycheck, hasUnpayableBills);
-          const isBreakGlass = !isReserved && isBreakGlassPaycheck(paycheck, maxBudgetRemaining, minCashOnHand);
+          const isBreakGlass = !isReserved && isLabeledBreakGlassPaycheck(paycheck, maxBudgetRemaining, minCashOnHand);
           const warningTooltip = isReserved
             ? null
             : paycheckWarningTooltip(

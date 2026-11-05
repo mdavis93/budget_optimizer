@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { AlertTriangle, Check, ArrowRight, Calendar, DollarSign } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { ReconciliationReport, ProposedFix, ShortfallDetail, PaycheckBill } from '../types';
+import { ReconciliationReport, ProposedFix, ShortfallDetail, PaycheckBill, PRIORITY_COLORS } from '../types';
+import { BILL_PRIORITY_STYLES } from '@shared/billPriorityStyle';
 import clsx from 'clsx';
 import {
   formatProposedFixCopy,
@@ -10,6 +11,7 @@ import {
   formatUnfundableReasonCopy,
 } from '../utils/reconciliationCopy';
 import { formatCurrency } from '../utils/formatCurrency';
+import { DEFAULT_MIN_CASH_ON_HAND } from '@shared/constants';
 
 interface ReconciliationPageProps {
   report: ReconciliationReport;
@@ -87,7 +89,7 @@ export default function ReconciliationPage({
           <ShortfallCard
             key={shortfall.paycheckDate}
             shortfall={shortfall}
-            minCashOnHand={report.minCashOnHand ?? 100}
+            minCashOnHand={report.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND}
           />
         ))}
       </div>
@@ -257,25 +259,13 @@ function BillItem({ bill }: { bill: PaycheckBill }) {
     });
   }, [bill]);
 
-  const priorityColors: Record<string, string> = {
-    critical: 'text-danger-500',
-    high: 'text-warning-500',
-    normal: 'text-primary-500',
-    low: 'text-(--color-text-muted)',
-  };
-
   return (
     <div className="text-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={clsx('w-1.5 h-1.5 rounded-full', {
-            'bg-danger-500': bill.priority === 'critical',
-            'bg-warning-500': bill.priority === 'high',
-            'bg-primary-500': bill.priority === 'normal',
-            'bg-gray-400': bill.priority === 'low',
-          })} />
+          <div className={clsx('w-1.5 h-1.5 rounded-full', BILL_PRIORITY_STYLES[bill.priority].reconciliationDot)} />
           <span>{bill.creditorName}</span>
-          <span className={clsx('text-xs', priorityColors[bill.priority])}>
+          <span className={clsx('text-xs', PRIORITY_COLORS[bill.priority])}>
             ({bill.priority})
           </span>
           {bill.isUnpayable && (

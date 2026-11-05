@@ -1,15 +1,11 @@
-import {
-  format,
-  parseISO,
-  startOfDay,
-  addMonths,
-  isBefore,
-  differenceInCalendarMonths,
-} from 'date-fns';
+import { parseISO, startOfDay } from 'date-fns';
+import { monthsCoveringDate } from '@shared/monthsCoveringDate';
+import type { BillPriority } from '@shared/billPriority';
 import type { IncomePurpose, UnfundableReason } from '@shared/types';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   MAX_PREPAY_DAYS,
   MAX_ADVISOR_EARLY_DAYS,
   SCHEDULE_CALCULATION_MONTHS,
@@ -40,6 +36,7 @@ export type {
 export {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   MAX_PREPAY_DAYS,
   MAX_ADVISOR_EARLY_DAYS,
   SCHEDULE_CALCULATION_MONTHS,
@@ -67,10 +64,7 @@ export function resolveCalculationMonths(
     for (const goal of goals) {
       if (!goal.targetDate) continue;
       const target = startOfDay(parseISO(goal.targetDate));
-      if (!isBefore(start, target)) continue; // deadline already passed / today
-      // Whole months from start, rounded up so addMonths(start, m) >= target.
-      let months = Math.max(0, differenceInCalendarMonths(target, start));
-      while (isBefore(addMonths(start, months), target)) months++;
+      const months = monthsCoveringDate(start, target);
       if (months > maxMonths) maxMonths = months;
     }
   }
@@ -99,7 +93,7 @@ export interface ProjectedBill {
   creditorName: string;
   amount: number;
   dueDay: number;
-  priority: 'critical' | 'high' | 'normal' | 'low';
+  priority: BillPriority;
   category?: string;
   preferredIncomeSourceId?: string;
   isIncomeAttached?: boolean;
@@ -117,6 +111,4 @@ export interface PaycheckAssignment {
   unusable?: boolean;
 }
 
-export function billOccurrenceKey(billId: string, date: Date): string {
-  return `${billId}-${format(date, 'yyyy-MM-dd')}`;
-}
+export { billOccurrenceKey, billOccurrenceKeyFromIso } from '@shared/billOccurrence';

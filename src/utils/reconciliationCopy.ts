@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns';
-import { MAX_PREPAY_DAYS } from '@shared/constants';
+import { DEFAULT_MIN_CASH_ON_HAND, MAX_PREPAY_DAYS } from '@shared/constants';
 import { ProposedFix, ShortfallDetail, UnfundableReason } from '../types';
 import { formatCurrency } from './formatCurrency';
 import { shortfallDeficitAmount } from '@shared/shortfallDeficit';
@@ -132,7 +132,7 @@ export function formatShortfallCopy(
   const paycheckDate = formatPaycheckDate(shortfall.paycheckDate);
   const deficit = formatMoney(shortfall.deficit);
   const unfundableBills = shortfall.bills.filter((b) => b.isUnpayable && b.unfundableReason);
-  const minCashOnHand = options?.minCashOnHand ?? shortfall.minCashOnHand ?? 100;
+  const minCashOnHand = options?.minCashOnHand ?? shortfall.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   const cashOnHand = shortfall.budgetRemaining;
 
   if (unfundableBills.length > 0) {

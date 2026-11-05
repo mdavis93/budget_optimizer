@@ -4,6 +4,7 @@ import { createEligibilityLookup } from './eligibility';
 import {
   DEFAULT_TARGET_CASH_ON_HAND,
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   PaycheckEntry,
   PaycheckAssignment,
   ProjectedIncome,
@@ -152,7 +153,7 @@ export function assignBillsToPaychecks(
   maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0,
+  minSavingsPerPaycheck: number = DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   skippedForDisplay: ProjectedBill[] = [],
   cashOnHandByDate?: CashOnHandByDate,
   preferredAssignments: Map<string, string> = new Map(),

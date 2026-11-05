@@ -27,8 +27,10 @@ import {
 import { calculateGoalProjections } from './goals';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   DEFAULT_TARGET_CASH_ON_HAND,
   billOccurrenceKey,
+  billOccurrenceKeyFromIso,
   resolveCalculationMonths,
   type DebtPayoffInfo,
   type PaycheckEntry,
@@ -107,7 +109,7 @@ export function prepareScheduleHorizon(
   const maxBudgetRemaining = input.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
   const goals = input.goals ?? [];
   const minCashOnHand = input.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
-  const minSavingsPerPaycheck = input.minSavingsPerPaycheck ?? 0;
+  const minSavingsPerPaycheck = input.minSavingsPerPaycheck ?? DEFAULT_MIN_SAVINGS_PER_PAYCHECK;
   const debtPayoffs = input.debtPayoffs ?? new Map<string, DebtPayoffInfo>();
   const incomeOverrides = input.incomeOverrides ?? new Map<string, number>();
   const leaves = input.leaves ?? [];
@@ -168,7 +170,7 @@ export function prepareScheduleHorizon(
   const skippedForDisplay: ProjectedBill[] = [];
   const uniqueBills = allBills.filter((bill) => {
     const dateStr = format(bill.date, 'yyyy-MM-dd');
-    const skipKey = `${bill.billId}-${dateStr}`;
+    const skipKey = billOccurrenceKeyFromIso(bill.billId, dateStr);
     const dedupKey = billOccurrenceKey(bill.billId, bill.date);
 
     if (seenBillKeys.has(dedupKey)) {

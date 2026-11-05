@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { BudgetManager } from '../services/budget-manager.service';
 import { DatabaseService } from '../services/database.service';
 import { clearApprovedExportPaths } from '../utils/exportPaths';
+import { IPC } from '@shared/ipcChannels';
 
 export interface LockSideEffectServices {
   budgetManager: BudgetManager | null;
@@ -14,7 +15,7 @@ export function notifyRendererLocked(): void {
     if (window.isDestroyed()) {
       continue;
     }
-    window.webContents.send('auth:locked');
+    window.webContents.send(IPC.authLocked);
   }
 }
 

@@ -1,4 +1,5 @@
 import type { IncomePurpose, PaycheckEntry } from './types';
+import { roundCurrency } from './money';
 
 export const INCOME_PURPOSES: readonly IncomePurpose[] = ['operating', 'savingsAndGoals'];
 
@@ -28,9 +29,9 @@ type PaycheckSpendFields = {
 
 /** Leftover of this paycheck's own deposit after goals and savings (not operating cash). */
 export function paycheckUnallocatedDeposit(paycheck: PaycheckSpendFields): number {
-  return Math.round(
-    (paycheck.totalIncome - (paycheck.totalGoalDeposits ?? 0) - (paycheck.savingsDeposit ?? 0)) * 100
-  ) / 100;
+  return roundCurrency(
+    paycheck.totalIncome - (paycheck.totalGoalDeposits ?? 0) - (paycheck.savingsDeposit ?? 0)
+  );
 }
 
 /**
@@ -52,10 +53,13 @@ export function paycheckEntryId(purpose: IncomePurpose, dateStr: string): string
   return `${purpose === 'savingsAndGoals' ? 'sg' : 'op'}:${dateStr}`;
 }
 
+export function normalizeIncomePurpose(purpose: string | null | undefined): IncomePurpose {
+  return purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating';
+}
+
 export function paycheckKey(entry: Pick<PaycheckEntry, 'date'> & Partial<Pick<PaycheckEntry, 'id' | 'purpose'>>): string {
   if (entry.id) return entry.id;
-  const purpose: IncomePurpose = entry.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating';
-  return paycheckEntryId(purpose, entry.date);
+  return paycheckEntryId(normalizeIncomePurpose(entry.purpose), entry.date);
 }
 
 export function stripBillLinkToIncome<T extends { preferredIncomeSourceId?: string; isIncomeAttached?: boolean }>(

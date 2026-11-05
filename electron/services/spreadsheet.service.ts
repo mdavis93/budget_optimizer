@@ -4,6 +4,7 @@ import { format, parseISO, getMonth, getYear } from 'date-fns';
 import type { ScheduleData } from './scheduler.service';
 import { PRIORITY_LABELS } from '../utils/constants';
 import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
+import { DEFAULT_CURRENCY } from '@shared/settingsDefaults';
 
 function excelCellText(value: string): string | { richText: Array<{ text: string }> } {
   if (value.startsWith('=')) {
@@ -14,7 +15,7 @@ function excelCellText(value: string): string | { richText: Array<{ text: string
 
 function excelCurrencyNumFmt(currency: string): string {
   const symbol =
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' })
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || DEFAULT_CURRENCY })
       .formatToParts(0)
       .find((part) => part.type === 'currency')?.value ?? '$';
   const escaped = symbol.replace(/"/g, '""');
@@ -25,7 +26,7 @@ export class SpreadsheetService {
   async generateXlsx(
     schedule: ScheduleData,
     outputPath: string,
-    currency = 'USD'
+    currency = DEFAULT_CURRENCY
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const currencyFormat = excelCurrencyNumFmt(currency);

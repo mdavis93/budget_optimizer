@@ -4,17 +4,20 @@ import type {
   PaycheckEntry,
   ScheduleData,
 } from './types';
+import { DEFAULT_MIN_CASH_ON_HAND, DEFAULT_TARGET_CASH_ON_HAND } from '@shared/constants';
+import { isBreakGlassBand } from '@shared/breakGlassBand';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 
 function cashFloors(paycheck: PaycheckEntry, schedule: ScheduleData) {
   return {
-    target: paycheck.targetCashOnHand ?? schedule.maxBudgetRemaining ?? 250,
-    min: paycheck.minCashOnHand ?? schedule.minCashOnHand ?? 100,
+    target: paycheck.targetCashOnHand ?? schedule.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND,
+    min: paycheck.minCashOnHand ?? schedule.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND,
   };
 }
 
 function isBreakGlassPaycheck(paycheck: PaycheckEntry, schedule: ScheduleData): boolean {
   const { target, min } = cashFloors(paycheck, schedule);
-  return paycheck.budgetRemaining < target && paycheck.budgetRemaining >= min;
+  return isBreakGlassBand(paycheck.budgetRemaining, target, min);
 }
 
 function isAtOrAboveTarget(paycheck: PaycheckEntry, schedule: ScheduleData): boolean {
@@ -121,7 +124,7 @@ export function preferredMapFromPlanSteps(
 ): Map<string, string> {
   const next = new Map(into);
   for (const step of steps) {
-    next.set(`${step.billId}-${step.billDueDate}`, step.toPaycheckDate);
+    next.set(billOccurrenceKeyFromIso(step.billId, step.billDueDate), step.toPaycheckDate);
   }
   return next;
 }

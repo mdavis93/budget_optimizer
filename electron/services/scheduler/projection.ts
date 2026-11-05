@@ -2,47 +2,25 @@ import {
   addMonths,
   isBefore,
   isAfter,
-  startOfDay,
   setDate,
   getDaysInMonth,
   startOfMonth,
   endOfMonth,
   isEqual,
-  parseISO,
 } from 'date-fns';
 import { Income, Bill } from '../database.service';
-import { getNextIncomeDate } from '../../utils/paycheck-calculator';
+import { getPaycheckDatesForIncome } from '../../utils/paycheck-calculator';
+import { normalizeIncomePurpose } from '@shared/incomePurpose';
 import { DebtPayoffInfo, ProjectedIncome, ProjectedBill } from './types';
 
 export function projectIncome(income: Income, startDate: Date, endDate: Date): ProjectedIncome[] {
-  const events: ProjectedIncome[] = [];
-  if (!income.isActive) return events;
-
-  const incomeEnd = income.endDate ? startOfDay(parseISO(income.endDate)) : null;
-
-  let currentDate = parseISO(income.startDate);
-  currentDate = startOfDay(currentDate);
-
-  while (isBefore(currentDate, startDate)) {
-    currentDate = getNextIncomeDate(currentDate, income.cadence);
-    if (incomeEnd && isAfter(currentDate, incomeEnd)) return events;
-  }
-
-  while (
-    (isBefore(currentDate, endDate) || isEqual(currentDate, endDate)) &&
-    (!incomeEnd || !isAfter(currentDate, incomeEnd))
-  ) {
-    events.push({
-      date: currentDate,
-      sourceId: income.id,
-      sourceName: income.sourceName,
-      amount: income.amount,
-      purpose: income.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating',
-    });
-    currentDate = getNextIncomeDate(currentDate, income.cadence);
-  }
-
-  return events;
+  return getPaycheckDatesForIncome(income, startDate, endDate).map((paycheck) => ({
+    date: paycheck.date,
+    sourceId: paycheck.incomeId,
+    sourceName: paycheck.incomeName,
+    amount: paycheck.amount,
+    purpose: normalizeIncomePurpose(income.purpose),
+  }));
 }
 
 export function projectBills(

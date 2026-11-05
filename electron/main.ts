@@ -18,6 +18,7 @@ import { ScheduleComputeHost, runScheduleWorkerSmoke } from './services/schedule
 import { diagnostics } from './services/diagnostics.service';
 import { logger } from './services/logger.service';
 import { approveExportPath } from './utils/exportPaths';
+import { IPC } from '@shared/ipcChannels';
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
@@ -201,7 +202,7 @@ function createWindow() {
     }
 
     event.preventDefault();
-    mainWindow?.webContents.send('app:close-requested');
+    mainWindow?.webContents.send(IPC.appCloseRequested);
   });
 
   mainWindow.on('closed', () => {
@@ -294,7 +295,7 @@ app.on('before-quit', (event) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
-      mainWindow.webContents.send('app:close-requested');
+      mainWindow.webContents.send(IPC.appCloseRequested);
     }
     return;
   }
@@ -311,11 +312,11 @@ app.on('before-quit', (event) => {
   }
 });
 
-ipcMain.handle('app:quit', () => {
+ipcMain.handle(IPC.appQuit, () => {
   shutdownApp();
 });
 
-ipcMain.handle('app:check-biometric-available', async () => {
+ipcMain.handle(IPC.appCheckBiometricAvailable, async () => {
   if (process.platform === 'darwin') {
     try {
       const canPrompt = systemPreferences.canPromptTouchID();
@@ -333,9 +334,9 @@ ipcMain.handle('app:check-biometric-available', async () => {
   return false;
 });
 
-ipcMain.handle('app:get-platform', () => process.platform);
+ipcMain.handle(IPC.appGetPlatform, () => process.platform);
 
-ipcMain.handle('app:show-save-dialog', async (_, options) => {
+ipcMain.handle(IPC.appShowSaveDialog, async (_, options) => {
   if (!mainWindow) return { canceled: true };
   const result = await dialog.showSaveDialog(mainWindow, options);
   if (!result.canceled && result.filePath) {

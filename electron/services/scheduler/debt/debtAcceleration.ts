@@ -13,15 +13,17 @@ import type {
 } from '@shared/types';
 import { allocateFromSnapshot, createCashFlowSnapshot } from '../cashFlowAllocator';
 import { paycheckEntryId, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
+import { allBillsSkippedOrUnpayable, isPaycheckShortfall, isSavingsSqueezed } from '@shared/paycheckFlags';
 import {
   cashMinForDate,
   cashTargetForDate,
   type CashOnHandByDate,
 } from '../cashOnHandOverrides';
-import { fromCents, toCents } from '../money';
+import { fromCents, roundCurrency, toCents } from '../money';
 import { buildPaycheckEntries } from '../paychecks';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   DEFAULT_TARGET_CASH_ON_HAND,
   SAVINGS_TARGET_FALLBACK,
   billOccurrenceKey,
@@ -465,13 +467,14 @@ function runPayingVariant(
       totalSavingsDollars += savingsDeposit;
     }
 
-    const allOperatingBillsUnpayable =
-      currentBills.length > 0 && currentBills.every((bill) => bill.isSkipped || bill.isUnpayable);
-    const isShortfall = isReserved
-      ? false
-      : assignment.unusable && allOperatingBillsUnpayable
-        ? true
-        : budgetRemaining < effectiveMin;
+    const allOperatingBillsUnpayable = allBillsSkippedOrUnpayable(currentBills);
+    const isShortfall = isPaycheckShortfall({
+      isReserved,
+      unusable: assignment.unusable === true,
+      allOperatingBillsUnpayable,
+      budgetRemaining,
+      effectiveMin,
+    });
 
     paychecks.push({
       id: paycheckEntryId(purpose, dateIso),
@@ -506,7 +509,11 @@ function runPayingVariant(
       isShortfall,
       targetCashOnHand: effectiveTarget,
       minCashOnHand: effectiveMin,
-      savingsSqueezed: totalGoalDeposits > 0 && savingsDeposit < fromCents(toCents(SAVINGS_TARGET_FALLBACK)),
+      savingsSqueezed: isSavingsSqueezed(
+        totalGoalDeposits,
+        savingsDeposit,
+        fromCents(toCents(SAVINGS_TARGET_FALLBACK))
+      ),
       unpayableCount: unpayableBills.length,
       hasUnpayableBills: hasUnpaid,
       debtPayments,
@@ -570,7 +577,7 @@ export function runDebtAcceleration(input: DebtAccelerationInput): DebtAccelerat
   const goals = input.goals ?? [];
   const maxBudgetRemaining = input.maxBudgetRemaining ?? DEFAULT_TARGET_CASH_ON_HAND;
   const minCashOnHand = input.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
-  const minSavings = input.minSavingsPerPaycheck ?? 0;
+  const minSavings = input.minSavingsPerPaycheck ?? DEFAULT_MIN_SAVINGS_PER_PAYCHECK;
   const manuals = input.manualAssignments ?? new Map();
   const { eligible, excluded } = classifyDebts(input.debts, input.bills);
 
@@ -724,8 +731,8 @@ export function runDebtAcceleration(input: DebtAccelerationInput): DebtAccelerat
     debts: baselineRows,
     excluded,
     debtFreeDate: payoffDates.length === baselineRows.length && payoffDates.length > 0 ? payoffDates[payoffDates.length - 1] : null,
-    totalInterestSaved: Math.round(totalInterestSaved * 100) / 100,
-    freedMonthlyCash: Math.round(freedMonthlyCash * 100) / 100,
+    totalInterestSaved: roundCurrency(totalInterestSaved),
+    freedMonthlyCash: roundCurrency(freedMonthlyCash),
   };
 
   const paychecks = apply ? applied.paychecks : disabledPaychecks;

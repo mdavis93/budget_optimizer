@@ -8,6 +8,7 @@ import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
 import { useDraftData, useDraftActions, useSchedule } from '../context/DraftContext';
 import { MAX_SAVINGS_GOALS, nextAvailableGoalPriority } from '@shared/goalPriority';
+import { DEFAULT_MIN_CASH_ON_HAND } from '@shared/constants';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
   name: '',
@@ -164,7 +165,7 @@ export default function GoalsPage() {
     );
   }
 
-  const minCashOnHand = budgetFields?.minCashOnHand ?? 100;
+  const minCashOnHand = budgetFields?.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   const projections = schedule?.goalProjections ?? [];
 
   return (

@@ -19,6 +19,11 @@ import {
   LeaveInput,
 } from './database.service';
 import { budgetLogger as logger } from './logger.service';
+import {
+  DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
+  DEFAULT_TARGET_CASH_ON_HAND,
+} from '@shared/constants';
 
 export interface BudgetManagerOptions {
   createEphemeralDatabase?: (dbPath: string) => DatabaseService;
@@ -209,7 +214,7 @@ export class BudgetManager {
   }
 
   getTargetCashOnHand(): number {
-    return this.getCurrentBudgetRecord()?.targetCashOnHand ?? 250;
+    return this.getCurrentBudgetRecord()?.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   }
 
   setTargetCashOnHand(amount: number): void {
@@ -219,7 +224,7 @@ export class BudgetManager {
   }
 
   getMinCashOnHand(): number {
-    return this.getCurrentBudgetRecord()?.minCashOnHand ?? 100;
+    return this.getCurrentBudgetRecord()?.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   }
 
   setMinCashOnHand(amount: number): void {
@@ -229,7 +234,7 @@ export class BudgetManager {
   }
 
   getMinSavingsPerPaycheck(): number {
-    return this.getCurrentBudgetRecord()?.minSavingsPerPaycheck ?? 0;
+    return this.getCurrentBudgetRecord()?.minSavingsPerPaycheck ?? DEFAULT_MIN_SAVINGS_PER_PAYCHECK;
   }
 
   setMinSavingsPerPaycheck(amount: number): void {

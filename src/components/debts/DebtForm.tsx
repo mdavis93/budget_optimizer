@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { Bill, DebtInput, DebtWithAmortization } from '../../types';
+import { Bill, DEBT_CATEGORY, DebtInput, DebtWithAmortization } from '../../types';
+import { extraMonthlyDollars } from '@electron/services/scheduler/debt/debtSimulator';
 
 interface DebtFormProps {
   debt?: DebtWithAmortization;
@@ -23,14 +24,14 @@ export default function DebtForm({ debt, bills, existingDebtBillIds, preselected
 
   const isPreselected = !!preselectedBill;
   const debtBills = bills.filter(b => 
-    b.category === 'Debt' && 
+    b.category === DEBT_CATEGORY && 
     (b.id === debt?.debt.billId || b.id === preselectedBill?.id || !existingDebtBillIds.has(b.id))
   );
 
   // Get the selected bill to calculate extra payment
   const selectedBill = bills.find(b => b.id === billId);
-  const extraPayment = selectedBill && monthlyPayment 
-    ? Math.max(0, selectedBill.budgetedAmount - parseFloat(monthlyPayment || '0'))
+  const extraPayment = selectedBill && monthlyPayment
+    ? extraMonthlyDollars(selectedBill.budgetedAmount, parseFloat(monthlyPayment || '0'))
     : 0;
 
   const handleBillChange = (newBillId: string) => {

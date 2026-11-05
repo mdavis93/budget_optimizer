@@ -11,8 +11,9 @@
  *     versa for ids the inventory claims are covered;
  *   - a tier's covered % is below its floor (critical 100%, standard 80%);
  *   - route drift: a route in src/App.tsx is not claimed by any touchpoint;
- *   - channel drift: an IPC channel in electron/preload.ts is neither exercised
- *     by a touchpoint nor listed in untestedChannels.
+ *   - channel drift: an IPC channel invoked from electron/preload.ts is neither
+ *     exercised by a touchpoint nor listed in untestedChannels. Channel names
+ *     are the string values of the IPC.* constants in shared/ipcChannels.ts.
  *
  * Warns (exit 0) when a tier is above its floor but below its target.
  */
@@ -24,6 +25,7 @@ const E2E_DIR = path.join(ROOT, 'tests', 'e2e');
 const INVENTORY_PATH = path.join(E2E_DIR, 'touchpoint-inventory.json');
 const APP_PATH = path.join(ROOT, 'src', 'App.tsx');
 const PRELOAD_PATH = path.join(ROOT, 'electron', 'preload.ts');
+const IPC_CHANNELS_PATH = path.join(ROOT, 'shared', 'ipcChannels.ts');
 
 const errors = [];
 const warnings = [];
@@ -67,12 +69,33 @@ function collectAppRoutes() {
   return routes;
 }
 
+function collectIpcConstants() {
+  const content = readFile(IPC_CHANNELS_PATH);
+  const constants = new Map();
+  const re = /^\s*(\w+):\s*'([^']+)'/gm;
+  let m;
+  while ((m = re.exec(content)) !== null) constants.set(m[1], m[2]);
+  return constants;
+}
+
 function collectPreloadChannels() {
+  const constants = collectIpcConstants();
   const content = readFile(PRELOAD_PATH);
   const channels = new Set();
-  const re = /ipcRenderer\.invoke\('([^']+)'/g;
+  const memberRe = /ipcRenderer\.invoke\(\s*IPC\.(\w+)/g;
+  const literalRe = /ipcRenderer\.invoke\(\s*'([^']+)'/g;
   let m;
-  while ((m = re.exec(content)) !== null) channels.add(m[1]);
+  while ((m = memberRe.exec(content)) !== null) {
+    const channel = constants.get(m[1]);
+    if (!channel) {
+      errors.push(
+        `preload.ts invokes IPC.${m[1]}, which is not defined in shared/ipcChannels.ts.`
+      );
+      continue;
+    }
+    channels.add(channel);
+  }
+  while ((m = literalRe.exec(content)) !== null) channels.add(m[1]);
   return channels;
 }
 

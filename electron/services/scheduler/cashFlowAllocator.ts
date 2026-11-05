@@ -1,5 +1,7 @@
 import { dayNumberOfIsoDate } from '@shared/billEligibility';
-import { fromCents, toCents } from './money';
+import { DEFAULT_MIN_SAVINGS_PER_PAYCHECK } from '@shared/constants';
+import { isSavingsSqueezed } from '@shared/paycheckFlags';
+import { CENTS_PER_DOLLAR, fromCents, toCents } from './money';
 import { SAVINGS_TARGET_FALLBACK, SAVINGS_TARGET_PRIMARY } from './types';
 
 /**
@@ -71,8 +73,6 @@ export interface AllocationResult {
   /** Per-goal funding outcome, ordered by input priority. */
   goals: GoalOutcome[];
 }
-
-const CENTS_PER_DOLLAR = 100;
 
 interface SnapshotGoal {
   id: string;
@@ -337,7 +337,7 @@ export function createCashFlowSnapshot(
   options: AllocatorOptions = {}
 ): CashFlowSnapshot {
   const n = paychecks.length;
-  const floorCents = Math.max(0, toCents(options.minSavingsPerPaycheck ?? 0));
+  const floorCents = Math.max(0, toCents(options.minSavingsPerPaycheck ?? DEFAULT_MIN_SAVINGS_PER_PAYCHECK));
   const primaryCents = toCents(options.savingsTargetPrimary ?? SAVINGS_TARGET_PRIMARY);
   const fallbackCents = toCents(options.savingsTargetFallback ?? SAVINGS_TARGET_FALLBACK);
   const primaryReserveCents = Math.max(primaryCents, floorCents);
@@ -507,7 +507,7 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
       goalDeposits,
       totalGoalDeposits,
       savingsDeposit,
-      savingsSqueezed: totalGoalDeposits > 0 && savingsDeposit < fallbackDollars,
+      savingsSqueezed: isSavingsSqueezed(totalGoalDeposits, savingsDeposit, fallbackDollars),
     });
   }
 

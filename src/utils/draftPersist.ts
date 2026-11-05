@@ -13,6 +13,8 @@ import {
   SavingsGoalInput,
   SkippedBill,
 } from '../types';
+import { normalizeIncomePurpose } from '@shared/incomePurpose';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import {
   DraftBudgetFields,
   DraftDomain,
@@ -111,7 +113,7 @@ function toIncomeInput(income: Income): IncomeInput {
     startDate: income.startDate,
     ...(income.endDate ? { endDate: income.endDate } : {}),
     isActive: income.isActive,
-    purpose: income.purpose === 'savingsAndGoals' ? 'savingsAndGoals' : 'operating',
+    purpose: normalizeIncomePurpose(income.purpose),
   };
 }
 
@@ -396,7 +398,7 @@ export async function persistScheduleDomain(
   const skippedDiff = computeKeyedDiff(
     committedSkipped,
     draftSkipped,
-    (item) => `${item.billId}-${item.skipDate}`,
+    (item) => billOccurrenceKeyFromIso(item.billId, item.skipDate),
     (a, b) => a.billId === b.billId && a.skipDate === b.skipDate
   );
 
@@ -417,7 +419,7 @@ export async function persistScheduleDomain(
   const assignmentDiff = computeKeyedDiff(
     committedAssignments,
     draftAssignments,
-    (item) => `${item.billId}-${item.billDueDate}`,
+    (item) => billOccurrenceKeyFromIso(item.billId, item.billDueDate),
     (a, b) => a.billId === b.billId && a.billDueDate === b.billDueDate && a.paycheckDate === b.paycheckDate
   );
 
@@ -714,13 +716,13 @@ export function computeDirtyDomains(committed: DraftState, draft: DraftState): S
   const skippedDiff = computeKeyedDiff(
     committed.skippedBills,
     draft.skippedBills,
-    (item) => `${item.billId}-${item.skipDate}`,
+    (item) => billOccurrenceKeyFromIso(item.billId, item.skipDate),
     (a, b) => a.billId === b.billId && a.skipDate === b.skipDate
   );
   const assignmentDiff = computeKeyedDiff(
     committed.billAssignments,
     draft.billAssignments,
-    (item) => `${item.billId}-${item.billDueDate}`,
+    (item) => billOccurrenceKeyFromIso(item.billId, item.billDueDate),
     (a, b) => a.billId === b.billId && a.billDueDate === b.billDueDate && a.paycheckDate === b.paycheckDate
   );
   const overrideDiff = computeKeyedDiff(

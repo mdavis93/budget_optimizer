@@ -8,6 +8,7 @@ import {
   useRef,
   ReactNode,
 } from 'react';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import {
   Bill,
   BillAssignment,
@@ -802,8 +803,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     if (isDraftMode) {
       let nextSkipped: SkippedBill[] = stateRef.current.draft.skippedBills;
       updateDraft((prev) => {
-        const key = `${billId}-${skipDate}`;
-        const exists = prev.skippedBills.some((sb) => `${sb.billId}-${sb.skipDate}` === key);
+        const key = billOccurrenceKeyFromIso(billId, skipDate);
+        const exists = prev.skippedBills.some((sb) => billOccurrenceKeyFromIso(sb.billId, sb.skipDate) === key);
         if (exists) {
           nextSkipped = prev.skippedBills;
           return prev;

@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Wallet, ToggleLeft, ToggleRight, Palmtree, Landma
 import { useDraftActions, useDraftData } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
 import { Income, IncomeInput, Leave, LeaveInput, CADENCE_LABELS } from '../types';
+import { INCOME_CADENCES } from '@shared/incomeCadence';
 import { getMonthlyIncomeEquivalent, getMonthlyOperatingIncomeTotal } from '../utils/cadence';
 import { isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import type { IncomePurpose } from '../types';
@@ -12,9 +13,7 @@ import EmptyState from '../components/EmptyState';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import { formatCurrency } from '../utils/formatCurrency';
-
-const DEFAULT_TARGET_CASH = 250;
-const DEFAULT_MIN_CASH = 100;
+import { DEFAULT_MIN_CASH_ON_HAND, DEFAULT_TARGET_CASH_ON_HAND } from '@shared/constants';
 
 interface IncomeFormProps {
   income?: Income;
@@ -94,10 +93,9 @@ function IncomeForm({ income, onSubmit, onCancel }: IncomeFormProps) {
           onChange={(e) => setCadence(e.target.value as Income['cadence'])}
           className="input"
         >
-          <option value="weekly">Weekly</option>
-          <option value="biweekly">Bi-weekly (every 2 weeks)</option>
-          <option value="semimonthly">Semi-monthly (1st and 15th)</option>
-          <option value="monthly">Monthly</option>
+          {INCOME_CADENCES.map((option) => (
+            <option key={option.value} value={option.value}>{option.longLabel}</option>
+          ))}
         </select>
       </div>
 
@@ -406,9 +404,9 @@ export default function IncomePage() {
   const [deletingLeaveId, setDeletingLeaveId] = useState<string | null>(null);
 
   const defaultTargetCashOnHand =
-    budgetFields?.targetCashOnHand ?? currentBudget?.targetCashOnHand ?? DEFAULT_TARGET_CASH;
+    budgetFields?.targetCashOnHand ?? currentBudget?.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   const defaultMinCashOnHand =
-    budgetFields?.minCashOnHand ?? currentBudget?.minCashOnHand ?? DEFAULT_MIN_CASH;
+    budgetFields?.minCashOnHand ?? currentBudget?.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
 
   const handleCreate = async (data: IncomeInput) => {
     const success = await createIncome(data);

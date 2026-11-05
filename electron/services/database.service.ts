@@ -14,6 +14,18 @@ import {
   restoreFromPreSqlCipherBackup,
 } from '../utils/sqlcipher';
 import { coerceScheduleViewportMonths, DEFAULT_SCHEDULE_VIEWPORT_MONTHS } from '@shared/scheduleViewportMonths';
+import {
+  DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
+  DEFAULT_TARGET_CASH_ON_HAND,
+} from '@shared/constants';
+import { firstOfLocalMonth } from '@shared/firstOfLocalMonth';
+import {
+  DEFAULT_AUTO_LOCK_MINUTES,
+  DEFAULT_CURRENCY,
+  DEFAULT_SAVINGS_APY,
+  DEFAULT_THEME,
+} from '@shared/settingsDefaults';
 import type {
   AppSettings,
   Bill,
@@ -53,10 +65,7 @@ export type {
 };
 
 function defaultScheduleStartDate(createdAt: string): string {
-  const created = new Date(createdAt);
-  const year = created.getFullYear();
-  const month = String(created.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}-01`;
+  return firstOfLocalMonth(new Date(createdAt));
 }
 
 interface BudgetRow {
@@ -160,11 +169,11 @@ interface LeavePayload {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'system',
-  autoLockMinutes: 5,
-  currency: 'USD',
+  theme: DEFAULT_THEME,
+  autoLockMinutes: DEFAULT_AUTO_LOCK_MINUTES,
+  currency: DEFAULT_CURRENCY,
   defaultScheduleMonths: DEFAULT_SCHEDULE_VIEWPORT_MONTHS,
-  savingsAPY: 0,
+  savingsAPY: DEFAULT_SAVINGS_APY,
 };
 
 interface SkipCacheEntry {
@@ -1154,9 +1163,9 @@ export class DatabaseService {
     const payload = {
       name: input.name,
       startingBalance: input.startingBalance ?? 0,
-      targetCashOnHand: input.targetCashOnHand ?? 250,
-      minCashOnHand: input.minCashOnHand ?? 100,
-      minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? 0,
+      targetCashOnHand: input.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND,
+      minCashOnHand: input.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND,
+      minSavingsPerPaycheck: input.minSavingsPerPaycheck ?? DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
       accelerateDebtPayoff: input.accelerateDebtPayoff === true,
       scheduleStartDate: input.scheduleStartDate ?? defaultScheduleStartDate(now),
     };

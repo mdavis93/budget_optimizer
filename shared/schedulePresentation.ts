@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { MAX_PREPAY_DAYS } from './constants';
+import { roundCurrency } from './money';
 import type { Bill, PaycheckEntry, ScheduleEntry, ScheduleSummary } from './types';
 import { isOperatingPaycheck, isSavingsAndGoalsIncome } from './incomePurpose';
 
@@ -40,22 +41,18 @@ export function calculateSummary(
     : 0;
 
   return {
-    totalIncome: Math.round(totalIncome * 100) / 100,
-    totalExpenses: Math.round(totalExpenses * 100) / 100,
-    totalSavingsDeposits: Math.round(totalSavingsDeposits * 100) / 100,
-    finalSavingsBalance: Math.round(finalSavingsBalance * 100) / 100,
-    netBalance: Math.round((totalIncome - totalExpenses) * 100) / 100,
+    totalIncome: roundCurrency(totalIncome),
+    totalExpenses: roundCurrency(totalExpenses),
+    totalSavingsDeposits: roundCurrency(totalSavingsDeposits),
+    finalSavingsBalance: roundCurrency(finalSavingsBalance),
+    netBalance: roundCurrency(totalIncome - totalExpenses),
     shortfallCount,
     averageBalance: operatingCount > 0
-      ? Math.round((balanceSum / operatingCount) * 100) / 100
+      ? roundCurrency(balanceSum / operatingCount)
       : startingBalance,
-    lowestBalance: Math.round(lowestBalance * 100) / 100,
-    highestBalance: Math.round(highestBalance * 100) / 100,
+    lowestBalance: roundCurrency(lowestBalance),
+    highestBalance: roundCurrency(highestBalance),
   };
-}
-
-function roundMoney(amount: number): number {
-  return Math.round(amount * 100) / 100;
 }
 
 /**
@@ -124,7 +121,7 @@ export function buildLedgerEntries(
         type: 'income',
         description: income.name,
         amount: income.amount,
-        runningBalance: roundMoney(runningBalance),
+        runningBalance: roundCurrency(runningBalance),
         isShortfall: runningBalance < 0,
       });
     }
@@ -136,7 +133,7 @@ export function buildLedgerEntries(
           type: 'expense',
           description: `${bill.creditorName} (skipped)`,
           amount: bill.amount,
-          runningBalance: roundMoney(runningBalance),
+          runningBalance: roundCurrency(runningBalance),
           isShortfall: false,
         });
         continue;
@@ -148,7 +145,7 @@ export function buildLedgerEntries(
         type: 'expense',
         description: bill.creditorName,
         amount: bill.amount,
-        runningBalance: roundMoney(runningBalance),
+        runningBalance: roundCurrency(runningBalance),
         isShortfall: Boolean(bill.isUnpayable) || runningBalance < 0,
         recommendation: bill.isUnpayable ? bill.unfundableReason : undefined,
       });
@@ -161,7 +158,7 @@ export function buildLedgerEntries(
         type: 'savings',
         description: `Goal: ${goalDeposit.goalName}`,
         amount: goalDeposit.amount,
-        runningBalance: roundMoney(runningBalance),
+        runningBalance: roundCurrency(runningBalance),
         isShortfall: false,
       });
     }
@@ -173,7 +170,7 @@ export function buildLedgerEntries(
         type: 'debt',
         description: `Debt: ${payment.creditorName}`,
         amount: payment.amount,
-        runningBalance: roundMoney(runningBalance),
+        runningBalance: roundCurrency(runningBalance),
         isShortfall: false,
       });
     }
@@ -185,7 +182,7 @@ export function buildLedgerEntries(
         type: 'savings',
         description: 'Transfer to Savings',
         amount: paycheck.savingsDeposit,
-        runningBalance: roundMoney(runningBalance),
+        runningBalance: roundCurrency(runningBalance),
         isShortfall: false,
       });
     }
@@ -197,8 +194,8 @@ export function buildLedgerEntries(
         date: paycheck.date,
         type: 'pettyCash',
         description: 'Petty cash',
-        amount: roundMoney(pettyCash),
-        runningBalance: roundMoney(runningBalance),
+        amount: roundCurrency(pettyCash),
+        runningBalance: roundCurrency(runningBalance),
         isShortfall: false,
       });
     }

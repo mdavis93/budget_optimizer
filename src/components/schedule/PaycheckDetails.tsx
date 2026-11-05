@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { BillAssignment, IncomeOverride, PaycheckBill, PaycheckEntry } from '../../types';
 import { filterPaycheckBills } from '../../utils/scheduleBills';
 import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
+import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import PaycheckBillRow from './PaycheckBillRow';
 import PaycheckIncomeRow from './PaycheckIncomeRow';
 import type { DraggedBill } from './PaycheckView';
@@ -155,10 +156,10 @@ export default function PaycheckDetails({
                   formatCurrency={formatCurrency}
                   onSkipBill={onSkipBill}
                   onUnskipBill={onUnskipBill}
-                  isSkipping={skippingBill === `${bill.billId}-${bill.billDate}`}
-                  isUnskipping={unskippingBill === `${bill.billId}-${bill.billDate}`}
+                  isSkipping={skippingBill === billOccurrenceKeyFromIso(bill.billId, bill.billDate)}
+                  isUnskipping={unskippingBill === billOccurrenceKeyFromIso(bill.billId, bill.billDate)}
                   onRestoreBill={onRestoreBill}
-                  isRestoring={restoringBill === `${bill.billId}-${bill.billDate}`}
+                  isRestoring={restoringBill === billOccurrenceKeyFromIso(bill.billId, bill.billDate)}
                   onDragStart={onDragStart}
                   onDragEnd={onDragEnd}
                   draggedBill={draggedBill}

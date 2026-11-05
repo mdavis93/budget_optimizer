@@ -12,6 +12,7 @@ import type { Leave } from '../database.service';
 import { formatCurrency, roundCurrency } from '../../utils/constants';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
+  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   DEFAULT_TARGET_CASH_ON_HAND,
   DebtPayoffInfo,
   PaycheckEntry,
@@ -20,9 +21,10 @@ import {
   GoalScheduleHealth,
 } from './types';
 import { assignPreparedHorizon, prepareScheduleHorizon } from './scheduleBuild';
+import { isOperatingIncome } from '@shared/incomePurpose';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
-  const operating = paychecks.filter((p) => !p.purpose || p.purpose === 'operating');
+  const operating = paychecks.filter((p) => isOperatingIncome(p));
   const nonShortfall = operating.filter(p => !p.isShortfall);
   const tightPaycheckCount = nonShortfall.filter(
     p => p.totalBills > p.totalIncome * 0.9 && p.savingsDeposit === 0
@@ -209,7 +211,7 @@ export function generateGoalSuggestions(
 
   if (relevantPaychecks.length > 0) {
     const achievableRemaining = availablePerPaycheck * relevantPaychecks.length;
-    const achievableTotal = Math.round((goal.alreadySaved + achievableRemaining) * 100) / 100;
+    const achievableTotal = roundCurrency(goal.alreadySaved + achievableRemaining);
 
     if (achievableTotal < goal.targetAmount && achievableTotal > goal.alreadySaved) {
       suggestions.push({
@@ -430,7 +432,7 @@ export function generateGoalProjections(
   maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = 0,
+  minSavingsPerPaycheck: number = DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
   debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
   incomeOverrides: Map<string, number> = new Map(),
   leaves: Leave[] = [],
