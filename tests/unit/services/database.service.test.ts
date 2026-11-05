@@ -155,6 +155,18 @@ describe('DatabaseService', () => {
       const updatedGoal = db.updateGoal(goal.id, budget.id, { alreadySaved: 250, priority: 1 });
       expect(updatedGoal?.alreadySaved).toBe(250);
       expect(updatedGoal?.priority).toBe(1);
+      expect(updatedGoal?.openEnded).toBe(false);
+
+      const openEnded = db.createGoal(budget.id, {
+        name: 'New Car',
+        targetAmount: 20000,
+        openEnded: true,
+      });
+      expect(openEnded.openEnded).toBe(true);
+      expect(openEnded.targetDate).toBe('');
+      expect(openEnded.priority).toBe(0);
+      const stored = db.getAllGoals(budget.id);
+      expect(stored.map((entry) => entry.id)).toEqual([updatedGoal?.id, openEnded.id]);
 
       const debt = db.createDebt(budget.id, {
         billId: bill.id,

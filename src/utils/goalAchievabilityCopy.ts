@@ -7,6 +7,7 @@ export type GoalComfortTier =
   | 'partial'
   | 'projected'
   | 'projected_funded'
+  | 'open_ended'
   | 'not_achievable';
 
 export interface GoalCopyVars {
@@ -126,6 +127,17 @@ export const GOAL_COPY: Record<GoalComfortTier, GoalCopyEntry> = {
     showSuggestions: false,
     ariaMessage:
       'Projected To Reach Your Target. Your {targetDate} deadline is beyond the next {scheduleMonths} months. At your current rate, you are projected to fully fund {targetAmount} for {goalName}.',
+  },
+  open_ended: {
+    headline: 'Open-Ended Goal',
+    body:
+      "You'll fund the full {targetAmount} for {goalName} by {completionDate}, about {paycheckCount} paychecks from now.",
+    marginFact:
+      'Your other goals keep what they need to hit their deadlines. This goal is funded with what is left.',
+    badge: 'Open-ended',
+    showSuggestions: false,
+    ariaMessage:
+      "Open-Ended Goal. You'll fund the full {targetAmount} for {goalName} by {completionDate}, about {paycheckCount} paychecks from now.",
   },
   not_achievable: {
     headline: 'No Room In This Budget',

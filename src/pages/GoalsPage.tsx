@@ -7,7 +7,15 @@ import Modal from '../components/Modal';
 import GoalCard from '../components/goals/GoalCard';
 import GoalForm, { GoalFormValues } from '../components/goals/GoalForm';
 import { useDraftData, useDraftActions, useSchedule } from '../context/DraftContext';
-import { MAX_SAVINGS_GOALS, nextAvailableGoalPriority } from '@shared/goalPriority';
+import {
+  compareGoalsByPriority,
+  isOpenEndedGoal,
+  MAX_GOAL_PRIORITY,
+  MAX_SAVINGS_GOALS,
+  MIN_GOAL_PRIORITY,
+  nextAvailableGoalPriority,
+  OPEN_ENDED_GOAL_PRIORITY,
+} from '@shared/goalPriority';
 import { DEFAULT_MIN_CASH_ON_HAND } from '@shared/constants';
 
 const INITIAL_FORM_VALUES: GoalFormValues = {
@@ -16,6 +24,7 @@ const INITIAL_FORM_VALUES: GoalFormValues = {
   targetDate: '',
   alreadySaved: 0,
   priority: 1,
+  openEnded: false,
 };
 
 export default function GoalsPage() {
@@ -80,29 +89,48 @@ export default function GoalsPage() {
   };
 
   const handleOpenEdit = (goal: SavingsGoal) => {
+    const openEnded = isOpenEndedGoal(goal);
     setFormValues({
       name: goal.name,
       targetAmount: goal.targetAmount,
-      targetDate: goal.targetDate,
+      targetDate: openEnded ? '' : goal.targetDate,
       alreadySaved: goal.alreadySaved,
-      priority: goal.priority,
+      priority: openEnded ? OPEN_ENDED_GOAL_PRIORITY : goal.priority,
+      openEnded,
     });
     setEditingGoal(goal);
   };
 
+  const handleFormChange = (next: GoalFormValues) => {
+    if (next.openEnded === formValues.openEnded) {
+      setFormValues(next);
+      return;
+    }
+    if (next.openEnded) {
+      setFormValues({ ...next, openEnded: true });
+      return;
+    }
+    const otherDated = goals.filter((goal) => goal.id !== editingGoal?.id && !isOpenEndedGoal(goal));
+    const priority = next.priority >= MIN_GOAL_PRIORITY && next.priority <= MAX_GOAL_PRIORITY
+      ? next.priority
+      : nextAvailableGoalPriority(otherDated);
+    setFormValues({ ...next, openEnded: false, priority });
+  };
+
   const handleCreate = (event: React.FormEvent) => {
     event.preventDefault();
-    const { name, targetAmount, targetDate, alreadySaved, priority } = formValues;
-    if (!name.trim() || targetAmount <= 0 || !targetDate) return;
+    const { name, targetAmount, targetDate, alreadySaved, priority, openEnded } = formValues;
+    if (!name.trim() || targetAmount <= 0 || (!openEnded && !targetDate)) return;
 
     setIsSaving(true);
     try {
       const input: SavingsGoalInput = {
         name: name.trim(),
         targetAmount,
-        targetDate,
+        targetDate: openEnded ? '' : targetDate,
         alreadySaved,
-        priority,
+        priority: openEnded ? OPEN_ENDED_GOAL_PRIORITY : priority,
+        openEnded,
       };
       if (createGoal(input)) {
         setShowCreateModal(false);
@@ -115,17 +143,18 @@ export default function GoalsPage() {
 
   const handleUpdate = (event: React.FormEvent) => {
     event.preventDefault();
-    const { name, targetAmount, targetDate, alreadySaved, priority } = formValues;
-    if (!editingGoal || !name.trim() || targetAmount <= 0 || !targetDate) return;
+    const { name, targetAmount, targetDate, alreadySaved, priority, openEnded } = formValues;
+    if (!editingGoal || !name.trim() || targetAmount <= 0 || (!openEnded && !targetDate)) return;
 
     setIsSaving(true);
     try {
       const updates = {
         name: name.trim(),
         targetAmount,
-        targetDate,
+        targetDate: openEnded ? '' : targetDate,
         alreadySaved,
-        priority,
+        priority: openEnded ? OPEN_ENDED_GOAL_PRIORITY : priority,
+        openEnded,
       };
       if (updateGoal(editingGoal.id, updates)) {
         setEditingGoal(null);
@@ -174,8 +203,8 @@ export default function GoalsPage() {
         <div>
           <h2 className="text-2xl font-semibold">Savings Goals</h2>
           <p className="text-(--color-text-secondary)">
-            Goals are funded as early as savings rules allow. The per-paycheck figure is
-            what you need to stay on deadline.
+            Goals are funded as early as savings rules allow. An open-ended goal has no due date
+            and is funded alongside the others, using only money they can spare and still hit their deadlines.
           </p>
         </div>
 
@@ -202,7 +231,7 @@ export default function GoalsPage() {
       ) : (
         <div className="space-y-4">
           {[...goals]
-            .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))
+            .sort(compareGoalsByPriority)
             .map((goal) => (
               <GoalCard
                 key={goal.id}
@@ -220,7 +249,7 @@ export default function GoalsPage() {
       <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create Savings Goal">
         <GoalForm
           values={formValues}
-          onChange={setFormValues}
+          onChange={handleFormChange}
           onSubmit={handleCreate}
           onCancel={() => setShowCreateModal(false)}
           isSaving={isSaving}
@@ -232,7 +261,7 @@ export default function GoalsPage() {
       <Modal isOpen={!!editingGoal} onClose={() => setEditingGoal(null)} title="Edit Savings Goal">
         <GoalForm
           values={formValues}
-          onChange={setFormValues}
+          onChange={handleFormChange}
           onSubmit={handleUpdate}
           onCancel={() => setEditingGoal(null)}
           isSaving={isSaving}

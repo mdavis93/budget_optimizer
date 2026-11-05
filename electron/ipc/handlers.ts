@@ -590,9 +590,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.goalsCreate, withBudgetGuard(services, (_, input: {
     name: string;
     targetAmount: number;
-    targetDate: string;
+    targetDate?: string;
     alreadySaved?: number;
     priority?: number;
+    openEnded?: boolean;
   }) => ipcData(IPC.goalsCreate, () => ready().budgetManager.createGoal(input))));
 
   ipcMain.handle(IPC.goalsUpdate, withBudgetGuard(services, async (_, id: string, input: {
@@ -601,6 +602,7 @@ export function registerIpcHandlers(
     targetDate?: string;
     alreadySaved?: number;
     priority?: number;
+    openEnded?: boolean;
   }) => {
     const result = await ipcData(IPC.goalsUpdate, () => ready().budgetManager.updateGoal(id, input));
     if (result.success && !result.data) {

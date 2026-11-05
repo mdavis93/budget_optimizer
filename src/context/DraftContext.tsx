@@ -30,10 +30,13 @@ import {
 } from '../types';
 import { stripBillLinkToIncome } from '@shared/incomePurpose';
 import {
+  assignPriorityFromOpenEnded,
   compactGoalPriorities,
   goalsWithPrioritySwap,
+  isOpenEndedGoal,
   MAX_SAVINGS_GOALS,
   nextAvailableGoalPriority,
+  OPEN_ENDED_GOAL_PRIORITY,
 } from '@shared/goalPriority';
 import { useScheduleEngine } from './draft/useScheduleEngine';
 import {
@@ -736,19 +739,27 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     if (!currentBudget || !isDraftMode) return false;
     if (stateRef.current.draft.goals.length >= MAX_SAVINGS_GOALS) return false;
 
+    const openEnded = input.openEnded === true;
+    const datedGoals = stateRef.current.draft.goals.filter((goal) => !isOpenEndedGoal(goal));
     const newGoal: SavingsGoal = {
       id: createDraftId(),
       budgetId: currentBudget.id,
       name: input.name,
       targetAmount: input.targetAmount,
-      targetDate: input.targetDate,
+      targetDate: openEnded ? '' : (input.targetDate ?? ''),
       alreadySaved: input.alreadySaved ?? 0,
-      priority: input.priority ?? nextAvailableGoalPriority(stateRef.current.draft.goals),
+      priority: openEnded
+        ? OPEN_ENDED_GOAL_PRIORITY
+        : (input.priority ?? nextAvailableGoalPriority(datedGoals)),
+      openEnded,
       createdAt: nowIso(),
     };
     updateDraft((prev) => {
       if (prev.goals.length >= MAX_SAVINGS_GOALS) return prev;
-      const fromPriority = nextAvailableGoalPriority(prev.goals);
+      if (openEnded) {
+        return { ...prev, goals: [...prev.goals, newGoal] };
+      }
+      const fromPriority = nextAvailableGoalPriority(prev.goals.filter((goal) => !isOpenEndedGoal(goal)));
       return {
         ...prev,
         goals: goalsWithPrioritySwap([...prev.goals, newGoal], {
@@ -767,9 +778,34 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       updateDraft((prev) => {
         const current = prev.goals.find((goal) => goal.id === id);
         if (!current) return prev;
-        const { priority: nextPriority, ...rest } = input;
-        const swapped =
-          nextPriority !== undefined
+        const openEnded = input.openEnded !== undefined ? input.openEnded === true : isOpenEndedGoal(current);
+        if (openEnded) {
+          const next = prev.goals.map((goal) =>
+            goal.id === id
+              ? {
+                  ...goal,
+                  name: input.name ?? goal.name,
+                  targetAmount: input.targetAmount ?? goal.targetAmount,
+                  alreadySaved: input.alreadySaved ?? goal.alreadySaved,
+                  targetDate: '',
+                  priority: OPEN_ENDED_GOAL_PRIORITY,
+                  openEnded: true,
+                }
+              : goal
+          );
+          return { ...prev, goals: compactGoalPriorities(next) };
+        }
+
+        const wasOpen = isOpenEndedGoal(current);
+        const nextPriority = input.priority ?? (
+          wasOpen
+            ? nextAvailableGoalPriority(prev.goals.filter((goal) => goal.id !== id && !isOpenEndedGoal(goal)))
+            : current.priority
+        );
+        const targetDate = input.targetDate ?? current.targetDate;
+        const ranked = wasOpen
+          ? assignPriorityFromOpenEnded(prev.goals, id, nextPriority)
+          : input.priority !== undefined
             ? goalsWithPrioritySwap(prev.goals, {
                 movingId: id,
                 fromPriority: current.priority,
@@ -778,7 +814,19 @@ export function DraftProvider({ children }: { children: ReactNode }) {
             : prev.goals;
         return {
           ...prev,
-          goals: swapped.map((goal) => (goal.id === id ? { ...goal, ...rest } : goal)),
+          goals: ranked.map((goal) =>
+            goal.id === id
+              ? {
+                  ...goal,
+                  name: input.name ?? goal.name,
+                  targetAmount: input.targetAmount ?? goal.targetAmount,
+                  alreadySaved: input.alreadySaved ?? goal.alreadySaved,
+                  targetDate,
+                  priority: goal.priority,
+                  openEnded: false,
+                }
+              : goal
+          ),
         };
       });
       markDirty('goals');

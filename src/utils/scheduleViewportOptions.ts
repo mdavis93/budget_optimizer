@@ -42,6 +42,7 @@ export function buildViewportOptions(
   }
 
   const goalOptions = goals
+    .filter((goal) => goal.targetDate)
     .map((goal) => ({
       months: Math.min(horizon, monthsUntil(startDate, goal.targetDate)),
       goal,

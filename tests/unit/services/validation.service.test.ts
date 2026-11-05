@@ -346,6 +346,18 @@ describe('validation.service', () => {
         targetDate: '2026-12-31',
       }).valid).toBe(true);
 
+      expect(validateGoal({
+        name: 'New Car',
+        targetAmount: 20000,
+        openEnded: true,
+      }).valid).toBe(true);
+
+      expect(validateGoal({
+        name: 'New Car',
+        targetAmount: 20000,
+        openEnded: false,
+      }).valid).toBe(false);
+
       expect(validateDebt({
         billId: 'draft-12345678-abcd',
         principalBalance: 5000,

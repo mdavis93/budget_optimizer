@@ -12,6 +12,7 @@ import type {
   SavingsGoal,
 } from '@shared/types';
 import { allocateFromSnapshot, createCashFlowSnapshot } from '../cashFlowAllocator';
+import { compareGoalsByPriority } from '@shared/goalPriority';
 import { paycheckEntryId, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import { allBillsSkippedOrUnpayable, isPaycheckShortfall, isSavingsSqueezed } from '@shared/paycheckFlags';
 import {
@@ -400,6 +401,7 @@ function runPayingVariant(
         alreadySaved: goal.alreadySaved + (allocatedByGoal.get(goal.id) ?? 0),
         priority: goal.priority,
         targetDate: goal.targetDate,
+        openEnded: goal.openEnded === true,
       }));
       const allocation = allocateFromSnapshot(
         createCashFlowSnapshot(suffix, suffixGoals, { minSavingsPerPaycheck })
@@ -433,9 +435,7 @@ function runPayingVariant(
           recordPayment(debtPayments, freedDebt, applied);
           if (freedDebt.paidOff) removeLaterOccurrences(freedDebt.billId, i);
         }
-        const byPriority = [...goals].sort(
-          (left, right) => left.priority - right.priority || left.id.localeCompare(right.id)
-        );
+        const byPriority = [...goals].sort(compareGoalsByPriority);
         for (const goal of byPriority) {
           const remaining = Math.max(
             0,

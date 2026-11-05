@@ -83,7 +83,8 @@ function goalEquals(a: SavingsGoal, b: SavingsGoal): boolean {
     a.targetAmount === b.targetAmount &&
     a.targetDate === b.targetDate &&
     a.alreadySaved === b.alreadySaved &&
-    a.priority === b.priority
+    a.priority === b.priority &&
+    (a.openEnded === true) === (b.openEnded === true)
   );
 }
 
@@ -167,12 +168,14 @@ function remapLeaveIncomeIds(leaves: Leave[], incomeIdMap: Map<string, string>):
 }
 
 function toGoalInput(goal: SavingsGoal): SavingsGoalInput {
+  const openEnded = goal.openEnded === true;
   return {
     name: goal.name,
     targetAmount: goal.targetAmount,
-    targetDate: goal.targetDate,
+    targetDate: openEnded ? '' : goal.targetDate,
     alreadySaved: goal.alreadySaved,
     priority: goal.priority,
+    openEnded,
   };
 }
 

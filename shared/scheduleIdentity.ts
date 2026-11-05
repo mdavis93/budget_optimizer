@@ -109,6 +109,7 @@ function goalIdentity(goals: SavingsGoal[]) {
     targetDate: goal.targetDate,
     alreadySaved: goal.alreadySaved,
     priority: goal.priority,
+    openEnded: goal.openEnded === true,
   }));
 }
 

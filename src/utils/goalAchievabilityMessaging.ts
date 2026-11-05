@@ -7,6 +7,7 @@ import {
 } from './goalAchievabilityCopy';
 import { formatCurrency } from './formatCurrency';
 import { DEFAULT_MIN_CASH_ON_HAND } from '@shared/constants';
+import { isOpenEndedGoal } from '@shared/goalPriority';
 
 export type { GoalComfortTier };
 
@@ -223,11 +224,140 @@ function shouldShowSuggestions(
   return copyShowSuggestions;
 }
 
+function paycheckLabel(count: number): string {
+  return `${count} paycheck${count === 1 ? '' : 's'}`;
+}
+
+function buildOpenEndedMessaging(
+  goal: SavingsGoal,
+  projection: GoalProjection,
+  minCashOnHand: number
+): GoalAchievabilityMessaging {
+  const footnote = `Assumes ${formatCurrency(minCashOnHand)} min cash each paycheck and goals funded from surplus after bills & savings.`;
+  const scheduleLink = {
+    goalId: goal.id,
+    highlightPaycheckDate: projection.estimatedFundedDate ?? undefined,
+  };
+
+  if (projection.remainingAmount <= 0) {
+    const vars: GoalCopyVars = {
+      goalName: goal.name,
+      targetAmount: formatMoney(goal.targetAmount),
+      alreadySaved: formatMoney(goal.alreadySaved),
+      remainingAmount: formatMoney(0),
+      allocatedAmount: formatMoney(0),
+      achievableAmount: formatMoney(goal.targetAmount),
+      achievabilityPercent: 100,
+      targetDate: '',
+      completionDate: '',
+      paycheckCount: 0,
+      weeksTiming: '',
+      tightPaycheckCount: 0,
+      shortfallCount: 0,
+      savingsTotal: formatMoney(0),
+      scheduleMonths: SCHEDULE_MONTHS,
+    };
+    const copy = formatGoalCopy('complete', vars);
+    return {
+      comfortTier: 'complete',
+      modifiers: [],
+      headline: copy.headline,
+      body: copy.body,
+      marginFact: copy.marginFact,
+      badge: copy.badge,
+      showSuggestions: false,
+      ariaMessage: copy.ariaMessage,
+      timeline: null,
+      margin: null,
+      footnote,
+      suggestions: [],
+      scheduleLink,
+    };
+  }
+
+  if (!projection.estimatedFundedDate || projection.paychecksToFullyFund == null) {
+    const body = `Your schedule doesn't leave surplus for ${goal.name} right now. You still need ${formatMoney(projection.remainingAmount)}.`;
+    return {
+      comfortTier: 'not_achievable',
+      modifiers: [],
+      headline: 'No Room In This Budget',
+      body,
+      marginFact: 'Higher-priority bills and goals are using your surplus first.',
+      badge: 'Not Funded',
+      cta: 'Lower the target, or free up surplus by adjusting your other goals.',
+      showSuggestions: false,
+      ariaMessage: `No Room In This Budget. ${body}`,
+      timeline: {
+        paychecksToFund: null,
+        estimatedFundedDate: null,
+        deadlineDate: '',
+        relativeToDeadline: 'unknown',
+        paycheckDeltaFromDeadline: null,
+      },
+      margin: null,
+      footnote,
+      suggestions: [],
+      scheduleLink,
+    };
+  }
+
+  const paycheckCount = projection.paychecksToFullyFund;
+  const completionDate = formatDisplayDate(projection.estimatedFundedDate);
+  const vars: GoalCopyVars = {
+    goalName: goal.name,
+    targetAmount: formatMoney(goal.targetAmount),
+    alreadySaved: formatMoney(goal.alreadySaved),
+    remainingAmount: formatMoney(projection.remainingAmount),
+    allocatedAmount: formatMoney(projection.actualAllocation),
+    achievableAmount: formatMoney(projection.achievableAmount),
+    achievabilityPercent: projection.achievabilityPercent,
+    targetDate: '',
+    completionDate,
+    paycheckCount,
+    weeksTiming: '',
+    tightPaycheckCount: projection.scheduleHealth.tightPaycheckCount,
+    shortfallCount: projection.scheduleHealth.shortfallCount,
+    savingsTotal: formatMoney(projection.scheduleHealth.savingsTotal),
+    scheduleMonths: SCHEDULE_MONTHS,
+  };
+  const copy = formatGoalCopy('open_ended', vars);
+  const body = `You'll fund the full ${formatMoney(goal.targetAmount)} for ${goal.name} by ${completionDate}, about ${paycheckLabel(paycheckCount)} from now.`;
+  const marginFact = projection.isProjected
+    ? 'This date is estimated from your current surplus after your other goals stay on schedule. Actual timing can shift as bills change.'
+    : copy.marginFact;
+
+  return {
+    comfortTier: 'open_ended',
+    modifiers: projection.isProjected ? ['projected'] : [],
+    headline: copy.headline,
+    body,
+    marginFact,
+    badge: copy.badge,
+    showSuggestions: false,
+    ariaMessage: `${copy.headline}. ${body}`,
+    timeline: {
+      paychecksToFund: paycheckCount,
+      estimatedFundedDate: projection.estimatedFundedDate,
+      deadlineDate: '',
+      relativeToDeadline: 'unknown',
+      paycheckDeltaFromDeadline: null,
+    },
+    margin: null,
+    footnote,
+    suggestions: [],
+    scheduleLink,
+  };
+}
+
 export function buildGoalAchievabilityMessaging(
   goal: SavingsGoal,
   projection: GoalProjection,
   minCashOnHand = DEFAULT_MIN_CASH_ON_HAND
 ): GoalAchievabilityMessaging {
+  if (isOpenEndedGoal(goal)) {
+    return buildOpenEndedMessaging(goal, projection, minCashOnHand);
+  }
+
   const comfortTier = deriveComfortTier(goal, projection);
   const copyTier =
     comfortTier === 'projected_funded' ? 'projected_funded' : comfortTier;

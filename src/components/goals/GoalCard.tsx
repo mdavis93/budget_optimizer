@@ -44,7 +44,7 @@ export default function GoalCard({
           <div>
             <h3 className="font-semibold">{goal.name}</h3>
             <p className="text-sm text-(--color-text-secondary)">
-              Priority: {goal.priority}
+              {goal.openEnded ? 'Open-ended' : `Priority: ${goal.priority}`}
             </p>
           </div>
         </div>
@@ -82,7 +82,9 @@ export default function GoalCard({
         </div>
         <div>
           <p className="text-xs text-(--color-text-muted) uppercase tracking-wide">Deadline</p>
-          <p className="font-semibold">{format(parseISO(goal.targetDate), 'MMM yyyy')}</p>
+          <p className="font-semibold">
+            {goal.openEnded || !goal.targetDate ? 'No deadline' : format(parseISO(goal.targetDate), 'MMM yyyy')}
+          </p>
         </div>
       </div>
 

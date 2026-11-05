@@ -107,6 +107,7 @@ export function buildPaycheckEntries(
       alreadySaved: goal.alreadySaved,
       priority: goal.priority,
       targetDate: goal.targetDate,
+      openEnded: goal.openEnded === true,
     })),
     { minSavingsPerPaycheck }
   );
