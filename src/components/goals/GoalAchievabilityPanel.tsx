@@ -216,14 +216,16 @@ const GoalAchievabilityPanel = memo(function GoalAchievabilityPanel({
       <h4 id={headlineId} className={clsx('text-sm font-semibold line-clamp-1', tierStyle.text)}>
         {messaging.headline}
       </h4>
-      <p className={clsx(
-        'text-sm mt-1',
-        messaging.comfortTier === 'open_ended' ? 'line-clamp-3' : 'line-clamp-2',
-        tierStyle.text,
-        'opacity-90'
-      )}>
-        {messaging.body}
-      </p>
+      {messaging.body.trim() && (
+        <p className={clsx(
+          'text-sm mt-1',
+          messaging.comfortTier === 'open_ended' ? 'line-clamp-3' : 'line-clamp-2',
+          tierStyle.text,
+          'opacity-90'
+        )}>
+          {messaging.body}
+        </p>
+      )}
 
       {showTimeline && timelinePrimary && (
         <div className={clsx('mt-2 text-sm flex flex-col md:flex-row md:items-center gap-1 md:gap-2', tierStyle.text)}>

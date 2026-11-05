@@ -21,6 +21,18 @@ const baseVars = {
 };
 
 describe('formatGoalCopy', () => {
+  it('leaves on-track copy to the timeline instead of restating the funding date', () => {
+    const result = formatGoalCopy('achievable', baseVars);
+    expect(result.headline).toBe('On Track To Hit Your Target');
+    expect(result.badge).toBe('On Track');
+    expect(result.body).toBe('');
+    expect(result.marginFact).toBe(
+      "Most paychecks still leave some room beyond this goal's share."
+    );
+    expect(result.ariaMessage).not.toContain(baseVars.completionDate);
+    expect(result.ariaMessage).not.toContain('paychecks from now');
+  });
+
   it('substitutes placeholders in achievable_tight copy', () => {
     const result = formatGoalCopy('achievable_tight', baseVars);
     expect(result.headline).toBe("Funded, But It's Tight");

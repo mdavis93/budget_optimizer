@@ -63,13 +63,12 @@ export const GOAL_COPY: Record<GoalComfortTier, GoalCopyEntry> = {
   },
   achievable: {
     headline: 'On Track To Hit Your Target',
-    body:
-      "You'll fund the full {targetAmount} for {goalName} by {completionDate}, about {paycheckCount} paychecks from now. That meets your {targetDate} deadline.",
+    body: '',
     marginFact: "Most paychecks still leave some room beyond this goal's share.",
     badge: 'On Track',
     showSuggestions: false,
     ariaMessage:
-      "On Track To Hit Your Target. You'll fund the full {targetAmount} for {goalName} by {completionDate}, about {paycheckCount} paychecks from now. That meets your {targetDate} deadline. Most paychecks still leave some room beyond this goal's share.",
+      "On Track To Hit Your Target. Most paychecks still leave some room beyond this goal's share.",
   },
   achievable_tight: {
     headline: "Funded, But It's Tight",
