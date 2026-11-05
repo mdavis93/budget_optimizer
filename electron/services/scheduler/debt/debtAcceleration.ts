@@ -164,7 +164,8 @@ function runDisabled(
   goals: SavingsGoal[],
   minCashOnHand: number,
   minSavingsPerPaycheck: number,
-  cashOnHandByDate: CashOnHandByDate | undefined
+  cashOnHandByDate: CashOnHandByDate | undefined,
+  horizonEndDate?: string
 ): PaycheckEntry[] {
   return buildPaycheckEntries(
     assignments,
@@ -173,7 +174,8 @@ function runDisabled(
     goals,
     minCashOnHand,
     minSavingsPerPaycheck,
-    cashOnHandByDate
+    cashOnHandByDate,
+    horizonEndDate
   );
 }
 
@@ -200,7 +202,8 @@ function runPayingVariant(
   cashOnHandByDate: CashOnHandByDate | undefined,
   manualAssignments: Map<string, string>,
   applyExtras: boolean,
-  work: DebtWorkCounter
+  work: DebtWorkCounter,
+  horizonEndDate?: string
 ): { paychecks: PaycheckEntry[]; accounts: DebtAccount[]; ignoredPins: number } {
   const assignments = cloneAssignments(source);
   const accounts = eligible.map(
@@ -404,7 +407,7 @@ function runPayingVariant(
         openEnded: goal.openEnded === true,
       }));
       const allocation = allocateFromSnapshot(
-        createCashFlowSnapshot(suffix, suffixGoals, { minSavingsPerPaycheck })
+        createCashFlowSnapshot(suffix, suffixGoals, { minSavingsPerPaycheck, horizonEndDate })
       );
       const thisAlloc = allocation.paychecks[0];
       for (const deposit of thisAlloc.goalDeposits) {
@@ -564,6 +567,8 @@ export interface DebtAccelerationInput {
   manualAssignments?: Map<string, string>;
   accelerateDebtPayoff: boolean;
   forcedVariant?: DebtPlanVariant;
+  /** Funding horizon end (yyyy-MM-dd). Deadlines on or before this day are in horizon. */
+  horizonEndDate?: string;
 }
 
 export interface DebtAccelerationResult {
@@ -588,7 +593,8 @@ export function runDebtAcceleration(input: DebtAccelerationInput): DebtAccelerat
     goals,
     minCashOnHand,
     minSavings,
-    input.cashOnHandByDate
+    input.cashOnHandByDate,
+    input.horizonEndDate
   );
   const disabledDates = goalCompletionDates(disabledPaychecks, goals);
 
@@ -605,7 +611,8 @@ export function runDebtAcceleration(input: DebtAccelerationInput): DebtAccelerat
     input.cashOnHandByDate,
     manuals,
     true,
-    work
+    work,
+    input.horizonEndDate
   );
   const deep = runPayingVariant(
     'deep',
@@ -620,7 +627,8 @@ export function runDebtAcceleration(input: DebtAccelerationInput): DebtAccelerat
     input.cashOnHandByDate,
     manuals,
     true,
-    work
+    work,
+    input.horizonEndDate
   );
 
   const standardDates = goalCompletionDates(standard.paychecks, goals);

@@ -33,7 +33,8 @@ export function buildPaycheckEntries(
   goals: SavingsGoal[] = [],
   minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
   minSavingsPerPaycheck: number = DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
-  cashOnHandByDate?: CashOnHandByDate
+  cashOnHandByDate?: CashOnHandByDate,
+  horizonEndDate?: string
 ): PaycheckEntry[] {
   const paychecks: PaycheckEntry[] = [];
   let totalSavings = 0;
@@ -109,7 +110,7 @@ export function buildPaycheckEntries(
       targetDate: goal.targetDate,
       openEnded: goal.openEnded === true,
     })),
-    { minSavingsPerPaycheck }
+    { minSavingsPerPaycheck, horizonEndDate }
   );
 
   let lastOperatingRemaining = startingBalance;

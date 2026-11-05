@@ -215,6 +215,7 @@ export function assignBillsToPaychecks(
     manualAssignments,
     accelerateDebtPayoff: assignmentOptions.accelerateDebtPayoff === true,
     forcedVariant: assignmentOptions.forcedVariant,
+    horizonEndDate: fundingEndDate ? formatIso(fundingEndDate) : undefined,
   });
   assignmentOptions.onDebtPlan?.(acceleration.debtPlan, acceleration.ignoredPins);
   if (acceleration.ignoredPins > 0 && assignmentOptions.onComputeMeta) {

@@ -439,6 +439,44 @@ describe('cashFlowAllocator oracle', () => {
     expect(result.paychecks.every((entry) => entry.savingsDeposit >= 0)).toBe(true);
   });
 
+  it('paces a dated goal whose deadline is after the last paycheck but inside the horizon', () => {
+    const dates = [
+      '2026-01-15',
+      '2026-02-15',
+      '2026-03-15',
+      '2026-04-15',
+      '2026-05-15',
+      '2026-06-15',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date) => paycheck(date, 300)),
+      [
+        goal({ id: 'home', name: 'Home', priority: 1, targetAmount: 900, targetDate: '2026-07-01' }),
+        goal({
+          id: 'open',
+          name: 'Cat',
+          priority: 2,
+          targetAmount: 300,
+          targetDate: '',
+          openEnded: true,
+        }),
+      ],
+      { savingsTargetPrimary: 0, savingsTargetFallback: 0, horizonEndDate: '2026-07-15' }
+    );
+
+    expect(result.goals.find((entry) => entry.goalId === 'home')).toMatchObject({
+      funded: true,
+      totalAllocated: 900,
+    });
+    expect(result.goals.find((entry) => entry.goalId === 'open')).toMatchObject({
+      funded: true,
+      totalAllocated: 300,
+    });
+    expect(result.paychecks[0].goalDeposits.find((deposit) => deposit.goalId === 'home')?.amount).toBe(150);
+    expect(result.paychecks[0].goalDeposits.find((deposit) => deposit.goalId === 'open')?.amount).toBe(150);
+    expect(result.paychecks[1].goalDeposits.find((deposit) => deposit.goalId === 'open')?.amount).toBe(150);
+  });
+
   it('funds an open-ended goal on the same paychecks as a dated goal that still hits its deadline', () => {
     const dates = [
       '2026-01-02',
