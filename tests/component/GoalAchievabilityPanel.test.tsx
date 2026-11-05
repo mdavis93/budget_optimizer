@@ -47,6 +47,37 @@ const projection: GoalProjection = {
 };
 
 describe('GoalAchievabilityPanel', () => {
+  it('renders an on-track goal without restating the funding date in a sentence', () => {
+    const onTrackProjection: GoalProjection = {
+      ...projection,
+      marginPerPaycheck: 40,
+      requiredPerPaycheck: 200,
+      adjustedRequiredPerPaycheck: 200,
+      paychecksToFullyFund: 104,
+      estimatedFundedDate: '2029-01-12',
+      beatsDeadlineByPaychecks: 61,
+    };
+    const messaging = buildGoalAchievabilityMessaging(goal, onTrackProjection);
+    render(
+      <GoalAchievabilityPanel
+        goal={goal}
+        projection={onTrackProjection}
+        messaging={messaging}
+      />
+    );
+
+    expect(screen.getByText('On Track')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'On Track To Hit Your Target' })).toBeInTheDocument();
+    expect(screen.queryByText(/You'll fund the full/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Funded in ~104 paychecks/)).toBeInTheDocument();
+    expect(screen.getByText(/est\. Jan 12, 2029/)).toBeInTheDocument();
+    expect(screen.getByText('61 paychecks before your deadline')).toBeInTheDocument();
+    expect(
+      screen.getByText("Most paychecks still leave some room beyond this goal's share.")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Assumes .* min cash each paycheck/)).toBeInTheDocument();
+  });
+
   it('renders an open-ended goal with its funding date and paycheck count', () => {
     const openGoal: SavingsGoal = {
       ...goal,

@@ -140,8 +140,17 @@ describe('buildGoalAchievabilityMessaging', () => {
     );
     expect(messaging.comfortTier).toBe('achievable');
     expect(messaging.headline).toBe('On Track To Hit Your Target');
+    expect(messaging.badge).toBe('On Track');
+    expect(messaging.body).toBe('');
     expect(messaging.margin).toBeNull();
-    expect(messaging.body).toContain('Dec 11, 2026');
+    expect(messaging.marginFact).toBe(
+      "Most paychecks still leave some room beyond this goal's share."
+    );
+    expect(messaging.ariaMessage).toBe(
+      "On Track To Hit Your Target. Most paychecks still leave some room beyond this goal's share."
+    );
+    expect(messaging.timeline?.estimatedFundedDate).toBe('2026-12-11');
+    expect(messaging.timeline?.paychecksToFund).toBe(3);
   });
 
   it('produces tight messaging for low-margin fully funded goal', () => {
