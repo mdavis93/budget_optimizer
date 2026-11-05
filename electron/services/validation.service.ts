@@ -315,11 +315,13 @@ export function validateBreakGlassApplySteps(steps: BreakGlassApplyStepInput[]):
 export function validateGoal(goal: {
   name: string;
   targetAmount: number;
-  targetDate: string;
+  targetDate?: string;
   alreadySaved?: number;
   priority?: number;
+  openEnded?: boolean;
 }): ValidationResult {
   const errors: string[] = [];
+  const openEnded = goal.openEnded === true;
 
   if (!goal.name || goal.name.trim().length === 0) {
     errors.push('Goal name is required');
@@ -333,7 +335,7 @@ export function validateGoal(goal: {
     errors.push('Target amount cannot exceed 10,000,000');
   }
 
-  if (!DATE_REGEX.test(goal.targetDate)) {
+  if (!openEnded && (!goal.targetDate || !DATE_REGEX.test(goal.targetDate))) {
     errors.push('Target date must be in YYYY-MM-DD format');
   }
 
@@ -347,7 +349,11 @@ export function validateGoal(goal: {
     errors.push('Already saved must be a non-negative number');
   }
 
-  if (goal.priority !== undefined && (!Number.isInteger(goal.priority) || goal.priority < MIN_GOAL_PRIORITY || goal.priority > MAX_GOAL_PRIORITY)) {
+  if (
+    !openEnded &&
+    goal.priority !== undefined &&
+    (!Number.isInteger(goal.priority) || goal.priority < MIN_GOAL_PRIORITY || goal.priority > MAX_GOAL_PRIORITY)
+  ) {
     errors.push('Priority must be an integer between 1 and 5');
   }
 

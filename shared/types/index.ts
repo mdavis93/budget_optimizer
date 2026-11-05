@@ -102,18 +102,24 @@ export interface SavingsGoal {
   budgetId: string;
   name: string;
   targetAmount: number;
+  /** Empty when `openEnded` is true. */
   targetDate: string;
   alreadySaved: number;
+  /** 1–5 for dated goals. Open-ended goals store 0 and always rank last. */
   priority: number;
+  /** No due date. Funded only with surplus dated goals do not need to hit their deadlines. */
+  openEnded?: boolean;
   createdAt: string;
 }
 
 export interface SavingsGoalInput {
   name: string;
   targetAmount: number;
-  targetDate: string;
+  /** Required unless `openEnded` is true. */
+  targetDate?: string;
   alreadySaved?: number;
   priority?: number;
+  openEnded?: boolean;
 }
 
 export interface SkippedBill {

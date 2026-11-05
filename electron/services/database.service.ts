@@ -20,6 +20,7 @@ import {
   DEFAULT_TARGET_CASH_ON_HAND,
 } from '@shared/constants';
 import { firstOfLocalMonth } from '@shared/firstOfLocalMonth';
+import { compareGoalsByPriority, OPEN_ENDED_GOAL_PRIORITY } from '@shared/goalPriority';
 import {
   DEFAULT_AUTO_LOCK_MINUTES,
   DEFAULT_CURRENCY,
@@ -935,10 +936,14 @@ export class DatabaseService {
 
   private mapGoalRow(row: GoalRow): SavingsGoal {
     const decrypted = this.crypto.decryptObject<Omit<SavingsGoal, 'id' | 'budgetId' | 'createdAt'>>(row.data);
+    const openEnded = decrypted.openEnded === true;
     return {
       id: row.id,
       budgetId: row.budget_id,
       ...decrypted,
+      targetDate: openEnded ? '' : decrypted.targetDate,
+      priority: openEnded ? OPEN_ENDED_GOAL_PRIORITY : decrypted.priority,
+      openEnded,
       createdAt: row.created_at,
     };
   }
@@ -1906,9 +1911,7 @@ export class DatabaseService {
       'SELECT * FROM goals WHERE budget_id = ? ORDER BY created_at ASC'
     ).all(budgetId) as GoalRow[];
     
-    return rows
-      .map(row => this.mapGoalRow(row))
-      .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
+    return rows.map(row => this.mapGoalRow(row)).sort(compareGoalsByPriority);
   }
 
   getGoalById(id: string, budgetId: string): SavingsGoal | null {
@@ -1931,12 +1934,14 @@ export class DatabaseService {
     
     const id = this.crypto.generateId();
     const now = new Date().toISOString();
+    const openEnded = input.openEnded === true;
     const payload = {
       name: input.name,
       targetAmount: input.targetAmount,
-      targetDate: input.targetDate,
+      targetDate: openEnded ? '' : (input.targetDate ?? ''),
       alreadySaved: input.alreadySaved ?? 0,
-      priority: input.priority ?? 1,
+      priority: openEnded ? OPEN_ENDED_GOAL_PRIORITY : (input.priority ?? 1),
+      openEnded,
     };
     const encryptedData = this.crypto.encryptObject(payload);
     
@@ -1961,12 +1966,14 @@ export class DatabaseService {
     const existing = this.getGoalById(id, budgetId);
     if (!existing) return null;
     
+    const openEnded = input.openEnded !== undefined ? input.openEnded === true : existing.openEnded === true;
     const payload = {
       name: input.name ?? existing.name,
       targetAmount: input.targetAmount ?? existing.targetAmount,
-      targetDate: input.targetDate ?? existing.targetDate,
+      targetDate: openEnded ? '' : (input.targetDate ?? existing.targetDate),
       alreadySaved: input.alreadySaved ?? existing.alreadySaved,
-      priority: input.priority ?? existing.priority,
+      priority: openEnded ? OPEN_ENDED_GOAL_PRIORITY : (input.priority ?? existing.priority),
+      openEnded,
     };
     assertValid(validateGoal(payload), 'Invalid goal data');
     const encryptedData = this.crypto.encryptObject(payload);
