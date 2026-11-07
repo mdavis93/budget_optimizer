@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { differenceInCalendarMonths, parseISO } from 'date-fns';
 import { CreditCard, Plus, ChevronDown } from 'lucide-react';
 import { useDraftActions, useDraftData, useDraftStatus, useSchedule } from '../context/DraftContext';
 import { useBudget } from '../context/BudgetContext';
@@ -21,10 +22,26 @@ import {
   type TimePeriod,
 } from '../components/debts';
 
+function monthsUntilPayoff(startIso: string | undefined, payoffIso: string | null, fallback: number): number {
+  if (!startIso || !payoffIso) return fallback;
+  const months = differenceInCalendarMonths(parseISO(payoffIso), parseISO(startIso));
+  if (!Number.isFinite(months)) return fallback;
+  if (months > 0) return months;
+  return parseISO(payoffIso).getTime() >= parseISO(startIso).getTime() ? 1 : fallback;
+}
+
 export default function DebtsPage() {
-  const { debts, bills, budgetFields } = useDraftData();
+  const { debts, bills, budgetFields, incomes = [] } = useDraftData();
   const { isDraftMode } = useDraftStatus();
-  const { schedule } = useSchedule();
+  const {
+    schedule,
+    generateSchedule,
+    scheduleStartDate,
+    scheduleMonths,
+    scheduleStartingBalance,
+    isViewportReady,
+    scheduleInputHash,
+  } = useSchedule();
   const { currentBudget, updateBudget } = useBudget();
   const {
     getDebtsWithAmortization,
@@ -72,6 +89,22 @@ export default function DebtsPage() {
   useEffect(() => {
     void loadDebts();
   }, [loadDebts, debts, bills]);
+
+  useEffect(() => {
+    if (!isViewportReady || typeof generateSchedule !== 'function') return;
+    if (incomes.length === 0 && bills.length === 0) return;
+    if (!scheduleStartDate) return;
+    void generateSchedule(scheduleStartDate, scheduleMonths, scheduleStartingBalance);
+  }, [
+    bills,
+    generateSchedule,
+    incomes,
+    isViewportReady,
+    scheduleInputHash,
+    scheduleMonths,
+    scheduleStartDate,
+    scheduleStartingBalance,
+  ]);
 
   const existingDebtBillIds = useMemo(
     () => new Set(debtsWithAmortization.map((d) => d.debt.billId)),
@@ -163,8 +196,28 @@ export default function DebtsPage() {
   };
 
   const totalBalance = debtsWithAmortization.reduce((sum, d) => sum + d.debt.principalBalance, 0);
-  const totalInterest = debtsWithAmortization.reduce((sum, d) => sum + (d.amortization?.totalInterest || 0), 0);
-  const maxPayoffMonths = Math.max(...debtsWithAmortization.map(d => d.amortization?.monthsToPayoff || 0), 0);
+  const baselineCardInterest = debtsWithAmortization.reduce((sum, d) => sum + (d.amortization?.totalInterest || 0), 0);
+  const baselineMaxMonths = Math.max(...debtsWithAmortization.map(d => d.amortization?.monthsToPayoff || 0), 0);
+  const showAccelerated = accelerateDebtPayoff && (debtPlan?.debts.length ?? 0) > 0 && debtPlan?.variant !== 'disabled';
+  const totalInterest = showAccelerated
+    ? debtsWithAmortization.reduce((sum, debt) => {
+        const row = debtPlan?.debts.find((item) => item.debtId === debt.debt.id);
+        return sum + (row ? row.acceleratedInterest : (debt.amortization?.totalInterest || 0));
+      }, 0)
+    : baselineCardInterest;
+  const maxPayoffMonths = showAccelerated
+    ? Math.max(
+        ...debtsWithAmortization.map((debt) => {
+          const row = debtPlan?.debts.find((item) => item.debtId === debt.debt.id);
+          return monthsUntilPayoff(
+            schedule?.startDate,
+            row?.acceleratedPayoffDate ?? null,
+            debt.amortization?.monthsToPayoff || 0
+          );
+        }),
+        0
+      )
+    : baselineMaxMonths;
 
   if (isLoading) {
     return (
@@ -242,7 +295,12 @@ export default function DebtsPage() {
 
       {accelerateDebtPayoff && (
         <div className="card p-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="font-medium">Accelerated payoff is on</p>
+          <p className="font-medium">
+            Accelerated payoff is on
+            {debtPlan && debtPlan.totalInterestSaved > 0
+              ? ` and saves ${formatCurrency(debtPlan.totalInterestSaved)} in interest`
+              : ''}
+          </p>
           <button type="button" className="btn-secondary" onClick={() => setAccelerateDebtPayoff(false)}>
             Turn off accelerated payoff
           </button>

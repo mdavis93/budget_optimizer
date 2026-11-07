@@ -66,6 +66,21 @@ describe('draftPersist', () => {
       expect(dirty.size).toBe(1);
     });
 
+    it('marks schedule and budget dirty when accelerated payoff changes', () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        budget: {
+          ...committed.budget!,
+          accelerateDebtPayoff: true,
+        },
+      });
+
+      const dirty = computeDirtyDomains(committed, draft);
+      expect(dirty.has('schedule')).toBe(true);
+      expect(dirty.has('budget')).toBe(true);
+      expect(dirty.size).toBe(2);
+    });
+
     it('marks income dirty when leaves change', () => {
       const committed = makeDraftState();
       const draft = makeDraftState({
@@ -372,6 +387,25 @@ describe('draftPersist', () => {
         scheduleStartDate: '2026-07-01',
       });
       expect(result.nextCommitted.budget?.scheduleStartDate).toBe('2026-07-01');
+    });
+
+    it('persists accelerated payoff when saving the schedule domain', async () => {
+      const committed = makeDraftState();
+      const draft = makeDraftState({
+        budget: {
+          ...committed.budget!,
+          accelerateDebtPayoff: true,
+        },
+      });
+
+      const result = await persistDomains(committed, draft, ['schedule'], 'budget-1');
+
+      expect(result.success).toBe(true);
+      expect(window.electronAPI.budget.update).toHaveBeenCalledWith('budget-1', {
+        accelerateDebtPayoff: true,
+      });
+      expect(result.nextCommitted.budget?.accelerateDebtPayoff).toBe(true);
+      expect(result.nextCommitted.budget?.name).toBe(committed.budget?.name);
     });
 
     it('maps created draft ids across income, bills, debts, and schedule domains', async () => {

@@ -186,6 +186,44 @@ describe('DebtsPage', () => {
       expect(updateBudgetFields).toHaveBeenCalledWith({ accelerateDebtPayoff: false });
     });
 
+    it('shows accelerated interest and payoff length while keeping the current balance', async () => {
+      mockUseDraftData.mockReturnValue({
+        ...baseDraftData,
+        budgetFields: { accelerateDebtPayoff: true },
+      });
+      mockUseSchedule.mockReturnValue({
+        schedule: {
+          startDate: '2026-01-15',
+          debtPlan: {
+            enabled: true,
+            strategy: 'avalanche',
+            variant: 'standard',
+            debts: [{
+              debtId: 'debt-1',
+              billId: 'bill-1',
+              creditorName: 'CardOne: Platinum',
+              baselinePayoffDate: '2027-01-15',
+              acceleratedPayoffDate: '2026-08-15',
+              baselineInterest: 400,
+              acceleratedInterest: 120,
+            }],
+            excluded: [],
+            debtFreeDate: '2026-08-15',
+            totalInterestSaved: 280,
+            freedMonthlyCash: 120,
+          },
+        },
+      });
+
+      renderWithRouter(<DebtsPage />, { mockAPI });
+
+      const interestLabel = await screen.findByText('Total Interest (All Debts)');
+      expect(interestLabel.nextElementSibling).toHaveTextContent('$120.00');
+      expect(screen.getByText('Longest Payoff').nextElementSibling).toHaveTextContent('7 months');
+      expect(screen.getByText('Total Debt Balance').nextElementSibling).toHaveTextContent('$1,200.00');
+      expect(screen.getByText(/saves \$280\.00 in interest/)).toBeInTheDocument();
+    });
+
     it('renders tracked debt list from draft amortization results', async () => {
       renderWithRouter(<DebtsPage />, { mockAPI });
       expect(await screen.findByText('CardOne: Platinum')).toBeInTheDocument();
