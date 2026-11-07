@@ -319,6 +319,37 @@ describe('debtAcceleration', () => {
     expect(february.totalGoalDeposits + february.savingsDeposit + february.totalDebtPayments).toBe(210);
   });
 
+  it('does not give a cancelled debt payment to a goal after that goal deadline', () => {
+    const earlyGoal: SavingsGoal = {
+      ...hundredGoal,
+      targetAmount: 500,
+      targetDate: '2026-01-20',
+    };
+    const result = runDebtAcceleration({
+      assignments: [
+        paycheck('2026-01-15', 800, [
+          projectedBill({ billId: 'debt', amount: 100, date: onDate('2026-01-15'), dueDay: 15, creditorName: 'Card' }),
+        ]),
+        paycheck('2026-02-15', 800, [
+          projectedBill({ billId: 'debt', amount: 100, date: onDate('2026-02-15'), dueDay: 15, creditorName: 'Card' }),
+        ]),
+      ],
+      debts: [debt({ id: 'd', billId: 'debt', principalBalance: 100, apr: 0, monthlyPayment: 100 })],
+      bills: [bill({ id: 'debt', creditorName: 'Card', budgetedAmount: 100, dueDay: 15 })],
+      startIso: '2026-01-15',
+      startingBalance: 0,
+      maxBudgetRemaining: 250,
+      minCashOnHand: 100,
+      minSavingsPerPaycheck: 0,
+      goals: [earlyGoal],
+      accelerateDebtPayoff: true,
+    });
+    const february = result.paychecks.find((paycheck) => paycheck.date === '2026-02-15');
+    expect(february?.bills.map((item) => item.billId)).not.toContain('debt');
+    expect(february?.goalDeposits.find((deposit) => deposit.goalId === 'g')?.amount ?? 0).toBe(0);
+    expect(february?.savingsDeposit ?? 0).toBeGreaterThanOrEqual(100);
+  });
+
   it('does not fund a goal later than the flag-off schedule', () => {
     const input = {
       assignments: fourPaychecks(),
