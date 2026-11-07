@@ -6,14 +6,28 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  Cell,
+  ReferenceLine,
 } from 'recharts';
+import { AVOIDED_BAR_OPACITY } from '../debts/accelerationChart';
 import { CHART_COLORS, formatTooltipDollarPair } from './chartTheme';
 
+export interface DebtAmortizationChartDatum {
+  name: string;
+  principal: number;
+  interest: number;
+  payment: number;
+  avoided?: boolean;
+}
+
 interface DebtAmortizationChartProps {
-  data: Array<{ name: string; principal: number; interest: number; payment: number }>;
+  data: DebtAmortizationChartDatum[];
 }
 
 export default function DebtAmortizationChart({ data }: DebtAmortizationChartProps) {
+  const cutoffName = [...data].reverse().find((row) => !row.avoided)?.name;
+  const hasAvoided = data.some((row) => row.avoided);
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
@@ -36,14 +50,56 @@ export default function DebtAmortizationChart({ data }: DebtAmortizationChartPro
             borderRadius: '8px',
           }}
           labelStyle={{ color: 'var(--color-text-primary)' }}
-          formatter={(value, name) => formatTooltipDollarPair(value, String(name))}
+          formatter={(value, name, item) => {
+            const [formatted, label] = formatTooltipDollarPair(value, String(name));
+            const avoided = Boolean(
+              (item?.payload as DebtAmortizationChartDatum | undefined)?.avoided
+            );
+            return [formatted, avoided ? `${label} (Avoided by acceleration)` : label];
+          }}
         />
         <Legend
           wrapperStyle={{ paddingTop: '10px' }}
           formatter={(value) => <span className="text-(--color-text-secondary)">{value}</span>}
         />
-        <Bar dataKey="principal" stackId="a" fill={CHART_COLORS.principal} name="Principal" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="interest" stackId="a" fill={CHART_COLORS.interest} name="Interest" radius={[4, 4, 0, 0]} />
+        {hasAvoided && cutoffName != null && (
+          <ReferenceLine
+            x={cutoffName}
+            stroke="var(--color-text-muted)"
+            strokeDasharray="4 4"
+            strokeOpacity={0.7}
+          />
+        )}
+        <Bar
+          dataKey="principal"
+          stackId="a"
+          fill={CHART_COLORS.principal}
+          name="Principal"
+          radius={[0, 0, 0, 0]}
+        >
+          {data.map((entry, index) => (
+            <Cell
+              key={`principal-${entry.name}-${index}`}
+              fill={CHART_COLORS.principal}
+              fillOpacity={entry.avoided ? AVOIDED_BAR_OPACITY : 1}
+            />
+          ))}
+        </Bar>
+        <Bar
+          dataKey="interest"
+          stackId="a"
+          fill={CHART_COLORS.interest}
+          name="Interest"
+          radius={[4, 4, 0, 0]}
+        >
+          {data.map((entry, index) => (
+            <Cell
+              key={`interest-${entry.name}-${index}`}
+              fill={CHART_COLORS.interest}
+              fillOpacity={entry.avoided ? AVOIDED_BAR_OPACITY : 1}
+            />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

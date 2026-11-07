@@ -7,6 +7,12 @@ import { DebtPlanDebt, DebtWithAmortization } from '../../types';
 import { extraMonthlyDollars } from '@electron/services/scheduler/debt/debtSimulator';
 import { formatCurrency } from '../../utils/formatCurrency';
 import type { TimePeriod } from './debtSorting';
+import {
+  AVOIDED_BAR_OPACITY,
+  acceleratedFooterFigures,
+  isAccelerationPositive,
+  isPaymentAvoidedByAcceleration,
+} from './accelerationChart';
 
 interface DebtCardProps {
   debtData: DebtWithAmortization;
@@ -33,6 +39,10 @@ const DebtCard = memo(function DebtCard({
 
   // Calculate extra payment from bill budget vs minimum payment
   const extraPayment = extraMonthlyDollars(bill.budgetedAmount, debt.monthlyPayment);
+  const accelerationPositive = isAccelerationPositive(planDebt);
+  const acceleratedPayoffDate = accelerationPositive
+    ? planDebt?.acceleratedPayoffDate
+    : undefined;
 
   const monthsToShow = timePeriod === 'max' ? amortization.monthsToPayoff : Math.min(timePeriod, amortization.monthsToPayoff);
   const paymentsToShow = amortization.payments.slice(0, monthsToShow);
@@ -42,10 +52,22 @@ const DebtCard = memo(function DebtCard({
     principal: payment.principal,
     interest: payment.interest,
     payment: payment.payment,
+    avoided: isPaymentAvoidedByAcceleration(payment.date, acceleratedPayoffDate),
   }));
+  const hasAvoidedBars = chartData.some((row) => row.avoided);
 
   const displayedInterest = paymentsToShow.reduce((sum, p) => sum + p.interest, 0);
   const displayedPrincipal = paymentsToShow.reduce((sum, p) => sum + p.principal, 0);
+  const baselineAmountOverPrincipal = amortization.totalPayments - amortization.totalPrincipal;
+  const acceleratedFooter =
+    accelerationPositive && planDebt
+      ? acceleratedFooterFigures({
+          principalBalance: debt.principalBalance,
+          acceleratedInterest: planDebt.acceleratedInterest,
+          acceleratedPayoffDate: planDebt.acceleratedPayoffDate,
+          baselinePayments: amortization.payments,
+        })
+      : null;
 
   return (
     <div className="card p-6 space-y-4">
@@ -149,9 +171,9 @@ const DebtCard = memo(function DebtCard({
       )}
 
       <div className="pt-4 border-t border-(--color-border)">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h4 className="font-medium">Payment Breakdown</h4>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.principal }} />
               <span>Principal: {formatCurrency(displayedPrincipal)}</span>
@@ -160,8 +182,25 @@ const DebtCard = memo(function DebtCard({
               <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.interest }} />
               <span>Interest: {formatCurrency(displayedInterest)}</span>
             </div>
+            {hasAvoidedBars && (
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-sm"
+                  style={{
+                    backgroundColor: CHART_COLORS.principal,
+                    opacity: AVOIDED_BAR_OPACITY,
+                  }}
+                />
+                <span>Avoided</span>
+              </div>
+            )}
           </div>
         </div>
+        {hasAvoidedBars && (
+          <p className="text-xs text-(--color-text-muted) mb-3">
+            Faded bars are baseline payments acceleration removes.
+          </p>
+        )}
         
         <div className="h-48">
           <ChartSuspense heightClass="h-48">
@@ -169,17 +208,53 @@ const DebtCard = memo(function DebtCard({
           </ChartSuspense>
         </div>
 
-        <div className="mt-4 p-3 rounded-lg bg-(--color-bg-tertiary) text-sm">
-          <div className="flex justify-between">
-            <span className="text-(--color-text-muted)">Total Payments ({amortization.monthsToPayoff} months)</span>
-            <span className="font-medium">{formatCurrency(amortization.totalPayments)}</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-(--color-text-muted)">Amount Over Principal</span>
-            <span className="font-medium text-danger-400">
-              +{formatCurrency(amortization.totalPayments - amortization.totalPrincipal)}
-            </span>
-          </div>
+        <div className="mt-4 p-3 rounded-lg bg-(--color-bg-tertiary) text-sm space-y-2">
+          {acceleratedFooter ? (
+            <>
+              <div className="flex justify-between gap-3">
+                <span className="text-(--color-text-muted)">
+                  Baseline total payments ({amortization.monthsToPayoff} months)
+                </span>
+                <span className="font-medium">{formatCurrency(amortization.totalPayments)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-(--color-text-muted)">Baseline amount over principal</span>
+                <span className="font-medium text-danger-400">
+                  +{formatCurrency(baselineAmountOverPrincipal)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 pt-1 border-t border-(--color-border)">
+                <span className="text-(--color-text-muted)">
+                  Accelerated total payments
+                  {acceleratedFooter.monthsToPayoff != null
+                    ? ` (${acceleratedFooter.monthsToPayoff} months)`
+                    : ''}
+                </span>
+                <span className="font-medium">{formatCurrency(acceleratedFooter.totalPayments)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-(--color-text-muted)">Accelerated amount over principal</span>
+                <span className="font-medium text-success-400">
+                  +{formatCurrency(acceleratedFooter.amountOverPrincipal)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between">
+                <span className="text-(--color-text-muted)">
+                  Total Payments ({amortization.monthsToPayoff} months)
+                </span>
+                <span className="font-medium">{formatCurrency(amortization.totalPayments)}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-(--color-text-muted)">Amount Over Principal</span>
+                <span className="font-medium text-danger-400">
+                  +{formatCurrency(baselineAmountOverPrincipal)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

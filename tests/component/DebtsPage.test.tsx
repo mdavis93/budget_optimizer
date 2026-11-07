@@ -37,6 +37,8 @@ vi.mock('recharts', () => {
       <div data-testid="mock-bar-chart">{data?.length ?? 0}{children}</div>
     ),
     Bar: Mock,
+    Cell: Mock,
+    ReferenceLine: Mock,
     XAxis: Mock,
     YAxis: Mock,
     Tooltip: Mock,
@@ -222,6 +224,134 @@ describe('DebtsPage', () => {
       expect(screen.getByText('Longest Payoff').nextElementSibling).toHaveTextContent('7 months');
       expect(screen.getByText('Total Debt Balance').nextElementSibling).toHaveTextContent('$1,200.00');
       expect(screen.getByText(/saves \$280\.00 in interest/)).toBeInTheDocument();
+    });
+
+    it('labels baseline and accelerated footer totals when acceleration shortens a debt', async () => {
+      getDebtsWithAmortization.mockResolvedValue([
+        {
+          debt: {
+            id: 'debt-1',
+            billId: 'bill-1',
+            principalBalance: 1200,
+            apr: 0.22,
+            monthlyPayment: 100,
+          },
+          bill: {
+            id: 'bill-1',
+            creditorName: 'CardOne: Platinum',
+            budgetedAmount: 120,
+            dueDay: 10,
+          },
+          amortization: {
+            monthsToPayoff: 4,
+            payoffDate: '2026-04-15',
+            totalInterest: 140,
+            totalPayments: 1340,
+            totalPrincipal: 1200,
+            payments: [
+              {
+                paymentNumber: 1,
+                date: '2026-01-15',
+                payment: 120,
+                principal: 80,
+                interest: 40,
+                remainingBalance: 1120,
+              },
+              {
+                paymentNumber: 2,
+                date: '2026-02-15',
+                payment: 120,
+                principal: 85,
+                interest: 35,
+                remainingBalance: 1035,
+              },
+              {
+                paymentNumber: 3,
+                date: '2026-03-15',
+                payment: 120,
+                principal: 90,
+                interest: 30,
+                remainingBalance: 945,
+              },
+              {
+                paymentNumber: 4,
+                date: '2026-04-15',
+                payment: 120,
+                principal: 95,
+                interest: 25,
+                remainingBalance: 0,
+              },
+            ],
+          },
+        },
+      ]);
+      mockUseSchedule.mockReturnValue({
+        schedule: {
+          startDate: '2026-01-15',
+          debtPlan: {
+            enabled: false,
+            strategy: 'avalanche',
+            variant: 'standard',
+            debts: [{
+              debtId: 'debt-1',
+              billId: 'bill-1',
+              creditorName: 'CardOne: Platinum',
+              baselinePayoffDate: '2026-04-15',
+              acceleratedPayoffDate: '2026-02-15',
+              baselineInterest: 140,
+              acceleratedInterest: 55,
+            }],
+            excluded: [],
+            debtFreeDate: '2026-02-15',
+            totalInterestSaved: 85,
+            freedMonthlyCash: 120,
+          },
+        },
+      });
+
+      renderWithRouter(<DebtsPage />, { mockAPI });
+
+      expect(await screen.findByText('Faded bars are baseline payments acceleration removes.')).toBeInTheDocument();
+      expect(screen.getByText('Avoided')).toBeInTheDocument();
+      expect(screen.getByText('Baseline total payments (4 months)')).toBeInTheDocument();
+      expect(screen.getByText('Accelerated total payments (2 months)')).toBeInTheDocument();
+      expect(screen.getByText('Baseline amount over principal')).toBeInTheDocument();
+      expect(screen.getByText('Accelerated amount over principal')).toBeInTheDocument();
+      expect(screen.getByText('+$140.00')).toBeInTheDocument();
+      expect(screen.getByText('+$55.00')).toBeInTheDocument();
+    });
+
+    it('keeps the baseline-only footer when acceleration does not shorten the debt', async () => {
+      mockUseSchedule.mockReturnValue({
+        schedule: {
+          startDate: '2026-01-15',
+          debtPlan: {
+            enabled: false,
+            strategy: 'avalanche',
+            variant: 'standard',
+            debts: [{
+              debtId: 'debt-1',
+              billId: 'bill-1',
+              creditorName: 'CardOne: Platinum',
+              baselinePayoffDate: '2026-12-01',
+              acceleratedPayoffDate: '2026-12-01',
+              baselineInterest: 140,
+              acceleratedInterest: 140,
+            }],
+            excluded: [],
+            debtFreeDate: '2026-12-01',
+            totalInterestSaved: 0,
+            freedMonthlyCash: 0,
+          },
+        },
+      });
+
+      renderWithRouter(<DebtsPage />, { mockAPI });
+
+      expect(await screen.findByText('Total Payments (12 months)')).toBeInTheDocument();
+      expect(screen.getByText('Amount Over Principal')).toBeInTheDocument();
+      expect(screen.queryByText('Faded bars are baseline payments acceleration removes.')).not.toBeInTheDocument();
+      expect(screen.queryByText('Accelerated total payments')).not.toBeInTheDocument();
     });
 
     it('renders tracked debt list from draft amortization results', async () => {
