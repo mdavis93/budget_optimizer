@@ -95,15 +95,16 @@ function budgetSettingsEquals(a: DraftBudgetFields, b: DraftBudgetFields): boole
     a.targetCashOnHand === b.targetCashOnHand &&
     a.minCashOnHand === b.minCashOnHand &&
     a.minSavingsPerPaycheck === b.minSavingsPerPaycheck &&
-    a.accelerateDebtPayoff === b.accelerateDebtPayoff
+    accelerateDebtPayoffEquals(a, b)
   );
 }
 
+function accelerateDebtPayoffEquals(a: DraftBudgetFields, b: DraftBudgetFields): boolean {
+  return (a.accelerateDebtPayoff === true) === (b.accelerateDebtPayoff === true);
+}
+
 function budgetEquals(a: DraftBudgetFields, b: DraftBudgetFields): boolean {
-  return (
-    budgetSettingsEquals(a, b) &&
-    a.scheduleStartDate === b.scheduleStartDate
-  );
+  return budgetSettingsEquals(a, b) && a.scheduleStartDate === b.scheduleStartDate;
 }
 
 function toIncomeInput(income: Income): IncomeInput {
@@ -482,30 +483,36 @@ export async function persistScheduleDomain(
     incomeOverrides: structuredClone(draftOverrides),
   };
 
-  // Schedule start date is edited on the Schedule page but stored on the budget
-  // record — persist it with the schedule domain so Budgets/Settings stay clean.
-  if (
-    budgetId &&
-    draft.budget &&
-    committed.budget &&
-    draft.budget.scheduleStartDate !== committed.budget.scheduleStartDate
-  ) {
-    const result = await window.electronAPI.budget.update(budgetId, {
-      scheduleStartDate: draft.budget.scheduleStartDate,
-    });
-    if (!result.success) {
-      return {
-        success: false,
-        error: result.error || 'Failed to update schedule start date',
-        diagnosticId: result.diagnosticId,
-        nextDraft: draft,
-        nextCommitted: committed,
+  // Schedule start date and accelerated payoff are stored on the budget record.
+  // Saving the schedule domain writes whichever of those fields changed, without
+  // committing unrelated budget edits.
+  if (budgetId && draft.budget && committed.budget) {
+    const scheduleBudgetUpdates: { scheduleStartDate?: string; accelerateDebtPayoff?: boolean } = {};
+    if (draft.budget.scheduleStartDate !== committed.budget.scheduleStartDate) {
+      scheduleBudgetUpdates.scheduleStartDate = draft.budget.scheduleStartDate;
+    }
+    if (!accelerateDebtPayoffEquals(draft.budget, committed.budget)) {
+      scheduleBudgetUpdates.accelerateDebtPayoff = draft.budget.accelerateDebtPayoff === true;
+    }
+    if (Object.keys(scheduleBudgetUpdates).length > 0) {
+      const result = await window.electronAPI.budget.update(budgetId, scheduleBudgetUpdates);
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to update schedule budget fields',
+          diagnosticId: result.diagnosticId,
+          nextDraft: draft,
+          nextCommitted: committed,
+        };
+      }
+      nextCommitted = {
+        ...nextCommitted,
+        budget: {
+          ...structuredClone(committed.budget),
+          ...scheduleBudgetUpdates,
+        },
       };
     }
-    nextCommitted = {
-      ...nextCommitted,
-      budget: structuredClone(draft.budget),
-    };
   }
 
   return { success: true, nextDraft, nextCommitted };
@@ -536,6 +543,7 @@ export async function persistBudgetDomain(
     targetCashOnHand: draft.budget.targetCashOnHand,
     minCashOnHand: draft.budget.minCashOnHand,
     minSavingsPerPaycheck: draft.budget.minSavingsPerPaycheck,
+    accelerateDebtPayoff: draft.budget.accelerateDebtPayoff === true,
     scheduleStartDate: draft.budget.scheduleStartDate,
   });
 
@@ -746,7 +754,8 @@ export function computeDirtyDomains(committed: DraftState, draft: DraftState): S
     overrideDiff.changed.length > 0 ||
     (committed.budget &&
       draft.budget &&
-      committed.budget.scheduleStartDate !== draft.budget.scheduleStartDate)
+      (committed.budget.scheduleStartDate !== draft.budget.scheduleStartDate ||
+        !accelerateDebtPayoffEquals(committed.budget, draft.budget)))
   ) {
     dirty.add('schedule');
   }

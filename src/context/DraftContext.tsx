@@ -488,6 +488,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
           next.budget = {
             ...prev.budget,
             scheduleStartDate: saved.budget.scheduleStartDate,
+            accelerateDebtPayoff: saved.budget.accelerateDebtPayoff === true,
           };
         }
       }
@@ -1020,10 +1021,15 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         ...prev,
         budget: prev.budget ? { ...prev.budget, ...updates } : prev.budget,
       }));
+      const keys = Object.keys(updates);
       const onlyScheduleStart =
-        Object.keys(updates).length > 0 &&
-        Object.keys(updates).every((key) => key === 'scheduleStartDate');
-      markDirty(onlyScheduleStart ? 'schedule' : 'budget');
+        keys.length > 0 && keys.every((key) => key === 'scheduleStartDate');
+      if (onlyScheduleStart) {
+        markDirty('schedule');
+      } else {
+        markDirty('budget');
+        if (keys.includes('accelerateDebtPayoff')) markDirty('schedule');
+      }
       return true;
     }
     return false;
