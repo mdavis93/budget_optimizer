@@ -440,6 +440,7 @@ function runPayingVariant(
         }
         const byPriority = [...goals].sort(compareGoalsByPriority);
         for (const goal of byPriority) {
+          if (goal.openEnded !== true && dateIso > goal.targetDate) continue;
           const remaining = Math.max(
             0,
             Math.round(goal.targetAmount - goal.alreadySaved - (allocatedByGoal.get(goal.id) ?? 0))
