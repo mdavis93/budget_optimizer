@@ -11,7 +11,11 @@ import type {
   PaycheckEntry,
   SavingsGoal,
 } from '@shared/types';
-import { allocateFromSnapshot, createCashFlowSnapshot } from '../cashFlowAllocator';
+import {
+  allocateFromSnapshot,
+  createCashFlowSnapshot,
+  type AllocationResult,
+} from '../cashFlowAllocator';
 import { compareGoalsByPriority } from '@shared/goalPriority';
 import { paycheckEntryId, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
 import { allBillsSkippedOrUnpayable, isPaycheckShortfall, isSavingsSqueezed } from '@shared/paycheckFlags';
@@ -223,6 +227,8 @@ function runPayingVariant(
   const freedCents = new Int32Array(assignments.length);
   let ignoredPins = 0;
   const allocatedByGoal = new Map(goals.map((goal) => [goal.id, 0]));
+  let openLoopSurplus: number[] | null = null;
+  let openLoopPaychecks: AllocationResult['paychecks'] | null = null;
   const paychecks: PaycheckEntry[] = [];
   let totalSavingsDollars = 0;
   let lastOperatingRemaining = startingBalance;
@@ -406,15 +412,48 @@ function runPayingVariant(
         targetDate: goal.targetDate,
         openEnded: goal.openEnded === true,
       }));
-      const allocation = allocateFromSnapshot(
-        createCashFlowSnapshot(suffix, suffixGoals, { minSavingsPerPaycheck, horizonEndDate })
-      );
-      const thisAlloc = allocation.paychecks[0];
-      for (const deposit of thisAlloc.goalDeposits) {
-        addGoalDeposit(goalDeposits, deposit.goalId, deposit.goalName, deposit.amount);
-        allocatedByGoal.set(deposit.goalId, (allocatedByGoal.get(deposit.goalId) ?? 0) + deposit.amount);
+      const suffixSurplus = suffix.map((slot) => slot.surplus);
+      const sameSurplus =
+        openLoopSurplus !== null &&
+        openLoopPaychecks !== null &&
+        openLoopSurplus.length === suffixSurplus.length + 1 &&
+        openLoopSurplus.slice(1).every(
+          (value, index) => toCents(value) === toCents(suffixSurplus[index])
+        );
+      let plannedPaychecks: AllocationResult['paychecks'];
+      if (sameSurplus && openLoopSurplus && openLoopPaychecks) {
+        openLoopSurplus = openLoopSurplus.slice(1);
+        openLoopPaychecks = openLoopPaychecks.slice(1);
+        plannedPaychecks = openLoopPaychecks;
+      } else {
+        const allocation = allocateFromSnapshot(
+          createCashFlowSnapshot(suffix, suffixGoals, { minSavingsPerPaycheck, horizonEndDate })
+        );
+        openLoopSurplus = suffixSurplus;
+        openLoopPaychecks = allocation.paychecks;
+        plannedPaychecks = allocation.paychecks;
       }
-      savingsCents = toCents(thisAlloc.savingsDeposit);
+      const thisAlloc = plannedPaychecks[0];
+      let plannedDepositDollars = 0;
+      let appliedDepositDollars = 0;
+      for (const deposit of thisAlloc?.goalDeposits ?? []) {
+        plannedDepositDollars += deposit.amount;
+        const goal = goals.find((candidate) => candidate.id === deposit.goalId);
+        const remaining = goal
+          ? Math.max(
+              0,
+              Math.round(goal.targetAmount - goal.alreadySaved - (allocatedByGoal.get(goal.id) ?? 0))
+            )
+          : deposit.amount;
+        const amount = Math.min(deposit.amount, remaining);
+        if (amount <= 0) continue;
+        appliedDepositDollars += amount;
+        addGoalDeposit(goalDeposits, deposit.goalId, deposit.goalName, amount);
+        allocatedByGoal.set(deposit.goalId, (allocatedByGoal.get(deposit.goalId) ?? 0) + amount);
+      }
+      savingsCents = toCents(
+        (thisAlloc?.savingsDeposit ?? 0) + plannedDepositDollars - appliedDepositDollars
+      );
 
       if (applyExtras && !isReserved) {
         const account = nextDebt();
