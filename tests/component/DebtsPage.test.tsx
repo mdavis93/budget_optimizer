@@ -316,9 +316,10 @@ describe('DebtsPage', () => {
       expect(screen.getByText('Baseline total payments (4 months)')).toBeInTheDocument();
       expect(screen.getByText('Accelerated total payments (2 months)')).toBeInTheDocument();
       expect(screen.getByText('Baseline amount over principal')).toBeInTheDocument();
-      expect(screen.getByText('Accelerated amount over principal')).toBeInTheDocument();
+      expect(screen.getByText('Interest Saved')).toBeInTheDocument();
+      expect(screen.queryByText('Accelerated amount over principal')).not.toBeInTheDocument();
       expect(screen.getByText('+$140.00')).toBeInTheDocument();
-      expect(screen.getByText('+$55.00')).toBeInTheDocument();
+      expect(screen.getByText('$85.00')).toBeInTheDocument();
     });
 
     it('keeps the baseline-only footer when acceleration does not shorten the debt', async () => {
@@ -350,6 +351,8 @@ describe('DebtsPage', () => {
 
       expect(await screen.findByText('Total Payments (12 months)')).toBeInTheDocument();
       expect(screen.getByText('Amount Over Principal')).toBeInTheDocument();
+      expect(screen.queryByText('Baseline payoff')).not.toBeInTheDocument();
+      expect(screen.queryByText('Accelerated payoff')).not.toBeInTheDocument();
       expect(screen.queryByText('Faded bars are baseline payments acceleration removes.')).not.toBeInTheDocument();
       expect(screen.queryByText('Accelerated total payments')).not.toBeInTheDocument();
     });

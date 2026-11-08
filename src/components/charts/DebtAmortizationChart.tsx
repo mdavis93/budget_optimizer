@@ -17,6 +17,11 @@ export interface DebtAmortizationChartDatum {
   principal: number;
   interest: number;
   payment: number;
+  /** Unpaid slice of this month's baseline principal. */
+  avoidedPrincipal?: number;
+  /** Unpaid slice of this month's baseline interest. */
+  avoidedInterest?: number;
+  /** True when the whole baseline payment is removed. */
   avoided?: boolean;
 }
 
@@ -24,9 +29,20 @@ interface DebtAmortizationChartProps {
   data: DebtAmortizationChartDatum[];
 }
 
+function tooltipAmount(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
 export default function DebtAmortizationChart({ data }: DebtAmortizationChartProps) {
   const cutoffName = [...data].reverse().find((row) => !row.avoided)?.name;
   const hasAvoided = data.some((row) => row.avoided);
+  const hasAvoidedPrincipal = data.some((row) => (row.avoidedPrincipal ?? 0) > 0);
+  const hasAvoidedInterest = data.some((row) => (row.avoidedInterest ?? 0) > 0);
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -51,10 +67,16 @@ export default function DebtAmortizationChart({ data }: DebtAmortizationChartPro
           }}
           labelStyle={{ color: 'var(--color-text-primary)' }}
           formatter={(value, name, item) => {
-            const [formatted, label] = formatTooltipDollarPair(value, String(name));
-            const avoided = Boolean(
-              (item?.payload as DebtAmortizationChartDatum | undefined)?.avoided
-            );
+            const amount = tooltipAmount(value);
+            if (amount === 0) return null;
+            const dataKey = String(item?.dataKey ?? name ?? '');
+            const row = item?.payload as DebtAmortizationChartDatum | undefined;
+            const avoided =
+              dataKey === 'avoidedPrincipal' ||
+              dataKey === 'avoidedInterest' ||
+              Boolean(row?.avoided);
+            const label = dataKey.toLowerCase().includes('interest') ? 'Interest' : 'Principal';
+            const [formatted] = formatTooltipDollarPair(amount, label);
             return [formatted, avoided ? `${label} (Avoided by acceleration)` : label];
           }}
         />
@@ -85,6 +107,16 @@ export default function DebtAmortizationChart({ data }: DebtAmortizationChartPro
             />
           ))}
         </Bar>
+        {hasAvoidedPrincipal && (
+          <Bar
+            dataKey="avoidedPrincipal"
+            stackId="a"
+            fill={CHART_COLORS.principal}
+            fillOpacity={AVOIDED_BAR_OPACITY}
+            name="Principal"
+            legendType="none"
+          />
+        )}
         <Bar
           dataKey="interest"
           stackId="a"
@@ -100,6 +132,17 @@ export default function DebtAmortizationChart({ data }: DebtAmortizationChartPro
             />
           ))}
         </Bar>
+        {hasAvoidedInterest && (
+          <Bar
+            dataKey="avoidedInterest"
+            stackId="a"
+            fill={CHART_COLORS.interest}
+            fillOpacity={AVOIDED_BAR_OPACITY}
+            name="Interest"
+            legendType="none"
+            radius={[4, 4, 0, 0]}
+          />
+        )}
       </BarChart>
     </ResponsiveContainer>
   );
