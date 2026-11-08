@@ -4,6 +4,8 @@ export { default as UnsetupDebtCard } from './UnsetupDebtCard';
 export {
   AVOIDED_BAR_OPACITY,
   acceleratedFooterFigures,
+  buildPayoffChartPortions,
+  interestSavedTextClass,
   isAccelerationPositive,
   isPaymentAvoidedByAcceleration,
 } from './accelerationChart';

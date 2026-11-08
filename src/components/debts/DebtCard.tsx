@@ -10,8 +10,9 @@ import type { TimePeriod } from './debtSorting';
 import {
   AVOIDED_BAR_OPACITY,
   acceleratedFooterFigures,
+  buildPayoffChartPortions,
+  interestSavedTextClass,
   isAccelerationPositive,
-  isPaymentAvoidedByAcceleration,
 } from './accelerationChart';
 
 interface DebtCardProps {
@@ -46,15 +47,25 @@ const DebtCard = memo(function DebtCard({
 
   const monthsToShow = timePeriod === 'max' ? amortization.monthsToPayoff : Math.min(timePeriod, amortization.monthsToPayoff);
   const paymentsToShow = amortization.payments.slice(0, monthsToShow);
-  
-  const chartData = paymentsToShow.map((payment) => ({
-    name: format(parseISO(payment.date), 'MMM yy'),
-    principal: payment.principal,
-    interest: payment.interest,
-    payment: payment.payment,
-    avoided: isPaymentAvoidedByAcceleration(payment.date, acceleratedPayoffDate),
-  }));
-  const hasAvoidedBars = chartData.some((row) => row.avoided);
+  const chartData = buildPayoffChartPortions({
+    payments: amortization.payments,
+    acceleratedPayoffDate,
+    principalBalance: debt.principalBalance,
+    acceleratedInterest: planDebt?.acceleratedInterest ?? 0,
+  })
+    .slice(0, monthsToShow)
+    .map((portion) => ({
+      name: format(parseISO(portion.date), 'MMM yy'),
+      principal: portion.principal,
+      interest: portion.interest,
+      payment: portion.payment,
+      avoidedPrincipal: portion.avoidedPrincipal,
+      avoidedInterest: portion.avoidedInterest,
+      avoided: portion.avoided,
+    }));
+  const hasAvoidedBars = chartData.some(
+    (row) => row.avoided || row.avoidedPrincipal > 0 || row.avoidedInterest > 0
+  );
 
   const displayedInterest = paymentsToShow.reduce((sum, p) => sum + p.interest, 0);
   const displayedPrincipal = paymentsToShow.reduce((sum, p) => sum + p.principal, 0);
@@ -63,6 +74,7 @@ const DebtCard = memo(function DebtCard({
     accelerationPositive && planDebt
       ? acceleratedFooterFigures({
           principalBalance: debt.principalBalance,
+          baselineInterest: planDebt.baselineInterest,
           acceleratedInterest: planDebt.acceleratedInterest,
           acceleratedPayoffDate: planDebt.acceleratedPayoffDate,
           baselinePayments: amortization.payments,
@@ -147,7 +159,7 @@ const DebtCard = memo(function DebtCard({
         <p className="text-sm text-warning-400">Excluded: {excludedReason}</p>
       )}
 
-      {planDebt && (
+      {accelerationPositive && planDebt && (
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-(--color-text-muted)">Baseline payoff</p>
@@ -233,9 +245,9 @@ const DebtCard = memo(function DebtCard({
                 <span className="font-medium">{formatCurrency(acceleratedFooter.totalPayments)}</span>
               </div>
               <div className="flex justify-between gap-3">
-                <span className="text-(--color-text-muted)">Accelerated amount over principal</span>
-                <span className="font-medium text-success-400">
-                  +{formatCurrency(acceleratedFooter.amountOverPrincipal)}
+                <span className="text-(--color-text-muted)">Interest Saved</span>
+                <span className={`font-medium ${interestSavedTextClass(acceleratedFooter.interestSaved)}`}>
+                  {formatCurrency(acceleratedFooter.interestSaved)}
                 </span>
               </div>
             </>
