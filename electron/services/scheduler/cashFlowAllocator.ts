@@ -4,6 +4,9 @@ import { isSavingsSqueezed } from '@shared/paycheckFlags';
 import { CENTS_PER_DOLLAR, fromCents, toCents } from './money';
 import { SAVINGS_TARGET_FALLBACK, SAVINGS_TARGET_PRIMARY } from './types';
 
+/** A partial dip that still covers this share of the full target is worth taking. */
+const NEARLY_FUNDED_TARGET_SHARE = 0.8;
+
 /**
  * Forward cash-flow allocator: protected goals, ALAP savings dips, greedy
  * deposits in priority order. A slack guard only reserves capacity for
@@ -92,7 +95,14 @@ interface SnapshotGoal {
   priority: number;
   openEnded: boolean;
   deadlineDay: number;
+  targetAmount: number;
   remainingDollars: number;
+  /**
+   * Dollars reserved when this goal is in the protected set. Equal to
+   * `remainingDollars` when it can finish, a smaller feasible cap when the
+   * dip still funds the goal or leaves it at least 80% funded, otherwise 0.
+   */
+  reserveDollars: number;
   lastPaycheckIndex: number;
 }
 
@@ -109,6 +119,11 @@ export interface CashFlowSnapshot {
   readonly fallbackReserveCents: number;
   readonly goals: readonly SnapshotGoal[];
   readonly protectedIndices: readonly number[];
+}
+
+interface CapacityBreach {
+  need: number;
+  capacity: number;
 }
 
 function wholeDollarsAbove(surplusCents: number, reserveCents: number): number {
@@ -131,34 +146,104 @@ function lastPaycheckOnOrBefore(
   return last;
 }
 
-function protectedSetFeasible(
+function protectedCapacityBreach(
   candidate: readonly number[],
   goals: readonly SnapshotGoal[],
   paycheckDays: Int32Array,
-  capacityDollars: Int32Array
-): boolean {
+  capacityDollars: Int32Array,
+  trialIndex = -1,
+  trialReserve = 0
+): CapacityBreach | null {
   const deadlines = [...new Set(candidate.map((index) => goals[index].deadlineDay))].sort(
     (a, b) => a - b
   );
+  let worst: CapacityBreach | null = null;
   for (const deadline of deadlines) {
     let need = 0;
     for (const index of candidate) {
-      if (goals[index].deadlineDay <= deadline) need += goals[index].remainingDollars;
+      if (goals[index].deadlineDay <= deadline) {
+        need += index === trialIndex ? trialReserve : goals[index].reserveDollars;
+      }
     }
     let capacity = 0;
     for (let i = 0; i < paycheckDays.length; i++) {
       if (paycheckDays[i] <= deadline) capacity += capacityDollars[i];
     }
-    if (need > capacity) return false;
+    const shortfall = need - capacity;
+    if (shortfall > 0 && (worst === null || shortfall > worst.need - worst.capacity)) {
+      worst = { need, capacity };
+    }
   }
-  return true;
+  return worst;
+}
+
+function protectedSetFeasible(
+  candidate: readonly number[],
+  goals: readonly SnapshotGoal[],
+  paycheckDays: Int32Array,
+  capacityDollars: Int32Array,
+  trialIndex = -1,
+  trialReserve = 0
+): boolean {
+  return (
+    protectedCapacityBreach(
+      candidate,
+      goals,
+      paycheckDays,
+      capacityDollars,
+      trialIndex,
+      trialReserve
+    ) === null
+  );
+}
+
+function laterGoalNeedsThisCapacity(
+  laterIndices: readonly number[],
+  currentIndex: number,
+  partialReserve: number,
+  unavoidableReserve: number,
+  protectedIndices: readonly number[],
+  goals: SnapshotGoal[],
+  paycheckDays: Int32Array,
+  floorCapacity: Int32Array
+): boolean {
+  // Above-primary is spent even when this goal is not protected. A later goal
+  // that still cannot finish after that unavoidable draw does not need the
+  // extra dip withheld.
+  const unavoidable = Math.max(0, Math.min(partialReserve, unavoidableReserve));
+  for (const later of laterIndices) {
+    goals[currentIndex].reserveDollars = unavoidable;
+    const withoutExtraDip = protectedCapacityBreach(
+      [...protectedIndices, currentIndex, later],
+      goals,
+      paycheckDays,
+      floorCapacity,
+      later,
+      goals[later].remainingDollars
+    );
+    if (withoutExtraDip !== null) continue;
+    goals[currentIndex].reserveDollars = partialReserve;
+    const withPartial = protectedCapacityBreach(
+      [...protectedIndices, currentIndex, later],
+      goals,
+      paycheckDays,
+      floorCapacity,
+      later,
+      goals[later].remainingDollars
+    );
+    goals[currentIndex].reserveDollars = 0;
+    if (withPartial !== null) return true;
+  }
+  goals[currentIndex].reserveDollars = 0;
+  return false;
 }
 
 function admitProtectedSet(
-  goals: readonly SnapshotGoal[],
+  goals: SnapshotGoal[],
   paycheckDays: Int32Array,
   floorCapacity: Int32Array,
-  horizonEndDay: number
+  horizonEndDay: number,
+  abovePrimary: Int32Array
 ): number[] {
   const inHorizon: number[] = [];
   const order = goals.map((_, index) => index).sort((a, b) => compareGoals(goals[a], goals[b]));
@@ -172,12 +257,57 @@ function admitProtectedSet(
     inHorizon.push(index);
   }
 
+  const uncovered = remainingAfterAbovePrimaryDraw(goals, paycheckDays, abovePrimary);
   const protectedIndices: number[] = [];
-  for (const index of inHorizon) {
+  for (let cursor = 0; cursor < inHorizon.length; cursor++) {
+    const index = inHorizon[cursor];
+    const goal = goals[index];
     const candidate = [...protectedIndices, index];
-    if (protectedSetFeasible(candidate, goals, paycheckDays, floorCapacity)) {
+    if (
+      protectedSetFeasible(candidate, goals, paycheckDays, floorCapacity, index, goal.remainingDollars)
+    ) {
+      goal.reserveDollars = goal.remainingDollars;
       protectedIndices.push(index);
+      continue;
     }
+
+    const breach = protectedCapacityBreach(
+      candidate,
+      goals,
+      paycheckDays,
+      floorCapacity,
+      index,
+      goal.remainingDollars
+    );
+    if (!breach) continue;
+    const over = breach.need - breach.capacity;
+    const partialReserve = goal.remainingDollars - over;
+    const dipRoom = uncovered[index] - over;
+    const aboveAssigned = goal.remainingDollars - uncovered[index];
+    const projectedShare =
+      goal.targetAmount <= 0
+        ? 1
+        : (goal.targetAmount - goal.remainingDollars + Math.max(0, partialReserve)) / goal.targetAmount;
+    // A miss larger than the dip that still fits would spend the savings cushion
+    // on a goal that stays mostly unfunded. A dip that still reaches 80% of the
+    // target, including money already saved, is kept.
+    const keepPartial =
+      partialReserve > 0 &&
+      dipRoom > 0 &&
+      (dipRoom > over || projectedShare >= NEARLY_FUNDED_TARGET_SHARE) &&
+      !laterGoalNeedsThisCapacity(
+        inHorizon.slice(cursor + 1),
+        index,
+        partialReserve,
+        aboveAssigned,
+        protectedIndices,
+        goals,
+        paycheckDays,
+        floorCapacity
+      );
+    if (!keepPartial) continue;
+    goal.reserveDollars = partialReserve;
+    protectedIndices.push(index);
   }
   return protectedIndices;
 }
@@ -232,7 +362,12 @@ function planAlapDips(
     const deadline = deadlines[d];
     let need = 0;
     for (const index of protectedIndices) {
-      if (goals[index].deadlineDay <= deadline) need += uncovered[index];
+      if (goals[index].deadlineDay > deadline) continue;
+      const aboveAssigned = goals[index].remainingDollars - uncovered[index];
+      need += Math.min(
+        uncovered[index],
+        Math.max(0, goals[index].reserveDollars - aboveAssigned)
+      );
     }
     remainingDeficit[d] = need;
   }
@@ -459,7 +594,9 @@ export function createCashFlowSnapshot(
       priority: goal.priority,
       openEnded,
       deadlineDay,
+      targetAmount: goal.targetAmount,
       remainingDollars,
+      reserveDollars: 0,
       lastPaycheckIndex: openEnded ? n - 1 : lastPaycheckOnOrBefore(paycheckDays, deadlineDay),
     };
   });
@@ -472,7 +609,8 @@ export function createCashFlowSnapshot(
     snapshotGoals,
     paycheckDays,
     floorCapacity,
-    horizonEndDay
+    horizonEndDay,
+    abovePrimary
   );
 
   return {
@@ -495,7 +633,9 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
   const n = snapshot.paycheckCount;
   const remainingNeed = new Int32Array(snapshot.goals.length);
   for (let g = 0; g < snapshot.goals.length; g++) {
-    remainingNeed[g] = snapshot.goals[g].remainingDollars;
+    const goal = snapshot.goals[g];
+    const partial = goal.reserveDollars > 0 && goal.reserveDollars < goal.remainingDollars;
+    remainingNeed[g] = partial ? goal.reserveDollars : goal.remainingDollars;
   }
 
   const dips = planAlapDips(
@@ -527,9 +667,13 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
   // later goal's dip, and the freed above-primary then leaks to an unadmitted goal.
   const dipAllowance = new Int32Array(snapshot.goals.length);
   for (const index of snapshot.protectedIndices) {
-    dipAllowance[index] = uncoveredAfterAbove[index];
+    const uncoveredAmount = uncoveredAfterAbove[index];
+    const aboveAssigned = snapshot.goals[index].remainingDollars - uncoveredAmount;
+    dipAllowance[index] = Math.min(
+      uncoveredAmount,
+      Math.max(0, snapshot.goals[index].reserveDollars - aboveAssigned)
+    );
   }
-
   const deposit = (goalIndex: number, paycheckIndex: number, amount: number) => {
     if (amount <= 0) return;
     const fromAbove = Math.min(aboveLeft[paycheckIndex], amount);
@@ -550,10 +694,24 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
   const constrainingByGoal = snapshot.goals.map((_, goalIndex) =>
     constrainingProtectedIndices(goalIndex, snapshot.protectedIndices, snapshot.goals)
   );
-  const spendRoom = (goalIndex: number, paycheckIndex: number) =>
-    protectedSet.has(goalIndex)
-      ? aboveLeft[paycheckIndex] + Math.min(dipAllowance[goalIndex], dipLeft[paycheckIndex])
-      : aboveLeft[paycheckIndex];
+  const higherGoalStillNeeds = (goalIndex: number, paycheckIndex: number) => {
+    const day = snapshot.paycheckDays[paycheckIndex];
+    for (let other = 0; other < snapshot.goals.length; other++) {
+      if (other === goalIndex || remainingNeed[other] <= 0) continue;
+      if (compareGoals(snapshot.goals[other], snapshot.goals[goalIndex]) >= 0) continue;
+      if (day <= snapshot.goals[other].deadlineDay) return true;
+    }
+    return false;
+  };
+  const spendRoom = (goalIndex: number, paycheckIndex: number) => {
+    if (!protectedSet.has(goalIndex)) return aboveLeft[paycheckIndex];
+    const goal = snapshot.goals[goalIndex];
+    const partial = goal.reserveDollars > 0 && goal.reserveDollars < goal.remainingDollars;
+    // A partial dip can use savings the higher goal is not allowed to touch,
+    // but not while that higher goal is still funding inside this paycheck.
+    if (partial && higherGoalStillNeeds(goalIndex, paycheckIndex)) return aboveLeft[paycheckIndex];
+    return aboveLeft[paycheckIndex] + Math.min(dipAllowance[goalIndex], dipLeft[paycheckIndex]);
+  };
 
   const depositDated = (goalIndex: number, paycheckIndex: number, spendCap: number) => {
     if (snapshot.paycheckDays[paycheckIndex] > snapshot.goals[goalIndex].deadlineDay) return;
