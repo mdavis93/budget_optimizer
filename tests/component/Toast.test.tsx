@@ -96,7 +96,7 @@ describe('Toast', () => {
         { mockAPI }
       );
       const viewport = screen.getByTestId('toast-viewport');
-      expect(viewport).toHaveStyle({ bottom: 'var(--app-toast-bottom, 1rem)' });
+      expect(viewport.style.bottom).toBe('var(--app-toast-bottom, 1rem)');
     });
   });
 });
