@@ -832,9 +832,10 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
         if (other === goalIndex) continue;
         if (compareGoals(snapshot.goals[other], snapshot.goals[goalIndex]) >= 0) continue;
         if (day > snapshot.goals[other].deadlineDay) continue;
-        // A finished higher-priority goal already took the deposit it needed.
-        // Leftover dip on that paycheck is still this goal's reserve.
-        if (remainingNeed[other] > 0 && allocByGoal[other][paycheckIndex] > 0) return true;
+        // An unadmitted higher goal may take above-primary cash on this paycheck.
+        // That deposit does not own the savings dip band. Only a higher protected
+        // goal that still has dip allowance left can reserve those dollars.
+        if (protectedSet.has(other) && dipAllowance[other] > 0) return true;
       }
       return false;
     };
