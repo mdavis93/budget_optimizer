@@ -304,7 +304,8 @@ describe('cashFlowAllocator oracle', () => {
     const christmas = result.goals.find((g) => g.goalId === 'christmas')!;
     const con = result.goals.find((g) => g.goalId === 'con')!;
     const cruise = result.goals.find((g) => g.goalId === 'cruise')!;
-    expect(christmas.totalAllocated).toBeGreaterThan(0);
+    // Unadmitted Christmas keeps every above-primary dollar in its window.
+    expect(christmas.totalAllocated).toBe(1250);
     expect(con.totalAllocated).toBeGreaterThan(0);
     expect(cruise.totalAllocated).toBeGreaterThan(0);
     result.paychecks.forEach((paycheckAlloc, index) => {
@@ -313,7 +314,10 @@ describe('cashFlowAllocator oracle', () => {
         .filter((d) => d.goalId !== 'christmas')
         .reduce((sum, deposit) => sum + deposit.amount, 0);
       if (dates[index] <= '2026-11-27' && toChristmas > 0) {
-        expect(toOthers).toBe(0);
+        expect(toChristmas).toBe(250);
+        // Protected lower goals may spend only the savings dip Christmas cannot use.
+        expect(toOthers).toBeLessThanOrEqual(150);
+        expect(paycheckAlloc.savingsDeposit).toBe(0);
       }
     });
   });
@@ -599,6 +603,43 @@ describe('cashFlowAllocator oracle', () => {
     expect(high).toMatchObject({ funded: true, totalAllocated: 300 });
     expect(cruise.totalAllocated).toBe(3300);
     expect(cruise.funded).toBe(false);
+  });
+
+  it('gives a protected goal its savings dip beside an unfinished unadmitted higher-priority goal', () => {
+    const dates = [
+      '2026-01-15',
+      '2026-02-15',
+      '2026-03-15',
+      '2026-04-15',
+      '2026-05-15',
+      '2026-06-15',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date, index) => paycheck(date, index < 2 ? 400 : 0)),
+      [
+        goal({
+          id: 'high',
+          name: 'High',
+          priority: 1,
+          targetAmount: 2000,
+          targetDate: '2026-02-15',
+        }),
+        goal({
+          id: 'low',
+          name: 'Low',
+          priority: 2,
+          targetAmount: 900,
+          targetDate: '2026-06-15',
+        }),
+      ]
+    );
+    const high = result.goals.find((entry) => entry.goalId === 'high')!;
+    const low = result.goals.find((entry) => entry.goalId === 'low')!;
+    expect(high.totalAllocated).toBe(500);
+    expect(high.funded).toBe(false);
+    expect(low.totalAllocated).toBe(300);
+    expect(low.funded).toBe(false);
+    expect(result.paychecks.slice(0, 2).every((entry) => entry.savingsDeposit === 0)).toBe(true);
   });
 
   it('keeps a nearly funded goal’s dip when later goals cannot finish without it', () => {
