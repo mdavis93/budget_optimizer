@@ -806,6 +806,90 @@ export function allocateFromSnapshot(snapshot: CashFlowSnapshot): AllocationResu
     }
   }
 
+  // Pace fills itself from above-primary and counts later dips as if they will
+  // be spent. Those dips are skipped once above-primary covers the pace, so a
+  // protected goal can finish short of the reserve that justified the dip.
+  // Give each protected goal its remaining dip allowance, latest paycheck first.
+  const depositDip = (goalIndex: number, paycheckIndex: number, amount: number) => {
+    if (amount <= 0) return;
+    const fromDip = Math.min(dipLeft[paycheckIndex], amount);
+    if (fromDip <= 0) return;
+    dipLeft[paycheckIndex] -= fromDip;
+    dipAllowance[goalIndex] -= fromDip;
+    remainingNeed[goalIndex] -= fromDip;
+    remainingAllocable[paycheckIndex] -= fromDip;
+    allocByGoal[goalIndex][paycheckIndex] += fromDip;
+  };
+  for (const goalIndex of datedOrder) {
+    if (!protectedSet.has(goalIndex) || remainingNeed[goalIndex] <= 0 || dipAllowance[goalIndex] <= 0) {
+      continue;
+    }
+    const peers = snapshot.protectedIndices.filter((index) => index !== goalIndex);
+    const last = Math.min(n - 1, snapshot.goals[goalIndex].lastPaycheckIndex);
+    const higherStillFunding = (paycheckIndex: number) => {
+      const day = snapshot.paycheckDays[paycheckIndex];
+      for (let other = 0; other < snapshot.goals.length; other++) {
+        if (other === goalIndex) continue;
+        if (compareGoals(snapshot.goals[other], snapshot.goals[goalIndex]) >= 0) continue;
+        if (day > snapshot.goals[other].deadlineDay) continue;
+        // A finished higher-priority goal already took the deposit it needed.
+        // Leftover dip on that paycheck is still this goal's reserve.
+        if (remainingNeed[other] > 0 && allocByGoal[other][paycheckIndex] > 0) return true;
+      }
+      return false;
+    };
+    for (let i = last; i >= 0 && remainingNeed[goalIndex] > 0 && dipAllowance[goalIndex] > 0; i--) {
+      if (higherStillFunding(i)) continue;
+      const available = Math.min(
+        dipLeft[i],
+        dipAllowance[goalIndex],
+        remainingNeed[goalIndex],
+        remainingAllocable[i]
+      );
+      if (available <= 0) continue;
+      let take = available;
+      if (
+        !protectedFeasibleAfterTake(
+          goalIndex,
+          i,
+          take,
+          peers,
+          snapshot.goals,
+          remainingNeed,
+          remainingAllocable,
+          snapshot.paycheckDays,
+          false
+        )
+      ) {
+        let lo = 0;
+        let hi = available;
+        take = 0;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (
+            protectedFeasibleAfterTake(
+              goalIndex,
+              i,
+              mid,
+              peers,
+              snapshot.goals,
+              remainingNeed,
+              remainingAllocable,
+              snapshot.paycheckDays,
+              false
+            )
+          ) {
+            take = mid;
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+      }
+      depositDip(goalIndex, i, take);
+    }
+  }
+
   const fallbackDollars = snapshot.fallbackCents / CENTS_PER_DOLLAR;
   const paycheckResults: PaycheckAllocation[] = [];
   for (let i = 0; i < n; i++) {

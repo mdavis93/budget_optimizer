@@ -551,6 +551,56 @@ describe('cashFlowAllocator oracle', () => {
     expect(result.paychecks.every((entry) => !entry.savingsSqueezed)).toBe(true);
   });
 
+  it('gives a partial goal leftover dip on paychecks that already paid a finished higher-priority goal', () => {
+    const dates = [
+      '2026-11-06',
+      '2026-11-20',
+      '2026-12-04',
+      '2026-12-18',
+      '2027-01-01',
+      '2027-01-15',
+      '2027-01-29',
+      '2027-02-12',
+      '2027-02-26',
+      '2027-03-12',
+      '2027-03-26',
+      '2027-04-09',
+    ];
+    const result = allocateGoalsAndSavings(
+      dates.map((date) => paycheck(date, 300)),
+      [
+        goal({
+          id: 'high',
+          name: 'High',
+          priority: 1,
+          targetAmount: 300,
+          targetDate: '2026-12-18',
+        }),
+        goal({
+          id: 'cruise',
+          name: 'Alaska Cruise',
+          priority: 2,
+          targetAmount: 4000,
+          alreadySaved: 500,
+          targetDate: '2027-04-09',
+        }),
+        goal({
+          id: 'open',
+          name: 'Cat',
+          priority: 0,
+          targetAmount: 5000,
+          targetDate: '',
+          openEnded: true,
+        }),
+      ]
+    );
+    const high = result.goals.find((entry) => entry.goalId === 'high')!;
+    const cruise = result.goals.find((entry) => entry.goalId === 'cruise')!;
+    expect(high).toMatchObject({ funded: true, totalAllocated: 300 });
+    expect(cruise.totalAllocated).toBe(3300);
+    expect(cruise.funded).toBe(false);
+  });
+
   it('keeps a nearly funded goal’s dip when later goals cannot finish without it', () => {
     const rows = [
       paycheck('2026-11-06', 640),
