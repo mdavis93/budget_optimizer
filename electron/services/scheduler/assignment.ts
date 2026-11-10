@@ -160,7 +160,7 @@ export function assignBillsToPaychecks(
   reservedIncomes: ProjectedIncome[] = [],
   fundingEndDate?: Date,
   startDate?: Date,
-  assignmentOptions: Pick<AssignBillsOptions, 'solver' | 'onComputeMeta'> & {
+  assignmentOptions: Pick<AssignBillsOptions, 'solver' | 'onComputeMeta' | 'omittedOperatingIncomes'> & {
     debts?: Debt[];
     bills?: Bill[];
     accelerateDebtPayoff?: boolean;
@@ -182,6 +182,7 @@ export function assignBillsToPaychecks(
       minCashOnHand,
       cashOnHandByDate,
       startDate,
+      omittedOperatingIncomes: assignmentOptions.omittedOperatingIncomes,
       solver: assignmentOptions.solver,
       onComputeMeta: assignmentOptions.onComputeMeta,
     }
@@ -189,14 +190,11 @@ export function assignBillsToPaychecks(
 
   attachSkippedBillsForDisplay(assignments, skippedForDisplay);
   dedupeAssignmentBills(assignments);
-  const publishedAssignments = assignments.filter(
-    (assignment) => !assignment.unusable || assignment.bills.some((bill) => bill.isUnpayable)
-  );
 
   const reservedInHorizon = fundingEndDate
     ? reservedIncomes.filter((income) => !isAfter(startOfDay(income.date), startOfDay(fundingEndDate)))
     : reservedIncomes;
-  const merged = mergeReservedDepositAssignments(publishedAssignments, reservedInHorizon);
+  const merged = mergeReservedDepositAssignments(assignments, reservedInHorizon);
   const horizonAssignments = fundingEndDate
     ? dropLookaheadAssignments(merged, fundingEndDate)
     : merged;

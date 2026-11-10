@@ -32,7 +32,6 @@ function isPaycheckUsable(
   return isFundingPaycheckUsable(
     {
       purpose: paycheck.purpose,
-      unusable: paycheck.unusable,
       incomeSourceIds: fundingSourceIds(paycheck),
     },
     bill.preferredIncomeSourceId

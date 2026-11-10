@@ -53,20 +53,18 @@ export function eligiblePaycheckIndices(
 
 /**
  * Shared usable-paycheck rule for engine, reconciliation, advisor, and drag.
- * Operating paychecks qualify. Savings-only and restored $0 leave slots do not.
- * When `preferredIncomeSourceId` is set and the paycheck publishes source ids,
- * that source must be present. A date-only paycheck (no source ids) stays usable
- * so callers that only have dates keep the "all operating" meaning.
+ * Operating paychecks qualify. Savings-only paychecks do not. When
+ * `preferredIncomeSourceId` is set and the paycheck publishes source ids, that
+ * source must be present. A date-only paycheck (no source ids) stays usable so
+ * callers that only have dates keep the "all operating" meaning.
  */
 export function isFundingPaycheckUsable(
   paycheck: {
     purpose?: string;
-    unusable?: boolean;
     incomeSourceIds?: readonly string[];
   },
   preferredIncomeSourceId?: string
 ): boolean {
-  if (paycheck.unusable) return false;
   if (paycheck.purpose === 'savingsAndGoals') return false;
   if (!preferredIncomeSourceId || paycheck.incomeSourceIds == null) return true;
   return paycheck.incomeSourceIds.includes(preferredIncomeSourceId);

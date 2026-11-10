@@ -23,20 +23,17 @@ describe('single-source helpers', () => {
     expect(isLabeledBreakGlassPaycheck({ budgetRemaining: 50, isShortfall: false }, 250, 100)).toBe(false);
   });
 
-  it('marks a paycheck shortfall from reserved, unusable, or remaining cash', () => {
+  it('marks a paycheck shortfall from remaining cash below the floor', () => {
     expect(allBillsSkippedOrUnpayable([])).toBe(false);
     expect(allBillsSkippedOrUnpayable([{ isSkipped: true }, { isUnpayable: true }])).toBe(true);
     expect(allBillsSkippedOrUnpayable([{ isSkipped: false, isUnpayable: false }])).toBe(false);
 
     const base = {
       isReserved: false,
-      unusable: false,
-      allOperatingBillsUnpayable: false,
       budgetRemaining: 50,
       effectiveMin: 100,
     };
     expect(isPaycheckShortfall({ ...base, isReserved: true, budgetRemaining: 0 })).toBe(false);
-    expect(isPaycheckShortfall({ ...base, unusable: true, allOperatingBillsUnpayable: true, budgetRemaining: 500 })).toBe(true);
     expect(isPaycheckShortfall(base)).toBe(true);
     expect(isPaycheckShortfall({ ...base, budgetRemaining: 100 })).toBe(false);
   });

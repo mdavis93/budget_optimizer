@@ -52,9 +52,8 @@ describe('eligiblePaycheckIndices', () => {
 });
 
 describe('isFundingPaycheckUsable', () => {
-  it('rejects savings-only and restored slots, and applies preferred source when ids exist', () => {
+  it('rejects savings-only paychecks and applies preferred source when ids exist', () => {
     expect(isFundingPaycheckUsable({ purpose: 'savingsAndGoals' })).toBe(false);
-    expect(isFundingPaycheckUsable({ unusable: true })).toBe(false);
     expect(isFundingPaycheckUsable({ incomeSourceIds: ['side'] }, 'job')).toBe(false);
     expect(isFundingPaycheckUsable({ incomeSourceIds: ['job'] }, 'job')).toBe(true);
     expect(isFundingPaycheckUsable({}, 'job')).toBe(true);

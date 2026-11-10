@@ -345,7 +345,7 @@ describe('Schedule rules', () => {
     expect(report.proposedFixes.some((fix) => fix.toPaycheckDate === '2026-01-01')).toBe(true);
   });
 
-  it('attaches an in-horizon bill to a restored $0 first-cycle paycheck during leading leave', () => {
+  it('does not create a paycheck during unpaid leave, and keeps the bill unpaid on the next real paycheck', () => {
     const pay = income({ id: 'job', cadence: 'biweekly', startDate: '2026-01-02', amount: 2000 });
     const leave: Leave = {
       id: 'leave-1',
@@ -380,25 +380,91 @@ describe('Schedule rules', () => {
     expect(dates).not.toContain('2026-01-30');
     expect(dates).not.toContain('2026-02-13');
 
-    const jan16 = schedule.paychecks.find((paycheck) => paycheck.date === '2026-01-16');
-    expect(jan16).toMatchObject({
-      totalIncome: 0,
-      hasUnpayableBills: true,
-      isShortfall: true,
-    });
-    expect(jan16?.budgetRemaining).toBe(-400);
-    expect(jan16?.bills).toEqual([
+    expect(schedule.paychecks.some((paycheck) => paycheck.date === '2026-01-16')).toBe(false);
+    expect(schedule.paychecks.some((paycheck) => paycheck.totalIncome === 0)).toBe(false);
+    expect(schedule.presumedPaidCount ?? 0).toBe(0);
+
+    const feb27 = schedule.paychecks.find((paycheck) => paycheck.date === '2026-02-27');
+    expect(feb27).toBeDefined();
+    expect(feb27?.totalIncome).toBe(2000);
+    expect(feb27?.bills).toEqual([
       expect.objectContaining({
         billDate: '2026-01-20',
         isUnpayable: true,
         unfundableReason: 'no_eligible_paycheck_in_window',
       }),
     ]);
-    expect(schedule.presumedPaidCount ?? 0).toBe(0);
+  });
 
-    const feb27 = schedule.paychecks.find((paycheck) => paycheck.date === '2026-02-27');
-    expect(feb27).toBeDefined();
-    expect(feb27?.bills.some((item) => item.billDate === '2026-01-20')).toBe(false);
-    expect(feb27?.totalIncome).toBe(2000);
+  it('does not add a leave paycheck when the schedule starts during that leave', () => {
+    const angela = income({
+      id: 'angela',
+      sourceName: 'Angela',
+      cadence: 'biweekly',
+      startDate: '2026-10-30',
+      amount: 1800,
+    });
+    const michael = income({
+      id: 'michael',
+      sourceName: 'Michael',
+      cadence: 'biweekly',
+      startDate: '2026-11-06',
+      amount: 2200,
+    });
+    const leave: Leave = {
+      id: 'leave-angela',
+      budgetId: 'budget-1',
+      incomeId: 'angela',
+      name: 'Leave',
+      type: 'unpaid',
+      startDate: '2026-11-01',
+      endDate: '2027-01-08',
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    const rent = bill({ id: 'rent', dueDay: 15, creditorName: 'Rent' });
+    const build = (startDate: string) => scheduler.generateSchedule(
+      [angela, michael],
+      [rent],
+      startDate,
+      2,
+      500,
+      new Set(),
+      new Map(),
+      250,
+      [],
+      100,
+      0,
+      new Map(),
+      new Map(),
+      [leave]
+    );
+
+    const beforeLeaveWeek = build('2026-11-01');
+    expect(beforeLeaveWeek.paychecks.some((paycheck) =>
+      paycheck.date < '2027-01-09' &&
+      paycheck.incomeSources.some((source) => source.name === 'Angela')
+    )).toBe(false);
+
+    const duringLeaveWeek = build('2026-11-09');
+    expect(duringLeaveWeek.paychecks.some((paycheck) =>
+      paycheck.date < '2027-01-09' &&
+      paycheck.incomeSources.some((source) => source.name === 'Angela')
+    )).toBe(false);
+    const novemberRent = duringLeaveWeek.paychecks.flatMap((paycheck) =>
+      paycheck.bills
+        .filter((item) => item.billDate === '2026-11-15')
+        .map((item) => ({ date: paycheck.date, sources: paycheck.incomeSources.map((source) => source.name), item }))
+    );
+    expect(novemberRent).toEqual([
+      expect.objectContaining({
+        date: '2026-11-20',
+        sources: ['Michael'],
+        item: expect.objectContaining({
+          isUnpayable: true,
+          unfundableReason: 'no_eligible_paycheck_in_window',
+        }),
+      }),
+    ]);
   });
 });

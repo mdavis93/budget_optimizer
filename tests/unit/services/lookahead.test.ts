@@ -164,14 +164,63 @@ describe('partitionPresumedPaidBills', () => {
     expect(payableBills).toEqual([preferred]);
   });
 
-  it('presumes a bill due before the schedule start even when a restored $0 slot exists', () => {
+  it('presumes a bill due before the schedule start even when omitted leave paychecks exist', () => {
     const beforeStart = bill({ billId: 'rent', date: parseISO('2025-12-20') });
     const { presumedPaidBills, payableBills } = partitionPresumedPaidBills(
       [beforeStart],
-      [income('job', '2026-01-02'), income('job', '2026-02-27')],
-      parseISO('2026-01-01')
+      [income('job', '2026-02-27')],
+      parseISO('2026-01-01'),
+      [income('job', '2026-01-02')]
     );
     expect(presumedPaidBills).toEqual([beforeStart]);
     expect(payableBills).toEqual([]);
+  });
+
+  it('presumes a bill due before the first real paycheck when no omitted leave paycheck covers it', () => {
+    const gapBill = bill({ billId: 'rent', date: parseISO('2026-01-10') });
+    const { presumedPaidBills, payableBills } = partitionPresumedPaidBills(
+      [gapBill],
+      [income('job', '2026-01-30')],
+      parseISO('2026-01-01')
+    );
+    expect(presumedPaidBills).toEqual([gapBill]);
+    expect(payableBills).toEqual([]);
+  });
+
+  it('keeps a bill payable when an omitted leave paycheck falls on or before the due date', () => {
+    const gapBill = bill({ billId: 'rent', date: parseISO('2026-01-15') });
+    const { presumedPaidBills, payableBills } = partitionPresumedPaidBills(
+      [gapBill],
+      [income('job', '2026-01-30')],
+      parseISO('2026-01-01'),
+      [income('job', '2026-01-13')]
+    );
+    expect(payableBills).toEqual([gapBill]);
+    expect(presumedPaidBills).toEqual([]);
+  });
+
+  it('only counts omitted leave paychecks for the preferred source', () => {
+    const preferred = bill({
+      billId: 'car',
+      date: parseISO('2026-01-15'),
+      preferredIncomeSourceId: 'side',
+    });
+    const { presumedPaidBills, payableBills } = partitionPresumedPaidBills(
+      [preferred],
+      [income('job', '2026-01-02'), income('side', '2026-01-30')],
+      parseISO('2026-01-01'),
+      [income('job', '2026-01-13')]
+    );
+    expect(presumedPaidBills).toEqual([preferred]);
+    expect(payableBills).toEqual([]);
+
+    const withPreferredOmitted = partitionPresumedPaidBills(
+      [preferred],
+      [income('job', '2026-01-02'), income('side', '2026-01-30')],
+      parseISO('2026-01-01'),
+      [income('side', '2026-01-13')]
+    );
+    expect(withPreferredOmitted.payableBills).toEqual([preferred]);
+    expect(withPreferredOmitted.presumedPaidBills).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import { addMonths, format, parseISO } from 'date-fns';
 import { describe, expect, it } from 'vitest';
-import type { Bill, Income } from '@shared/types';
+import type { Bill, Income, Leave } from '@shared/types';
 import {
   assembleAssignedSchedule,
   assignPreparedHorizon,
@@ -225,6 +225,63 @@ describe('scheduleBuild', () => {
       expect(twelveWindow.map((paycheck) => paycheck.totalBills)).toEqual(
         three.paychecks.map((paycheck) => paycheck.totalBills)
       );
+    });
+  });
+
+  describe('unpaid leave', () => {
+    it('keeps leave income out of the operating list, including the gap before another earner', () => {
+      const angela: Income = {
+        id: 'angela',
+        sourceName: 'Angela',
+        amount: 1800,
+        cadence: 'biweekly',
+        startDate: '2026-10-30',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const michael: Income = {
+        id: 'michael',
+        sourceName: 'Michael',
+        amount: 2200,
+        cadence: 'biweekly',
+        startDate: '2026-11-06',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const leave: Leave = {
+        id: 'leave-angela',
+        budgetId: 'budget-1',
+        incomeId: 'angela',
+        name: 'Leave',
+        type: 'unpaid',
+        startDate: '2026-11-01',
+        endDate: '2027-01-08',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const prepared = prepareScheduleHorizon({
+        incomes: [angela, michael],
+        bills: [rent({ dueDay: 15 })],
+        startDateStr: '2026-11-09',
+        startingBalance: 500,
+        leaves: [leave],
+      });
+
+      expect(
+        prepared.operatingIncomes.some(
+          (event) =>
+            event.sourceId === 'angela' && format(event.date, 'yyyy-MM-dd') < '2027-01-09'
+        )
+      ).toBe(false);
+      expect(prepared.operatingIncomes.some((event) => event.amount === 0)).toBe(false);
+      expect(
+        prepared.omittedOperatingIncomes.some(
+          (event) =>
+            event.sourceId === 'angela' && format(event.date, 'yyyy-MM-dd') === '2026-11-13'
+        )
+      ).toBe(true);
     });
   });
 
