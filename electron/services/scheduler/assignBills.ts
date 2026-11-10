@@ -42,6 +42,8 @@ export interface AssignBillsOptions {
   minCashOnHand?: number;
   cashOnHandByDate?: CashOnHandByDate;
   startDate?: Date;
+  /** Operating paychecks removed for unpaid leave; keeps gap bills in the solve. */
+  omittedOperatingIncomes?: readonly ProjectedIncome[];
   solver?: AssignmentSolver;
   onComputeMeta?: (meta: AssignmentComputeMeta) => void;
 }
@@ -69,7 +71,8 @@ export function assignBills(
   const { payableBills } = partitionPresumedPaidBills(
     allBills,
     operating,
-    options.startDate
+    options.startDate,
+    options.omittedOperatingIncomes ?? []
   );
 
   const modelStarted = performance.now();

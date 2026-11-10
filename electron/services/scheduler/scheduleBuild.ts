@@ -55,6 +55,8 @@ export interface PreparedScheduleHorizon {
   allIncomes: ProjectedIncome[];
   operatingIncomes: ProjectedIncome[];
   reservedIncomes: ProjectedIncome[];
+  /** Operating paychecks removed for unpaid leave; never reinserted. */
+  omittedOperatingIncomes: ProjectedIncome[];
   uniqueBills: ProjectedBill[];
   /** Occurrences due before the first paycheck they may use (presumed paid pre-schedule). */
   presumedPaidCount: number;
@@ -125,23 +127,7 @@ export function prepareScheduleHorizon(
   }
 
   const omitted = applyProjectedIncomeAdjustments(allIncomes, leaves, incomeOverrides);
-  const remainingOperating = allIncomes.filter((income) => isOperatingIncome(income));
-  const firstRemainingMs = remainingOperating.reduce(
-    (earliest, income) => Math.min(earliest, income.date.getTime()),
-    Infinity
-  );
-  const startMs = startDate.getTime();
-  for (const event of omitted) {
-    if (!isOperatingIncome(event)) continue;
-    const eventMs = event.date.getTime();
-    if (eventMs < startMs || eventMs >= firstRemainingMs) continue;
-    allIncomes.push({
-      ...event,
-      amount: 0,
-      purpose: 'operating',
-      unusable: true,
-    });
-  }
+  const omittedOperatingIncomes = omitted.filter((income) => isOperatingIncome(income));
 
   const operatingIncomes = allIncomes.filter((income) => isOperatingIncome(income));
   const reservedIncomes = allIncomes.filter((income) => isSavingsAndGoalsIncome(income));
@@ -189,7 +175,8 @@ export function prepareScheduleHorizon(
   const { payableBills, presumedPaidBills } = partitionPresumedPaidBills(
     uniqueBills,
     operatingIncomes,
-    startDate
+    startDate,
+    omittedOperatingIncomes
   );
   const horizonBills = billsEligibleOnFundingHorizon(payableBills, paycheckDates, endDate);
   const effectiveManualAssignments = pruneManualAssignmentsToPaychecks(
@@ -219,6 +206,7 @@ export function prepareScheduleHorizon(
     allIncomes,
     operatingIncomes,
     reservedIncomes,
+    omittedOperatingIncomes,
     uniqueBills: horizonBills,
     presumedPaidCount: presumedPaidBills.length,
     skippedForDisplay,
@@ -270,6 +258,7 @@ export function assignPreparedHorizon(
       bills: prepared.bills,
       accelerateDebtPayoff: prepared.accelerateDebtPayoff,
       forcedVariant: assignmentOptions.forcedVariant ?? prepared.forcedVariant,
+      omittedOperatingIncomes: prepared.omittedOperatingIncomes,
       onDebtPlan: (plan, ignoredPins) => {
         prepared.lastDebtPlan = plan;
         prepared.lastDebtIgnoredPins = ignoredPins;

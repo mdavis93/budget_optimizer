@@ -169,6 +169,7 @@ function PaycheckView({
         {paychecks.map((paycheck) => {
           const entryKey = paycheckKey(paycheck);
           const isReserved = isSavingsAndGoalsIncome(paycheck);
+          const blocksAssignment = isReserved;
           const visibleBills = filterPaycheckBills(
             paycheck.bills,
             billAssignments,
@@ -190,7 +191,7 @@ function PaycheckView({
                 minCashOnHand
               );
           const isExpanded = expandedPaychecks.has(entryKey) || expandedPaychecks.has(paycheck.date);
-          const isDropTarget = !isReserved && dropTargetDate === paycheck.date;
+          const isDropTarget = !blocksAssignment && dropTargetDate === paycheck.date;
           const isDragSource = draggedBill?.sourcePaycheckDate === paycheck.date;
           const cardClassName = clsx(
             'card overflow-hidden transition-all',
@@ -206,9 +207,9 @@ function PaycheckView({
             <div 
               key={entryKey}
               className={cardClassName}
-              onDragOver={isReserved ? undefined : (e) => onDragOver(e, paycheck.date)}
-              onDragLeave={isReserved ? undefined : onDragLeave}
-              onDrop={isReserved ? undefined : (e) => onDrop(e, paycheck.date)}
+              onDragOver={blocksAssignment ? undefined : (e) => onDragOver(e, paycheck.date)}
+              onDragLeave={blocksAssignment ? undefined : onDragLeave}
+              onDrop={blocksAssignment ? undefined : (e) => onDrop(e, paycheck.date)}
             >
               <button
                 onClick={() => togglePaycheck(entryKey)}

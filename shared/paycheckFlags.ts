@@ -6,13 +6,10 @@ export function allBillsSkippedOrUnpayable(
 
 export function isPaycheckShortfall(input: {
   isReserved: boolean;
-  unusable: boolean;
-  allOperatingBillsUnpayable: boolean;
   budgetRemaining: number;
   effectiveMin: number;
 }): boolean {
   if (input.isReserved) return false;
-  if (input.unusable && input.allOperatingBillsUnpayable) return true;
   return input.budgetRemaining < input.effectiveMin;
 }
 

@@ -18,7 +18,7 @@ import {
 } from '../cashFlowAllocator';
 import { compareGoalsByPriority } from '@shared/goalPriority';
 import { paycheckEntryId, isSavingsAndGoalsIncome } from '@shared/incomePurpose';
-import { allBillsSkippedOrUnpayable, isPaycheckShortfall, isSavingsSqueezed } from '@shared/paycheckFlags';
+import { isPaycheckShortfall, isSavingsSqueezed } from '@shared/paycheckFlags';
 import {
   cashMinForDate,
   cashTargetForDate,
@@ -233,7 +233,7 @@ function runPayingVariant(
   let totalSavingsDollars = 0;
   let lastOperatingRemaining = startingBalance;
   const firstOperating = assignments.findIndex(
-    (assignment) => !isSavingsAndGoalsIncome(assignment) && !assignment.unusable
+    (assignment) => !isSavingsAndGoalsIncome(assignment)
   );
   const hardFloorCents = Math.max(0, toCents(minSavingsPerPaycheck));
   const fiftyCents = Math.max(hardFloorCents, toCents(50));
@@ -295,7 +295,7 @@ function runPayingVariant(
     const effectiveMin = cashMinForDate(cashOnHandByDate, dateIso, minCashOnHand);
     const purpose = isReserved ? ('savingsAndGoals' as const) : ('operating' as const);
 
-    if (!isReserved && !assignment.unusable && applyExtras) {
+    if (!isReserved && applyExtras) {
       for (const account of accounts) account.accrueThrough(dateIso, work);
       for (const bill of bills) {
         if (bill.isSkipped || bill.isUnpayable) continue;
@@ -326,7 +326,7 @@ function runPayingVariant(
         const dueDay = dayNumberOfIsoDate(format(item.bill.date, 'yyyy-MM-dd'));
         const eligibleIdx = eligiblePaycheckIndices(dueDay, paycheckDays, (index) => {
           const slot = assignments[index];
-          return !isSavingsAndGoalsIncome(slot) && !slot.unusable;
+          return !isSavingsAndGoalsIncome(slot);
         });
         if (!eligibleIdx.includes(i)) continue;
         const key = billOccurrenceKey(item.bill.billId, item.bill.date);
@@ -350,7 +350,7 @@ function runPayingVariant(
     const hasUnpaid = unpayableBills.length > 0;
     const totalBillsAmount = fromCents(fundedBills.reduce((sum, bill) => sum + toCents(bill.amount), 0));
     const freedAfterRepair = freedCents[i];
-    const positionBeforeTopUp = isReserved || assignment.unusable
+    const positionBeforeTopUp = isReserved
       ? 0
       : regularPositionCents(i, freedAfterRepair) -
         (hasUnpaid ? unpayableBills.reduce((sum, bill) => sum + toCents(bill.amount), 0) : 0);
@@ -358,7 +358,7 @@ function runPayingVariant(
     const minCents = toCents(effectiveMin);
     let freed = freedAfterRepair;
     let appliedToRemaining = 0;
-    if (applyExtras && !isReserved && !assignment.unusable) {
+    if (applyExtras && !isReserved) {
       if (positionBeforeTopUp < minCents) {
         const use = Math.min(freed, minCents - positionBeforeTopUp);
         freed -= use;
@@ -374,7 +374,7 @@ function runPayingVariant(
     freedCents[i] = freed;
 
     const regularSurplusCents =
-      isReserved || assignment.unusable || hasUnpaid
+      isReserved || hasUnpaid
         ? 0
         : Math.max(0, positionBeforeTopUp - targetCents);
     const reservedSurplus = isReserved ? Math.max(0, totalIncome) : 0;
@@ -383,7 +383,7 @@ function runPayingVariant(
     const debtPayments: DebtPayment[] = [];
     let savingsCents = 0;
 
-    if (!hasUnpaid && !assignment.unusable) {
+    if (!hasUnpaid) {
       const suffix = [];
       for (let j = i; j < assignments.length; j++) {
         const slot = assignments[j];
@@ -391,8 +391,6 @@ function runPayingVariant(
         let surplus: number;
         if (j === i) {
           surplus = isReserved ? reservedSurplus : fromCents(regularSurplusCents);
-        } else if (slot.unusable) {
-          surplus = 0;
         } else if (isSavingsAndGoalsIncome(slot)) {
           surplus = Math.max(0, slot.incomes.reduce((sum, income) => sum + income.amount, 0));
         } else if (uniqueBills(slot).some((bill) => bill.isUnpayable && !bill.isSkipped)) {
@@ -504,17 +502,10 @@ function runPayingVariant(
     } else if (!hasUnpaid && (regularSurplusCents > 0 || appliedToRemaining > 0 || positionBeforeTopUp >= targetCents)) {
       budgetRemaining = effectiveTarget;
     }
-    if (!isReserved && !assignment.unusable) {
-      totalSavingsDollars += savingsDeposit;
-    } else if (isReserved) {
-      totalSavingsDollars += savingsDeposit;
-    }
+    totalSavingsDollars += savingsDeposit;
 
-    const allOperatingBillsUnpayable = allBillsSkippedOrUnpayable(currentBills);
     const isShortfall = isPaycheckShortfall({
       isReserved,
-      unusable: assignment.unusable === true,
-      allOperatingBillsUnpayable,
       budgetRemaining,
       effectiveMin,
     });

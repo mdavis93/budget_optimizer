@@ -27,7 +27,6 @@ function buildPaycheckSkeleton(
       date: paycheckDate,
       incomes,
       bills: [],
-      unusable: incomes.length > 0 && incomes.every((income) => income.unusable),
     };
   });
 }
@@ -85,6 +84,18 @@ function latestOnOrBefore(
   return -1;
 }
 
+function earliestAfter(
+  assignments: readonly PaycheckAssignment[],
+  due: Date
+): number {
+  for (let index = 0; index < assignments.length; index++) {
+    if (isAfter(assignments[index].date, due)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 function unpaidLanding(
   model: AssignmentModel,
   billIndex: number,
@@ -104,8 +115,15 @@ function unpaidLanding(
     };
   }
   const due = parseISO(model.billDueIso[billIndex]);
+  const earlier = latestOnOrBefore(assignments, due);
+  if (earlier >= 0) {
+    return {
+      paycheckIndex: earlier,
+      reason: 'no_eligible_paycheck_in_window',
+    };
+  }
   return {
-    paycheckIndex: latestOnOrBefore(assignments, due),
+    paycheckIndex: earliestAfter(assignments, due),
     reason: 'no_eligible_paycheck_in_window',
   };
 }

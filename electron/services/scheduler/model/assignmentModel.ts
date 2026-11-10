@@ -126,7 +126,6 @@ function buildPaycheckSkeleton(
       date: paycheckDate,
       incomes: onDate,
       bills: [],
-      unusable: onDate.length > 0 && onDate.every((income) => income.unusable),
     };
   });
 }
@@ -216,7 +215,7 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
   const assignments = buildPaycheckSkeleton(input.paycheckDates, operatingIncomes);
   const paycheckIso = assignments.map((assignment) => isoOf(assignment.date));
   const paycheckCount = assignments.length;
-  const firstRealIndex = assignments.findIndex((assignment) => !assignment.unusable);
+  const firstRealIndex = assignments.length > 0 ? 0 : -1;
   const startingBalanceCents = toCents(input.startingBalance);
   assertCents(startingBalanceCents, 'startingBalance');
 
@@ -249,7 +248,7 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
     minCashCents[index] = toCents(minDollars);
     targetCashCents[index] = toCents(targetDollars);
     paycheckDay[index] = dayNumberOfDate(assignment.date);
-    countsTowardCashFloors[index] = assignment.unusable ? 0 : 1;
+    countsTowardCashFloors[index] = 1;
   }
 
   const modelBills: ModelBill[] = [];

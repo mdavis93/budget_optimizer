@@ -44,7 +44,9 @@ export function getAssignmentViolation(
   const eligibleDays = new Set(
     eligiblePaycheckIndices(dueDay, paycheckDays, (index) =>
       isFundingPaycheckUsable(
-        { incomeSourceIds: paychecks[index].incomeSourceIds },
+        {
+          incomeSourceIds: paychecks[index].incomeSourceIds,
+        },
         preferredIncomeSourceId
       )
     ).map((index) => paycheckDays[index])

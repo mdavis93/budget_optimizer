@@ -8,13 +8,17 @@ import type { PaycheckAssignment, ProjectedBill, ProjectedIncome } from './types
 
 /**
  * Bills due before the first operating paycheck they may use are presumed paid
- * by pre-schedule paychecks and leave the solve. A preferred source with no
- * operating income falls back to any paycheck, so its bills stay unpayable as before.
+ * by pre-schedule paychecks and leave the solve. An omitted unpaid-leave
+ * paycheck in [start, due] keeps that bill in the solve: the income does not
+ * exist, so the bill was not paid by a pre-schedule paycheck. A preferred
+ * source with no operating income falls back to any paycheck, so its bills
+ * stay unpayable as before.
  */
 export function partitionPresumedPaidBills(
   bills: ProjectedBill[],
   operatingIncomes: ProjectedIncome[],
-  startDate?: Date
+  startDate?: Date,
+  omittedOperatingIncomes: readonly ProjectedIncome[] = []
 ): { payableBills: ProjectedBill[]; presumedPaidBills: ProjectedBill[] } {
   const startDay = startDate ? dayNumberOfDate(startDate) : -Infinity;
   let firstPaycheckDay = Infinity;
@@ -28,6 +32,20 @@ export function partitionPresumedPaidBills(
     }
   }
 
+  const omittedInRange = (
+    dueDay: number,
+    preferredIncomeSourceId: string | undefined
+  ): boolean => {
+    for (const omitted of omittedOperatingIncomes) {
+      if (preferredIncomeSourceId && omitted.sourceId !== preferredIncomeSourceId) {
+        continue;
+      }
+      const omittedDay = dayNumberOfDate(omitted.date);
+      if (omittedDay >= startDay && omittedDay <= dueDay) return true;
+    }
+    return false;
+  };
+
   const payableBills: ProjectedBill[] = [];
   const presumedPaidBills: ProjectedBill[] = [];
   for (const bill of bills) {
@@ -40,8 +58,11 @@ export function partitionPresumedPaidBills(
       ? firstPaycheckDayBySource.get(bill.preferredIncomeSourceId)
       : undefined;
     const firstUsableDay = sourceFirstDay ?? firstPaycheckDay;
-    if (dueDay < firstUsableDay) presumedPaidBills.push(bill);
-    else payableBills.push(bill);
+    if (dueDay < firstUsableDay && !omittedInRange(dueDay, bill.preferredIncomeSourceId)) {
+      presumedPaidBills.push(bill);
+    } else {
+      payableBills.push(bill);
+    }
   }
   return { payableBills, presumedPaidBills };
 }

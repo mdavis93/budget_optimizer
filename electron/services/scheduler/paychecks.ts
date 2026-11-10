@@ -19,7 +19,7 @@ import {
 import { allocateGoalsAndSavings } from './cashFlowAllocator';
 import { roundCurrency } from './money';
 import { isSavingsAndGoalsIncome, paycheckEntryId } from '@shared/incomePurpose';
-import { allBillsSkippedOrUnpayable, isPaycheckShortfall } from '@shared/paycheckFlags';
+import { isPaycheckShortfall } from '@shared/paycheckFlags';
 export {
   calculateSummary,
   buildLedgerEntries,
@@ -60,8 +60,7 @@ export function buildPaycheckEntries(
     const hasUnpayableBills = unpayableBillsAmount > 0;
     const isFirstRealOperating =
       !isReserved &&
-      !assignment.unusable &&
-      assignments.findIndex((item) => !isSavingsAndGoalsIncome(item) && !item.unusable) === i;
+      assignments.findIndex((item) => !isSavingsAndGoalsIncome(item)) === i;
     const ledgerBoost = isFirstRealOperating ? startingBalance : 0;
     const paycheckDateStr = format(assignment.date, 'yyyy-MM-dd');
     const effectiveTarget = cashTargetForDate(
@@ -148,11 +147,8 @@ export function buildPaycheckEntries(
       totalSavings += savingsDeposit;
     }
 
-    const allOperatingBillsUnpayable = allBillsSkippedOrUnpayable(uniqueBills);
     const isShortfall = isPaycheckShortfall({
       isReserved,
-      unusable: assignment.unusable === true,
-      allOperatingBillsUnpayable,
       budgetRemaining,
       effectiveMin,
     });
