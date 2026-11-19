@@ -2,8 +2,9 @@ import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
 import { fromCents, toCents } from './money';
 
 /**
- * Charged amount for one occurrence: override only when finite and strictly
- * above the series floor (compared in cents).
+ * Charged amount for one occurrence. A finite override above zero replaces
+ * the series amount for that date, including amounts below the series.
+ * Non-finite, non-positive, and cent-equal overrides keep the series amount.
  */
 export function resolveBillOccurrenceAmount(
   billId: string,
@@ -20,7 +21,8 @@ export function resolveBillOccurrenceAmount(
   if (
     typeof override !== 'number' ||
     !Number.isFinite(override) ||
-    toCents(override) <= seriesCents
+    toCents(override) <= 0 ||
+    toCents(override) === seriesCents
   ) {
     return fromCents(seriesCents);
   }

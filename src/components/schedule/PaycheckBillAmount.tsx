@@ -62,7 +62,7 @@ export default function PaycheckBillAmount({
               ? 'text-amber-600 dark:text-amber-400 line-through'
               : 'text-danger-600 dark:text-danger-500'
           )}
-          title="Raise this payment for this date only"
+          title="Change this payment for this date only"
         >
           -{formatCurrency(bill.amount)}
         </button>

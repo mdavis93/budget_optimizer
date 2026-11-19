@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
-import { toCents } from '@shared/money';
 import { resolveBillOccurrenceAmount } from '../../../electron/services/scheduler/billPaymentOverrides';
 import {
   assignPreparedHorizon,
@@ -81,14 +80,17 @@ function findOccurrence(
 }
 
 describe('resolveBillOccurrenceAmount', () => {
-  it('returns override only when strictly above series amount', () => {
+  it('returns a positive override above or below the series amount', () => {
     const key = billOccurrenceKeyFromIso('bill-1', '2026-04-15');
     const overrides = new Map([[key, 125.5]]);
     expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 100, overrides)).toBe(125.5);
     expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 125.5, overrides)).toBe(125.5);
-    expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 200, overrides)).toBe(200);
+    expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 200, overrides)).toBe(125.5);
+    expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 250, new Map([[key, 160]]))).toBe(160);
     expect(resolveBillOccurrenceAmount('other', '2026-04-15', 100, overrides)).toBe(100);
     expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 100, undefined)).toBe(100);
+    expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 250, new Map([[key, 0]]))).toBe(250);
+    expect(resolveBillOccurrenceAmount('bill-1', '2026-04-15', 250, new Map([[key, -10]]))).toBe(250);
   });
 
   it('rounds through cents and ignores non-finite overrides', () => {
@@ -316,22 +318,24 @@ describe('bill payment override scheduler sequences', () => {
       },
     },
     {
-      name: 'stale override at or below series is ignored including while skipped',
+      name: 'override below series is charged, including while skipped',
       run: () => {
         const key = billOccurrenceKeyFromIso(rent.id, '2026-01-15');
-        const stale = new Map([[key, 900]]);
+        const lowered = new Map([[key, 900]]);
         const skipped = buildSchedule({
           bills: [rent],
-          paymentOverrides: stale,
+          paymentOverrides: lowered,
           skipped: new Set([key]),
         });
-        expect(findOccurrence(skipped, rent.id, '2026-01-15')?.bill.amount).toBe(1000);
+        expect(findOccurrence(skipped, rent.id, '2026-01-15')?.bill.amount).toBe(900);
+        expect(findOccurrence(skipped, rent.id, '2026-01-15')?.paycheck.totalBills).toBe(0);
 
         const unskipped = buildSchedule({
           bills: [rent],
-          paymentOverrides: stale,
+          paymentOverrides: lowered,
         });
-        expect(findOccurrence(unskipped, rent.id, '2026-01-15')?.bill.amount).toBe(1000);
+        expect(findOccurrence(unskipped, rent.id, '2026-01-15')?.bill.amount).toBe(900);
+        expect(findOccurrence(unskipped, rent.id, '2026-01-15')?.paycheck.totalBills).toBe(900);
       },
     },
     {
@@ -443,7 +447,7 @@ describe('bill payment override scheduler sequences', () => {
     expect(raisedDates).toEqual(baselineDates);
   });
 
-  it('ignores override after budgetedAmount is raised past stored override', () => {
+  it('keeps a stored override when the series later moves above it', () => {
     const key = billOccurrenceKeyFromIso(rent.id, '2026-01-15');
     const raisedBill = { ...rent, budgetedAmount: 1500 };
     const paychecks = buildSchedule({
@@ -451,7 +455,7 @@ describe('bill payment override scheduler sequences', () => {
       paymentOverrides: new Map([[key, 1200]]),
     });
     const found = findOccurrence(paychecks, rent.id, '2026-01-15');
-    expect(found?.bill.amount).toBe(1500);
-    expect(toCents(found!.bill.amount)).toBe(toCents(found!.bill.seriesAmount ?? 0));
+    expect(found?.bill.amount).toBe(1200);
+    expect(found?.bill.seriesAmount).toBe(1500);
   });
 });

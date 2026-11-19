@@ -209,8 +209,8 @@ test.describe('Schedule', () => {
     await reloadShell(window);
 
     await showRentSchedule(window);
-    await window.getByTitle('Raise this payment for this date only').first().click();
-    const dialog = window.getByRole('dialog', { name: /Raise payment for/ });
+    await window.getByTitle('Change this payment for this date only').first().click();
+    const dialog = window.getByRole('dialog', { name: /Change payment for/ });
     await expect(dialog.getByText('Series is $1,500.00')).toBeVisible();
     await dialog.locator('input').fill('1600');
     await dialog.getByRole('button', { name: 'Save' }).click();
@@ -223,7 +223,7 @@ test.describe('Schedule', () => {
     await expect(window.getByRole('button', { name: '-$1,500.00' }).first()).toBeVisible();
 
     await window.getByRole('button', { name: '-$1,600.00' }).click();
-    const resetDialog = window.getByRole('dialog', { name: /Raise payment for/ });
+    const resetDialog = window.getByRole('dialog', { name: /Change payment for/ });
     await resetDialog.getByRole('button', { name: 'Reset' }).click();
     await saveScheduleChanges(window);
     await expect.poll(() => readBillPaymentOverrideAmounts(window)).toEqual([]);

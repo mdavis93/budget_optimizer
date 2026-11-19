@@ -72,7 +72,7 @@ describe('BillPaymentPopover', () => {
     expect(onClear).toHaveBeenCalled();
   });
 
-  it('keeps popover open below series; equal series clears; empty/non-numeric do not save', async () => {
+  it('saves an amount below series; equal series clears; zero and non-numeric do not save', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     const onClear = vi.fn();
@@ -93,8 +93,15 @@ describe('BillPaymentPopover', () => {
     const input = screen.getByRole('spinbutton');
     await user.clear(input);
     await user.type(input, '90{Enter}');
+    expect(onSave).toHaveBeenCalledWith(90);
+    expect(onClear).not.toHaveBeenCalled();
+
+    onSave.mockClear();
+    await user.clear(input);
+    await user.type(input, '0{Enter}');
     expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByText('Must be at least $100.00')).toBeInTheDocument();
+    expect(onClear).not.toHaveBeenCalled();
+    expect(screen.getByText('Must be greater than $0.00')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
     await user.clear(input);
@@ -301,7 +308,7 @@ describe('PaycheckBillRow payment editor matrix', () => {
       />
     );
 
-    const amountButton = screen.queryByTitle('Raise this payment for this date only');
+    const amountButton = screen.queryByTitle('Change this payment for this date only');
     expect(Boolean(amountButton)).toBe(row.expectAmountButton);
     expect(Boolean(screen.queryByRole('button', { name: /Restore/i }))).toBe(row.expectRestore);
     expect(Boolean(screen.queryByRole('button', { name: /^Skip$/i }))).toBe(row.expectSkip);
@@ -381,7 +388,7 @@ describe('PaycheckBillRow payment editor matrix', () => {
       </>
     );
 
-    await user.click(screen.getAllByTitle('Raise this payment for this date only')[0]);
+    await user.click(screen.getAllByTitle('Change this payment for this date only')[0]);
     view.rerender(
       <>
         <PaycheckBillRow
@@ -432,7 +439,7 @@ describe('PaycheckBillRow payment editor matrix', () => {
     );
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await user.click(screen.getAllByTitle('Raise this payment for this date only')[1]);
+    await user.click(screen.getAllByTitle('Change this payment for this date only')[1]);
     expect(onSave).not.toHaveBeenCalled();
   });
 });
