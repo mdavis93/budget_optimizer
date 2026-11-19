@@ -51,6 +51,25 @@ export function seedDebt(window: Page, input: DebtInput): Promise<string> {
   return ipcCreate(window, 'debts', input);
 }
 
+/** Read persisted single-occurrence amounts. The schedule page loads these from the budget snapshot, so a journey must call this channel itself. */
+export async function readBillPaymentOverrideAmounts(window: Page): Promise<number[]> {
+  const result = (await window.evaluate(async () => {
+    const api = (window as unknown as {
+      electronAPI: {
+        billPaymentOverrides: {
+          getAll: () => Promise<{ success: boolean; data?: { amount: number }[]; error?: string }>;
+        };
+      };
+    }).electronAPI;
+    return api.billPaymentOverrides.getAll();
+  })) as ApiResult<{ amount: number }[]>;
+
+  if (!result.success || !result.data) {
+    throw new Error(`bill-payment-overrides:get-all failed: ${result.error ?? 'unknown error'}`);
+  }
+  return result.data.map((override) => override.amount);
+}
+
 export type ReloadOptions = {
   password?: string;
   /** Budget to reselect from the picker after reload (defaults to the harness budget). */

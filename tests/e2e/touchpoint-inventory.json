@@ -1,5 +1,5 @@
 {
-  "description": "Registry of user-facing touchpoints for the E2E safety net. A touchpoint is 'covered' when its id appears as an @id tag in a spec title under tests/e2e. Reconciled and gated by scripts/e2e-touchpoints.cjs.",
+  "description": "Registry of user-facing touchpoints for the E2E safety net. A touchpoint is 'covered' when its id appears as an @id tag in a spec title under tests/e2e. A preload channel with no journey must be an untestedChannels object with a reason and an added date no older than 21 UTC days. Reconciled and gated by scripts/e2e-touchpoints.cjs.",
   "tiers": {
     "critical": {
       "label": "Money movement, data integrity, and authentication",
@@ -19,7 +19,7 @@
       "domain": "auth",
       "description": "First-run: create master password, acknowledge recovery key, reach app shell",
       "routes": ["/setup"],
-      "channels": ["auth:is-first-time-setup", "auth:create-master-password", "auth:clear-pending-recovery-key"]
+      "channels": ["auth:is-first-time-setup", "auth:create-master-password", "auth:clear-pending-recovery-key", "app:check-biometric-available", "auth:is-biometric-enabled"]
     },
     {
       "id": "auth.unlock",
@@ -27,21 +27,21 @@
       "domain": "auth",
       "description": "Returning user unlocks the vault with the master password",
       "routes": ["/login"],
-      "channels": ["auth:unlock", "auth:is-unlocked"]
+      "channels": ["auth:unlock", "auth:is-unlocked", "credentials:has"]
     },
     {
       "id": "auth.unlock-rejected",
       "tier": "critical",
       "domain": "auth",
       "description": "An incorrect master password keeps the app locked",
-      "channels": ["auth:unlock"]
+      "channels": ["auth:unlock", "credentials:has"]
     },
     {
       "id": "auth.lock",
       "tier": "critical",
       "domain": "auth",
       "description": "Locking the app returns to the login screen",
-      "channels": ["auth:lock"]
+      "channels": ["auth:lock", "credentials:has"]
     },
     {
       "id": "budget.create",
@@ -49,7 +49,7 @@
       "domain": "budget",
       "description": "Create and open a named budget from the picker",
       "routes": ["/budgets"],
-      "channels": ["budget:create", "budget:switch", "budget:get-all-with-stats", "budget:get-current"]
+      "channels": ["budget:create", "budget:switch", "budget:get-all-with-stats", "budget:get-current", "settings:update"]
     },
     {
       "id": "income.create",
@@ -94,6 +94,14 @@
       "channels": ["bills:create", "bills:get-all"]
     },
     {
+      "id": "bills.delete",
+      "tier": "critical",
+      "domain": "bills",
+      "description": "Delete a saved bill, save, and confirm it stays gone after reload",
+      "routes": ["/bills"],
+      "channels": ["bills:delete"]
+    },
+    {
       "id": "bills.per-paycheck-requires-income",
       "tier": "critical",
       "domain": "bills",
@@ -106,6 +114,14 @@
       "description": "Income + bills produce a rendered paycheck schedule",
       "routes": ["/schedule"],
       "channels": ["schedule:build"]
+    },
+    {
+      "id": "schedule.raise-payment",
+      "tier": "critical",
+      "domain": "schedule",
+      "description": "Raise one bill occurrence above its series amount, save, and reset it without changing the series",
+      "routes": ["/schedule"],
+      "channels": ["bill-payment-overrides:get-all", "bill-payment-overrides:set", "bill-payment-overrides:remove"]
     },
     {
       "id": "draft.nav-free",
@@ -129,13 +145,15 @@
       "id": "draft.guard-discard",
       "tier": "critical",
       "domain": "draft",
-      "description": "Exit guard (Quit / window close): Discard All drops the draft and proceeds"
+      "description": "Exit guard (Quit / window close): Discard All drops the draft and proceeds",
+      "channels": ["app:quit"]
     },
     {
       "id": "draft.guard-save",
       "tier": "critical",
       "domain": "draft",
-      "description": "Exit guard (Quit / window close): Save All Changes persists the draft and proceeds"
+      "description": "Exit guard (Quit / window close): Save All Changes persists the draft and proceeds",
+      "channels": ["app:quit"]
     },
     {
       "id": "draft.native-close-cancel",
@@ -147,19 +165,22 @@
       "id": "draft.native-close-discard",
       "tier": "critical",
       "domain": "draft",
-      "description": "Native window close with dirty draft: Discard All exits the app"
+      "description": "Native window close with dirty draft: Discard All exits the app",
+      "channels": ["app:quit"]
     },
     {
       "id": "draft.native-close-save",
       "tier": "critical",
       "domain": "draft",
-      "description": "Native window close with dirty draft: Save All Changes persists then exits"
+      "description": "Native window close with dirty draft: Save All Changes persists then exits",
+      "channels": ["app:quit"]
     },
     {
       "id": "draft.native-close-clean",
       "tier": "critical",
       "domain": "draft",
-      "description": "Native window close with a clean draft exits without prompting"
+      "description": "Native window close with a clean draft exits without prompting",
+      "channels": ["app:quit"]
     },
 
     {
@@ -284,6 +305,14 @@
       "routes": ["/export"]
     },
     {
+      "id": "export.pdf",
+      "tier": "standard",
+      "domain": "export",
+      "description": "Export the schedule to a PDF through the save dialog and confirm the file is written",
+      "routes": ["/export"],
+      "channels": ["export:to-pdf", "app:show-save-dialog"]
+    },
+    {
       "id": "settings.view",
       "tier": "standard",
       "domain": "settings",
@@ -297,7 +326,7 @@
       "tier": "standard",
       "domain": "bills",
       "status": "planned",
-      "description": "Edit and delete an existing bill (not yet covered by a journey)"
+      "description": "Edit an existing bill (not yet covered by a journey; delete is bills.delete)"
     },
     {
       "id": "goals.edit",
@@ -308,57 +337,225 @@
     }
   ],
   "untestedChannels": [
-    "app:get-platform",
-    "app:check-biometric-available",
-    "app:show-save-dialog",
-    "app:quit",
-    "budget:get-all",
-    "budget:get-stats",
-    "budget:update",
-    "budget:delete",
-    "budget:start-quick",
-    "budget:end-quick",
-    "auth:unlock-with-biometric",
-    "auth:unlock-with-saved-credentials",
-    "auth:enable-biometric",
-    "auth:is-biometric-enabled",
-    "auth:change-password",
-    "auth:get-pending-recovery-key",
-    "auth:verify-recovery-key",
-    "auth:reset-password-with-recovery",
-    "auth:activity-ping",
-    "income:update",
-    "income:delete",
-    "bills:update",
-    "bills:delete",
-    "skipped-bills:get-all",
-    "skipped-bills:skip",
-    "skipped-bills:unskip",
-    "skipped-bills:is-skipped",
-    "bill-assignments:get-all",
-    "bill-assignments:assign",
-    "bill-assignments:remove",
-    "income-overrides:get-all",
-    "income-overrides:set",
-    "income-overrides:remove",
-    "leaves:get-all",
-    "leaves:create",
-    "leaves:update",
-    "leaves:delete",
-    "goals:update",
-    "goals:delete",
-    "debts:get-by-bill",
-    "debts:update",
-    "debts:delete",
-    "export:to-pdf",
-    "export:to-html",
-    "export:to-spreadsheet",
-    "settings:update",
-    "credentials:delete",
-    "credentials:has",
-    "diagnostics:report",
-    "diagnostics:get-event",
-    "diagnostics:get-bundle",
-    "diagnostics:export"
+    {
+      "channel": "app:get-platform",
+      "reason": "No screen calls this. Exit behavior listens for a close request instead of reading an OS string.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "budget:get-all",
+      "reason": "No screen calls this. The picker and Budgets page load budgets through budget:get-all-with-stats.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "budget:get-stats",
+      "reason": "No screen calls this. Income and bill counts arrive inside budget:get-all-with-stats.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "budget:update",
+      "reason": "No journey renames a budget or saves cash targets or the schedule start date.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "budget:delete",
+      "reason": "No journey deletes a budget from the Budgets page and confirms it is gone.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "budget:start-quick",
+      "reason": "No journey starts a Quick Budget. The suite always creates and opens a named budget.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "budget:end-quick",
+      "reason": "No journey ends a Quick Budget, because no journey starts one.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:unlock-with-biometric",
+      "reason": "No journey unlocks with Touch ID or Windows Hello. Headless runs cannot complete a biometric prompt, and login tests use the master password.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:unlock-with-saved-credentials",
+      "reason": "The harness declines the keychain save prompt, so no journey has a saved password to unlock with.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:enable-biometric",
+      "reason": "When setup offers fingerprint enrollment, the journey clicks Skip for now instead of enabling it. Headless CI often has no biometric device.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:change-password",
+      "reason": "No journey changes the master password from Settings and acknowledges the new recovery key.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:get-pending-recovery-key",
+      "reason": "No screen calls this. Setup shows the recovery key returned by auth:create-master-password.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:verify-recovery-key",
+      "reason": "No journey submits a recovery key on the login screen.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:reset-password-with-recovery",
+      "reason": "No journey resets the master password with a recovery key.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "auth:activity-ping",
+      "reason": "Layout sends this only after 30 seconds of pointer or keyboard input, and no journey waits for that heartbeat.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "income:update",
+      "reason": "No journey edits an existing income source and saves the change.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "income:delete",
+      "reason": "No journey deletes an existing income source and confirms it stays gone after reload.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "bills:update",
+      "reason": "No journey edits an existing bill. That action remains the planned bills.edit touchpoint.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "skipped-bills:get-all",
+      "reason": "No screen calls this. Skips load inside the budget snapshot, and no journey skips an occurrence.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "skipped-bills:skip",
+      "reason": "No journey skips one bill occurrence and saves the schedule.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "skipped-bills:unskip",
+      "reason": "No journey restores a skipped occurrence and saves the schedule.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "skipped-bills:is-skipped",
+      "reason": "No screen calls this. Skip state is read from the budget snapshot, and no journey skips an occurrence.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "bill-assignments:get-all",
+      "reason": "No screen calls this. Assignments load inside the budget snapshot, and no journey moves a bill between paychecks.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "bill-assignments:assign",
+      "reason": "No journey drags a bill onto another paycheck and saves that assignment.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "bill-assignments:remove",
+      "reason": "No journey restores a manually moved bill and saves the schedule.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "income-overrides:get-all",
+      "reason": "No screen calls this. Income overrides load inside the budget snapshot, and no journey changes one paycheck's income.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "income-overrides:set",
+      "reason": "No journey changes a single paycheck's income amount and saves the schedule.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "income-overrides:remove",
+      "reason": "No journey clears a single paycheck's income override and saves the schedule.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "leaves:get-all",
+      "reason": "No screen calls this. Leave rows load inside the budget snapshot, and no journey adds a leave period.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "leaves:create",
+      "reason": "No journey adds a leave period on the Income page and saves it.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "leaves:update",
+      "reason": "No journey edits a leave period and saves it.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "leaves:delete",
+      "reason": "No journey deletes a leave period and saves it.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "goals:update",
+      "reason": "No journey edits an existing goal. That action remains the planned goals.edit touchpoint.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "goals:delete",
+      "reason": "No journey deletes an existing goal. That action remains the planned goals.edit touchpoint.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "debts:get-by-bill",
+      "reason": "No screen calls this. The Debts page loads debts through debts:get-all-with-amortization.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "debts:update",
+      "reason": "No journey edits a tracked debt and saves the change.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "debts:delete",
+      "reason": "No journey deletes a tracked debt and confirms it stays gone after reload.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "export:to-html",
+      "reason": "No journey exports the report as HTML. PDF export is covered separately.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "export:to-spreadsheet",
+      "reason": "No journey exports the report as a spreadsheet. PDF export is covered separately.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "diagnostics:report",
+      "reason": "This runs only after an unexpected failure via the error reporter. No journey asserts that path.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "diagnostics:get-event",
+      "reason": "This runs only when the error reporter fetches an event it just recorded. No journey asserts that path.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "diagnostics:get-bundle",
+      "reason": "No screen calls this. Settings exports diagnostics through diagnostics:export instead.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "diagnostics:export",
+      "reason": "No journey exports the diagnostics bundle from Settings.",
+      "added": "2026-11-19"
+    },
+    {
+      "channel": "credentials:delete",
+      "reason": "No screen calls this. Login only checks credentials:has, and the harness declines the keychain save prompt.",
+      "added": "2026-11-19"
+    }
   ]
 }

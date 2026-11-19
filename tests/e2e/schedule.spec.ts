@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import {
@@ -8,7 +9,7 @@ import {
 } from './helpers/dates';
 import { navigateTo, expectNoSpinner } from './helpers/nav';
 import { dismissReconciliationIfPresent, pinScheduleStart } from './helpers/schedule';
-import { reloadShell, seedBill, seedGoal, seedIncome } from './helpers/seed';
+import { readBillPaymentOverrideAmounts, reloadShell, seedBill, seedGoal, seedIncome } from './helpers/seed';
 
 /**
  * Schedule domain journeys — the seam where income + bills become a paycheck
@@ -188,4 +189,60 @@ test.describe('Schedule', () => {
     await expect(window.getByText(/Skip "/i)).toHaveCount(0);
     await expectNoSpinner(window);
   });
+
+  test('happy: raise one occurrence, save it, then reset it @schedule.raise-payment', async ({ window }) => {
+    await startInNamedBudget(window);
+    await seedIncome(window, {
+      sourceName: 'Acme Payroll',
+      amount: 2400,
+      cadence: 'biweekly',
+      startDate: E2E_INCOME_START,
+      isActive: true,
+    });
+    await seedBill(window, {
+      creditorName: 'Rent',
+      budgetedAmount: 1500,
+      dueDay: 1,
+      isRecurring: true,
+      priority: 'critical',
+    });
+    await reloadShell(window);
+
+    await showRentSchedule(window);
+    await window.getByTitle('Raise this payment for this date only').first().click();
+    const dialog = window.getByRole('dialog', { name: /Raise payment for/ });
+    await expect(dialog.getByText('Series is $1,500.00')).toBeVisible();
+    await dialog.locator('input').fill('1600');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await saveScheduleChanges(window);
+    await expect.poll(() => readBillPaymentOverrideAmounts(window)).toEqual([1600]);
+
+    await reloadShell(window);
+    await showRentSchedule(window);
+    await expect(window.getByRole('button', { name: '-$1,600.00' })).toBeVisible();
+    await expect(window.getByRole('button', { name: '-$1,500.00' }).first()).toBeVisible();
+
+    await window.getByRole('button', { name: '-$1,600.00' }).click();
+    const resetDialog = window.getByRole('dialog', { name: /Raise payment for/ });
+    await resetDialog.getByRole('button', { name: 'Reset' }).click();
+    await saveScheduleChanges(window);
+    await expect.poll(() => readBillPaymentOverrideAmounts(window)).toEqual([]);
+
+    await reloadShell(window);
+    await showRentSchedule(window);
+    await expect(window.getByRole('button', { name: '-$1,600.00' })).toHaveCount(0);
+    await expect(window.getByRole('button', { name: '-$1,500.00' }).first()).toBeVisible();
+  });
 });
+
+async function showRentSchedule(window: Page): Promise<void> {
+  await navigateTo(window, 'Schedule');
+  await pinScheduleStart(window);
+  await window.getByRole('button', { name: 'Expand All' }).click();
+}
+
+async function saveScheduleChanges(window: Page): Promise<void> {
+  await expect(window.getByText('Unsaved changes on Schedule')).toBeVisible();
+  await window.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect(window.getByText('Unsaved changes on Schedule')).toBeHidden();
+}

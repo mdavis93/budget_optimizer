@@ -73,8 +73,14 @@ export default function BillPaymentPopover({
     onSave(fromCents(cents));
   };
 
-  const top = Math.min(anchorRect.bottom + 8, window.innerHeight - 12);
-  const left = Math.min(Math.max(8, anchorRect.left), window.innerWidth - 280);
+  const margin = 8;
+  const panelHeight = 200;
+  const panelWidth = 260;
+  const spaceBelow = window.innerHeight - anchorRect.bottom;
+  const top = spaceBelow >= panelHeight + margin
+    ? anchorRect.bottom + margin
+    : Math.max(margin, anchorRect.top - panelHeight - margin);
+  const left = Math.min(Math.max(margin, anchorRect.left), window.innerWidth - panelWidth - margin);
 
   return createPortal(
     <div

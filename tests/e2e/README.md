@@ -58,7 +58,8 @@ monolithic end-to-end path:
 - `smoke.spec.ts` — setup → app shell, plus a crawl of every sidebar route
   asserting no stuck spinner (regression guard for the past Goals/Debts hangs).
 - `income`, `bills`, `goals`, `debts` — happy / sad / malicious lanes per domain.
-- `schedule.spec.ts` — income + bills → rendered schedule, plus the empty state.
+- `schedule.spec.ts` — income + bills → rendered schedule, plus raising one occurrence and the empty state.
+- `export.spec.ts` — PDF export writes a file through the stubbed save dialog.
 - `nav-guard.spec.ts` — unsaved-changes contract: in-app nav is free; Lock App
   preserves drafts without prompting; Quit App and native window close prompt
   Cancel / Discard / Save (plus clean native-close exits without a modal).
@@ -66,3 +67,16 @@ monolithic end-to-end path:
 
 Touchpoint coverage is tracked in `tests/e2e/touchpoint-inventory.json` and
 enforced by `scripts/e2e-touchpoints.cjs` (see that file for the tiers/targets).
+
+A preload channel that no journey drives belongs in `untestedChannels` as an
+object, not a bare name:
+
+```json
+{ "channel": "income:update", "reason": "No journey edits an existing income source and saves the change.", "added": "2026-11-19" }
+```
+
+`reason` is a trimmed sentence of at least 40 characters naming why the channel
+has no journey. `added` is the UTC calendar date of the exception. The gate
+rejects a future date and any exception older than 21 days. Renewing one means
+changing `added` in a commit after reconsidering the reason. Covering the
+channel with a touchpoint removes the entry.
