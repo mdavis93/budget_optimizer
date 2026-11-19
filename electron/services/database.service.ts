@@ -3,7 +3,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { CryptoService } from './crypto.service';
-import { validateBill, validateIncome, validateGoal, validateDebt, validateLeave, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, assertValid, assertCollectionCap, COLLECTION_LIMITS, MAX_MONEY } from './validation.service';
+import { validateBill, validateIncome, validateGoal, validateDebt, validateLeave, validateBudget, validateSettings, validateSkippedBill, validateBillAssignment, validateBillPaymentOverride, assertValid, assertCollectionCap, COLLECTION_LIMITS, MAX_MONEY } from './validation.service';
 import { databaseLogger as logger } from './logger.service';
 import { diagnostics } from './diagnostics.service';
 import {
@@ -38,6 +38,7 @@ import type {
   DebtInput,
   Income,
   IncomeOverride,
+  BillPaymentOverride,
   Leave,
   LeaveInput,
   SavingsGoal,
@@ -58,6 +59,7 @@ export type {
   DebtInput,
   Income,
   IncomeOverride,
+  BillPaymentOverride,
   Leave,
   LeaveInput,
   SavingsGoal,
@@ -142,6 +144,19 @@ interface IncomeOverridePayload {
   amount: number;
 }
 
+interface BillPaymentOverrideRow {
+  id: string;
+  budget_id: string;
+  data: string;
+  created_at: string;
+}
+
+interface BillPaymentOverridePayload {
+  billId: string;
+  billDate: string;
+  amount: number;
+}
+
 interface DebtRow {
   id: string;
   budget_id: string;
@@ -197,6 +212,7 @@ export class DatabaseService {
   private skipCache = new Map<string, Map<string, SkipCacheEntry>>();
   private assignmentCache = new Map<string, Map<string, AssignmentCacheEntry>>();
   private overrideCache = new Map<string, Map<string, OverrideCacheEntry>>();
+  private billPaymentOverrideCache = new Map<string, Map<string, OverrideCacheEntry>>();
 
   constructor(crypto: CryptoService, dbPath?: string) {
     this.crypto = crypto;
@@ -390,13 +406,20 @@ export class DatabaseService {
       logger.info('Migration to schema version 12 complete (encrypted settings)');
     }
 
+    // Schema version 13: Encrypted per-occurrence bill payment overrides
+    if (currentVersion < 13) {
+      this.migrateToVersion13();
+      this.db.prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (13)').run();
+      logger.info('Migration to schema version 13 complete (bill payment overrides)');
+    }
+
     try {
       fs.chmodSync(this.dbPath, 0o600);
     } catch (error) {
       logger.warn('Failed to set database file permissions:', error);
     }
     
-    logger.info('Database initialized', { version: Math.max(currentVersion, 12) });
+    logger.info('Database initialized', { version: Math.max(currentVersion, 13) });
   }
 
   private migrateToVersion5(): void {
@@ -784,6 +807,23 @@ export class DatabaseService {
     logger.info('Encrypted settings values', { count: rows.length });
   }
 
+  private migrateToVersion13(): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS bill_payment_overrides (
+        id TEXT PRIMARY KEY,
+        budget_id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_bill_payment_overrides_budget
+        ON bill_payment_overrides(budget_id);
+    `);
+    logger.info('Created bill_payment_overrides table');
+  }
+
   private readSettingValue(raw: string): { value: unknown; encrypted: boolean } {
     try {
       return { value: this.crypto.decryptObject(raw), encrypted: true };
@@ -1032,6 +1072,17 @@ export class DatabaseService {
     };
   }
 
+  private mapBillPaymentOverrideRow(row: BillPaymentOverrideRow): BillPaymentOverride {
+    const decrypted = this.crypto.decryptObject<BillPaymentOverridePayload>(row.data);
+    return {
+      id: row.id,
+      billId: decrypted.billId,
+      billDate: decrypted.billDate,
+      amount: decrypted.amount,
+      createdAt: row.created_at,
+    };
+  }
+
   private junctionKey(left: string, right: string): string {
     return `${left}\0${right}`;
   }
@@ -1040,6 +1091,7 @@ export class DatabaseService {
     this.skipCache.clear();
     this.assignmentCache.clear();
     this.overrideCache.clear();
+    this.billPaymentOverrideCache.clear();
   }
 
   private skipMap(budgetId: string): Map<string, SkipCacheEntry> {
@@ -1107,6 +1159,30 @@ export class DatabaseService {
     paycheckDate: string
   ): string | null {
     return this.overrideMap(budgetId).get(this.junctionKey(incomeId, paycheckDate))?.id ?? null;
+  }
+
+  private billPaymentOverrideMap(budgetId: string): Map<string, OverrideCacheEntry> {
+    let map = this.billPaymentOverrideCache.get(budgetId);
+    if (!map) {
+      map = new Map();
+      const rows = this.db!.prepare('SELECT * FROM bill_payment_overrides WHERE budget_id = ?').all(
+        budgetId
+      ) as BillPaymentOverrideRow[];
+      for (const row of rows) {
+        const mapped = this.mapBillPaymentOverrideRow(row);
+        map.set(this.junctionKey(mapped.billId, mapped.billDate), { id: row.id });
+      }
+      this.billPaymentOverrideCache.set(budgetId, map);
+    }
+    return map;
+  }
+
+  private findBillPaymentOverrideId(
+    budgetId: string,
+    billId: string,
+    billDate: string
+  ): string | null {
+    return this.billPaymentOverrideMap(budgetId).get(this.junctionKey(billId, billDate))?.id ?? null;
   }
 
   close(): void {
@@ -1257,6 +1333,7 @@ export class DatabaseService {
       this.db!.prepare('DELETE FROM goals WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM bill_assignments WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM income_overrides WHERE budget_id = ?').run(id);
+      this.db!.prepare('DELETE FROM bill_payment_overrides WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM skipped_bills WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM bills WHERE budget_id = ?').run(id);
       this.db!.prepare('DELETE FROM incomes WHERE budget_id = ?').run(id);
@@ -1269,9 +1346,7 @@ export class DatabaseService {
     this.skipCache.delete(id);
     this.assignmentCache.delete(id);
     this.overrideCache.delete(id);
-    this.skipCache.delete(id);
-    this.assignmentCache.delete(id);
-    this.overrideCache.delete(id);
+    this.billPaymentOverrideCache.delete(id);
     
     if (result.changes > 0) {
       logger.info('Budget deleted', { id });
@@ -1350,7 +1425,8 @@ export class DatabaseService {
       | 'leaves'
       | 'skipped_bills'
       | 'bill_assignments'
-      | 'income_overrides',
+      | 'income_overrides'
+      | 'bill_payment_overrides',
     budgetId: string
   ): number {
     const row = this.db!.prepare(`SELECT COUNT(*) as count FROM ${table} WHERE budget_id = ?`).get(budgetId) as {
@@ -1557,7 +1633,20 @@ export class DatabaseService {
 
   deleteBillEntry(id: string, budgetId: string): boolean {
     if (!this.db) throw new Error('Database not initialized');
-    
+
+    const overrideRows = this.db.prepare(
+      'SELECT * FROM bill_payment_overrides WHERE budget_id = ?'
+    ).all(budgetId) as BillPaymentOverrideRow[];
+    const deleteOverride = this.db.prepare('DELETE FROM bill_payment_overrides WHERE id = ?');
+    const paymentMap = this.billPaymentOverrideMap(budgetId);
+    for (const row of overrideRows) {
+      const mapped = this.mapBillPaymentOverrideRow(row);
+      if (mapped.billId === id) {
+        deleteOverride.run(row.id);
+        paymentMap.delete(this.junctionKey(mapped.billId, mapped.billDate));
+      }
+    }
+
     const result = this.db.prepare('DELETE FROM bills WHERE id = ? AND budget_id = ?').run(id, budgetId);
     return result.changes > 0;
   }
@@ -1903,6 +1992,86 @@ export class DatabaseService {
     return false;
   }
 
+  getBillPaymentOverrides(budgetId: string): BillPaymentOverride[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = this.db.prepare(
+      'SELECT * FROM bill_payment_overrides WHERE budget_id = ?'
+    ).all(budgetId) as BillPaymentOverrideRow[];
+
+    return rows
+      .map((row) => this.mapBillPaymentOverrideRow(row))
+      .sort((a, b) => a.billDate.localeCompare(b.billDate));
+  }
+
+  setBillPaymentOverride(
+    budgetId: string,
+    billId: string,
+    billDate: string,
+    amount: number
+  ): BillPaymentOverride {
+    if (!this.db) throw new Error('Database not initialized');
+    assertValid(
+      validateBillPaymentOverride({ billId, billDate, amount }),
+      'Invalid bill payment override'
+    );
+    if (!this.getBillById(billId, budgetId)) {
+      throw new Error('Bill does not exist in the current budget');
+    }
+    if (!this.findBillPaymentOverrideId(budgetId, billId, billDate)) {
+      this.assertWithinCollectionCap(
+        'bill_payment_overrides',
+        budgetId,
+        'Bill payment overrides',
+        COLLECTION_LIMITS.billPaymentOverrides,
+        true
+      );
+    }
+
+    const id = this.crypto.generateId();
+    const now = new Date().toISOString();
+    const payload: BillPaymentOverridePayload = { billId, billDate, amount };
+    const encryptedData = this.crypto.encryptObject(payload);
+
+    const tx = this.db.transaction(() => {
+      const existingId = this.findBillPaymentOverrideId(budgetId, billId, billDate);
+      if (existingId) {
+        this.db!.prepare('DELETE FROM bill_payment_overrides WHERE id = ?').run(existingId);
+      }
+
+      this.db!.prepare(`
+        INSERT INTO bill_payment_overrides (id, budget_id, data, created_at)
+        VALUES (?, ?, ?, ?)
+      `).run(id, budgetId, encryptedData, now);
+    });
+    tx();
+    this.billPaymentOverrideMap(budgetId).set(this.junctionKey(billId, billDate), { id });
+
+    return {
+      id,
+      billId,
+      billDate,
+      amount,
+      createdAt: now,
+    };
+  }
+
+  removeBillPaymentOverride(budgetId: string, billId: string, billDate: string): boolean {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existingId = this.findBillPaymentOverrideId(budgetId, billId, billDate);
+    if (!existingId) {
+      return false;
+    }
+
+    const result = this.db.prepare('DELETE FROM bill_payment_overrides WHERE id = ?').run(existingId);
+    if (result.changes > 0) {
+      this.billPaymentOverrideMap(budgetId).delete(this.junctionKey(billId, billDate));
+      return true;
+    }
+    return false;
+  }
+
   // Savings Goals Management (budget-scoped)
   getAllGoals(budgetId: string): SavingsGoal[] {
     if (!this.db) throw new Error('Database not initialized');
@@ -2027,6 +2196,7 @@ export class DatabaseService {
       skippedBills: this.getSkippedBills(budgetId),
       billAssignments: this.getBillAssignments(budgetId),
       incomeOverrides: this.getIncomeOverrides(budgetId),
+      billPaymentOverrides: this.getBillPaymentOverrides(budgetId),
       debts: this.getDebts(budgetId),
       leaves: this.getLeaves(budgetId),
       budget: this.getBudgetById(budgetId),

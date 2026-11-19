@@ -510,6 +510,7 @@ describe('validation.service', () => {
         skippedBills: [{ billId: 'bad', skipDate: '2026/01/01' }],
         billAssignments: [{ billId: 'bad', billDueDate: 'oops', paycheckDate: 'still-bad' }],
         incomeOverrides: [{ incomeId: 'bad', paycheckDate: 'nope', amount: -1 }],
+        billPaymentOverrides: [],
         leaves: [{
           incomeId: 'bad',
           name: '',

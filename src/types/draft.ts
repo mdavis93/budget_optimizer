@@ -60,6 +60,7 @@ export function createEmptyDraftState(): DraftState {
     skippedBills: [],
     billAssignments: [],
     incomeOverrides: [],
+    billPaymentOverrides: [],
     budget: null,
   };
 }
@@ -75,6 +76,7 @@ export function copyDraftState(state: DraftState): DraftState {
     skippedBills: [...state.skippedBills],
     billAssignments: [...state.billAssignments],
     incomeOverrides: [...state.incomeOverrides],
+    billPaymentOverrides: [...state.billPaymentOverrides],
     budget: state.budget ? { ...state.budget } : null,
   };
 }

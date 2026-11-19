@@ -22,6 +22,7 @@ export interface ScheduleComputeNativeInputs {
   debts: unknown[];
   accelerateDebtPayoff: boolean;
   incomeOverrides: Map<string, number>;
+  billPaymentOverrides: Map<string, number>;
   leaves: unknown[];
   nowIso: string;
 }
@@ -45,6 +46,7 @@ export function serializeScheduleComputeInput(
     debts: native.debts,
     accelerateDebtPayoff: native.accelerateDebtPayoff === true,
     incomeOverrides: Array.from(native.incomeOverrides.entries()),
+    billPaymentOverrides: Array.from(native.billPaymentOverrides.entries()),
     leaves: native.leaves,
     nowIso: native.nowIso,
   };
@@ -71,6 +73,7 @@ export function deserializeScheduleComputeInput(
     debts: payload.debts ?? [],
     accelerateDebtPayoff: payload.accelerateDebtPayoff === true,
     incomeOverrides: new Map(payload.incomeOverrides),
+    billPaymentOverrides: new Map(payload.billPaymentOverrides ?? []),
     leaves: payload.leaves,
     nowIso: payload.nowIso,
   };

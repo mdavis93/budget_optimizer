@@ -1,6 +1,7 @@
 import type {
   Bill,
   BillAssignment,
+  BillPaymentOverride,
   Debt,
   Income,
   IncomeOverride,
@@ -26,6 +27,7 @@ export const SCHEDULE_IDENTITY_FIELDS = [
   'billAssignments',
   'preferredAssignments',
   'incomeOverrides',
+  'billPaymentOverrides',
   'startDate',
   'startingBalance',
   'targetCashOnHand',
@@ -47,6 +49,7 @@ export interface ScheduleIdentityInput {
   billAssignments: BillAssignment[];
   preferredAssignments?: Array<[string, string]>;
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   startDate: string;
   startingBalance: number;
   targetCashOnHand?: number | null;
@@ -173,6 +176,20 @@ function overrideIdentity(incomeOverrides: IncomeOverride[]) {
     });
 }
 
+function billPaymentOverrideIdentity(overrides: BillPaymentOverride[]) {
+  return [...overrides]
+    .map((row) => ({
+      billId: row.billId,
+      billDate: row.billDate,
+      amount: row.amount,
+    }))
+    .sort((a, b) => {
+      const left = `${a.billId}\0${a.billDate}`;
+      const right = `${b.billId}\0${b.billDate}`;
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+}
+
 /**
  * Canonical renderer identity. Cache keys and effect hashes must use this
  * (not `JSON.stringify(overlay)`).
@@ -188,6 +205,7 @@ export function buildScheduleIdentity(input: ScheduleIdentityInput): string {
     billAssignments: assignmentIdentity(input.billAssignments),
     preferredAssignments: sortPairs(input.preferredAssignments ?? []),
     incomeOverrides: overrideIdentity(input.incomeOverrides),
+    billPaymentOverrides: billPaymentOverrideIdentity(input.billPaymentOverrides),
     startDate: input.startDate,
     startingBalance: input.startingBalance,
     targetCashOnHand: input.targetCashOnHand ?? '',
@@ -222,6 +240,7 @@ export function scheduleComputeHashBody(input: ScheduleComputeInputPayload): Omi
     debts: input.debts,
     accelerateDebtPayoff: input.accelerateDebtPayoff === true,
     incomeOverrides: input.incomeOverrides,
+    billPaymentOverrides: input.billPaymentOverrides,
     leaves: input.leaves,
     clockDate: localCalendarDate(new Date(input.nowIso)),
   };

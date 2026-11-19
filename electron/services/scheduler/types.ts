@@ -90,6 +90,8 @@ export interface ProjectedBill {
   billId: string;
   creditorName: string;
   amount: number;
+  /** Series floor for this occurrence; equals amount when not raised. */
+  seriesAmount?: number;
   dueDay: number;
   priority: BillPriority;
   category?: string;

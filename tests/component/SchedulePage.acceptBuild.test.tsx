@@ -78,6 +78,7 @@ async function renderSchedule(isQuickBudget: boolean) {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       debts: [],
       leaves: [],
       budget: createMockBudget(),

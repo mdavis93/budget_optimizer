@@ -14,6 +14,9 @@
  *   - channel drift: an IPC channel invoked from electron/preload.ts is neither
  *     exercised by a touchpoint nor listed in untestedChannels. Channel names
  *     are the string values of the IPC.* constants in shared/ipcChannels.ts.
+ *   - an untestedChannels entry is a bare string, lacks a reason of at least
+ *     40 characters, has an invalid or future added date, or is older than
+ *     21 UTC days. Renewing an exception means setting a new added date.
  *
  * Warns (exit 0) when a tier is above its floor but below its target.
  */
@@ -26,6 +29,10 @@ const INVENTORY_PATH = path.join(E2E_DIR, 'touchpoint-inventory.json');
 const APP_PATH = path.join(ROOT, 'src', 'App.tsx');
 const PRELOAD_PATH = path.join(ROOT, 'electron', 'preload.ts');
 const IPC_CHANNELS_PATH = path.join(ROOT, 'shared', 'ipcChannels.ts');
+
+const UNTESTED_MAX_AGE_DAYS = 21;
+const MIN_UNTESTED_REASON_LENGTH = 40;
+const ADDED_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const errors = [];
 const warnings = [];
@@ -99,6 +106,96 @@ function collectPreloadChannels() {
   return channels;
 }
 
+function utcDayNumber(date) {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function parseAddedDate(value) {
+  if (typeof value !== 'string') return null;
+  const match = ADDED_DATE_PATTERN.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utc = Date.UTC(year, month - 1, day);
+  const check = new Date(utc);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return utc;
+}
+
+function collectUntestedChannels(entries, today) {
+  const untested = new Set();
+  if (!Array.isArray(entries)) {
+    errors.push('untestedChannels must be an array of { channel, reason, added } objects.');
+    return untested;
+  }
+
+  const todayUtc = utcDayNumber(today);
+  const seen = new Set();
+  entries.forEach((entry, index) => {
+    if (typeof entry === 'string') {
+      errors.push(
+        `Untested channel '${entry}' must be an object with channel, reason, and added. A bare name is not accepted.`
+      );
+      untested.add(entry);
+      return;
+    }
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      errors.push(
+        `untestedChannels[${index}] must be an object with channel, reason, and added.`
+      );
+      return;
+    }
+
+    const channel = entry.channel;
+    const reason = typeof entry.reason === 'string' ? entry.reason.trim() : '';
+    if (typeof channel !== 'string' || channel.length === 0) {
+      errors.push(`untestedChannels[${index}] is missing a channel name.`);
+      return;
+    }
+    if (seen.has(channel)) {
+      errors.push(`Untested channel '${channel}' is listed more than once.`);
+    }
+    seen.add(channel);
+    untested.add(channel);
+
+    if (reason.length < MIN_UNTESTED_REASON_LENGTH) {
+      errors.push(
+        `Untested channel '${channel}' needs an explicit reason of at least ${MIN_UNTESTED_REASON_LENGTH} characters.`
+      );
+    }
+
+    const addedUtc = parseAddedDate(entry.added);
+    if (addedUtc === null) {
+      errors.push(
+        `Untested channel '${channel}' (reason: ${reason || 'missing'}) needs a real added date in YYYY-MM-DD form.`
+      );
+      return;
+    }
+
+    const ageDays = Math.round((todayUtc - addedUtc) / 86_400_000);
+    if (ageDays < 0) {
+      errors.push(
+        `Untested channel '${channel}' (reason: ${reason}) has added date ${entry.added}, which is in the future.`
+      );
+      return;
+    }
+    if (ageDays > UNTESTED_MAX_AGE_DAYS) {
+      errors.push(
+        `Untested channel '${channel}' added ${entry.added} (reason: ${reason}) is ${ageDays} days old, past the ${UNTESTED_MAX_AGE_DAYS}-day limit. Cover it with a journey or recommit a new added date.`
+      );
+    }
+  });
+
+  return untested;
+}
+
 function main() {
   const inventory = JSON.parse(readFile(INVENTORY_PATH));
   const touchpoints = inventory.touchpoints;
@@ -146,7 +243,7 @@ function main() {
 
   // --- Channel drift ---
   const preloadChannels = collectPreloadChannels();
-  const untested = new Set(inventory.untestedChannels || []);
+  const untested = collectUntestedChannels(inventory.untestedChannels, new Date());
   const journeyChannels = new Set();
   for (const tp of touchpoints) for (const c of tp.channels || []) journeyChannels.add(c);
   const known = new Set([...journeyChannels, ...untested]);
@@ -193,7 +290,7 @@ function main() {
         `(floor ${tier.floorPct}%, target ${tier.targetPct}%)`
     );
   }
-  console.log(`  channels   ${journeyChannels.size} journey + ${untested.size} acknowledged untested = ${preloadChannels.size} total`);
+  console.log(`  channels   ${journeyChannels.size} journey + ${untested.size} acknowledged exceptions = ${preloadChannels.size} total`);
   console.log(`  routes     ${appRoutes.size} app routes, all claimed`);
 
   if (warnings.length) {

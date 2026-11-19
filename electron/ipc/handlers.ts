@@ -72,6 +72,7 @@ interface ScheduleMaps {
   manualAssignments: Map<string, string>;
   preferredAssignments: Map<string, string>;
   incomeOverridesMap: Map<string, number>;
+  billPaymentOverridesMap: Map<string, number>;
 }
 
 function buildScheduleMaps(
@@ -87,6 +88,12 @@ function buildScheduleMaps(
     preferredAssignments: resolved.preferredAssignments,
     incomeOverridesMap: new Map(
       resolved.incomeOverrides.map((o) => [`${o.incomeId}-${o.paycheckDate}`, o.amount])
+    ),
+    billPaymentOverridesMap: new Map(
+      resolved.billPaymentOverrides.map((o) => [
+        billOccurrenceKeyFromIso(o.billId, o.billDate),
+        o.amount,
+      ])
     ),
   };
 }
@@ -582,6 +589,22 @@ export function registerIpcHandlers(
     )
   ));
 
+  ipcMain.handle(IPC.billPaymentOverridesGetAll, withBudgetGuard(services, () =>
+    ipcData(IPC.billPaymentOverridesGetAll, () => ready().budgetManager.getBillPaymentOverrides())
+  ));
+
+  ipcMain.handle(IPC.billPaymentOverridesSet, withBudgetGuard(services, (_, billId: string, billDate: string, amount: number) =>
+    ipcData(IPC.billPaymentOverridesSet, () =>
+      ready().budgetManager.setBillPaymentOverride(billId, billDate, amount)
+    )
+  ));
+
+  ipcMain.handle(IPC.billPaymentOverridesRemove, withBudgetGuard(services, (_, billId: string, billDate: string) =>
+    ipcData(IPC.billPaymentOverridesRemove, () =>
+      ready().budgetManager.removeBillPaymentOverride(billId, billDate)
+    )
+  ));
+
   // Savings Goals Management (via BudgetManager)
   ipcMain.handle(IPC.goalsGetAll, withBudgetGuard(services, () =>
     ipcData(IPC.goalsGetAll, () => ready().budgetManager.getAllGoals())
@@ -631,8 +654,13 @@ export function registerIpcHandlers(
     const resolved = resolveScheduleInputs(budgetManager, database, overlay);
     const effectiveStartingBalance = overlay ? startingBalance : resolved.startingBalance;
 
-    const { skippedSet, manualAssignments, preferredAssignments, incomeOverridesMap: incomeOverridesMapOpt } =
-      buildScheduleMaps(resolved);
+    const {
+      skippedSet,
+      manualAssignments,
+      preferredAssignments,
+      incomeOverridesMap: incomeOverridesMapOpt,
+      billPaymentOverridesMap: billPaymentOverridesMapOpt,
+    } = buildScheduleMaps(resolved);
 
     return runOffloadedCompute(
       services,
@@ -653,6 +681,7 @@ export function registerIpcHandlers(
         debts: resolved.debts,
         accelerateDebtPayoff: resolved.accelerateDebtPayoff,
         incomeOverrides: incomeOverridesMapOpt,
+        billPaymentOverrides: billPaymentOverridesMapOpt,
         leaves: resolved.leaves,
         nowIso: new Date().toISOString(),
       },

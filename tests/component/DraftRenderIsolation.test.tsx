@@ -82,6 +82,7 @@ describe('draft render isolation', () => {
             skippedBills: [],
             billAssignments: [],
             incomeOverrides: [],
+            billPaymentOverrides: [],
             budget: null,
           },
         }),
@@ -118,6 +119,7 @@ describe('draft render isolation', () => {
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         budget: null,
       },
     });

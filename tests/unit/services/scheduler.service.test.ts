@@ -1381,37 +1381,67 @@ describe('SchedulerService', () => {
 
     it('returns empty array when no goals', () => {
       expect(
-        scheduler.generateGoalProjections([income], [bill], '2026-01-01', 1000)
+        scheduler.generateGoalProjections({
+          incomes: [income],
+          bills: [bill],
+          startDateStr: '2026-01-01',
+          startingBalance: 1000,
+        })
       ).toEqual([]);
     });
 
     it('matches full schedule goal projections for typical biweekly scenario', () => {
+      const paymentKey = billOccurrenceKeyFromIso(bill.id, '2026-02-01');
+      const billPaymentOverrides = new Map([[paymentKey, 1800]]);
+      const hungryGoals: SavingsGoal[] = [
+        {
+          ...goals[0],
+          targetAmount: 50_000,
+          alreadySaved: 0,
+        },
+        {
+          ...goals[1],
+          targetAmount: 50_000,
+          alreadySaved: 0,
+        },
+      ];
+      const horizonInput = {
+        incomes: [income],
+        bills: [bill],
+        startDateStr: '2026-01-01',
+        startingBalance: 0,
+        skippedBills: new Set<string>(),
+        manualAssignments: new Map<string, string>(),
+        maxBudgetRemaining: 0,
+        goals: hungryGoals,
+        minCashOnHand: 0,
+        minSavingsPerPaycheck: 0,
+        billPaymentOverrides,
+      };
+
       const schedule = scheduler.generateSchedule(
         [income],
         [bill],
         '2026-01-01',
         12,
-        1000,
+        0,
         new Set(),
         new Map(),
-        500,
-        goals,
-        100,
-        50
+        0,
+        hungryGoals,
+        0,
+        0,
+        new Map(),
+        new Map(),
+        [],
+        new Map(),
+        undefined,
+        [],
+        false,
+        billPaymentOverrides
       );
 
-      const lightweight = scheduler.generateGoalProjections(
-        [income],
-        [bill],
-        '2026-01-01',
-        1000,
-        new Set(),
-        new Map(),
-        500,
-        goals,
-        100,
-        50
-      );
+      const lightweight = scheduler.generateGoalProjections(horizonInput);
 
       expect(lightweight).toHaveLength(schedule.goalProjections!.length);
       for (let i = 0; i < lightweight.length; i++) {
@@ -1423,6 +1453,20 @@ describe('SchedulerService', () => {
         expect(lite.paycheckCount).toBe(full.paycheckCount);
         expect(lite.requiredPerPaycheck).toBeCloseTo(full.requiredPerPaycheck, 1);
       }
+
+      const withoutOverride = scheduler.generateGoalProjections({
+        ...horizonInput,
+        billPaymentOverrides: undefined,
+      });
+      const liteAllocation = lightweight.reduce(
+        (sum, projection) => sum + projection.actualAllocation,
+        0
+      );
+      const withoutAllocation = withoutOverride.reduce(
+        (sum, projection) => sum + projection.actualAllocation,
+        0
+      );
+      expect(liteAllocation).not.toBe(withoutAllocation);
     });
   });
 

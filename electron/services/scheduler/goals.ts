@@ -9,20 +9,19 @@ import {
   differenceInCalendarMonths,
 } from 'date-fns';
 import { compareGoalsByPriority, isOpenEndedGoal } from '@shared/goalPriority';
-import { Income, Bill, SavingsGoal } from '../database.service';
-import type { Leave } from '../database.service';
+import { SavingsGoal } from '../database.service';
 import { formatCurrency, roundCurrency } from '../../utils/constants';
 import {
-  DEFAULT_MIN_CASH_ON_HAND,
-  DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
-  DEFAULT_TARGET_CASH_ON_HAND,
-  DebtPayoffInfo,
   PaycheckEntry,
   GoalProjection,
   GoalSuggestion,
   GoalScheduleHealth,
 } from './types';
-import { assignPreparedHorizon, prepareScheduleHorizon } from './scheduleBuild';
+import {
+  assignPreparedHorizon,
+  prepareScheduleHorizon,
+  type PrepareScheduleHorizonInput,
+} from './scheduleBuild';
 import { isOperatingIncome } from '@shared/incomePurpose';
 
 export function buildScheduleHealth(paychecks: PaycheckEntry[]): GoalScheduleHealth {
@@ -547,40 +546,15 @@ export function calculateGoalProjections(
 }
 
 export function generateGoalProjections(
-  incomes: Income[],
-  bills: Bill[],
-  startDateStr: string,
-  startingBalance: number,
-  skippedBills: Set<string> = new Set(),
-  manualAssignments: Map<string, string> = new Map(),
-  maxBudgetRemaining: number = DEFAULT_TARGET_CASH_ON_HAND,
-  goals: SavingsGoal[] = [],
-  minCashOnHand: number = DEFAULT_MIN_CASH_ON_HAND,
-  minSavingsPerPaycheck: number = DEFAULT_MIN_SAVINGS_PER_PAYCHECK,
-  debtPayoffs: Map<string, DebtPayoffInfo> = new Map(),
-  incomeOverrides: Map<string, number> = new Map(),
-  leaves: Leave[] = [],
+  input: PrepareScheduleHorizonInput,
   now: Date = new Date()
 ): GoalProjection[] {
+  const goals = input.goals ?? [];
   if (goals.length === 0) {
     return [];
   }
 
-  const prepared = prepareScheduleHorizon({
-    incomes,
-    bills,
-    startDateStr,
-    startingBalance,
-    skippedBills,
-    manualAssignments,
-    maxBudgetRemaining,
-    goals,
-    minCashOnHand,
-    minSavingsPerPaycheck,
-    debtPayoffs,
-    incomeOverrides,
-    leaves,
-  });
+  const prepared = prepareScheduleHorizon(input);
   const paychecks = assignPreparedHorizon(prepared);
 
   return calculateGoalProjections(

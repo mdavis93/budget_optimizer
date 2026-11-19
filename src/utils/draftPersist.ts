@@ -7,6 +7,7 @@ import {
   Income,
   IncomeInput,
   IncomeOverride,
+  BillPaymentOverride,
   Leave,
   LeaveInput,
   SavingsGoal,
@@ -392,12 +393,20 @@ export async function persistScheduleDomain(
       incomeId: mapIncomeId(item.incomeId),
     }));
 
+  const mapBillPaymentOverrides = (items: BillPaymentOverride[]) =>
+    items.map((item) => ({
+      ...item,
+      billId: mapBillId(item.billId),
+    }));
+
   const draftSkipped = mapSkipped(draft.skippedBills);
   const draftAssignments = mapAssignments(draft.billAssignments);
   const draftOverrides = mapOverrides(draft.incomeOverrides);
+  const draftBillPaymentOverrides = mapBillPaymentOverrides(draft.billPaymentOverrides);
   const committedSkipped = mapSkipped(committed.skippedBills);
   const committedAssignments = mapAssignments(committed.billAssignments);
   const committedOverrides = mapOverrides(committed.incomeOverrides);
+  const committedBillPaymentOverrides = mapBillPaymentOverrides(committed.billPaymentOverrides);
 
   const skippedDiff = computeKeyedDiff(
     committedSkipped,
@@ -470,17 +479,56 @@ export async function persistScheduleDomain(
     }
   }
 
+  const billPaymentDiff = computeKeyedDiff(
+    committedBillPaymentOverrides,
+    draftBillPaymentOverrides,
+    (item) => billOccurrenceKeyFromIso(item.billId, item.billDate),
+    (a, b) => a.billId === b.billId && a.billDate === b.billDate && a.amount === b.amount
+  );
+
+  for (const item of billPaymentDiff.removed) {
+    const result = await window.electronAPI.billPaymentOverrides.remove(item.billId, item.billDate);
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Failed to remove bill payment override',
+        diagnosticId: result.diagnosticId,
+        nextDraft: draft,
+        nextCommitted: committed,
+      };
+    }
+  }
+
+  for (const item of [...billPaymentDiff.added, ...billPaymentDiff.changed]) {
+    const result = await window.electronAPI.billPaymentOverrides.set(
+      item.billId,
+      item.billDate,
+      item.amount
+    );
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Failed to set bill payment override',
+        diagnosticId: result.diagnosticId,
+        nextDraft: draft,
+        nextCommitted: committed,
+      };
+    }
+  }
+
   const nextDraft = {
     ...draft,
     skippedBills: draftSkipped,
     billAssignments: draftAssignments,
     incomeOverrides: draftOverrides,
+    billPaymentOverrides: draftBillPaymentOverrides,
   };
   let nextCommitted: DraftState = {
     ...committed,
     skippedBills: structuredClone(draftSkipped),
     billAssignments: structuredClone(draftAssignments),
     incomeOverrides: structuredClone(draftOverrides),
+    billPaymentOverrides: structuredClone(draftBillPaymentOverrides),
   };
 
   // Schedule start date and accelerated payoff are stored on the budget record.
@@ -596,6 +644,12 @@ export function getRequiredSaveDomains(
     }
     for (const override of draft.incomeOverrides) {
       if (isDraftId(override.incomeId)) {
+        required.add('income');
+      }
+    }
+    for (const override of draft.billPaymentOverrides) {
+      if (isDraftId(override.billId)) {
+        required.add('bills');
         required.add('income');
       }
     }
@@ -742,6 +796,12 @@ export function computeDirtyDomains(committed: DraftState, draft: DraftState): S
     (item) => `${item.incomeId}-${item.paycheckDate}`,
     (a, b) => a.incomeId === b.incomeId && a.paycheckDate === b.paycheckDate && a.amount === b.amount
   );
+  const billPaymentDiff = computeKeyedDiff(
+    committed.billPaymentOverrides,
+    draft.billPaymentOverrides,
+    (item) => billOccurrenceKeyFromIso(item.billId, item.billDate),
+    (a, b) => a.billId === b.billId && a.billDate === b.billDate && a.amount === b.amount
+  );
 
   if (
     skippedDiff.added.length > 0 ||
@@ -752,6 +812,9 @@ export function computeDirtyDomains(committed: DraftState, draft: DraftState): S
     overrideDiff.added.length > 0 ||
     overrideDiff.removed.length > 0 ||
     overrideDiff.changed.length > 0 ||
+    billPaymentDiff.added.length > 0 ||
+    billPaymentDiff.removed.length > 0 ||
+    billPaymentDiff.changed.length > 0 ||
     (committed.budget &&
       draft.budget &&
       (committed.budget.scheduleStartDate !== draft.budget.scheduleStartDate ||

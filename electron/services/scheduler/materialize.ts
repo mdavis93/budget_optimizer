@@ -4,6 +4,7 @@ import {
   candidatesForBill,
   type AssignmentModel,
 } from './model/assignmentModel';
+import { fromCents } from './money';
 import { UNPAID_PLACEMENT } from './model/objective';
 import { priorityFromTier } from '@shared/billPriority';
 import {
@@ -53,7 +54,8 @@ function lookupProjectedBill(
       date: dueDate,
       billId,
       creditorName: attached.creditorName,
-      amount: attached.budgetedAmount,
+      amount: fromCents(model.amountCents[billIndex]),
+      seriesAmount: attached.budgetedAmount,
       dueDay: attached.dueDay,
       priority: attached.priority,
       category: attached.category,
@@ -66,7 +68,8 @@ function lookupProjectedBill(
     date: dueDate,
     billId,
     creditorName: model.creditorNames[billIndex],
-    amount: model.amountCents[billIndex] / 100,
+    amount: fromCents(model.amountCents[billIndex]),
+    seriesAmount: fromCents(model.amountCents[billIndex]),
     dueDay: model.dueDay[billIndex],
     priority: priorityFromTier(model.priorityTier[billIndex]),
   };

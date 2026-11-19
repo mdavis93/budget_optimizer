@@ -1,6 +1,7 @@
 import {
   Bill,
   BillAssignment,
+  BillPaymentOverride,
   Debt,
   Income,
   IncomeOverride,
@@ -22,6 +23,7 @@ export interface DraftOverlayInput {
   billAssignments?: BillAssignment[];
   preferredAssignments?: Array<[string, string]>;
   incomeOverrides?: IncomeOverride[];
+  billPaymentOverrides?: BillPaymentOverride[];
   startingBalance?: number;
   targetCashOnHand?: number;
   minCashOnHand?: number;
@@ -40,6 +42,7 @@ export interface ResolvedScheduleInputs {
   billAssignments: BillAssignment[];
   preferredAssignments: Map<string, string>;
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   startingBalance: number;
   targetCashOnHand: number;
   minCashOnHand: number;
@@ -65,6 +68,8 @@ export function resolveScheduleInputs(
   const billAssignments = overlay?.billAssignments ?? budgetManager.getBillAssignments();
   const preferredAssignments = new Map(overlay?.preferredAssignments ?? []);
   const incomeOverrides = overlay?.incomeOverrides ?? budgetManager.getIncomeOverrides();
+  const billPaymentOverrides =
+    overlay?.billPaymentOverrides ?? budgetManager.getBillPaymentOverrides();
 
   const debts = overlay?.debts ?? budgetManager.getDebts();
   const leaves = overlay?.leaves ?? budgetManager.getLeaves();
@@ -88,6 +93,7 @@ export function resolveScheduleInputs(
     billAssignments,
     preferredAssignments,
     incomeOverrides,
+    billPaymentOverrides,
     startingBalance,
     targetCashOnHand,
     minCashOnHand,

@@ -53,6 +53,7 @@ export function runScheduleCompute(
     minSavingsPerPaycheck: native.minSavingsPerPaycheck,
     debtPayoffs,
     incomeOverrides: native.incomeOverrides,
+    billPaymentOverrides: native.billPaymentOverrides,
     leaves,
     debts,
     accelerateDebtPayoff: native.accelerateDebtPayoff,

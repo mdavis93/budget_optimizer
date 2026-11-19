@@ -65,6 +65,7 @@ export interface ScheduleComputeInputPayload {
   debts: unknown[];
   accelerateDebtPayoff: boolean;
   incomeOverrides: Array<[string, number]>;
+  billPaymentOverrides: Array<[string, number]>;
   leaves: unknown[];
   /** ISO timestamp for deterministic beyond-horizon goal projection. */
   nowIso: string;

@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { startInNamedBudget } from './helpers/app';
 import { navigateTo, expectNoSpinner } from './helpers/nav';
-import { reloadShell } from './helpers/seed';
+import { reloadShell, seedBill } from './helpers/seed';
 
 /**
  * Bills domain journeys (named/draft budget).
@@ -67,5 +67,29 @@ test.describe('Bills', () => {
     await expect(window.getByText(payload)).toBeVisible();
     expect(await window.evaluate(() => (window as unknown as { __billxss?: number }).__billxss)).toBeUndefined();
     await expectNoSpinner(window);
+  });
+
+  test('happy: delete a saved bill and it stays gone after reload @bills.delete', async ({ window }) => {
+    await seedBill(window, {
+      creditorName: 'Electric Company',
+      budgetedAmount: 140,
+      dueDay: 15,
+      isRecurring: true,
+      priority: 'normal',
+    });
+    await reloadShell(window);
+    await navigateTo(window, 'Bills');
+
+    await window.getByRole('button', { name: 'Delete Electric Company' }).click();
+    const dialog = window.getByRole('dialog', { name: 'Delete Bill' });
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+    await expect(window.getByText('Unsaved changes on Bills')).toBeVisible();
+    await window.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await expect(window.getByText('Unsaved changes on Bills')).toBeHidden();
+
+    await reloadShell(window);
+    await navigateTo(window, 'Bills');
+    await expect(window.getByRole('heading', { name: 'No bills added' })).toBeVisible();
+    await expect(window.getByText('Electric Company')).toBeHidden();
   });
 });

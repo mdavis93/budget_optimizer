@@ -158,6 +158,7 @@ export const COLLECTION_LIMITS = {
   skippedBills: 20_000,
   billAssignments: 20_000,
   incomeOverrides: 20_000,
+  billPaymentOverrides: 20_000,
   preferredAssignments: 1000,
 } as const;
 
@@ -621,6 +622,38 @@ export function validateBillAssignment(input: {
   return { valid: errors.length === 0, errors };
 }
 
+export function validateBillPaymentOverride(input: {
+  billId: string;
+  billDate: string;
+  amount: number;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  if (!ID_REGEX.test(input.billId)) {
+    errors.push('Invalid billId');
+  }
+
+  if (!DATE_REGEX.test(input.billDate)) {
+    errors.push('Invalid billDate');
+  } else {
+    const date = new Date(input.billDate);
+    if (isNaN(date.getTime())) {
+      errors.push('billDate is not a valid date');
+    }
+  }
+
+  if (
+    typeof input.amount !== 'number' ||
+    !Number.isFinite(input.amount) ||
+    input.amount <= 0 ||
+    input.amount > MAX_BILL_BUDGETED_AMOUNT
+  ) {
+    errors.push('Amount must be greater than 0 and at most the bill budget cap');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 export function validateDraftOverlay(overlay: {
   incomes?: Array<Parameters<typeof validateIncome>[0] & { id?: string }>;
   bills?: Array<Parameters<typeof validateBill>[0] & { id?: string }>;
@@ -631,6 +664,7 @@ export function validateDraftOverlay(overlay: {
   billAssignments?: Array<{ billId: string; billDueDate: string; paycheckDate: string }>;
   preferredAssignments?: Array<[string, string]>;
   incomeOverrides?: Array<{ incomeId: string; paycheckDate: string; amount: number }>;
+  billPaymentOverrides?: Array<{ billId: string; billDate: string; amount: number }>;
   startingBalance?: number;
   targetCashOnHand?: number;
   minCashOnHand?: number;
@@ -649,6 +683,7 @@ export function validateDraftOverlay(overlay: {
     ['Skipped bills', overlay.skippedBills?.length, COLLECTION_LIMITS.skippedBills],
     ['Bill assignments', overlay.billAssignments?.length, COLLECTION_LIMITS.billAssignments],
     ['Income overrides', overlay.incomeOverrides?.length, COLLECTION_LIMITS.incomeOverrides],
+    ['Bill payment overrides', overlay.billPaymentOverrides?.length, COLLECTION_LIMITS.billPaymentOverrides],
     ['Preferred assignments', overlay.preferredAssignments?.length, COLLECTION_LIMITS.preferredAssignments],
   ];
   for (const [domain, count, limit] of capped) {
@@ -731,6 +766,19 @@ export function validateDraftOverlay(overlay: {
       override.amount > MAX_MONEY
     ) {
       errors.push(`IncomeOverride[${index}] is invalid`);
+    }
+  });
+
+  overlay.billPaymentOverrides?.forEach((override, index) => {
+    if (
+      !ID_REGEX.test(override.billId) ||
+      !DATE_REGEX.test(override.billDate) ||
+      typeof override.amount !== 'number' ||
+      !Number.isFinite(override.amount) ||
+      override.amount <= 0 ||
+      override.amount > MAX_BILL_BUDGETED_AMOUNT
+    ) {
+      errors.push(`BillPaymentOverride[${index}] is invalid`);
     }
   });
 

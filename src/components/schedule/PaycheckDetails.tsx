@@ -1,13 +1,10 @@
-import { useState } from 'react';
-import { getMonth, getYear, parseISO } from 'date-fns';
-import { PiggyBank, Receipt, RefreshCw, Target, TrendingUp, Wallet, Landmark } from 'lucide-react';
-import clsx from 'clsx';
-import { BillAssignment, IncomeOverride, PaycheckBill, PaycheckEntry } from '../../types';
-import { filterPaycheckBills } from '../../utils/scheduleBills';
-import { isSavingsAndGoalsIncome, paycheckSpendRemaining } from '@shared/incomePurpose';
-import { billOccurrenceKeyFromIso } from '@shared/billOccurrence';
-import PaycheckBillRow from './PaycheckBillRow';
-import PaycheckIncomeRow from './PaycheckIncomeRow';
+import type { BillAssignment, IncomeOverride, PaycheckBill, PaycheckEntry } from '../../types';
+import PaycheckIncomeSection from './PaycheckIncomeSection';
+import PaycheckBillsSection from './PaycheckBillsSection';
+import PaycheckGoalDeposits from './PaycheckGoalDeposits';
+import PaycheckDebtPaydown from './PaycheckDebtPaydown';
+import PaycheckSavingsTransfer from './PaycheckSavingsTransfer';
+import PaycheckRemainder from './PaycheckRemainder';
 import type { DraggedBill } from './PaycheckView';
 
 interface PaycheckDetailsProps {
@@ -29,248 +26,52 @@ interface PaycheckDetailsProps {
   onSaveIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => Promise<void>;
   onClearIncomeOverride: (incomeId: string, paycheckDate: string) => Promise<void>;
   savingIncomeKey: string | null;
+  openPaymentKey: string | null;
+  onOpenPaymentEditor: (billId: string, billDate: string) => void;
+  onClosePaymentEditor: () => void;
+  onSavePaymentOverride: (billId: string, billDate: string, amount: number) => void | Promise<void>;
+  onClearPaymentOverride: (billId: string, billDate: string) => void | Promise<void>;
 }
 
-function incomeOverrideRowKey(incomeId: string, paycheckDate: string): string {
-  return `${incomeId}-${paycheckDate}`;
-}
-
-function hasIncomeOverride(
-  overrides: IncomeOverride[],
-  incomeId: string,
-  paycheckDate: string
-): boolean {
-  return overrides.some(o => o.incomeId === incomeId && o.paycheckDate === paycheckDate);
-}
-
-export default function PaycheckDetails({
-  paycheck,
-  formatCurrency,
-  onSkipBill,
-  onUnskipBill,
-  skippingBill,
-  unskippingBill,
-  onRestoreBill,
-  restoringBill,
-  onDragStart,
-  onDragEnd,
-  draggedBill,
-  billAssignments,
-  validPaycheckDates,
-  isAssigning,
-  incomeOverrides,
-  onSaveIncomeOverride,
-  onClearIncomeOverride,
-  savingIncomeKey,
-}: PaycheckDetailsProps) {
-  const [editingIncomeKey, setEditingIncomeKey] = useState<string | null>(null);
-  const [draftIncomeAmount, setDraftIncomeAmount] = useState('');
-  const visibleBills = filterPaycheckBills(
-    paycheck.bills,
-    billAssignments,
-    paycheck.date,
-    validPaycheckDates
-  );
-  const visibleTotalBills = visibleBills
-    .filter(bill => !bill.isUnpayable && !bill.isSkipped)
-    .reduce((sum, bill) => sum + bill.amount, 0);
-  const isReserved = isSavingsAndGoalsIncome(paycheck);
-  const spendRemaining = paycheckSpendRemaining(paycheck);
+export default function PaycheckDetails(props: PaycheckDetailsProps) {
+  const { paycheck, formatCurrency } = props;
 
   return (
     <div className="mt-4 pt-4 border-t border-(--color-border)">
       <div className="space-y-4">
-        <div>
-          <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
-            {isReserved ? <Landmark className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
-            {isReserved ? 'Savings and goals deposit' : 'Income'}
-          </h4>
-          <div className="space-y-2">
-            {paycheck.incomeSources.map((source) => {
-              const rowKey = incomeOverrideRowKey(source.id, paycheck.date);
-              const overridden = hasIncomeOverride(incomeOverrides, source.id, paycheck.date);
-              const isEditing = editingIncomeKey === rowKey;
-              const isSaving = savingIncomeKey === rowKey;
-
-              return (
-                <PaycheckIncomeRow
-                  key={rowKey}
-                  source={source}
-                  rowKey={rowKey}
-                  overridden={overridden}
-                  isEditing={isEditing}
-                  isSaving={isSaving}
-                  draftIncomeAmount={draftIncomeAmount}
-                  formatCurrency={formatCurrency}
-                  onEdit={() => {
-                    setEditingIncomeKey(rowKey);
-                    setDraftIncomeAmount(String(source.amount));
-                  }}
-                  onDraftChange={setDraftIncomeAmount}
-                  onSave={async () => {
-                    const v = parseFloat(draftIncomeAmount);
-                    if (!Number.isFinite(v) || v < 0) return;
-                    await onSaveIncomeOverride(source.id, paycheck.date, v);
-                    setEditingIncomeKey(null);
-                  }}
-                  onCancel={() => setEditingIncomeKey(null)}
-                  onClear={() => onClearIncomeOverride(source.id, paycheck.date)}
-                />
-              );
-            })}
-            <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
-              <span>{isReserved ? 'Deposit total' : 'Total Income'}</span>
-              <span className={clsx(
-                'font-mono',
-                isReserved ? 'text-cyan-700 dark:text-cyan-400' : 'text-success-600 dark:text-success-500'
-              )}>
-                +{formatCurrency(paycheck.totalIncome)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {!isReserved && visibleBills.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
-              <Receipt className="w-4 h-4" />
-              Bills to Pay ({visibleBills.length})
-              <span className="text-xs text-(--color-text-muted)">• Drag bills to move between paychecks</span>
-              {isAssigning && <RefreshCw className="w-3 h-3 animate-spin text-primary-500" />}
-            </h4>
-            <div className="space-y-2">
-              {[...visibleBills].sort((a, b) => {
-                const paycheckDate = parseISO(paycheck.date);
-                const paycheckMonth = getMonth(paycheckDate);
-                const paycheckYear = getYear(paycheckDate);
-                const aDate = parseISO(a.billDate);
-                const bDate = parseISO(b.billDate);
-                const aMonthDiff = (getYear(aDate) - paycheckYear) * 12 + (getMonth(aDate) - paycheckMonth);
-                const bMonthDiff = (getYear(bDate) - paycheckYear) * 12 + (getMonth(bDate) - paycheckMonth);
-                return aMonthDiff !== bMonthDiff ? aMonthDiff - bMonthDiff : a.dueDay - b.dueDay;
-              }).map((bill, idx) => (
-                <PaycheckBillRow
-                  key={idx}
-                  bill={bill}
-                  paycheckDate={paycheck.date}
-                  formatCurrency={formatCurrency}
-                  onSkipBill={onSkipBill}
-                  onUnskipBill={onUnskipBill}
-                  isSkipping={skippingBill === billOccurrenceKeyFromIso(bill.billId, bill.billDate)}
-                  isUnskipping={unskippingBill === billOccurrenceKeyFromIso(bill.billId, bill.billDate)}
-                  onRestoreBill={onRestoreBill}
-                  isRestoring={restoringBill === billOccurrenceKeyFromIso(bill.billId, bill.billDate)}
-                  onDragStart={onDragStart}
-                  onDragEnd={onDragEnd}
-                  draggedBill={draggedBill}
-                  billAssignments={billAssignments}
-                />
-              ))}
-              <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
-                <span>Total Bills</span>
-                <span className="font-mono text-danger-600 dark:text-danger-500">
-                  -{formatCurrency(visibleTotalBills)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {paycheck.goalDeposits && paycheck.goalDeposits.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Goal Deposits ({paycheck.goalDeposits.length})
-            </h4>
-            <div className="space-y-2">
-              {paycheck.goalDeposits.map((deposit, idx) => (
-                <div key={idx} className="flex items-center justify-between py-2 px-3 bg-purple-50 dark:bg-purple-500/10 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-purple-500" />
-                    <span className="font-medium text-purple-700 dark:text-purple-300">Goal: {deposit.goalName}</span>
-                  </div>
-                  <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">
-                    -{formatCurrency(deposit.amount)}
-                  </span>
-                </div>
-              ))}
-              {paycheck.totalGoalDeposits > 0 && (
-                <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
-                  <span>Total Goal Deposits</span>
-                  <span className="font-mono text-purple-600 dark:text-purple-500">
-                    -{formatCurrency(paycheck.totalGoalDeposits)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {paycheck.debtPayments && paycheck.debtPayments.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
-              <Landmark className="w-4 h-4" />
-              Debt paydown ({paycheck.debtPayments.length})
-            </h4>
-            <div className="space-y-2">
-              {paycheck.debtPayments.map((payment) => (
-                <div key={payment.debtId} className="flex items-center justify-between py-2 px-3 bg-danger-50 dark:bg-danger-500/10 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Landmark className="w-4 h-4 text-danger-500" />
-                    <span className="font-medium text-danger-700 dark:text-danger-300">Debt: {payment.creditorName}</span>
-                  </div>
-                  <span className="font-mono font-semibold text-danger-600 dark:text-danger-400">
-                    -{formatCurrency(payment.amount)}
-                  </span>
-                </div>
-              ))}
-              {(paycheck.totalDebtPayments ?? 0) > 0 && (
-                <div className="flex items-center justify-between py-2 px-3 bg-(--color-bg-tertiary) rounded-lg font-semibold">
-                  <span>Total Debt Paydown</span>
-                  <span className="font-mono text-danger-600 dark:text-danger-500">
-                    -{formatCurrency(paycheck.totalDebtPayments ?? 0)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {paycheck.savingsDeposit > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-(--color-text-secondary) mb-2 flex items-center gap-2">
-              <PiggyBank className="w-4 h-4" />
-              Savings Transfer
-            </h4>
-            <div className="flex items-center justify-between py-2 px-3 bg-primary-50 dark:bg-primary-500/10 rounded-lg">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-primary-500" />
-                <span className="font-medium text-primary-700 dark:text-primary-300">Transfer to Savings</span>
-              </div>
-              <span className="font-mono font-semibold text-primary-600 dark:text-primary-400">
-                {formatCurrency(paycheck.savingsDeposit)}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between py-3 px-4 bg-(--color-bg-secondary) rounded-lg border border-(--color-border)">
-          <span className="font-semibold">Budget Remaining</span>
-          <span className={clsx(
-            'text-2xl font-mono font-bold',
-            spendRemaining < 0 || paycheck.hasUnpayableBills
-              ? 'text-danger-500'
-              : paycheck.isShortfall
-                ? 'text-warning-600 dark:text-warning-500'
-                : 'text-success-500'
-          )}>
-            {formatCurrency(spendRemaining)}
-          </span>
-        </div>
-
-        <p className="text-xs text-(--color-text-muted) text-center">
-          Savings Balance: {formatCurrency(paycheck.totalSavings)}
-        </p>
+        <PaycheckIncomeSection
+          paycheck={paycheck}
+          formatCurrency={formatCurrency}
+          incomeOverrides={props.incomeOverrides}
+          onSaveIncomeOverride={props.onSaveIncomeOverride}
+          onClearIncomeOverride={props.onClearIncomeOverride}
+          savingIncomeKey={props.savingIncomeKey}
+        />
+        <PaycheckBillsSection
+          paycheck={paycheck}
+          formatCurrency={formatCurrency}
+          onSkipBill={props.onSkipBill}
+          onUnskipBill={props.onUnskipBill}
+          skippingBill={props.skippingBill}
+          unskippingBill={props.unskippingBill}
+          onRestoreBill={props.onRestoreBill}
+          restoringBill={props.restoringBill}
+          onDragStart={props.onDragStart}
+          onDragEnd={props.onDragEnd}
+          draggedBill={props.draggedBill}
+          billAssignments={props.billAssignments}
+          validPaycheckDates={props.validPaycheckDates}
+          isAssigning={props.isAssigning}
+          openPaymentKey={props.openPaymentKey}
+          onOpenPaymentEditor={props.onOpenPaymentEditor}
+          onClosePaymentEditor={props.onClosePaymentEditor}
+          onSavePaymentOverride={props.onSavePaymentOverride}
+          onClearPaymentOverride={props.onClearPaymentOverride}
+        />
+        <PaycheckGoalDeposits paycheck={paycheck} formatCurrency={formatCurrency} />
+        <PaycheckDebtPaydown paycheck={paycheck} formatCurrency={formatCurrency} />
+        <PaycheckSavingsTransfer paycheck={paycheck} formatCurrency={formatCurrency} />
+        <PaycheckRemainder paycheck={paycheck} formatCurrency={formatCurrency} />
       </div>
     </div>
   );

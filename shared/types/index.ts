@@ -146,6 +146,15 @@ export interface IncomeOverride {
   createdAt: string;
 }
 
+/** Raised payment for one bill occurrence (yyyy-MM-dd), above that date's series amount. */
+export interface BillPaymentOverride {
+  id: string;
+  billId: string;
+  billDate: string;
+  amount: number;
+  createdAt: string;
+}
+
 export interface Debt {
   id: string;
   budgetId: string;
@@ -206,6 +215,7 @@ export interface BudgetSnapshot {
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   debts: Debt[];
   leaves: Leave[];
   budget: Budget | null;
@@ -262,6 +272,8 @@ export interface PaycheckBill {
   billId: string;
   creditorName: string;
   amount: number;
+  /** Series floor for this occurrence (budgeted or debt final); equals amount when not raised. */
+  seriesAmount?: number;
   dueDay: number;
   priority: BillPriority;
   category?: string;
@@ -548,6 +560,7 @@ export interface DraftState {
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   budget: DraftBudgetFields | null;
 }
 
@@ -562,6 +575,7 @@ export interface DraftOverlay {
   /** Soft seeds for one schedule build (Advisor / reconciliation); not persisted locks. */
   preferredAssignments?: Array<[string, string]>;
   incomeOverrides?: IncomeOverride[];
+  billPaymentOverrides?: BillPaymentOverride[];
   startingBalance?: number;
   targetCashOnHand?: number;
   minCashOnHand?: number;

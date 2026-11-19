@@ -171,6 +171,7 @@ export function buildPaycheckEntries(
         billId: bill.billId,
         creditorName: bill.creditorName,
         amount: bill.amount,
+        seriesAmount: bill.seriesAmount ?? bill.amount,
         dueDay: bill.dueDay,
         priority: bill.priority,
         category: bill.category,

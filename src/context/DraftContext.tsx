@@ -19,6 +19,7 @@ import {
   Income,
   IncomeInput,
   IncomeOverride,
+  BillPaymentOverride,
   Leave,
   LeaveInput,
   ProposedFix,
@@ -72,6 +73,7 @@ interface DraftDataContextValue {
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   budgetFields: DraftBudgetFields | null;
 }
 
@@ -115,6 +117,8 @@ interface DraftActionsContextValue {
   clearStaleBillAssignments: (validPaycheckDates: ReadonlySet<string>) => boolean;
   setIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => boolean;
   removeIncomeOverride: (incomeId: string, paycheckDate: string) => boolean;
+  setBillPaymentOverride: (billId: string, billDate: string, amount: number) => boolean;
+  removeBillPaymentOverride: (billId: string, billDate: string) => boolean;
   applyReconciliationFixes: (fixes: ProposedFix[]) => boolean;
   applyBreakGlassPlan: (plan: BreakGlassPlan) => boolean;
   updateBudgetFields: (updates: Partial<DraftBudgetFields>) => boolean;
@@ -269,8 +273,18 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { incomes, bills, goals, skippedBills, billAssignments, incomeOverrides, debts, leaves, budget } =
-        result.data;
+      const {
+        incomes,
+        bills,
+        goals,
+        skippedBills,
+        billAssignments,
+        incomeOverrides,
+        billPaymentOverrides,
+        debts,
+        leaves,
+        budget,
+      } = result.data;
 
       const snapshot: DraftState = {
         incomes: incomes ?? [],
@@ -281,6 +295,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         skippedBills: skippedBills ?? [],
         billAssignments: billAssignments ?? [],
         incomeOverrides: incomeOverrides ?? [],
+        billPaymentOverrides: billPaymentOverrides ?? [],
         budget: budget ? budgetToDraftFields(budget) : null,
       };
 
@@ -372,6 +387,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       skippedBills: currentDraft.skippedBills,
       billAssignments: currentDraft.billAssignments,
       incomeOverrides: currentDraft.incomeOverrides,
+      billPaymentOverrides: currentDraft.billPaymentOverrides,
       startingBalance: currentDraft.budget?.startingBalance,
       targetCashOnHand: currentDraft.budget?.targetCashOnHand,
       minCashOnHand: currentDraft.budget?.minCashOnHand,
@@ -484,6 +500,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         next.skippedBills = structuredClone(saved.skippedBills);
         next.billAssignments = structuredClone(saved.billAssignments);
         next.incomeOverrides = structuredClone(saved.incomeOverrides);
+        next.billPaymentOverrides = structuredClone(saved.billPaymentOverrides);
         if (saved.budget && prev.budget) {
           next.budget = {
             ...prev.budget,
@@ -598,13 +615,18 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     if (isDraftMode) {
       updateDraft((prev) => {
         const hadDebt = prev.debts.some((debt) => debt.billId === id);
+        const hadPaymentOverride = prev.billPaymentOverrides.some((override) => override.billId === id);
         const next = {
           ...prev,
           bills: prev.bills.filter((bill) => bill.id !== id),
           debts: prev.debts.filter((debt) => debt.billId !== id),
+          billPaymentOverrides: prev.billPaymentOverrides.filter((override) => override.billId !== id),
         };
         if (hadDebt) {
           setDirtyDomains((domains) => new Set(domains).add('debts'));
+        }
+        if (hadPaymentOverride) {
+          setDirtyDomains((domains) => new Set(domains).add('schedule'));
         }
         return next;
       });
@@ -992,6 +1014,41 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     return false;
   }, [isDraftMode, updateDraft, markDirty]);
 
+  const setBillPaymentOverride = useCallback((billId: string, billDate: string, amount: number): boolean => {
+    if (isDraftMode) {
+      updateDraft((prev) => {
+        const filtered = prev.billPaymentOverrides.filter(
+          (o) => !(o.billId === billId && o.billDate === billDate)
+        );
+        const override: BillPaymentOverride = {
+          id: createDraftId(),
+          billId,
+          billDate,
+          amount,
+          createdAt: nowIso(),
+        };
+        return { ...prev, billPaymentOverrides: [...filtered, override] };
+      });
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, updateDraft, markDirty]);
+
+  const removeBillPaymentOverride = useCallback((billId: string, billDate: string): boolean => {
+    if (isDraftMode) {
+      updateDraft((prev) => ({
+        ...prev,
+        billPaymentOverrides: prev.billPaymentOverrides.filter(
+          (o) => !(o.billId === billId && o.billDate === billDate)
+        ),
+      }));
+      markDirty('schedule');
+      return true;
+    }
+    return false;
+  }, [isDraftMode, updateDraft, markDirty]);
+
   const applyReconciliationFixes = useCallback((fixes: ProposedFix[]): boolean => {
     const placements = fixes
       .filter((fix) => fix.type === 'move_bill' && fix.toPaycheckDate)
@@ -1071,6 +1128,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       skippedBills: draft.skippedBills,
       billAssignments: draft.billAssignments,
       incomeOverrides: draft.incomeOverrides,
+      billPaymentOverrides: draft.billPaymentOverrides,
       budgetFields: draft.budget,
     }),
     [draft, isLoading]
@@ -1120,6 +1178,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       clearStaleBillAssignments,
       setIncomeOverride,
       removeIncomeOverride,
+      setBillPaymentOverride,
+      removeBillPaymentOverride,
       applyReconciliationFixes,
       applyBreakGlassPlan,
       updateBudgetFields,
@@ -1157,6 +1217,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       clearStaleBillAssignments,
       setIncomeOverride,
       removeIncomeOverride,
+      setBillPaymentOverride,
+      removeBillPaymentOverride,
       applyReconciliationFixes,
       applyBreakGlassPlan,
       updateBudgetFields,

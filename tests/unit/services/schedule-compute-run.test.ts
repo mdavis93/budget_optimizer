@@ -31,6 +31,7 @@ describe('schedule compute serialize', () => {
       debts: [{ id: 'debt-1', billId: 'bill-1', principalBalance: 400, apr: 0.12, monthlyPayment: 40 }],
       accelerateDebtPayoff: false,
       incomeOverrides: new Map([['inc-1-2026-01-15', 0]]),
+      billPaymentOverrides: new Map(),
       leaves: [
         {
           id: 'leave-1',
@@ -276,6 +277,7 @@ describe('runScheduleCompute', () => {
       debts: [],
       accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
+      billPaymentOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
     });
@@ -349,6 +351,7 @@ describe('runScheduleCompute', () => {
       debts: [],
       accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
+      billPaymentOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
     });
@@ -406,6 +409,7 @@ describe('runScheduleCompute', () => {
       debts: [],
       accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
+      billPaymentOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
     });
@@ -478,6 +482,7 @@ describe('runScheduleCompute', () => {
       debts: [],
       accelerateDebtPayoff: false,
       incomeOverrides: new Map(),
+      billPaymentOverrides: new Map(),
       leaves: [],
       nowIso: '2026-01-01T00:00:00.000Z',
     });

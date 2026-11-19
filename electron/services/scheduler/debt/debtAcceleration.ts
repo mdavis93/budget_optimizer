@@ -301,7 +301,7 @@ function runPayingVariant(
         if (bill.isSkipped || bill.isUnpayable) continue;
         const account = accountByBill.get(bill.billId);
         if (!account || account.paidOff) continue;
-        account.applyPayment(toCents(bill.amount), dateIso);
+        account.applyPayment(toCents(bill.seriesAmount ?? bill.amount), dateIso);
         if (account.paidOff) removeLaterOccurrences(bill.billId, i);
       }
 
@@ -524,6 +524,7 @@ function runPayingVariant(
         billId: bill.billId,
         creditorName: bill.creditorName,
         amount: bill.amount,
+        seriesAmount: bill.seriesAmount ?? bill.amount,
         dueDay: bill.dueDay,
         priority: bill.priority,
         category: bill.category,
