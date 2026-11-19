@@ -154,12 +154,17 @@ describe('useScheduleEngine', () => {
     });
     expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByText('debounce-generate'));
-    await new Promise((resolve) => {
-      setTimeout(resolve, SCHEDULE_DEBOUNCE_MS + 50);
-    });
-    expect(screen.getByTestId('last-result')).toHaveTextContent('ok');
-    expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText('debounce-generate'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SCHEDULE_DEBOUNCE_MS);
+      });
+      expect(screen.getByTestId('last-result')).toHaveTextContent('ok');
+      expect(mockAPI.schedule.build).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('seeds preferred assignments before building overlay', async () => {

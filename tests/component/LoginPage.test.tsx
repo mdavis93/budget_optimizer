@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginPage from '../../src/pages/LoginPage';
 import { renderWithRouter } from '../helpers/renderWithProviders';
@@ -125,8 +125,11 @@ describe('LoginPage', () => {
       });
     });
 
-    it('does not call unlock when password is whitespace only', () => {
+    it('does not call unlock when password is whitespace only', async () => {
       renderWithRouter(<LoginPage />, { mockAPI });
+      await act(async () => {
+        await Promise.resolve();
+      });
       const form = screen.getByLabelText('Master Password').closest('form')!;
       fireEvent.change(screen.getByLabelText('Master Password'), { target: { value: '   ' } });
       fireEvent.submit(form);
