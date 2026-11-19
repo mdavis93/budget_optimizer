@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../../src/context/AuthContext';
 import { createMockElectronAPI } from '../mocks/electron-api.mock';
 import { suppressExpectedConsoleErrors } from '../helpers/suppressExpectedConsoleErrors';
@@ -137,10 +137,10 @@ describe('AuthContext', () => {
         expect(screen.getByTestId('unlocked')).toHaveTextContent('true');
       });
 
-      lockedHandler?.();
-      await waitFor(() => {
-        expect(screen.getByTestId('unlocked')).toHaveTextContent('false');
+      act(() => {
+        lockedHandler?.();
       });
+      expect(screen.getByTestId('unlocked')).toHaveTextContent('false');
     });
   });
 
