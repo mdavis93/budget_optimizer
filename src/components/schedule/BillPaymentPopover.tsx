@@ -27,9 +27,9 @@ export default function BillPaymentPopover({
   const inputId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState(String(currentAmount));
-  const [floorError, setFloorError] = useState(false);
+  const [amountError, setAmountError] = useState(false);
   const seriesCents = toCents(seriesAmount);
-  const isRaised = toCents(currentAmount) > seriesCents;
+  const isAdjusted = toCents(currentAmount) !== seriesCents;
   const label = `${format(parseISO(billDate), 'MMM d')} only`;
 
   useEffect(() => {
@@ -61,11 +61,11 @@ export default function BillPaymentPopover({
     const parsed = Number.parseFloat(draft);
     if (!Number.isFinite(parsed)) return;
     const cents = toCents(parsed);
-    if (cents < seriesCents) {
-      setFloorError(true);
+    if (cents <= 0) {
+      setAmountError(true);
       return;
     }
-    setFloorError(false);
+    setAmountError(false);
     if (cents === seriesCents) {
       onClear();
       return;
@@ -86,7 +86,7 @@ export default function BillPaymentPopover({
     <div
       ref={panelRef}
       role="dialog"
-      aria-label={`Raise payment for ${label}`}
+      aria-label={`Change payment for ${label}`}
       className="fixed z-50 w-[260px] rounded-lg border border-(--color-border) bg-(--color-bg-primary) p-3 shadow-lg"
       style={{ top, left }}
     >
@@ -106,7 +106,7 @@ export default function BillPaymentPopover({
         value={draft}
         onChange={(event) => {
           setDraft(event.target.value);
-          setFloorError(false);
+          setAmountError(false);
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
@@ -115,13 +115,13 @@ export default function BillPaymentPopover({
           }
         }}
       />
-      {floorError && (
+      {amountError && (
         <p className="mt-1 text-xs text-danger-600 dark:text-danger-400">
-          Must be at least {formatCurrency(seriesAmount)}
+          Must be greater than $0.00
         </p>
       )}
       <div className="mt-2 flex items-center justify-between gap-2">
-        {isRaised ? (
+        {isAdjusted ? (
           <button
             type="button"
             className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"

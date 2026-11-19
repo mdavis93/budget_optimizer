@@ -1,10 +1,10 @@
 import { toCents } from '@shared/money';
 import type { PaycheckBill } from '../types';
 
-/** True when charged amount is strictly above this occurrence's series floor. */
+/** True when this occurrence is charged a different amount than its series. */
 export function isBillPaymentRaised(bill: Pick<PaycheckBill, 'amount' | 'seriesAmount'>): boolean {
   const series = bill.seriesAmount ?? bill.amount;
-  return toCents(bill.amount) > toCents(series);
+  return toCents(bill.amount) !== toCents(series);
 }
 
 export function billPaymentEditorKey(billId: string, billDate: string): string {
