@@ -16,6 +16,7 @@ import type {
   Income,
   IncomeInput,
   IncomeOverride,
+  BillPaymentOverride,
   Leave,
   LeaveInput,
   SavingsGoal,
@@ -111,6 +112,12 @@ export interface ElectronAPI {
     getAll: () => Promise<ApiResult<IncomeOverride[]>>;
     set: (incomeId: string, paycheckDate: string, amount: number) => Promise<ApiResult<IncomeOverride>>;
     remove: (incomeId: string, paycheckDate: string) => Promise<ApiResult<boolean>>;
+  };
+
+  billPaymentOverrides: {
+    getAll: () => Promise<ApiResult<BillPaymentOverride[]>>;
+    set: (billId: string, billDate: string, amount: number) => Promise<ApiResult<BillPaymentOverride>>;
+    remove: (billId: string, billDate: string) => Promise<ApiResult<boolean>>;
   };
 
   goals: {

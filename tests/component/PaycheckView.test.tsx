@@ -51,6 +51,8 @@ function baseProps() {
     onSaveIncomeOverride: vi.fn(async () => {}),
     onClearIncomeOverride: vi.fn(async () => {}),
     savingIncomeKey: null,
+    onSavePaymentOverride: vi.fn(async () => {}),
+    onClearPaymentOverride: vi.fn(async () => {}),
   };
 }
 

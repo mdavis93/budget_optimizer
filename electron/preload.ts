@@ -92,6 +92,14 @@ const api = {
       ipcRenderer.invoke(IPC.incomeOverridesRemove, incomeId, paycheckDate),
   },
 
+  billPaymentOverrides: {
+    getAll: () => ipcRenderer.invoke(IPC.billPaymentOverridesGetAll),
+    set: (billId, billDate, amount) =>
+      ipcRenderer.invoke(IPC.billPaymentOverridesSet, billId, billDate, amount),
+    remove: (billId, billDate) =>
+      ipcRenderer.invoke(IPC.billPaymentOverridesRemove, billId, billDate),
+  },
+
   goals: {
     getAll: () => ipcRenderer.invoke(IPC.goalsGetAll),
     create: (input) => ipcRenderer.invoke(IPC.goalsCreate, input),

@@ -174,6 +174,7 @@ export const createMockElectronAPI = () => {
           skippedBills: [],
           billAssignments: [],
           incomeOverrides: [],
+          billPaymentOverrides: [],
           debts: [],
           leaves: [],
           budget: createMockBudget(),
@@ -243,6 +244,21 @@ export const createMockElectronAPI = () => {
           incomeId: 'income-1',
           paycheckDate: '2026-01-01',
           amount: 1000,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+      remove: vi.fn().mockResolvedValue({ success: true, data: true }),
+    },
+
+    billPaymentOverrides: {
+      getAll: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      set: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          id: 'bpo-1',
+          billId: 'bill-1',
+          billDate: '2026-01-15',
+          amount: 200,
           createdAt: '2026-01-01T00:00:00.000Z',
         },
       }),

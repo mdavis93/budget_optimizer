@@ -206,6 +206,8 @@ describe('SchedulePage', () => {
   const assignBill = vi.fn(() => true);
   const setIncomeOverride = vi.fn(() => true);
   const removeIncomeOverride = vi.fn(() => true);
+  const setBillPaymentOverride = vi.fn(() => true);
+  const removeBillPaymentOverride = vi.fn(() => true);
   const reloadSnapshot = vi.fn();
 
   beforeEach(() => {
@@ -223,6 +225,8 @@ describe('SchedulePage', () => {
       assignBill,
       setIncomeOverride,
       removeIncomeOverride,
+      setBillPaymentOverride,
+      removeBillPaymentOverride,
       applyReconciliationFixes,
       applyBreakGlassPlan,
     });
@@ -231,6 +235,7 @@ describe('SchedulePage', () => {
       bills: [{ id: 'bill-1' }],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       schedule: createMockSchedule({
         paychecks: [createMockSchedule().paychecks[0]],
         recommendations: [],
@@ -264,6 +269,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -293,6 +299,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -344,6 +351,7 @@ describe('SchedulePage', () => {
           },
         ],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -376,6 +384,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -418,6 +427,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -475,6 +485,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -539,6 +550,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -603,6 +615,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -665,6 +678,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -715,6 +729,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -797,6 +812,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -836,6 +852,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           recommendations: ['deficit shortfall detected'],
           reconciliation: {
@@ -903,6 +920,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           paychecks: [createMockSchedule().paychecks[0]],
           recommendations: [],
@@ -983,6 +1001,7 @@ describe('SchedulePage', () => {
         bills: [{ id: 'bill-1' }],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         schedule: createMockSchedule({
           recommendations: ['Increase target cash buffer'],
           reconciliation: {
@@ -1055,6 +1074,7 @@ describe('SchedulePage', () => {
           bills: [{ id: 'bill-1' }],
           billAssignments: [],
           incomeOverrides: [],
+          billPaymentOverrides: [],
           schedule: createMockSchedule({
             calculationMonths: 18,
             goalProjections: [

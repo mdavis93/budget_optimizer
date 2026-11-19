@@ -83,6 +83,8 @@ export default function SchedulePage() {
     handleClearStaleBills,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,
+    handleSavePaymentOverride,
+    handleClearPaymentOverride,
   } = useScheduleMutations();
   const {
     draggedBill,
@@ -451,6 +453,8 @@ export default function SchedulePage() {
           onSaveIncomeOverride={handleSaveIncomeOverride}
           onClearIncomeOverride={handleClearIncomeOverride}
           savingIncomeKey={savingIncomeKey}
+          onSavePaymentOverride={handleSavePaymentOverride}
+          onClearPaymentOverride={handleClearPaymentOverride}
         />
       ) : (
         <CalendarView paychecks={schedule?.paychecks ?? EMPTY_PAYCHECKS} />

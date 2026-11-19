@@ -37,6 +37,7 @@ export interface AssignBillsOptions {
    */
   preferredAssignments?: Map<string, string>;
   incomeAttachedBillsRaw?: Bill[];
+  billPaymentOverrides?: Map<string, number>;
   lockedBillKeys?: Set<string>;
   targetCashOnHand?: number;
   minCashOnHand?: number;
@@ -63,6 +64,7 @@ export function assignBills(
   const manualAssignments = options.manualAssignments ?? new Map();
   const preferredAssignments = options.preferredAssignments ?? new Map();
   const incomeAttachedBillsRaw = options.incomeAttachedBillsRaw ?? [];
+  const billPaymentOverrides = options.billPaymentOverrides ?? new Map();
   const minCashOnHand = options.minCashOnHand ?? DEFAULT_MIN_CASH_ON_HAND;
   const targetCashOnHand = options.targetCashOnHand ?? DEFAULT_TARGET_CASH_ON_HAND;
   const solver = options.solver ?? new GreedySolver();
@@ -88,6 +90,7 @@ export function assignBills(
     manualAssignments,
     preferredAssignments,
     incomeAttachedBillsRaw,
+    billPaymentOverrides,
   });
   const modelMs = performance.now() - modelStarted;
 

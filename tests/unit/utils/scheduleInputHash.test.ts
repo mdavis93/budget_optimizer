@@ -16,6 +16,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
     };
 
     const before = buildScheduleOverlayHash(base);
@@ -39,6 +40,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       budgetFields: null,
     });
 
@@ -48,6 +50,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       budgetFields: {
         name: 'Personal',
         startingBalance: 1000,
@@ -92,6 +95,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       budgetFields,
       now: frozen,
     });
@@ -125,6 +129,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [] as [],
       billAssignments: [] as [],
       incomeOverrides: [] as [],
+      billPaymentOverrides: [],
       budgetFields: null,
     };
 
@@ -158,6 +163,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
     });
     const explicitFalse = buildScheduleInputHash({
       incomes,
@@ -165,6 +171,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       accelerateDebtPayoff: false,
     });
     const enabled = buildScheduleInputHash({
@@ -173,6 +180,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [],
       billAssignments: [],
       incomeOverrides: [],
+      billPaymentOverrides: [],
       accelerateDebtPayoff: true,
     });
     expect(omitted).toBe(explicitFalse);
@@ -210,6 +218,7 @@ describe('scheduleInputHash', () => {
       skippedBills: [] as [],
       billAssignments: [] as [],
       incomeOverrides: [] as [],
+      billPaymentOverrides: [],
       now: frozen,
     };
 

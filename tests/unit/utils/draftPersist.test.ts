@@ -31,6 +31,7 @@ function makeDraftState(overrides: Partial<DraftState> = {}): DraftState {
     skippedBills: [],
     billAssignments: [],
     incomeOverrides: [],
+    billPaymentOverrides: [],
     budget: {
       name: budget.name,
       startingBalance: budget.startingBalance,
@@ -327,6 +328,7 @@ describe('draftPersist', () => {
         skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-10' }],
         billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-05' }],
         incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1500 }],
+        billPaymentOverrides: [],
         budget: {
           ...committed.budget!,
           name: 'Renamed Budget',
@@ -417,6 +419,7 @@ describe('draftPersist', () => {
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
       });
       const draft = makeDraftState({
         incomes: [createMockIncome({ id: 'draft-income-1' })],
@@ -443,6 +446,7 @@ describe('draftPersist', () => {
           { billId: 'draft-bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-01' },
         ],
         incomeOverrides: [{ incomeId: 'draft-income-1', paycheckDate: '2026-01-01', amount: 1200 }],
+        billPaymentOverrides: [],
       });
 
       vi.mocked(window.electronAPI.income.create).mockResolvedValueOnce({
@@ -524,6 +528,7 @@ describe('draftPersist', () => {
         bills: [createMockBill({ id: 'draft-bill-1' })],
         skippedBills: [{ billId: 'draft-bill-1', skipDate: '2026-01-15' }],
         incomeOverrides: [{ incomeId: 'draft-income-1', paycheckDate: '2026-01-01', amount: 1200 }],
+        billPaymentOverrides: [],
       });
       const dirty = new Set(['income', 'bills', 'schedule'] as const);
 
@@ -683,11 +688,13 @@ describe('draftPersist', () => {
         skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-01' }],
         billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-01' }],
         incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1000 }],
+        billPaymentOverrides: [],
       });
       const draft = makeDraftState({
         skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-05' }],
         billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-08' }],
         incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1200 }],
+        billPaymentOverrides: [],
       });
 
       const ok = await persistScheduleDomain(committed, draft, {
@@ -873,6 +880,7 @@ describe('draftPersist', () => {
         skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-01' }],
         billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-01' }],
         incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1000 }],
+        billPaymentOverrides: [],
       });
       const draft = makeDraftState({
         incomes: [],
@@ -881,6 +889,7 @@ describe('draftPersist', () => {
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
       });
 
       expect(computeDirtyDomains(committed, draft)).toEqual(
@@ -907,11 +916,13 @@ describe('draftPersist', () => {
         skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-01' }],
         billAssignments: [{ billId: 'bill-1', billDueDate: '2026-01-15', paycheckDate: '2026-01-01' }],
         incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1000 }],
+        billPaymentOverrides: [],
       });
       const draft = makeDraftState({
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
       });
 
       vi.mocked(window.electronAPI.skippedBills.unskip).mockResolvedValueOnce({
@@ -974,10 +985,12 @@ describe('draftPersist', () => {
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
       });
       const draft = makeDraftState({
         skippedBills: [{ billId: 'bill-1', skipDate: '2026-01-10' }],
         incomeOverrides: [{ incomeId: 'income-1', paycheckDate: '2026-01-01', amount: 1500 }],
+        billPaymentOverrides: [],
       });
 
       vi.mocked(window.electronAPI.skippedBills.skip).mockResolvedValueOnce({

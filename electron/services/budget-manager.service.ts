@@ -11,6 +11,7 @@ import {
   SkippedBill,
   BillAssignment,
   IncomeOverride,
+  BillPaymentOverride,
   SavingsGoal,
   SavingsGoalInput,
   Debt,
@@ -364,6 +365,20 @@ export class BudgetManager {
     return this.activeDb().removeIncomeOverride(this.currentBudgetId, incomeId, paycheckDate);
   }
 
+  getBillPaymentOverrides(): BillPaymentOverride[] {
+    if (!this.currentBudgetId) return [];
+    return this.activeDb().getBillPaymentOverrides(this.currentBudgetId);
+  }
+
+  setBillPaymentOverride(billId: string, billDate: string, amount: number): BillPaymentOverride {
+    return this.activeDb().setBillPaymentOverride(this.requireBudgetId(), billId, billDate, amount);
+  }
+
+  removeBillPaymentOverride(billId: string, billDate: string): boolean {
+    if (!this.currentBudgetId) return false;
+    return this.activeDb().removeBillPaymentOverride(this.currentBudgetId, billId, billDate);
+  }
+
   getAllGoals(): SavingsGoal[] {
     if (!this.currentBudgetId) return [];
     return this.activeDb().getAllGoals(this.currentBudgetId);
@@ -445,6 +460,7 @@ export class BudgetManager {
         skippedBills: [],
         billAssignments: [],
         incomeOverrides: [],
+        billPaymentOverrides: [],
         debts: [],
         leaves: [],
         budget: null,

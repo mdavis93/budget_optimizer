@@ -24,6 +24,7 @@ function identityParams(overrides: Record<string, unknown> = {}) {
     skippedBills: [] as [],
     billAssignments: [] as [],
     incomeOverrides: [] as [],
+    billPaymentOverrides: [],
     leaves: [] as [],
     startDate: '2026-01-01',
     startingBalance: 1000,

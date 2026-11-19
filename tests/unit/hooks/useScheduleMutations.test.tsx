@@ -11,6 +11,8 @@ const reloadSnapshot = vi.fn().mockResolvedValue(undefined);
 const removeBillAssignment = vi.fn();
 const removeIncomeOverride = vi.fn(() => true);
 const setIncomeOverride = vi.fn(() => true);
+const removeBillPaymentOverride = vi.fn(() => true);
+const setBillPaymentOverride = vi.fn(() => true);
 const skipBill = vi.fn(() => true);
 const unskipBill = vi.fn(() => true);
 const generateSchedule = vi.fn().mockResolvedValue(undefined);
@@ -35,6 +37,8 @@ vi.mock('../../../src/context/DraftContext', () => ({
     removeBillAssignment,
     removeIncomeOverride,
     setIncomeOverride,
+    removeBillPaymentOverride,
+    setBillPaymentOverride,
     skipBill,
     unskipBill,
   }),

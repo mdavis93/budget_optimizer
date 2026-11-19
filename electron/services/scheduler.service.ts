@@ -88,7 +88,8 @@ export class SchedulerService {
     preferredAssignments: Map<string, string> = new Map(),
     now?: Date,
     debts: Debt[] = [],
-    accelerateDebtPayoff: boolean = false
+    accelerateDebtPayoff: boolean = false,
+    billPaymentOverrides: Map<string, number> = new Map()
   ): ScheduleData {
     const prepared = prepareScheduleHorizon({
       incomes,
@@ -103,6 +104,7 @@ export class SchedulerService {
       minSavingsPerPaycheck,
       debtPayoffs,
       incomeOverrides,
+      billPaymentOverrides,
       leaves,
       debts,
       accelerateDebtPayoff,

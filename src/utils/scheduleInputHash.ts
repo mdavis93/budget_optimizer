@@ -1,6 +1,7 @@
 import {
   Bill,
   BillAssignment,
+  BillPaymentOverride,
   Debt,
   Income,
   IncomeOverride,
@@ -15,6 +16,7 @@ export function buildScheduleOverlayHash(params: {
   skippedBills: SkippedBill[];
   billAssignments: BillAssignment[];
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
 }): string {
   return buildScheduleIdentity({
     incomes: [],
@@ -22,6 +24,7 @@ export function buildScheduleOverlayHash(params: {
     skippedBills: params.skippedBills,
     billAssignments: params.billAssignments,
     incomeOverrides: params.incomeOverrides,
+    billPaymentOverrides: params.billPaymentOverrides,
     startDate: '',
     startingBalance: 0,
     now: new Date(0),
@@ -40,6 +43,7 @@ export function buildScheduleEntityHash(
     skippedBills: [],
     billAssignments: [],
     incomeOverrides: [],
+    billPaymentOverrides: [],
     startDate: '',
     startingBalance: 0,
     now: new Date(0),
@@ -56,6 +60,7 @@ export function buildBudgetFieldsHash(budgetFields: DraftBudgetFields | null | u
     skippedBills: [],
     billAssignments: [],
     incomeOverrides: [],
+    billPaymentOverrides: [],
     startDate: budgetFields.scheduleStartDate,
     startingBalance: budgetFields.startingBalance,
     targetCashOnHand: budgetFields.targetCashOnHand,
@@ -75,6 +80,7 @@ export function toScheduleIdentityInput(params: {
   billAssignments: BillAssignment[];
   preferredAssignments?: Array<[string, string]>;
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   leaves?: Leave[];
   startDate?: string;
   startingBalance?: number;
@@ -96,6 +102,7 @@ export function toScheduleIdentityInput(params: {
     billAssignments: params.billAssignments,
     preferredAssignments: params.preferredAssignments,
     incomeOverrides: params.incomeOverrides,
+    billPaymentOverrides: params.billPaymentOverrides,
     startDate: params.startDate || budget?.scheduleStartDate || '',
     startingBalance: params.startingBalance ?? budget?.startingBalance ?? 0,
     targetCashOnHand: params.targetCashOnHand ?? budget?.targetCashOnHand,
@@ -129,6 +136,7 @@ export function buildScheduleInputHashFromDraft(
       billAssignments: draft.billAssignments,
       preferredAssignments: options.preferredAssignments,
       incomeOverrides: draft.incomeOverrides,
+      billPaymentOverrides: draft.billPaymentOverrides,
       startDate: options.startDate,
       startingBalance: options.startingBalance,
       targetCashOnHand: options.targetCashOnHand ?? draft.budget?.targetCashOnHand,
@@ -148,6 +156,7 @@ export function buildScheduleInputHash(params: {
   billAssignments: BillAssignment[];
   preferredAssignments?: Array<[string, string]>;
   incomeOverrides: IncomeOverride[];
+  billPaymentOverrides: BillPaymentOverride[];
   leaves?: Leave[];
   startDate?: string;
   startingBalance?: number;

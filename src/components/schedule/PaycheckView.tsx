@@ -1,21 +1,9 @@
-import { DragEvent, memo } from 'react';
-import { format, parseISO } from 'date-fns';
-import { 
-  Wallet, 
-  ChevronDown, 
-  ChevronUp, 
-  PiggyBank, 
-  Target,
-  AlertTriangle,
-  Landmark,
-} from 'lucide-react';
+import { DragEvent, memo, useCallback } from 'react';
+import { paycheckKey } from '@shared/incomePurpose';
 import { PaycheckEntry, PaycheckBill, BillAssignment, IncomeOverride } from '../../types';
-import { filterPaycheckBills } from '../../utils/scheduleBills';
-import { isSavingsAndGoalsIncome, paycheckKey } from '@shared/incomePurpose';
-import { isLabeledBreakGlassPaycheck } from '@shared/breakGlassBand';
-import clsx from 'clsx';
-import IconTooltip from '../IconTooltip';
-import PaycheckDetails from './PaycheckDetails';
+import { useBillPaymentEditor } from '../../hooks/useBillPaymentEditor';
+import PaycheckCard from './PaycheckCard';
+import PaycheckListHeader from './PaycheckListHeader';
 
 export interface DraggedBill {
   billId: string;
@@ -56,83 +44,48 @@ interface PaycheckViewProps {
   onSaveIncomeOverride: (incomeId: string, paycheckDate: string, amount: number) => Promise<void>;
   onClearIncomeOverride: (incomeId: string, paycheckDate: string) => Promise<void>;
   savingIncomeKey: string | null;
+  onSavePaymentOverride: (billId: string, billDate: string, amount: number) => Promise<void>;
+  onClearPaymentOverride: (billId: string, billDate: string) => Promise<void>;
 }
 
-/** Hard failure: unfunded bills or negative remaining after obligations. */
-function isHardShortfallPaycheck(
-  paycheck: PaycheckEntry,
-  hasUnpayableBills: boolean
-): boolean {
-  if (hasUnpayableBills) return true;
-  return paycheck.budgetRemaining < 0;
-}
-
-/**
- * Bills are funded but cash sits below the min floor — warning theme (not
- * the same as unpayable / negative remaining).
- */
-function isBelowMinimumPaycheck(
-  paycheck: PaycheckEntry,
-  hasUnpayableBills: boolean
-): boolean {
-  return (
-    Boolean(paycheck.isShortfall) &&
-    paycheck.budgetRemaining >= 0 &&
-    !hasUnpayableBills
-  );
-}
-
-function paycheckWarningTooltip(
-  paycheck: PaycheckEntry,
-  hasUnpayableBills: boolean,
-  unpayableCount: number,
-  formatCurrency: (amount: number) => string,
-  fallbackMinCashOnHand: number
-): string {
-  const min = paycheck.minCashOnHand ?? fallbackMinCashOnHand;
-  if (hasUnpayableBills) {
-    const noun = unpayableCount === 1 ? 'bill' : 'bills';
-    return `${unpayableCount} ${noun} could not be funded from available income in this paycheck's window.`;
-  }
-  if (paycheck.budgetRemaining < 0) {
-    return `Bills exceed this paycheck's income after reserves. Cash on hand would be ${formatCurrency(paycheck.budgetRemaining)}.`;
-  }
-  if (paycheck.isShortfall) {
-    return `Cash on hand (${formatCurrency(paycheck.budgetRemaining)}) is below your minimum floor of ${formatCurrency(min)}. Bills are funded, but this week is tighter than your reserve.`;
-  }
-  return '';
-}
-
-function PaycheckView({ 
-  paychecks, 
-  expandedPaychecks, 
-  togglePaycheck, 
-  expandAll, 
+function PaycheckView({
+  paychecks,
+  expandedPaychecks,
+  togglePaycheck,
+  expandAll,
   collapseAll,
   formatCurrency,
   maxBudgetRemaining,
   minCashOnHand,
   debtPlanEnabled = false,
-  onSkipBill,
-  onUnskipBill,
-  skippingBill,
-  unskippingBill,
-  onRestoreBill,
-  restoringBill,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  draggedBill,
-  dropTargetDate,
-  billAssignments,
-  isAssigning,
-  incomeOverrides,
-  onSaveIncomeOverride,
-  onClearIncomeOverride,
-  savingIncomeKey,
+  onSavePaymentOverride,
+  onClearPaymentOverride,
+  ...cardProps
 }: PaycheckViewProps) {
+  const {
+    openPaymentKey,
+    openPaymentEditor,
+    closePaymentEditor,
+    handleSavePaymentOverride,
+    handleClearPaymentOverride,
+  } = useBillPaymentEditor({
+    onSave: onSavePaymentOverride,
+    onClear: onClearPaymentOverride,
+  });
+
+  const handleTogglePaycheck = useCallback(
+    (entryKey: string) => {
+      closePaymentEditor();
+      togglePaycheck(entryKey);
+    },
+    [closePaymentEditor, togglePaycheck]
+  );
+
+  const handleCollapseAll = useCallback(() => {
+    closePaymentEditor();
+    collapseAll();
+  }, [closePaymentEditor, collapseAll]);
+
   if (paychecks.length === 0) {
     return (
       <div className="card text-center py-12">
@@ -145,230 +98,33 @@ function PaycheckView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold">Paychecks ({paychecks.length})</h3>
-          <p className="text-xs text-(--color-text-muted)">
-            Target cash on hand: {formatCurrency(maxBudgetRemaining)} •{' '}
-            {debtPlanEnabled
-              ? 'Surplus above target funds goals, debt paydown, and savings'
-              : 'Surplus above target funds goals and savings'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={expandAll} className="btn-ghost text-sm">
-            Expand All
-          </button>
-          <button onClick={collapseAll} className="btn-ghost text-sm">
-            Collapse All
-          </button>
-        </div>
-      </div>
-
+      <PaycheckListHeader
+        paycheckCount={paychecks.length}
+        formatCurrency={formatCurrency}
+        maxBudgetRemaining={maxBudgetRemaining}
+        debtPlanEnabled={debtPlanEnabled}
+        onExpandAll={expandAll}
+        onCollapseAll={handleCollapseAll}
+      />
       <div className="space-y-4">
-        {paychecks.map((paycheck) => {
-          const entryKey = paycheckKey(paycheck);
-          const isReserved = isSavingsAndGoalsIncome(paycheck);
-          const blocksAssignment = isReserved;
-          const visibleBills = filterPaycheckBills(
-            paycheck.bills,
-            billAssignments,
-            paycheck.date,
-            validPaycheckDates
-          );
-          const unpayableCount = visibleBills.filter(bill => bill.isUnpayable && !bill.isSkipped).length;
-          const hasUnpayableBills = unpayableCount > 0;
-          const isHardShortfall = !isReserved && isHardShortfallPaycheck(paycheck, hasUnpayableBills);
-          const isBelowMinimum = !isReserved && isBelowMinimumPaycheck(paycheck, hasUnpayableBills);
-          const isBreakGlass = !isReserved && isLabeledBreakGlassPaycheck(paycheck, maxBudgetRemaining, minCashOnHand);
-          const warningTooltip = isReserved
-            ? null
-            : paycheckWarningTooltip(
-                paycheck,
-                hasUnpayableBills,
-                unpayableCount,
-                formatCurrency,
-                minCashOnHand
-              );
-          const isExpanded = expandedPaychecks.has(entryKey) || expandedPaychecks.has(paycheck.date);
-          const isDropTarget = !blocksAssignment && dropTargetDate === paycheck.date;
-          const isDragSource = draggedBill?.sourcePaycheckDate === paycheck.date;
-          const cardClassName = clsx(
-            'card overflow-hidden transition-all',
-            isReserved && 'border-dashed border-2 border-cyan-400 dark:border-cyan-600 bg-cyan-50/40 dark:bg-cyan-500/5',
-            isHardShortfall && 'border-danger-300 dark:border-danger-700 bg-danger-50/50 dark:bg-danger-500/5',
-            isBelowMinimum && 'break-glass-tape border-warning-300 dark:border-warning-700/50',
-            isBreakGlass && !isHardShortfall && !isBelowMinimum && 'break-glass-tape border-warning-300 dark:border-warning-700/50',
-            isDropTarget && 'ring-2 ring-primary-500 ring-offset-2 bg-primary-50/50 dark:bg-primary-500/10',
-            isDragSource && 'opacity-50'
-          );
-          
-          return (
-            <div 
-              key={entryKey}
-              className={cardClassName}
-              onDragOver={blocksAssignment ? undefined : (e) => onDragOver(e, paycheck.date)}
-              onDragLeave={blocksAssignment ? undefined : onDragLeave}
-              onDrop={blocksAssignment ? undefined : (e) => onDrop(e, paycheck.date)}
-            >
-              <button
-                onClick={() => togglePaycheck(entryKey)}
-                aria-expanded={isExpanded}
-                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${isReserved ? 'savings deposit' : 'paycheck'} for ${format(parseISO(paycheck.date), 'MMMM d, yyyy')}`}
-                className="w-full flex items-center justify-between p-0 text-left"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={clsx(
-                    'p-3 rounded-lg',
-                    isReserved
-                      ? 'bg-cyan-100 dark:bg-cyan-500/20'
-                      : isHardShortfall
-                        ? 'bg-danger-100 dark:bg-danger-500/20'
-                        : isBelowMinimum || isBreakGlass
-                          ? 'bg-warning-100 dark:bg-warning-500/20'
-                          : 'bg-success-100 dark:bg-success-500/20'
-                  )}>
-                    {isReserved ? (
-                      <Landmark className="w-6 h-6 text-cyan-700 dark:text-cyan-400" />
-                    ) : (
-                      <Wallet className={clsx(
-                        'w-6 h-6',
-                        isHardShortfall
-                          ? 'text-danger-600 dark:text-danger-500'
-                          : isBelowMinimum || isBreakGlass
-                            ? 'text-warning-600 dark:text-warning-500'
-                            : 'text-success-600 dark:text-success-500'
-                      )} />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-lg flex items-center gap-2 flex-wrap">
-                      {format(parseISO(paycheck.date), 'EEEE, MMMM d, yyyy')}
-                      {isReserved && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-500/20 text-cyan-900 dark:text-cyan-200">
-                          Not spendable · savings and goals only
-                        </span>
-                      )}
-                      {isBreakGlass && (
-                        <span
-                          className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 dark:bg-warning-500/20 text-warning-800 dark:text-warning-200"
-                          title="Cash on hand is below your target but above your minimum floor"
-                        >
-                          Break-Glass
-                        </span>
-                      )}
-                      {isBelowMinimum && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 dark:bg-warning-500/20 text-warning-800 dark:text-warning-200">
-                          Below minimum
-                        </span>
-                      )}
-                      {(paycheck.totalDebtPayments ?? 0) > 0 && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-danger-100 dark:bg-danger-500/20 text-danger-800 dark:text-danger-200">
-                          Debt paydown {formatCurrency(paycheck.totalDebtPayments ?? 0)}
-                        </span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-4 text-sm text-(--color-text-secondary)">
-                      <span>{paycheck.incomeSources.map(s => s.name).join(' + ')}</span>
-                      {!isReserved && (
-                        <>
-                          <span>•</span>
-                          <span>{visibleBills.length} bill{visibleBills.length !== 1 ? 's' : ''}</span>
-                        </>
-                      )}
-                      {hasUnpayableBills && (
-                        <>
-                          <span>•</span>
-                          <span className="text-danger-600 dark:text-danger-400 font-semibold flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                            {unpayableCount} unpayable
-                          </span>
-                        </>
-                      )}
-                      {paycheck.goalDeposits && paycheck.goalDeposits.length > 0 && (
-                        <>
-                          <span>•</span>
-                          <span className="text-purple-500 flex items-center gap-1">
-                            <Target className="w-3 h-3" />
-                            {formatCurrency(paycheck.totalGoalDeposits)} to goals
-                          </span>
-                        </>
-                      )}
-                      {paycheck.savingsDeposit > 0 && (
-                        <>
-                          <span>•</span>
-                          <span className="text-primary-500 flex items-center gap-1">
-                            <PiggyBank className="w-3 h-3" />
-                            {formatCurrency(paycheck.savingsDeposit)} to savings
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-6">
-                  {!isReserved && (
-                  <div className="text-right">
-                    <p className="text-xs text-(--color-text-muted)">
-                      Budget Remaining
-                    </p>
-                    <p className={clsx(
-                      'text-xl font-semibold font-mono',
-                      isHardShortfall
-                        ? 'text-danger-500'
-                        : isBelowMinimum || isBreakGlass
-                          ? 'text-warning-600 dark:text-warning-500'
-                          : 'text-success-500'
-                    )}>
-                      {formatCurrency(paycheck.budgetRemaining)}
-                    </p>
-                  </div>
-                  )}
-                  {warningTooltip && (
-                    <IconTooltip label={warningTooltip} side="left">
-                      <AlertTriangle
-                        className={clsx(
-                          'w-6 h-6',
-                          isHardShortfall ? 'text-danger-500' : 'text-warning-600 dark:text-warning-500'
-                        )}
-                        aria-hidden="true"
-                      />
-                    </IconTooltip>
-                  )}
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-(--color-text-muted)" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-(--color-text-muted)" />
-                  )}
-                </div>
-              </button>
-              
-              {isExpanded && (
-                <PaycheckDetails
-                  paycheck={paycheck}
-                  formatCurrency={formatCurrency}
-                  onSkipBill={onSkipBill}
-                  onUnskipBill={onUnskipBill}
-                  skippingBill={skippingBill}
-                  unskippingBill={unskippingBill}
-                  onRestoreBill={onRestoreBill}
-                  restoringBill={restoringBill}
-                  onDragStart={onDragStart}
-                  onDragEnd={onDragEnd}
-                  draggedBill={draggedBill}
-                  billAssignments={billAssignments}
-                  validPaycheckDates={validPaycheckDates}
-                  isAssigning={isAssigning}
-                  incomeOverrides={incomeOverrides}
-                  onSaveIncomeOverride={onSaveIncomeOverride}
-                  onClearIncomeOverride={onClearIncomeOverride}
-                  savingIncomeKey={savingIncomeKey}
-                />
-              )}
-            </div>
-          );
-        })}
+        {paychecks.map((paycheck) => (
+          <PaycheckCard
+            key={paycheckKey(paycheck)}
+            paycheck={paycheck}
+            expandedPaychecks={expandedPaychecks}
+            formatCurrency={formatCurrency}
+            maxBudgetRemaining={maxBudgetRemaining}
+            minCashOnHand={minCashOnHand}
+            onToggle={handleTogglePaycheck}
+            validPaycheckDates={validPaycheckDates}
+            openPaymentKey={openPaymentKey}
+            onOpenPaymentEditor={openPaymentEditor}
+            onClosePaymentEditor={closePaymentEditor}
+            onSavePaymentOverride={handleSavePaymentOverride}
+            onClearPaymentOverride={handleClearPaymentOverride}
+            {...cardProps}
+          />
+        ))}
       </div>
     </div>
   );

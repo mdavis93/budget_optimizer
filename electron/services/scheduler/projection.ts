@@ -1,5 +1,6 @@
 import {
   addMonths,
+  format,
   isBefore,
   isAfter,
   setDate,
@@ -11,6 +12,7 @@ import {
 import { Income, Bill } from '../database.service';
 import { getPaycheckDatesForIncome } from '../../utils/paycheck-calculator';
 import { normalizeIncomePurpose } from '@shared/incomePurpose';
+import { resolveBillOccurrenceAmount } from './billPaymentOverrides';
 import { DebtPayoffInfo, ProjectedIncome, ProjectedBill } from './types';
 
 export function projectIncome(income: Income, startDate: Date, endDate: Date): ProjectedIncome[] {
@@ -27,7 +29,8 @@ export function projectBills(
   bill: Bill,
   startDate: Date,
   endDate: Date,
-  debtPayoffInfo?: DebtPayoffInfo
+  debtPayoffInfo?: DebtPayoffInfo,
+  billPaymentOverrides?: Map<string, number>
 ): ProjectedBill[] {
   const events: ProjectedBill[] = [];
 
@@ -58,11 +61,23 @@ export function projectBills(
       const isFinalPayment = debtPayoffInfo &&
         startOfMonth(dueDate).getTime() === startOfMonth(debtPayoffInfo.payoffDate).getTime();
 
+      const seriesAmount = isFinalPayment
+        ? debtPayoffInfo.finalPaymentAmount
+        : bill.budgetedAmount;
+      const dateIso = format(dueDate, 'yyyy-MM-dd');
+      const amount = resolveBillOccurrenceAmount(
+        bill.id,
+        dateIso,
+        seriesAmount,
+        billPaymentOverrides
+      );
+
       events.push({
         date: dueDate,
         billId: bill.id,
         creditorName: bill.creditorName,
-        amount: isFinalPayment ? debtPayoffInfo.finalPaymentAmount : bill.budgetedAmount,
+        amount,
+        seriesAmount,
         dueDay: bill.dueDay,
         priority: bill.priority,
         category: bill.category,

@@ -10,6 +10,7 @@ import {
   cashTargetForDate,
   type CashOnHandByDate,
 } from '../cashOnHandOverrides';
+import { resolveBillOccurrenceAmount } from '../billPaymentOverrides';
 import {
   DEFAULT_MIN_CASH_ON_HAND,
   DEFAULT_TARGET_CASH_ON_HAND,
@@ -86,6 +87,7 @@ export interface AssignmentModelInput {
   manualAssignments?: Map<string, string>;
   preferredAssignments?: Map<string, string>;
   incomeAttachedBillsRaw?: Bill[];
+  billPaymentOverrides?: Map<string, number>;
   /** When set, eligibility is every usable paycheck in `[due - maxEarlyDays, due]`. */
   maxEarlyDays?: number;
   /** Inclusive start day number; paychecks before this are ineligible. */
@@ -146,12 +148,11 @@ function pushAttachedBills(
   assignments: PaycheckAssignment[],
   incomeAttachedBillsRaw: Bill[],
   skippedBills: Set<string>,
-  bills: ModelBill[]
+  bills: ModelBill[],
+  billPaymentOverrides?: Map<string, number>
 ): void {
   for (const bill of incomeAttachedBillsRaw) {
     assertMoney(bill.budgetedAmount, `attached bill ${bill.id} amount`, false);
-    const amountCents = toCents(bill.budgetedAmount);
-    assertCents(amountCents, `attached bill ${bill.id}`);
     for (let paycheckIndex = 0; paycheckIndex < assignments.length; paycheckIndex++) {
       const paycheck = assignments[paycheckIndex];
       const hasMatchingIncome = paycheck.incomes.some(
@@ -160,6 +161,15 @@ function pushAttachedBills(
       if (!hasMatchingIncome) continue;
       const paycheckIso = isoOf(paycheck.date);
       if (skippedBills.has(billOccurrenceKeyFromIso(bill.id, paycheckIso))) continue;
+      const amountCents = toCents(
+        resolveBillOccurrenceAmount(
+          bill.id,
+          paycheckIso,
+          bill.budgetedAmount,
+          billPaymentOverrides
+        )
+      );
+      assertCents(amountCents, `attached bill ${bill.id}`);
       bills.push({
         billId: bill.id,
         dueIso: paycheckIso,
@@ -210,6 +220,7 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
   const manualAssignments = input.manualAssignments ?? new Map<string, string>();
   const preferredAssignments = input.preferredAssignments ?? new Map<string, string>();
   const incomeAttachedBillsRaw = input.incomeAttachedBillsRaw ?? [];
+  const billPaymentOverrides = input.billPaymentOverrides ?? new Map<string, number>();
 
   const operatingIncomes = input.incomes.filter((income) => isOperatingIncome(income));
   const assignments = buildPaycheckSkeleton(input.paycheckDates, operatingIncomes);
@@ -252,7 +263,13 @@ export function buildAssignmentModel(input: AssignmentModelInput): AssignmentMod
   }
 
   const modelBills: ModelBill[] = [];
-  pushAttachedBills(assignments, incomeAttachedBillsRaw, skippedBills, modelBills);
+  pushAttachedBills(
+    assignments,
+    incomeAttachedBillsRaw,
+    skippedBills,
+    modelBills,
+    billPaymentOverrides
+  );
 
   const placedKeys = new Set(
     modelBills.map((bill) => billOccurrenceKeyFromIso(bill.billId, bill.dueIso))
@@ -394,6 +411,7 @@ export function buildAssignmentModelFromPrepared(
     manualAssignments: prepared.effectiveManualAssignments,
     preferredAssignments,
     incomeAttachedBillsRaw: prepared.incomeAttachedBillsRaw,
+    billPaymentOverrides: prepared.billPaymentOverrides,
   });
 }
 

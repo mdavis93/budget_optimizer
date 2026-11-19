@@ -160,7 +160,10 @@ export function assignBillsToPaychecks(
   reservedIncomes: ProjectedIncome[] = [],
   fundingEndDate?: Date,
   startDate?: Date,
-  assignmentOptions: Pick<AssignBillsOptions, 'solver' | 'onComputeMeta' | 'omittedOperatingIncomes'> & {
+  assignmentOptions: Pick<
+    AssignBillsOptions,
+    'solver' | 'onComputeMeta' | 'omittedOperatingIncomes' | 'billPaymentOverrides'
+  > & {
     debts?: Debt[];
     bills?: Bill[];
     accelerateDebtPayoff?: boolean;
@@ -168,6 +171,7 @@ export function assignBillsToPaychecks(
     onDebtPlan?: (plan: DebtPlan, ignoredPins: number) => void;
   } = {}
 ): PaycheckEntry[] {
+  const billPaymentOverrides = assignmentOptions.billPaymentOverrides ?? new Map();
   const assignments = assignBills(
     paycheckDates,
     allIncomes.filter((income) => isOperatingIncome(income)),
@@ -178,6 +182,7 @@ export function assignBillsToPaychecks(
       manualAssignments,
       preferredAssignments,
       incomeAttachedBillsRaw,
+      billPaymentOverrides,
       targetCashOnHand: maxBudgetRemaining,
       minCashOnHand,
       cashOnHandByDate,

@@ -1,10 +1,10 @@
 import { format, getMonth, getYear, parseISO } from 'date-fns';
-import { GripVertical, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
 import clsx from 'clsx';
-import { ordinalSuffix } from '@shared/ordinal';
-import { BillAssignment, PaycheckBill, PRIORITY_LABELS } from '../../types';
-import { BILL_PRIORITY_STYLES } from '@shared/billPriorityStyle';
+import { BillAssignment, PaycheckBill } from '../../types';
 import { isBillMovedToPaycheck } from '../../utils/scheduleBills';
+import PaycheckBillAmount from './PaycheckBillAmount';
+import { PaycheckBillActions, PaycheckBillSkippedWatermark } from './PaycheckBillChrome';
+import PaycheckBillIdentity from './PaycheckBillIdentity';
 import type { DraggedBill } from './PaycheckView';
 
 interface PaycheckBillRowProps {
@@ -21,6 +21,11 @@ interface PaycheckBillRowProps {
   onDragEnd: () => void;
   draggedBill: DraggedBill | null;
   billAssignments: BillAssignment[];
+  openPaymentKey: string | null;
+  onOpenPaymentEditor: (billId: string, billDate: string) => void;
+  onClosePaymentEditor: () => void;
+  onSavePaymentOverride: (billId: string, billDate: string, amount: number) => void | Promise<void>;
+  onClearPaymentOverride: (billId: string, billDate: string) => void | Promise<void>;
 }
 
 export default function PaycheckBillRow({
@@ -37,6 +42,11 @@ export default function PaycheckBillRow({
   onDragEnd,
   draggedBill,
   billAssignments,
+  openPaymentKey,
+  onOpenPaymentEditor,
+  onClosePaymentEditor,
+  onSavePaymentOverride,
+  onClearPaymentOverride,
 }: PaycheckBillRowProps) {
   const isManuallyAssigned = isBillMovedToPaycheck(
     billAssignments,
@@ -47,10 +57,11 @@ export default function PaycheckBillRow({
   const isDragging = draggedBill?.billId === bill.billId && draggedBill?.billDate === bill.billDate;
   const paycheckDateValue = parseISO(paycheckDate);
   const billDate = parseISO(bill.billDate);
-  const isNextMonth = getMonth(billDate) !== getMonth(paycheckDateValue) || getYear(billDate) !== getYear(paycheckDateValue);
+  const isNextMonth =
+    getMonth(billDate) !== getMonth(paycheckDateValue) ||
+    getYear(billDate) !== getYear(paycheckDateValue);
   const monthName = isNextMonth ? format(billDate, 'MMM') + ' ' : '';
   const isSkipped = Boolean(bill.isSkipped);
-  // Unpayable bills must remain draggable so users can move them onto a paycheck with capacity.
   const canDrag = !isSkipped;
 
   return (
@@ -70,121 +81,36 @@ export default function PaycheckBillRow({
         isDragging && 'opacity-50'
       )}
     >
-      {isSkipped && (
-        <>
-          <span
-            aria-hidden="true"
-            className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg bg-slate-500 dark:bg-slate-400"
-          />
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-30"
-            style={{
-              backgroundImage:
-                'repeating-linear-gradient(-45deg, transparent, transparent 6px, currentColor 6px, currentColor 7px)',
-              color: 'var(--color-text-muted)',
-            }}
-          />
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
-          >
-            <span className="text-2xl font-black tracking-[0.2em] text-slate-600 dark:text-slate-300 opacity-35 -rotate-12">
-              SKIPPED
-            </span>
-          </span>
-        </>
-      )}
+      {isSkipped && <PaycheckBillSkippedWatermark />}
+      <PaycheckBillIdentity
+        bill={bill}
+        canDrag={canDrag}
+        isSkipped={isSkipped}
+        isManuallyAssigned={isManuallyAssigned}
+        monthName={monthName}
+      />
       <div className="relative flex items-center gap-3">
-        {canDrag && (
-          <GripVertical className="w-4 h-4 text-(--color-text-muted) opacity-0 group-hover:opacity-100 transition-opacity" />
-        )}
-        <span className={clsx(
-          'font-medium',
-          (bill.isUnpayable || isSkipped) && 'text-(--color-text-muted)',
-          bill.isUnpayable && !isSkipped && 'line-through'
-        )}>
-          {bill.creditorName}
-        </span>
-        {isSkipped && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-100">
-            Skipped
-          </span>
-        )}
-        {bill.isUnpayable && !isSkipped && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100">
-            Unpayable
-          </span>
-        )}
-        {isManuallyAssigned && !isSkipped && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-primary-200 text-primary-800 dark:bg-primary-800 dark:text-primary-200">
-            Moved
-          </span>
-        )}
-        <span className={clsx(
-          'text-xs px-2 py-0.5 rounded-full',
-          BILL_PRIORITY_STYLES[bill.priority].paycheckBadge
-        )}>
-          {PRIORITY_LABELS[bill.priority]}
-        </span>
-        <span className="text-xs text-(--color-text-muted)">
-          {bill.isIncomeAttached
-            ? 'Per Paycheck'
-            : `Due: ${monthName}${bill.dueDay}${ordinalSuffix(bill.dueDay)}`}
-        </span>
-      </div>
-      <div className="relative flex items-center gap-3">
-        {isManuallyAssigned && !isSkipped && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRestoreBill(bill.billId, bill.billDate);
-            }}
-            disabled={isRestoring}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded-sm bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-500 flex items-center gap-1 shadow-xs"
-            title="Restore to original paycheck"
-          >
-            <RotateCcw className="w-3 h-3" />
-            {isRestoring ? 'Restoring...' : 'Restore'}
-          </button>
-        )}
-        {isSkipped ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onUnskipBill(bill.billId, bill.billDate);
-            }}
-            disabled={isUnskipping}
-            className="opacity-100 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded-sm bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-500 flex items-center gap-1 shadow-xs"
-            title="Include this payment in the schedule again"
-          >
-            <Undo2 className="w-3 h-3" />
-            {isUnskipping ? 'Unskipping...' : 'Unskip'}
-          </button>
-        ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSkipBill(bill.billId, bill.billDate);
-            }}
-            disabled={isSkipping}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium px-2 py-1 rounded-sm bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 flex items-center gap-1 shadow-xs"
-            title="Skip this payment (already paid or not due)"
-          >
-            <SkipForward className="w-3 h-3" />
-            {isSkipping ? 'Skipping...' : 'Skip'}
-          </button>
-        )}
-        <span className={clsx(
-          'font-mono font-semibold',
-          isSkipped
-            ? 'text-slate-600 dark:text-slate-400 line-through'
-            : bill.isUnpayable
-              ? 'text-amber-600 dark:text-amber-400 line-through'
-              : 'text-danger-600 dark:text-danger-500'
-        )}>
-          -{formatCurrency(bill.amount)}
-        </span>
+        <PaycheckBillActions
+          billId={bill.billId}
+          billDate={bill.billDate}
+          isSkipped={isSkipped}
+          isManuallyAssigned={isManuallyAssigned}
+          isSkipping={isSkipping}
+          isUnskipping={isUnskipping}
+          isRestoring={isRestoring}
+          onSkipBill={onSkipBill}
+          onUnskipBill={onUnskipBill}
+          onRestoreBill={onRestoreBill}
+        />
+        <PaycheckBillAmount
+          bill={bill}
+          formatCurrency={formatCurrency}
+          openPaymentKey={openPaymentKey}
+          onOpenPaymentEditor={onOpenPaymentEditor}
+          onClosePaymentEditor={onClosePaymentEditor}
+          onSavePaymentOverride={onSavePaymentOverride}
+          onClearPaymentOverride={onClearPaymentOverride}
+        />
       </div>
     </div>
   );

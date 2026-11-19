@@ -14,6 +14,8 @@ export function useScheduleMutations() {
     removeBillAssignment,
     removeIncomeOverride,
     setIncomeOverride,
+    removeBillPaymentOverride,
+    setBillPaymentOverride,
     skipBill,
     unskipBill,
   } = useDraftActions();
@@ -219,6 +221,22 @@ export function useScheduleMutations() {
     }
   }, [generateSchedule, months, removeIncomeOverride, startDate, startingBalance]);
 
+  const handleSavePaymentOverride = useCallback(async (
+    billId: string,
+    billDate: string,
+    amount: number
+  ) => {
+    if (setBillPaymentOverride(billId, billDate, amount)) {
+      await generateSchedule(startDate, months, startingBalance, { force: true });
+    }
+  }, [generateSchedule, months, setBillPaymentOverride, startDate, startingBalance]);
+
+  const handleClearPaymentOverride = useCallback(async (billId: string, billDate: string) => {
+    if (removeBillPaymentOverride(billId, billDate)) {
+      await generateSchedule(startDate, months, startingBalance, { force: true });
+    }
+  }, [generateSchedule, months, removeBillPaymentOverride, startDate, startingBalance]);
+
   return {
     skippingBill,
     unskippingBill,
@@ -244,5 +262,7 @@ export function useScheduleMutations() {
     handleClearStaleBills,
     handleSaveIncomeOverride,
     handleClearIncomeOverride,
+    handleSavePaymentOverride,
+    handleClearPaymentOverride,
   };
 }

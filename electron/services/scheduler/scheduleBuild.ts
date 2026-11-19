@@ -63,6 +63,7 @@ export interface PreparedScheduleHorizon {
   skippedForDisplay: ProjectedBill[];
   paycheckDates: Date[];
   incomeAttachedBillsRaw: Bill[];
+  billPaymentOverrides: Map<string, number>;
   cashOnHandByDate: CashOnHandByDate;
   effectiveManualAssignments: Map<string, string>;
   debts: Debt[];
@@ -85,6 +86,7 @@ export interface PrepareScheduleHorizonInput {
   minSavingsPerPaycheck?: number;
   debtPayoffs?: Map<string, DebtPayoffInfo>;
   incomeOverrides?: Map<string, number>;
+  billPaymentOverrides?: Map<string, number>;
   leaves?: Leave[];
   debts?: Debt[];
   accelerateDebtPayoff?: boolean;
@@ -114,6 +116,7 @@ export function prepareScheduleHorizon(
   const minSavingsPerPaycheck = input.minSavingsPerPaycheck ?? DEFAULT_MIN_SAVINGS_PER_PAYCHECK;
   const debtPayoffs = input.debtPayoffs ?? new Map<string, DebtPayoffInfo>();
   const incomeOverrides = input.incomeOverrides ?? new Map<string, number>();
+  const billPaymentOverrides = input.billPaymentOverrides ?? new Map<string, number>();
   const leaves = input.leaves ?? [];
 
   const startDate = startOfDay(parseISO(input.startDateStr));
@@ -146,7 +149,9 @@ export function prepareScheduleHorizon(
   const allBills: ProjectedBill[] = [];
   for (const bill of regularBills) {
     const debtInfo = debtPayoffs.get(bill.id);
-    allBills.push(...projectBills(bill, startDate, solveEndDate, debtInfo));
+    allBills.push(
+      ...projectBills(bill, startDate, solveEndDate, debtInfo, billPaymentOverrides)
+    );
   }
 
   allIncomes.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -212,6 +217,7 @@ export function prepareScheduleHorizon(
     skippedForDisplay,
     paycheckDates,
     incomeAttachedBillsRaw,
+    billPaymentOverrides,
     cashOnHandByDate,
     effectiveManualAssignments,
     debts: input.debts ?? [],
@@ -254,6 +260,7 @@ export function assignPreparedHorizon(
     prepared.startDate,
     {
       ...assignmentOptions,
+      billPaymentOverrides: prepared.billPaymentOverrides,
       debts: prepared.debts,
       bills: prepared.bills,
       accelerateDebtPayoff: prepared.accelerateDebtPayoff,
